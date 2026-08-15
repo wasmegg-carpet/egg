@@ -18,7 +18,9 @@ export interface Group {
 }
 
 export interface Model {
+  // Sorted by node id, NOT the order the caller listed them; `requestedOrder` maps back.
   targets: string[];
+  requestedOrder: number[];
   craftables: string[];
   items: string[];
   consRows: number[][]; // items x craftables
@@ -122,7 +124,15 @@ function craftUpperBounds(
 
 export function buildModel(problem: PlanProblem): Model {
   const dag: RecipeDAG = problem.dag;
-  const targets = [...problem.targets];
+
+  // Sorted so the model is a function of the target *set*: the closure below visits targets in order, so
+  // permuting the caller's list permutes every row and column and a node-limited search then diverges.
+  const requested = [...problem.targets];
+  const requestedOrder = requested
+    .map((_, i) => i)
+    // Ties broken by original position, so duplicate ids stay a bijection.
+    .sort((a, b) => (requested[a] < requested[b] ? -1 : requested[a] > requested[b] ? 1 : a - b));
+  const targets = requestedOrder.map(i => requested[i]);
 
   const orderIds: string[] = [];
   const seen = new Set<string>();
@@ -283,6 +293,7 @@ export function buildModel(problem: PlanProblem): Model {
 
   return {
     targets,
+    requestedOrder,
     craftables,
     items,
     consRows,

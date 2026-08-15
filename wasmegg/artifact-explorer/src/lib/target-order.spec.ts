@@ -4,6 +4,11 @@
 import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
 import { buildRecipeDag } from '@/lib';
+import { loadHighs } from './solver/highs';
+import { DEFAULT_TUNING, solveWith } from './solver/oa';
+import type { PlanProblem } from './solver/types';
+import { makeNode, makeOpt } from './spec-helpers';
+import type { RecipeDAG } from './types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
@@ -43,5 +48,46 @@ describe('buildRecipeDag with a save loaded', () => {
     const p = craftProbabilities([FEATHER, CHALICE], 20);
     expect(p.get(CHALICE)).toBe(p.get(FEATHER));
     expect(p.get(FEATHER)).toBe(craftProbabilities([FEATHER, CHALICE]).get(FEATHER));
+  });
+});
+
+// `perTarget` is parallel to the caller's target list, so the seam has to map back out of the sorted order
+// the model works in. Getting that wrong mislabels which artifact each probability belongs to.
+
+// Two targets over one shared ingredient, with different craft probabilities so
+// their per-target factors are distinguishable.
+const jointDag: RecipeDAG = new Map([
+  ['A1', makeNode('A1', false, [['C1', 2]], 0.5)],
+  ['A2', makeNode('A2', false, [['C1', 2]], 0.8)],
+  ['C1', makeNode('C1', true)],
+]);
+
+function problemOf(targets: string[]): PlanProblem {
+  return {
+    options: [makeOpt(1, 1, [['C1', 3]])],
+    dag: jointDag,
+    targets,
+    fuelCapacity: 6,
+    timeCapacityPerSlot: 4,
+    slots: 3,
+    baseYield: new Map([['C1', 4]]),
+  };
+}
+
+describe('the model is a function of the target set, not its order', () => {
+  it('reports per-target factors in the order the caller asked for', async () => {
+    const solve = await loadHighs();
+    const forward = solveWith(problemOf(['A1', 'A2']), solve, DEFAULT_TUNING, { report: true });
+    const reversed = solveWith(problemOf(['A2', 'A1']), solve, DEFAULT_TUNING, { report: true });
+
+    // Same plan, same joint — the relabeling moved nothing.
+    expect(reversed.allocation).toEqual(forward.allocation);
+    expect(reversed.reported!.jointProbability).toBe(forward.reported!.jointProbability);
+
+    // ...but `perTarget` is parallel to the caller's list, so it flips. The two factors differ, so a seam
+    // that forgot to map back would return them the wrong way round and this would catch it.
+    const [a1, a2] = forward.reported!.perTarget;
+    expect(a1).not.toBe(a2);
+    expect(reversed.reported!.perTarget).toEqual([a2, a1]);
   });
 });

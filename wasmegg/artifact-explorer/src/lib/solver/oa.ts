@@ -77,9 +77,13 @@ function emit(problem: PlanProblem, model: Model, counts: readonly number[], rep
   if (!report) return { allocation };
 
   const finalEval = evaluateCounts(model, counts, EXACT_PRECISION);
-  const perTarget = finalEval.scores.map(s => (s > 0 ? -Math.expm1(-s) : 0));
+  const scored = finalEval.scores.map(s => (s > 0 ? -Math.expm1(-s) : 0));
+  const perTarget = new Array<number>(scored.length);
+  for (let t = 0; t < scored.length; t++) perTarget[model.requestedOrder[t]] = scored[t];
+  // Folded in the model's own order, not the caller's: float multiplication is not
+  // associative, so the caller's order would leak back into the reported joint.
   let jointProbability = 1;
-  for (const p of perTarget) jointProbability *= p;
+  for (const p of scored) jointProbability *= p;
   return { allocation, reported: { jointProbability, perTarget } };
 }
 
