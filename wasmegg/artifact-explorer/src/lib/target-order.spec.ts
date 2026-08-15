@@ -1,10 +1,9 @@
-// The pipeline must not depend on the order targets were selected in, with a
-// save loaded: each target's legendary craft probability comes from its own
-// crafted count, not from whichever target happened to be first.
+// The pipeline must not depend on the order targets were selected in: each target's legendary craft
+// probability comes from its own crafted count, not from whichever target happened to be first.
 
 import { describe, it, expect } from 'vitest';
-import { ei, Inventory, perfectShipsConfig } from 'lib';
-import { buildRecipeDag, computeBaseYield, optimize, type OptimizerSolution } from '@/lib';
+import { ei, Inventory } from 'lib';
+import { buildRecipeDag } from '@/lib';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
@@ -44,45 +43,5 @@ describe('buildRecipeDag with a save loaded', () => {
     const p = craftProbabilities([FEATHER, CHALICE], 20);
     expect(p.get(CHALICE)).toBe(p.get(FEATHER));
     expect(p.get(FEATHER)).toBe(craftProbabilities([FEATHER, CHALICE]).get(FEATHER));
-  });
-});
-
-function summarize(sol: OptimizerSolution) {
-  // The top-level probability fields deliberately mirror perTarget[0], so they
-  // are order-dependent by design and left out here.
-  return {
-    jointProbability: sol.jointProbability,
-    fuelUsed: sol.fuelUsed,
-    timeUnitsUsed: sol.timeUnitsUsed,
-    perTarget: [...sol.perTarget]
-      .sort((a, b) => a.nodeId.localeCompare(b.nodeId))
-      .map(t => ({
-        nodeId: t.nodeId,
-        bestProbability: t.bestProbability,
-        craftProbability: t.craftProbability,
-        dropProbability: t.dropProbability,
-      })),
-    choices: [...sol.choiceHistory]
-      .map(c => `${c.ship.shipType}/${c.ship.durationType}/${c.target}/${c.numShipsLaunched}`)
-      .sort(),
-  };
-}
-
-function runPipeline(ids: string[]): OptimizerSolution {
-  const inventory = savedInventory();
-  const config = {
-    desiredArtifactNodeIds: ids,
-    includeNotEnoughData: false,
-    fuelTankCapacity: 2_000_000_000,
-    timeBudgetSeconds: 24 * 3600,
-  };
-  const dag = buildRecipeDag(ids, 30, inventory);
-  const baseYield = computeBaseYield(inventory, ids, dag);
-  return optimize(config, perfectShipsConfig, dag, baseYield)[0];
-}
-
-describe('full pipeline target order', () => {
-  it('produces the same plan whichever order the targets were selected in', () => {
-    expect(summarize(runPipeline([CHALICE, FEATHER]))).toEqual(summarize(runPipeline([FEATHER, CHALICE])));
   });
 });

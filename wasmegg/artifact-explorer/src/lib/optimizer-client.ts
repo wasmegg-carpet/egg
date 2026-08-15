@@ -13,7 +13,8 @@ export interface OptimizerRequestInput {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
-  timeCapacity: number;
+  timeCapacityPerSlot: number;
+  maximumCost: number | undefined;
   baseYield: Map<string, number>;
 }
 

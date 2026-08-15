@@ -5,12 +5,9 @@ export * from './optimizer-views';
 export * from './optimizer-tree';
 export * from './tank-ids';
 
-import type { DAGNode, LaunchSolution, OptimizerConfig, OptimizerSolution, DropRow, RecipeDAG } from './types';
-import { enumerateLaunchOptions, generateRecipeDag } from './phases';
-import { optimizeFull } from './optimizer-core';
-import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, Inventory, InventoryItem, ShipsConfig } from 'lib';
-
-import { iconURL } from 'lib';
+import type { DAGNode, LaunchSolution, OptimizerSolution, DropRow, RecipeDAG } from './types';
+import { generateRecipeDag } from './phases';
+import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, iconURL, Inventory, InventoryItem } from 'lib';
 
 // An undefined previousCraftsOverride means "read each target's own crafted
 // count from the save"; a defined one applies to every target.
@@ -116,8 +113,8 @@ function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
   return totals;
 }
 
-// Presentation-only fields. The worker path applies this on the main thread
-// afterwards, so both it and optimize() below produce identical solutions.
+// Presentation-only fields, applied on the main thread after the worker returns. `optimize` in
+// `spec-helpers.ts` calls this too, so the in-process path and the worker path produce identical solutions.
 export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG): OptimizerSolution[] {
   for (const solution of solutions) {
     solution.choiceHistory.sort((a: LaunchSolution, b: LaunchSolution) => a.ship.shipType - b.ship.shipType);
@@ -127,31 +124,6 @@ export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG
   return solutions;
 }
 
-// Returns an array though today it's always one solution.
-export function optimize(
-  config: OptimizerConfig,
-  playerConfig: ShipsConfig,
-  dag: RecipeDAG,
-  baseYield: Map<string, number>,
-  launchPeriodSeconds = 0,
-  maxGemCost?: number
-) {
-  const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
-  const options = enumerateLaunchOptions(playerConfig, dag, launchPeriodSeconds, maxGemCost);
-
-  const solutions: OptimizerSolution[] = [
-    optimizeFull({
-      options,
-      recipeDag: dag,
-      desiredArtifactNodeIds: desiredArtifactNodeIds,
-      fuelCapacity: fuelTankCapacity,
-      timeCapacity: timeBudgetSeconds,
-      baseYield: baseYield,
-    }),
-  ];
-
-  return finalizeSolutions(solutions, dag);
-}
 
 export type {
   OptimizerConfig,

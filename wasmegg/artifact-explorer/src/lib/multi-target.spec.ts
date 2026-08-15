@@ -1,134 +1,17 @@
+// What a player's existing stock does to a multi-target plan: which of the items they already own change
+// the plan, and which cannot.
+
 import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
-import { compileInnerLp } from './value-function';
 import { optimizeFull } from './optimizer-core';
 import { computeBaseYield } from './index';
-import { makeNode, makeOpt } from './spec-helpers';
+import { lt1, lt2, lt4, makeNode, makeOpt, totemDag } from './spec-helpers';
 import type { RecipeDAG } from './types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
 const Rarity = ei.ArtifactSpec.Rarity;
 
-describe('multi-sink weighted objective LP', () => {
-  it('routes a shared ingredient to the higher-weight target', () => {
-    const dag: RecipeDAG = new Map([
-      ['A1', makeNode('A1', false, [['Z', 1]])],
-      ['A2', makeNode('A2', false, [['Z', 1]])],
-      ['Z', makeNode('Z', true)],
-    ]);
-    const hiA1 = compileInnerLp(
-      dag,
-      ['A1', 'A2'],
-      new Map([
-        ['A1', 2],
-        ['A2', 1],
-      ])
-    ).solve(new Map([['Z', 10]]));
-    expect(hiA1.score).toBeCloseTo(20, 9);
-    expect(hiA1.craftByTarget.get('A1')).toBeCloseTo(10, 9);
-    expect(hiA1.craftByTarget.get('A2')).toBeCloseTo(0, 9);
-
-    const hiA2 = compileInnerLp(
-      dag,
-      ['A1', 'A2'],
-      new Map([
-        ['A1', 1],
-        ['A2', 3],
-      ])
-    ).solve(new Map([['Z', 10]]));
-    expect(hiA2.score).toBeCloseTo(30, 9);
-    expect(hiA2.craftByTarget.get('A2')).toBeCloseTo(10, 9);
-  });
-
-  it('handles a target that is also an ingredient of another target', () => {
-    // B is both a target and an ingredient of A, so it must keep its
-    // conservation row and still be valued in its own right.
-    const dag: RecipeDAG = new Map([
-      ['A', makeNode('A', false, [['B', 1]])],
-      ['B', makeNode('B', false, [['C', 1]])],
-      ['C', makeNode('C', true)],
-    ]);
-    const w = new Map([
-      ['A', 2],
-      ['B', 1],
-    ]);
-    // raw ingredient C: craft B from C and A from B, both targets credited
-    const r1 = compileInnerLp(dag, ['A', 'B'], w).solve(new Map([['C', 10]]));
-    expect(r1.score).toBeCloseTo(30, 9);
-    expect(r1.craftByTarget.get('A')).toBeCloseTo(10, 9);
-    expect(r1.craftByTarget.get('B')).toBeCloseTo(10, 9);
-
-    // dropped B feeds A's crafting through B's conservation row
-    const r2 = compileInnerLp(dag, ['A', 'B'], w).solve(new Map([['B', 5]]));
-    expect(r2.craftByTarget.get('A')).toBeCloseTo(5, 9);
-    expect(r2.score).toBeCloseTo(10, 9);
-  });
-
-  it('does not count direct drops of a final target as crafts', () => {
-    const dag: RecipeDAG = new Map([
-      ['A', makeNode('A', false, [['B', 1]])],
-      ['B', makeNode('B', true)],
-    ]);
-    const lp = compileInnerLp(dag, ['A']);
-    expect(
-      lp.solve(
-        new Map([
-          ['B', 3],
-          ['A', 2],
-        ])
-      ).alpha
-    ).toBeCloseTo(3, 9);
-    expect(lp.solve(new Map([['A', 4]])).alpha).toBeCloseTo(0, 9);
-  });
-
-  it('is order-independent when an option drops the root directly', () => {
-    // A mission dropping the root (without legendaries) must not be
-    // over-valued; the result should not depend on option order.
-    const dag: RecipeDAG = new Map([
-      ['A', makeNode('A', false, [['B', 1]], 0.5)],
-      ['B', makeNode('B', true)],
-    ]);
-    const optRoot = makeOpt(1, 10, [['A', 1]], [], Name.LUNAR_TOTEM);
-    const optB = makeOpt(1, 10, [['B', 1]], [], Name.TUNGSTEN_ANKH);
-    const args = {
-      recipeDag: dag,
-      desiredArtifactNodeIds: ['A'],
-      fuelCapacity: 1000,
-      timeCapacity: 100,
-      baseYield: new Map<string, number>(),
-    };
-    const rootFirst = optimizeFull({ options: [optRoot, optB], ...args });
-    const bFirst = optimizeFull({ options: [optB, optRoot], ...args });
-    expect(rootFirst.bestProbability).toBeCloseTo(bFirst.bestProbability, 9);
-    expect(rootFirst.bestProbability).toBeGreaterThan(0.99);
-    expect(rootFirst.choiceHistory.some(c => c.targetAfxId === optB.targetAfxId)).toBe(true);
-  });
-});
-
-// Real totem ids, because computeBaseYield resolves each node through
-// getArtifactTierPropsFromId to look the stock up in the inventory.
-const lt1 = 'lunar-totem-1';
-const lt2 = 'lunar-totem-2';
-const lt3 = 'lunar-totem-3';
-const lt4 = 'lunar-totem-4';
-
-function totemDag(): RecipeDAG {
-  return new Map([
-    [
-      lt4,
-      makeNode(lt4, false, [
-        [lt3, 2],
-        [lt2, 1],
-      ]),
-    ],
-    [lt3, makeNode(lt3, false, [[lt1, 3]])],
-    [lt2, makeNode(lt2, false, [[lt1, 2]])],
-    [lt1, makeNode(lt1, true)],
-  ]);
-}
-
-// 4 common + 1 legendary T1, 2 rare T2, 3 common T4.
 function totemInventory(): Inventory {
   return new Inventory({
     inventoryItems: [
@@ -143,9 +26,8 @@ function totemInventory(): Inventory {
 describe('computeBaseYield', () => {
   it('keeps a target that another target consumes, and counts every rarity of it', () => {
     const base = computeBaseYield(totemInventory(), [lt4, lt2], totemDag());
-    // lt2 is an ingredient of lt4, so the owned copies are spendable there.
-    // All 2 are counted even though they are rare: rarity is irrelevant to
-    // crafting, and this stock never feeds the legendary side of the objective.
+    // lt2 is an ingredient of lt4, so the owned copies are spendable there. All 2 count even though they are
+    // rare: rarity is irrelevant to crafting, and this stock never feeds the legendary side of the objective.
     expect(base.get(lt2)).toBe(2);
     expect(base.get(lt1)).toBe(5);
   });
@@ -174,32 +56,33 @@ function nestedDag(): RecipeDAG {
   ]);
 }
 
-function runNested(baseYield: Map<string, number>, targets = ['A', 'B']) {
-  return optimizeFull({
+async function runNested(baseYield: Map<string, number>, targets = ['A', 'B']) {
+  return await optimizeFull({
     options: [makeOpt(1, 10, [['C', 1]], [], Name.TUNGSTEN_ANKH)],
     recipeDag: nestedDag(),
     desiredArtifactNodeIds: targets,
     fuelCapacity: 1000,
-    timeCapacity: 100, // per slot, so C arrives at a fixed rate the tests read back
+    timeCapacityPerSlot: 100, // per slot, so C arrives at a fixed rate the tests read back
     baseYield,
+    maximumCost: Infinity,
   });
 }
 
 describe('owned copies of a target', () => {
-  it('leave a top-level target untouched', () => {
+  it('leave a top-level target untouched', async () => {
     // Nothing consumes A, so its stock has no conservation row to relax and
     // dropping it loses nothing.
-    const without = runNested(new Map());
-    const with10A = runNested(new Map([['A', 10]]));
+    const without = await runNested(new Map());
+    const with10A = await runNested(new Map([['A', 10]]));
     expect(with10A.bestProbability).toBeCloseTo(without.bestProbability, 12);
     expect(with10A.craftProbability).toBeCloseTo(without.craftProbability, 12);
     expect(with10A.dropProbability).toBeCloseTo(without.dropProbability, 12);
     expect(with10A.jointProbability).toBeCloseTo(without.jointProbability, 12);
   });
 
-  it('raise the joint probability through the nested target, without inflating its own crafts', () => {
-    const without = runNested(new Map());
-    const with4B = runNested(new Map([['B', 4]]));
+  it('raise the joint probability through the nested target, without inflating its own crafts', async () => {
+    const without = await runNested(new Map());
+    const with4B = await runNested(new Map([['B', 4]]));
     expect(with4B.jointProbability).toBeGreaterThan(without.jointProbability);
 
     // Owned B enters its row only on the consumption side: it lets A craft
@@ -215,10 +98,10 @@ describe('owned copies of a target', () => {
     expect(parent.expectedCrafts).toBeCloseTo(without.perTarget.find(t => t.nodeId === 'A')!.expectedCrafts + 2, 9);
   });
 
-  it('never reads as an owned legendary: dropProbability ignores baseYield', () => {
+  it('never reads as an owned legendary: dropProbability ignores baseYield', async () => {
     // dropProbability is built from the mission legendary vectors alone, and
     // this option drops none, so stocking every node still leaves it at 0.
-    const stocked = runNested(
+    const stocked = await runNested(
       new Map([
         ['A', 10],
         ['B', 10],
@@ -231,8 +114,8 @@ describe('owned copies of a target', () => {
 });
 
 describe('joint probability with no targets', () => {
-  it('is 0, not the empty product', () => {
-    const solution = runNested(new Map(), []);
+  it('is 0, not the empty product', async () => {
+    const solution = await runNested(new Map(), []);
     expect(solution.jointProbability).toBe(0);
     expect(solution.perTarget).toEqual([]);
   });

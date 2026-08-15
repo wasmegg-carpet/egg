@@ -1,15 +1,12 @@
-// Inner crafting LPs over the recipe-conservation polytope. Every node consumed
-// by some parent gets a conservation row; a final target has none, so dropped
-// copies of it do not count as crafts. See OPTIMIZER.md.
+// Inner crafting LPs over the recipe-conservation polytope. Every node consumed by some parent gets a
+// conservation row; a final target has none, so dropped copies of it do not count as crafts.
 
 import type { RecipeDAG } from './types';
+import { gPrime, goldenSectionArgmax, logHit } from './concave';
 import { solveLp } from './lp';
-
 export interface AlphaResult {
   alpha: number; // craftable count of targets[0]; 0 when it's a leaf
-  score: number; // weighted objective at the optimum
   craftByTarget: Map<string, number>;
-  duals: Map<string, number>; // shadow price per constraint node
   primalByNode: Map<string, number>; // crafted count per non-leaf node
 }
 
@@ -69,8 +66,6 @@ export function compileInnerLp(
     }
   }
 
-  // One constraint per consumed node:
-  //   sum_parents q * p_parent - (p_n if non-leaf) <= inventory[n]
   const constraintNodes: string[] = [];
   for (const id of recipeDag.keys()) {
     const parents = parentsOf.get(id);
@@ -114,16 +109,11 @@ export function compileInnerLp(
       }
       const r = solveLp(c, A, bScratch);
       if (r.status !== 'optimal') {
-        return { alpha: 0, score: 0, craftByTarget: new Map(), duals: new Map(), primalByNode: new Map() };
+        return { alpha: 0, craftByTarget: new Map(), primalByNode: new Map() };
       }
       const craftByTarget = new Map<string, number>();
       for (const t of weightByTarget.keys()) {
         craftByTarget.set(t, r.primal[varIndex.get(t)!]);
-      }
-      const alpha = craftByTarget.get(primary) ?? 0;
-      const duals = new Map<string, number>();
-      for (let i = 0; i < nCons; i++) {
-        duals.set(constraintNodes[i], r.duals[i]);
       }
       const primalByNode = new Map<string, number>();
       for (let i = 0; i < nonLeafNodes.length; i++) {
@@ -131,7 +121,7 @@ export function compileInnerLp(
           primalByNode.set(nonLeafNodes[i], r.primal[i]);
         }
       }
-      return { alpha, score: r.objective, craftByTarget, duals, primalByNode };
+      return { alpha: craftByTarget.get(primary) ?? 0, craftByTarget, primalByNode };
     },
   };
 }
@@ -146,7 +136,7 @@ function makeTrivialLp(primary: string, targets: readonly string[], weightByTarg
     weightByTarget,
     solve(inventory: Map<string, number>): AlphaResult {
       const v = inventory.get(primary) ?? 0;
-      return { alpha: v > 0 ? v : 0, score: 0, craftByTarget: new Map(), duals: new Map(), primalByNode: new Map() };
+      return { alpha: v > 0 ? v : 0, craftByTarget: new Map(), primalByNode: new Map() };
     },
   };
 }
@@ -157,9 +147,6 @@ export interface ProbabilityFields {
   dropProbability: number;
 }
 
-//   craft = 1 - (1 - pCraft)^alpha
-//   drop  = 1 - e^(-lambda)   (Poisson on direct legendary drops)
-//   best  = 1 - (1 - craft)(1 - drop)
 export function alphaToProb(
   alpha: number,
   legendaryYield: Map<string, number>,
@@ -188,44 +175,27 @@ export function alphaToProb(
   return { bestProbability, craftProbability: craftProbability, dropProbability };
 }
 
-// Tangent points for the epigraph relaxation of g(s) = log(1 - e^-s). The
-// envelope OVER-estimates g: safe for search ranking only, never for reporting.
-export const JOINT_TANGENT_BREAKPOINTS: readonly number[] = [
-  1e-05,      1.8271e-05, 3.3383e-05, 6.09941e-05, 0.000111443, 0.000203617,
-  0.000372029, 0.000679734, 0.00124194, 0.00226916, 0.00414598, 0.00757513,
-  0.0138405,  0.0252881,  0.0462038,  0.0844191,  0.154242,    0.281816,
-  0.514907,   0.940788,   1.71892,    3.14063,    5.73826,     10.4844,
-  19.156,     35,
+// Tangent points for the outer approximation of g(s). The envelope OVER-estimates g: safe for search
+// ranking only, never for reporting. Transcribed rather than generated, so the seed LP's matrix does not move.
+const JOINT_TANGENT_BREAKPOINTS: readonly number[] = [
+  1e-5, 1.8271e-5, 3.3383e-5, 6.09941e-5, 0.000111443, 0.000203617, 0.000372029, 0.000679734, 0.00124194, 0.00226916,
+  0.00414598, 0.00757513, 0.0138405, 0.0252881, 0.0462038, 0.0844191, 0.154242, 0.281816, 0.514907, 0.940788, 1.71892,
+  3.14063, 5.73826, 10.4844, 19.156, 35,
 ];
 
-export interface Tangent {
+interface Tangent {
   alpha: number;
   beta: number;
 }
 
-// beta_k = g'(s_k) = 1/(e^s_k - 1); alpha_k = g(s_k) - beta_k*s_k.
-export const JOINT_TANGENTS: readonly Tangent[] = JOINT_TANGENT_BREAKPOINTS.map(s => {
+const JOINT_TANGENTS: readonly Tangent[] = JOINT_TANGENT_BREAKPOINTS.map(s => {
   const beta = 1 / Math.expm1(s);
-  const g = Math.log(-Math.expm1(-s));
-  return { alpha: g - beta * s, beta };
+  return { alpha: logHit(s) - beta * s, beta };
 });
 
-// z_T can be negative (g(s) < 0 below s = ln 2) but lp.ts assumes x >= 0.
-// Anyone building epigraph rows must subtract nTargets * this from the result.
-export const EPIGRAPH_SHIFT = 50;
-
-export function exactLogHitProbability(s: number): number {
-  return s > 0 ? Math.log(-Math.expm1(-s)) : -Infinity;
-}
-
-export function tangentLogHitProbability(s: number): number {
-  let best = Infinity;
-  for (const t of JOINT_TANGENTS) {
-    const v = t.alpha + t.beta * s;
-    if (v < best) best = v;
-  }
-  return best;
-}
+// z_T is negative (g(s) < 0 everywhere) but lp.ts assumes x >= 0, so every z_T is shifted up by
+// this much. Only the LP's primal is read and the shift does not move the argmax, so nothing undoes it.
+const ENVELOPE_SHIFT = 50;
 
 export interface JointAlphaResult {
   craftByTarget: Map<string, number>; // absent for a leaf target, mirroring compileInnerLp
@@ -238,15 +208,10 @@ export interface JointInnerLp {
   readonly varIndex: ReadonlyMap<string, number>;
   readonly targets: readonly string[];
 
-  // b is the inventory RHS (constraintNodes order), lambda the per-target
-  // direct-legendary offset (targets order). Returns the tangent OVER-estimate
-  // of sum_T g(Q_T*craft_T + lambda_T), for ranking only.
-  solveScore(b: Float64Array, lambda: Float64Array): number;
-
   solve(inventory: Map<string, number>, lambda: Map<string, number>): JointAlphaResult;
 }
 
-// The craft-conservation LP with one epigraph variable z_T per target. lambda
+// The craft-conservation LP with one envelope variable z_T per target. lambda
 // enters inside each tangent expression, never as one pooled scalar outside.
 export function compileJointInnerLp(
   recipeDag: RecipeDAG,
@@ -306,9 +271,6 @@ export function compileJointInnerLp(
     A.push(row);
   }
 
-  // One row per (target, tangent breakpoint): z_T - beta_k*Q_T*craft_T <=
-  // alpha_k + EPIGRAPH_SHIFT + beta_k*lambda_T, the lambda term folded into b
-  // at solve time.
   const rowTargetIdx: number[] = [];
   const rowTangentIdx: number[] = [];
   for (let ti = 0; ti < nt; ti++) {
@@ -328,11 +290,11 @@ export function compileJointInnerLp(
   const nRows = A.length;
   const bScratch = new Float64Array(nRows);
 
-  function fillEpigraphB(lambda: Float64Array) {
+  function fillEnvelopeB(lambda: Float64Array) {
     for (let r = 0; r < rowTargetIdx.length; r++) {
       const ti = rowTargetIdx[r];
       const k = rowTangentIdx[r];
-      bScratch[nCons + r] = JOINT_TANGENTS[k].alpha + EPIGRAPH_SHIFT + JOINT_TANGENTS[k].beta * lambda[ti];
+      bScratch[nCons + r] = JOINT_TANGENTS[k].alpha + ENVELOPE_SHIFT + JOINT_TANGENTS[k].beta * lambda[ti];
     }
   }
 
@@ -342,13 +304,6 @@ export function compileJointInnerLp(
     varIndex,
     targets,
 
-    solveScore(b: Float64Array, lambda: Float64Array): number {
-      for (let i = 0; i < nCons; i++) bScratch[i] = b[i] ?? 0;
-      fillEpigraphB(lambda);
-      const r = solveLp(c, A, bScratch);
-      return r.status === 'optimal' ? r.objective - nt * EPIGRAPH_SHIFT : -Infinity;
-    },
-
     solve(inventory: Map<string, number>, lambdaMap: Map<string, number>): JointAlphaResult {
       for (let i = 0; i < nCons; i++) {
         const v = inventory.get(constraintNodes[i]);
@@ -356,7 +311,7 @@ export function compileJointInnerLp(
       }
       const lambda = new Float64Array(nt);
       for (let i = 0; i < nt; i++) lambda[i] = lambdaMap.get(targets[i]) ?? 0;
-      fillEpigraphB(lambda);
+      fillEnvelopeB(lambda);
       const r = solveLp(c, A, bScratch);
       const craftByTarget = new Map<string, number>();
       const primalByNode = new Map<string, number>();
@@ -374,37 +329,8 @@ export function compileJointInnerLp(
   };
 }
 
-// argmax over t in [0, 1] of a concave function. Robust to phi returning
-// -Infinity on part of the interval.
-function goldenSectionArgmaxZeroToOne(phi: (t: number) => number, iters = 100): number {
-  const GOLDEN = (Math.sqrt(5) - 1) / 2;
-  let a = 0;
-  let b = 1;
-  let c = b - GOLDEN * (b - a);
-  let d = a + GOLDEN * (b - a);
-  let fc = phi(c);
-  let fd = phi(d);
-  for (let i = 0; i < iters; i++) {
-    if (fc >= fd) {
-      b = d;
-      d = c;
-      fd = fc;
-      c = b - GOLDEN * (b - a);
-      fc = phi(c);
-    } else {
-      a = c;
-      c = d;
-      fc = fd;
-      d = a + GOLDEN * (b - a);
-      fd = phi(d);
-    }
-  }
-  return (a + b) / 2;
-}
-
-// Recover the per-target craft split maximizing the EXACT objective
-// sum_T g(Q_T*craft_T + lambda_T) at a fixed inventory, by Frank-Wolfe with an
-// exact line search. Runs once per returned solution, never in the search loop.
+// Recovers the per-target craft split maximizing the EXACT objective at a fixed inventory.
+// Runs once per returned solution, never in the search loop.
 export function refineJointCraftSplit(
   recipeDag: RecipeDAG,
   targets: readonly string[],
@@ -422,9 +348,6 @@ export function refineJointCraftSplit(
 
   const Q = (t: string) => QByTarget.get(t) ?? 0;
   const lam = (t: string) => lambda.get(t) ?? 0;
-  const G_PRIME_CAP = 1e12; // guards g'(s) -> Infinity as s -> 0
-  const gPrime = (s: number) => (s <= 0 ? G_PRIME_CAP : Math.min(1 / Math.expm1(s), G_PRIME_CAP));
-  const g = (s: number) => (s > 0 ? Math.log(-Math.expm1(-s)) : -Infinity);
 
   let currentPrimal = new Map(seed.primalByNode);
   let currentCraft = new Map<string, number>();
@@ -452,7 +375,7 @@ export function refineJointCraftSplit(
     const phi = (t: number) => {
       let sum = 0;
       for (let i = 0; i < craftTargets.length; i++) {
-        const gv = g(s0[i] + t * (s1[i] - s0[i]));
+        const gv = logHit(s0[i] + t * (s1[i] - s0[i]));
         if (gv === -Infinity) return -Infinity;
         sum += gv;
       }
@@ -460,7 +383,7 @@ export function refineJointCraftSplit(
     };
     // Golden section only converges *toward* an endpoint, stopping a few ULPs
     // short, and endpoints are the common case. Probe them and prefer on ties.
-    const tInterior = goldenSectionArgmaxZeroToOne(phi);
+    const tInterior = goldenSectionArgmax(phi);
     const fInterior = phi(tInterior);
     let tStar = tInterior;
     if (phi(1) >= fInterior) tStar = 1;

@@ -1,13 +1,9 @@
-// Exact 3-bin packing feasibility, returning a witness assignment.
-//
-// This module is deliberately standalone and imports nothing — in particular
-// nothing from `src/oracle/`. The oracle spec re-checks every solver plan
-// against its own independent 3-bin feasibility routine
-// (`src/oracle/optimizer-oracle.spec.ts:140-143`); that assertion is only
-// meaningful while the two implementations are separate. Sharing one packer
-// would make it circular and silently stop validating anything.
+// Exact 3-bin packing feasibility, returning a witness assignment. Deliberately standalone and imports
+// nothing: the arena re-checks every plan against its own packer (invariant C1), which is only meaningful
+// while the two implementations stay separate.
 
-const NUM_SLOTS = 3;
+// Three mission slots, as the game gives. Exported because it is a property of the game rather than of this packer.
+export const NUM_SLOTS = 3;
 const EPS = 1e-9;
 
 /**
@@ -57,9 +53,8 @@ export function packWitness(
   // still empty, which is where the search prunes hardest.
   active.sort((a, b) => durations[b] - durations[a]);
 
-  // Only infeasible states are worth memoising: the first `true` propagates
-  // straight to the root and ends the search, so a feasible state is never
-  // re-queried. Keys quantise loads with Math.round, matching the oracle.
+  // Only infeasible states are worth memoising: the first `true` propagates straight to the root and ends the
+  // search, so a feasible state is never re-queried.
   const infeasible = new Set<string>();
   let nodes = 0;
   let exhausted = false;

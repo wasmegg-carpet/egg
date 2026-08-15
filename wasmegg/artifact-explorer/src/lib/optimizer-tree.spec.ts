@@ -2,7 +2,7 @@
 // builders resolve names and icons through getArtifactTierPropsFromId.
 
 import { describe, expect, it } from 'vitest';
-import { ei, iconURL, Inventory } from 'lib';
+import { ei, Inventory } from 'lib';
 
 import {
   buildRecipeTree,
@@ -10,34 +10,12 @@ import {
   computeCraftChainTree,
   computeInventoryTree,
 } from './optimizer-tree';
-import { makeNode, makeSolution } from './spec-helpers';
+import { lt1, lt2, lt3, lt4, makeNode, makeSolution, totemDag } from './spec-helpers';
 import type { RecipeDAG } from './types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
 const Rarity = ei.ArtifactSpec.Rarity;
-
-const lt1 = 'lunar-totem-1';
-const lt2 = 'lunar-totem-2';
-const lt3 = 'lunar-totem-3';
-const lt4 = 'lunar-totem-4';
-
-// lt4 needs 2x lt3 + 1x lt2; both intermediates share the lt1 leaf, and lt3
-// wins its canonical occurrence by BFS order.
-function totemDag(): RecipeDAG {
-  return new Map([
-    [
-      lt4,
-      makeNode(lt4, false, [
-        [lt3, 2],
-        [lt2, 1],
-      ]),
-    ],
-    [lt3, makeNode(lt3, false, [[lt1, 3]])],
-    [lt2, makeNode(lt2, false, [[lt1, 2]])],
-    [lt1, makeNode(lt1, true)],
-  ]);
-}
 
 // 4 common + 1 legendary T1 totems, 2 rare T2 totems.
 function totemInventory(): Inventory {
@@ -61,45 +39,9 @@ describe('computeCanonicalOccurrence', () => {
     const { canonicalParent } = computeCanonicalOccurrence(lt4, totemDag());
     expect(canonicalParent.get(lt1)).toBe(lt3);
   });
-
-  it('ignores child references missing from the DAG', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt2,
-        makeNode(lt2, false, [
-          [lt1, 2],
-          ['puzzle-cube-1', 1],
-        ]),
-      ],
-      [lt1, makeNode(lt1, true)],
-    ]);
-    const { minDepth } = computeCanonicalOccurrence(lt2, dag);
-    expect(minDepth.has('puzzle-cube-1')).toBe(false);
-  });
-
-  it('tolerates cycles between ingredients without looping', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt4,
-        makeNode(lt4, false, [
-          [lt3, 1],
-          [lt2, 1],
-        ]),
-      ],
-      [lt3, makeNode(lt3, false, [[lt2, 1]])],
-      [lt2, makeNode(lt2, false, [[lt3, 1]])],
-    ]);
-    const { minDepth } = computeCanonicalOccurrence(lt4, dag);
-    expect(Object.fromEntries(minDepth)).toEqual({ [lt4]: 0, [lt3]: 1, [lt2]: 1 });
-  });
 });
 
 describe('buildRecipeTree', () => {
-  it('returns null when the root is not in the DAG', () => {
-    const canonical = computeCanonicalOccurrence('puzzle-cube-1', totemDag());
-    expect(buildRecipeTree('puzzle-cube-1', totemDag(), canonical, () => ({}))).toBeNull();
-  });
-
   it('expands the canonical occurrence of a shared leaf and dims the duplicate, without recursing into it', () => {
     const dag = totemDag();
     const canonical = computeCanonicalOccurrence(lt4, dag);
@@ -135,52 +77,9 @@ describe('buildRecipeTree', () => {
     expect(lt1ViaLt2.children).toEqual([]);
     expect(lt1ViaLt2.metrics).toEqual(lt1ViaLt3.metrics);
   });
-
-  it('skips child references missing from the DAG', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt2,
-        makeNode(lt2, false, [
-          [lt1, 2],
-          ['puzzle-cube-1', 1],
-        ]),
-      ],
-      [lt1, makeNode(lt1, true)],
-    ]);
-    const canonical = computeCanonicalOccurrence(lt2, dag);
-    const tree = buildRecipeTree(lt2, dag, canonical, () => ({}))!;
-    expect(tree.children.map(c => c.nodeId)).toEqual([lt1]);
-  });
-
-  it('tolerates cycles between ingredients without infinite recursion', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt4,
-        makeNode(lt4, false, [
-          [lt3, 1],
-          [lt2, 1],
-        ]),
-      ],
-      [lt3, makeNode(lt3, false, [[lt2, 1]])],
-      [lt2, makeNode(lt2, false, [[lt3, 1]])],
-    ]);
-    const canonical = computeCanonicalOccurrence(lt4, dag);
-    const tree = buildRecipeTree(lt4, dag, canonical, () => ({}))!;
-    expect(tree.children.map(c => c.nodeId)).toEqual([lt3, lt2]);
-    // lt2 is already canonically expanded as lt4's own child
-    const lt3Node = tree.children.find(c => c.nodeId === lt3)!;
-    expect(lt3Node.children).toHaveLength(1);
-    expect(lt3Node.children[0].nodeId).toBe(lt2);
-    expect(lt3Node.children[0].isDuplicate).toBe(true);
-    expect(lt3Node.children[0].children).toEqual([]);
-  });
 });
 
 describe('computeInventoryTree', () => {
-  it('returns null when the root is not in the DAG', () => {
-    expect(computeInventoryTree('puzzle-cube-1', totemDag(), totemInventory())).toBeNull();
-  });
-
   it('still builds the tree with zero-valued metrics when there is no player inventory', () => {
     const tree = computeInventoryTree(lt4, totemDag(), null)!;
     expect(tree).not.toBeNull();
@@ -190,88 +89,36 @@ describe('computeInventoryTree', () => {
 
   it('walks the DAG, summing owned counts across rarities, root included', () => {
     const tree = computeInventoryTree(lt4, totemDag(), totemInventory())!;
-    expect(tree).toEqual({
-      nodeId: lt4,
-      name: 'Eggceptional lunar totem',
-      iconUrl: iconURL('egginc/afx_lunar_totem_4.png', 64),
-      depth: 0,
-      qtyPerParentCraft: 1,
-      isLeaf: false,
-      isDuplicate: false,
-      metrics: { have: 0 },
-      children: [
-        {
-          nodeId: lt3,
-          name: 'Powerful lunar totem',
-          iconUrl: iconURL('egginc/afx_lunar_totem_3.png', 64),
-          depth: 1,
-          qtyPerParentCraft: 2,
-          isLeaf: false,
-          isDuplicate: false,
-          metrics: { have: 0 },
-          children: [
-            {
-              nodeId: lt1,
-              name: 'Basic lunar totem',
-              iconUrl: iconURL('egginc/afx_lunar_totem_1.png', 64),
-              depth: 2,
-              qtyPerParentCraft: 3,
-              isLeaf: true,
-              isDuplicate: false,
-              metrics: { have: 5 },
-              children: [],
-            },
-          ],
-        },
-        {
-          nodeId: lt2,
-          name: 'Lunar totem',
-          iconUrl: iconURL('egginc/afx_lunar_totem_2.png', 64),
-          depth: 1,
-          qtyPerParentCraft: 1,
-          isLeaf: false,
-          isDuplicate: false,
-          metrics: { have: 2 },
-          children: [
-            {
-              nodeId: lt1,
-              name: 'Basic lunar totem',
-              iconUrl: iconURL('egginc/afx_lunar_totem_1.png', 64),
-              depth: 2,
-              qtyPerParentCraft: 2,
-              isLeaf: true,
-              // canonical occurrence is via lt3 above
-              isDuplicate: true,
-              metrics: { have: 5 },
-              children: [],
-            },
-          ],
-        },
-      ],
-    });
-  });
+    const flat = new Map<string, { depth: number; qty: number; dup: boolean; have: number }>();
+    const walk = (n: typeof tree, key: string) => {
+      flat.set(key, {
+        depth: n.depth,
+        qty: n.qtyPerParentCraft,
+        dup: n.isDuplicate,
+        have: n.metrics.have,
+      });
+      for (const c of n.children) walk(c, `${key}>${c.nodeId}`);
+    };
+    walk(tree, lt4);
 
-  it('skips child references that are missing from the DAG', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt2,
-        makeNode(lt2, false, [
-          [lt1, 2],
-          ['puzzle-cube-1', 1],
-        ]),
-      ],
-      [lt1, makeNode(lt1, true)],
+    // 4 common + 1 legendary T1 -> 5; 2 rare T2 -> 2; nothing at T3 or T4.
+    expect([...flat.keys()]).toEqual([
+      lt4,
+      `${lt4}>${lt3}`,
+      `${lt4}>${lt3}>${lt1}`,
+      `${lt4}>${lt2}`,
+      `${lt4}>${lt2}>${lt1}`,
     ]);
-    const tree = computeInventoryTree(lt2, dag, totemInventory())!;
-    expect(tree.children.map(c => c.nodeId)).toEqual([lt1]);
+    expect(flat.get(lt4)).toEqual({ depth: 0, qty: 1, dup: false, have: 0 });
+    expect(flat.get(`${lt4}>${lt3}`)).toEqual({ depth: 1, qty: 2, dup: false, have: 0 });
+    expect(flat.get(`${lt4}>${lt2}`)).toEqual({ depth: 1, qty: 1, dup: false, have: 2 });
+    expect(flat.get(`${lt4}>${lt3}>${lt1}`)).toEqual({ depth: 2, qty: 3, dup: false, have: 5 });
+    // canonical occurrence is via lt3, so this one is dimmed
+    expect(flat.get(`${lt4}>${lt2}>${lt1}`)).toEqual({ depth: 2, qty: 2, dup: true, have: 5 });
   });
 });
 
 describe('computeCraftChainTree', () => {
-  it('returns null when the root is not in the DAG', () => {
-    expect(computeCraftChainTree(makeSolution({}), lt4, null)).toBeNull();
-  });
-
   it('breaks down owned/dropped/crafted/consumed per node, root included', () => {
     const solution = makeSolution({
       recipeDag: totemDag(),
@@ -384,7 +231,6 @@ describe('computeCraftChainTree', () => {
       ],
     });
 
-    // totemInventory holds 5 T1 totems (4 common + 1 legendary).
     const ownedViaLt3 = computeCraftChainTree(solution, lt3, totemInventory())!.children.find(c => c.nodeId === lt1)!
       .metrics.owned;
     const ownedViaLt2 = computeCraftChainTree(solution, lt2, totemInventory())!.children.find(c => c.nodeId === lt1)!
@@ -393,6 +239,41 @@ describe('computeCraftChainTree', () => {
     expect(ownedViaLt3).toBeCloseTo(5 * (6 / 16), 9);
     expect(ownedViaLt2).toBeCloseTo(5 * (10 / 16), 9);
     expect(ownedViaLt3 + ownedViaLt2).toBeCloseTo(5, 9);
+  });
+
+  it('partitions a target that is also an ingredient of another target', () => {
+    // lt3 is selected *and* consumed by lt4. Its pooled crafts and its bill have to split
+    // between the two trees: giving lt3's own tree the whole pool and lt4's tree a demand
+    // share of it again put the craft-chain subtotals past the plan's real crafting cost.
+    const dag: RecipeDAG = new Map([
+      [lt4, makeNode(lt4, false, [[lt3, 2]])],
+      [lt3, makeNode(lt3, false, [[lt1, 3]])],
+      [lt1, makeNode(lt1, true)],
+    ]);
+    const prob = { bestProbability: 0, craftProbability: 0, dropProbability: 0 };
+    // Demand for lt3: lt4 wants 3*2 = 6, lt3 wants 2 for itself, total 8.
+    const solution = makeSolution({
+      recipeDag: dag,
+      craftPrimal: new Map([
+        [lt4, 3],
+        [lt3, 8],
+      ]),
+      perTarget: [
+        { nodeId: lt4, expectedCrafts: 3, ...prob },
+        { nodeId: lt3, expectedCrafts: 2, ...prob },
+      ],
+    });
+
+    const lt3ViaLt4 = computeCraftChainTree(solution, lt4, null)!.children.find(c => c.nodeId === lt3)!;
+    const lt3Root = computeCraftChainTree(solution, lt3, null)!;
+    expect(lt3ViaLt4.metrics.crafted).toBeCloseTo(8 * (6 / 8), 9);
+    expect(lt3Root.metrics.crafted).toBeCloseTo(8 * (2 / 8), 9);
+
+    // The whole point: the two slices reconstitute the pool instead of over-drawing it.
+    expect(lt3ViaLt4.metrics.crafted + lt3Root.metrics.crafted).toBeCloseTo(8, 9);
+
+    // An uncontested target still keeps its own pool whole.
+    expect(computeCraftChainTree(solution, lt4, null)!.metrics.crafted).toBe(3);
   });
 
   it('falls back to an even split when no target demands the node', () => {
@@ -428,35 +309,60 @@ describe('computeCraftChainTree', () => {
       expect(child.metrics.owned).toBe(0);
     }
   });
+});
 
-  it('skips child references that are missing from the DAG', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt4,
-        makeNode(lt4, false, [
-          [lt3, 2],
-          ['puzzle-cube-1', 1],
-        ]),
-      ],
-      [lt3, makeNode(lt3, true)],
-    ]);
-    const tree = computeCraftChainTree(makeSolution({ recipeDag: dag }), lt4, null)!;
-    expect(tree.children.map(c => c.nodeId)).toEqual([lt3]);
+describe('every builder survives a malformed DAG', () => {
+  // lt2 names an ingredient the DAG does not contain.
+  const missingChild: RecipeDAG = new Map([
+    [
+      lt2,
+      makeNode(lt2, false, [
+        [lt1, 2],
+        ['puzzle-cube-1', 1],
+      ]),
+    ],
+    [lt1, makeNode(lt1, true)],
+  ]);
+  // lt3 and lt2 consume each other.
+  const cyclic: RecipeDAG = new Map([
+    [
+      lt4,
+      makeNode(lt4, false, [
+        [lt3, 1],
+        [lt2, 1],
+      ]),
+    ],
+    [lt3, makeNode(lt3, false, [[lt2, 1]])],
+    [lt2, makeNode(lt2, false, [[lt3, 1]])],
+  ]);
+
+  // Every builder that returns a tree, behind one signature.
+  const builders: [string, (root: string, dag: RecipeDAG) => { children: { nodeId: string }[] } | null][] = [
+    ['buildRecipeTree', (root, dag) => buildRecipeTree(root, dag, computeCanonicalOccurrence(root, dag), () => ({}))],
+    ['computeInventoryTree', (root, dag) => computeInventoryTree(root, dag, totemInventory())],
+    ['computeCraftChainTree', (root, dag) => computeCraftChainTree(makeSolution({ recipeDag: dag }), root, null)],
+  ];
+
+  it('computeCanonicalOccurrence ignores a missing child and terminates on a cycle', () => {
+    expect(computeCanonicalOccurrence(lt2, missingChild).minDepth.has('puzzle-cube-1')).toBe(false);
+    expect(Object.fromEntries(computeCanonicalOccurrence(lt4, cyclic).minDepth)).toEqual({
+      [lt4]: 0,
+      [lt3]: 1,
+      [lt2]: 1,
+    });
   });
 
-  it('tolerates cycles between ingredients without looping', () => {
-    const dag: RecipeDAG = new Map([
-      [
-        lt4,
-        makeNode(lt4, false, [
-          [lt3, 1],
-          [lt2, 1],
-        ]),
-      ],
-      [lt3, makeNode(lt3, false, [[lt2, 1]])],
-      [lt2, makeNode(lt2, false, [[lt3, 1]])],
-    ]);
-    const tree = computeCraftChainTree(makeSolution({ recipeDag: dag }), lt4, null)!;
-    expect(tree.children.map(c => c.nodeId)).toEqual([lt3, lt2]);
-  });
+  for (const [name, build] of builders) {
+    it(`${name} returns null for a root outside the DAG`, () => {
+      expect(build('puzzle-cube-1', totemDag())).toBeNull();
+    });
+
+    it(`${name} skips a child reference missing from the DAG`, () => {
+      expect(build(lt2, missingChild)!.children.map(c => c.nodeId)).toEqual([lt1]);
+    });
+
+    it(`${name} terminates on a cycle between ingredients`, () => {
+      expect(build(lt4, cyclic)!.children.map(c => c.nodeId)).toEqual([lt3, lt2]);
+    });
+  }
 });

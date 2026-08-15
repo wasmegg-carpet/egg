@@ -101,9 +101,8 @@ export default defineComponent({
     targets: { type: Array as PropType<TargetView[]>, required: true },
   },
   setup(props) {
-    // One row per target for any count, so the markup below needs no n=1 arm.
-    // targets can be empty, in which case the solution's own top-level fields
-    // (which mirror perTarget[0]) stand in for the single row.
+    // One row per target for any count. `targets` can be empty, in which case the solution's own top-level
+    // fields (which mirror `perTarget[0]`) stand in for the single row.
     const rows = computed<TargetView[]>(() =>
       props.targets.length > 0
         ? props.targets

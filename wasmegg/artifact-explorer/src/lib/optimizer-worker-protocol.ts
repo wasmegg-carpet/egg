@@ -1,7 +1,5 @@
-// Message shapes shared by the optimizer worker and its main-thread client.
-// This wire format exists because structured clone drops prototypes: `ship` is
-// a MissionType whose entire API is getters, so it is narrowed to its two
-// fields on the way out and reconstructed on the way in. See OPTIMIZER.md.
+// Message shapes shared by the optimizer worker and its main-thread client. Structured clone drops
+// prototypes: `ship` is a MissionType whose entire API is getters, so it is narrowed on the way out and rebuilt on the way in.
 
 import { ei, MissionType } from 'lib';
 import type { LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG } from './types';
@@ -21,7 +19,8 @@ export interface OptimizerRequest {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
-  timeCapacity: number;
+  timeCapacityPerSlot: number;
+  maximumCost: number | undefined;
   baseYield: Map<string, number>;
 }
 

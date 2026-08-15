@@ -4,7 +4,6 @@
       Probability breakdown<template v-if="heading"> — {{ heading }}</template>
     </summary>
 
-    <!-- Formula decomposition -->
     <div class="mt-2 text-xs bg-gray-50 rounded p-2 space-y-0.5">
       <div class="font-medium text-gray-700">
         P(legendary) = {{ (bestProbability * 100).toFixed(2) }}%
@@ -24,7 +23,6 @@
       <div class="pl-6 text-gray-500">λ = {{ lambda.toFixed(3) }} expected direct legendary drops</div>
     </div>
 
-    <!-- Craft chain -->
     <template v-if="craftChainTree">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">Craft chain</div>
       <div class="flex items-baseline gap-1 text-xs py-0.5 font-medium text-gray-700 pl-1">
@@ -59,7 +57,6 @@
       </ul>
     </template>
 
-    <!-- Per-mission legendary contributions -->
     <template v-if="missionLegendarySources.length > 0">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
         Direct legendary sources (λ = {{ lambda.toFixed(3) }})
