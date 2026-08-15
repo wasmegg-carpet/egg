@@ -4,9 +4,8 @@ import { packWitness } from './packing';
 const NUM_SLOTS = 3;
 const TOL = 1e-9;
 
-// Independent oracle: expand the multiset into individual missions and try
-// every mission in every slot. No DP, no memo, no symmetry breaking — nothing
-// shared with packWitness, so agreement is real evidence.
+// Independent oracle: expand the multiset into individual missions and try every mission in every slot.
+// Nothing is shared with `packWitness`, so agreement is real evidence.
 function bruteForcePacks(durations: number[], counts: number[], capacity: number): boolean {
   const items: number[] = [];
   for (let j = 0; j < durations.length; j++) {
@@ -43,12 +42,7 @@ function mulberry32(seed: number): () => number {
 
 // Returns a description of the first defect, or null. Plain code rather than
 // `expect` so the 20k-case loop stays cheap; callers assert on the result.
-function witnessDefect(
-  witness: number[][],
-  durations: number[],
-  counts: number[],
-  capacity: number
-): string | null {
+function witnessDefect(witness: number[][], durations: number[], counts: number[], capacity: number): string | null {
   if (witness.length !== durations.length) {
     return `witness has ${witness.length} groups, expected ${durations.length}`;
   }
@@ -71,12 +65,7 @@ function witnessDefect(
   return null;
 }
 
-function expectValidWitness(
-  witness: number[][],
-  durations: number[],
-  counts: number[],
-  capacity: number
-): void {
+function expectValidWitness(witness: number[][], durations: number[], counts: number[], capacity: number): void {
   expect(witnessDefect(witness, durations, counts, capacity)).toBeNull();
 }
 
@@ -104,9 +93,7 @@ describe('packWitness', () => {
       const capacity = 5 + Math.floor(rng() * 21);
 
       const shape = () =>
-        `case ${c}: durations=${JSON.stringify(durations)} counts=${JSON.stringify(
-          counts
-        )} capacity=${capacity}`;
+        `case ${c}: durations=${JSON.stringify(durations)} counts=${JSON.stringify(counts)} capacity=${capacity}`;
 
       const expected = bruteForcePacks(durations, counts, capacity);
       const actual = packWitness(durations, counts, capacity);
@@ -149,7 +136,6 @@ describe('packWitness', () => {
 
   it('rejects four missions each longer than half capacity', () => {
     expect(packWitness([60], [4], 100)).toBeNull();
-    // Three of them still fit, one per slot.
     const w = packWitness([60], [3], 100);
     expect(w).not.toBeNull();
     expectValidWitness(w!, [60], [3], 100);
@@ -198,7 +184,6 @@ describe('packWitness', () => {
   });
 
   it('still answers from the prefilters when the budget is tiny', () => {
-    // Prefilter rejections happen before any node is spent.
     expect(packWitness([500], [1], 100, 1)).toBeNull();
   });
 });

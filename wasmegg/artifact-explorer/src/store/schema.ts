@@ -1,6 +1,5 @@
-// Persisted config shapes, defaults, and the type guards that validate
-// localStorage values. Kept free of side effects (no localStorage or window
-// access at import time) so it can be unit tested under node.
+// Persisted config shapes, defaults, and the type guards that validate localStorage values.
+// Free of side effects at import time, so it can be unit tested under node.
 
 import { virtueShipGemCosts, ei } from 'lib';
 
@@ -68,9 +67,6 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
   );
 }
 
-// How much effort the player will put into relaunching missions. Lower effort
-// means a longer launch period, biasing the optimizer away from lots of tiny,
-// babysitting-heavy launches.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const;
 
 export type EffortLevel = (typeof EFFORT_LEVELS)[number];

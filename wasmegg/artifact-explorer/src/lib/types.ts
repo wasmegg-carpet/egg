@@ -15,6 +15,7 @@ export interface LaunchOption {
   // level's launch period
   actualTime: number;
   rawTime: number; // true (unfloored) boosted duration
+  cost: number;
   // everything this launch drops, per single ship — display only
   supplyVector: Map<string, number>;
   // subset of supplyVector restricted to recipe ingredients; this is what
@@ -85,7 +86,7 @@ export interface OptimizerSolution {
   fuelByEgg: Map<ei.Egg, number>;
   timeUnitsUsed: integer; // makespan: the busiest slot's floored load
   runningTimeSeconds: integer; // the busiest slot's real (raw) flight time
-  slots?: SlotSummary[]; // per-slot occupancy of the chosen plan
+  slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];
   finalYieldVector: Map<string, number>;

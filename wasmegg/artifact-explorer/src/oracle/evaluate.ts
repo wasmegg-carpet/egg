@@ -1,8 +1,5 @@
-// Independent evaluator: compute the legendary probability of an integer
-// launch allocation from first principles, derived from the optimizer's
-// documented objective (see optimizer-core.ts) rather than its implementation.
-// A float simplex ranks the brute-force candidates cheaply; an exact
-// BigInt-rational simplex produces the numbers that get asserted or reported.
+// Independent evaluator: the legendary probability of an integer launch allocation, re-derived from the
+// documented objective. A float simplex ranks candidates; an exact BigInt-rational simplex produces the asserted numbers.
 
 import type { LaunchOption, RecipeDAG } from '../lib/types';
 import { Frac } from './rational';
@@ -13,16 +10,16 @@ export interface OracleInstance {
   seed: number;
   options: LaunchOption[];
   dag: RecipeDAG;
-  targets: string[]; // desired node ids; [0] is the primary target
+  targets: string[];
   fuelCapacity: number;
-  timeCapacity: number;
+  timeCapacityPerSlot: number;
   baseYield: Map<string, number>;
 }
 
 export interface OracleEvaluation {
   score: number; // Q-weighted crafts + direct legendary drops
   lpScore: number; // Q-weighted crafts only
-  drops: number; // total direct legendary drops
+  drops: number;
   probability: number; // 1 - exp(-score)
   expectedCrafts: number | null; // single-target instances only
 }
@@ -35,15 +32,14 @@ export function targetQ(inst: OracleInstance, target: string): number {
   return -Math.log(1 - node.legendaryCraftProbability);
 }
 
-// Shared across allocations of one instance: only the right-hand side (the
-// inventory) changes.
 interface LpTemplate {
   craftables: string[];
   items: string[];
-  A: number[][];
-  c: number[];
-  AFrac: Frac[][] | null;
-  cFrac: Frac[] | null;
+  constraintMatrix: number[][];
+  objectiveCoefficients: number[];
+  // The same two in exact arithmetic, built on first use.
+  constraintMatrixFrac: Frac[][] | null;
+  objectiveCoefficientsFrac: Frac[] | null;
 }
 
 const templateCache = new WeakMap<OracleInstance, LpTemplate>();
@@ -70,7 +66,7 @@ function lpTemplate(inst: OracleInstance): LpTemplate {
   }
   const items = [...ingredients];
 
-  const A = items.map(item => {
+  const constraintMatrix = items.map(item => {
     const row = new Array<number>(craftables.length).fill(0);
     for (const node of inst.dag.values()) {
       if (node.isLeaf) {
@@ -90,16 +86,23 @@ function lpTemplate(inst: OracleInstance): LpTemplate {
     return row;
   });
 
-  const c = new Array<number>(craftables.length).fill(0);
+  const objectiveCoefficients = new Array<number>(craftables.length).fill(0);
   for (const target of inst.targets) {
     const j = varIndex.get(target);
     if (j === undefined) {
       throw new Error(`target ${target} is not craftable`);
     }
-    c[j] += targetQ(inst, target);
+    objectiveCoefficients[j] += targetQ(inst, target);
   }
 
-  template = { craftables, items, A, c, AFrac: null, cFrac: null };
+  template = {
+    craftables,
+    items,
+    constraintMatrix,
+    objectiveCoefficients,
+    constraintMatrixFrac: null,
+    objectiveCoefficientsFrac: null,
+  };
   templateCache.set(inst, template);
   return template;
 }
@@ -134,7 +137,6 @@ function directDrops(inst: OracleInstance, allocation: number[]): number {
   return drops;
 }
 
-// Cheap ranking path; ~1e-9 accuracy against gaps asserted at 1e-3 scale.
 export function evaluateAllocationFloat(inst: OracleInstance, allocation: number[]): number {
   const template = lpTemplate(inst);
   const inv = new Map<string, number>();
@@ -150,19 +152,19 @@ export function evaluateAllocationFloat(inst: OracleInstance, allocation: number
     }
   });
   const b = template.items.map(item => inv.get(item) ?? 0);
-  return simplexMaximizeFloat(template.A, b, template.c) + directDrops(inst, allocation);
+  return simplexMaximizeFloat(template.constraintMatrix, b, template.objectiveCoefficients) + directDrops(inst, allocation);
 }
 
 export function evaluateAllocation(inst: OracleInstance, allocation: number[]): OracleEvaluation {
   const template = lpTemplate(inst);
-  if (!template.AFrac || !template.cFrac) {
-    template.AFrac = template.A.map(row => row.map(x => Frac.fromNumber(x)));
-    template.cFrac = template.c.map(x => Frac.fromNumber(x));
+  if (!template.constraintMatrixFrac || !template.objectiveCoefficientsFrac) {
+    template.constraintMatrixFrac = template.constraintMatrix.map(row => row.map(x => Frac.fromNumber(x)));
+    template.objectiveCoefficientsFrac = template.objectiveCoefficients.map(x => Frac.fromNumber(x));
   }
   const inv = inventoryFor(inst, allocation);
   const b = template.items.map(item => inv.get(item) ?? Frac.ZERO);
 
-  const lpScore = simplexMaximize(template.AFrac, b, template.cFrac).toNumber();
+  const lpScore = simplexMaximize(template.constraintMatrixFrac, b, template.objectiveCoefficientsFrac).toNumber();
   const drops = directDrops(inst, allocation);
   const score = lpScore + drops;
   return {
@@ -174,11 +176,6 @@ export function evaluateAllocation(inst: OracleInstance, allocation: number[]): 
   };
 }
 
-// ---------------------------------------------------------------------------
-// Joint (product) probability evaluator. Solves the TRUE objective directly --
-// no LP relaxation, no tangent lines -- so it can catch bugs in production's
-// tangent-envelope approximation rather than repeating its logic.
-
 export interface OracleJointTargetResult {
   nodeId: string;
   score: number; // Q_T * craftCount_T + direct-drop lambda_T
@@ -187,7 +184,7 @@ export interface OracleJointTargetResult {
 }
 
 export interface OracleJointEvaluation {
-  jointProbability: number; // product over targets of bestProbability
+  jointProbability: number;
   perTarget: OracleJointTargetResult[];
 }
 
@@ -199,8 +196,6 @@ function directDropsFor(inst: OracleInstance, allocation: number[], target: stri
   return drops;
 }
 
-// Re-derived rather than imported, to keep this evaluator independent of
-// production code.
 function logHitProbability(s: number): number {
   return s > 0 ? Math.log(-Math.expm1(-s)) : -Infinity;
 }
@@ -248,12 +243,10 @@ function goldenSectionArgmax(f: (x: number) => number, iters = 80): number {
 }
 
 interface FrontierVertexFloat {
-  scores: number[]; // Q_i * primal[idx_i] for each target
+  scores: number[];
   primal: number[];
 }
 
-// Maximize the weighted-sum craft objective sum_i weights_i * Q_i * craft_i over
-// the conservation polytope (RHS b), for an arbitrary number of targets.
 function solveWeightedFloat(
   template: LpTemplate,
   b: number[],
@@ -265,13 +258,11 @@ function solveWeightedFloat(
   for (let i = 0; i < idxs.length; i++) {
     c[idxs[i]] = weights[i] * Qs[i];
   }
-  const { primal } = simplexMaximizeFloatFull(template.A, b, c);
+  const { primal } = simplexMaximizeFloatFull(template.constraintMatrix, b, c);
   const scores = idxs.map((idx, i) => Qs[i] * primal[idx]);
   return { scores, primal };
 }
 
-// g'(s); grows like 1/s as s -> 0, so it is capped to keep the linearized
-// objective finite at zero score.
 function jointGPrime(s: number): number {
   const CAP = 1e12;
   return s <= 0 ? CAP : Math.min(1 / Math.expm1(s), CAP);
@@ -279,14 +270,10 @@ function jointGPrime(s: number): number {
 
 interface JointOptimum {
   scores: number[]; // s_i = Q_i * craft_i + lambda_i, per target
-  crafts: number[]; // expected legendary crafts per target
+  crafts: number[];
   logProb: number; // sum_i logHitProbability(s_i)
 }
 
-// Maximize the exact joint objective sum_i g(s_i), s_i = Q_i*craft_i + lambda_i,
-// over the craft-conservation polytope at a fixed inventory, for any number of
-// targets. The simplex, polytope build and objective are all independent
-// re-derivations, so agreement with production is genuine corroboration.
 function optimizeJointFloat(
   template: LpTemplate,
   b: number[],
@@ -295,10 +282,6 @@ function optimizeJointFloat(
   lambdas: number[]
 ): JointOptimum {
   const n = idxs.length;
-  // AWAY-STEP Frank-Wolfe, not plain FW: plain FW zig-zags to ~5e4 iterations
-  // when the optimum lies in the interior of a face. Seeded at the centroid of
-  // the per-target max-craft vertices, since a corner seed leaves n-1 targets
-  // at zero crafts where g(0) = -Infinity pins the line search.
   interface ActiveVertex {
     crafts: number[];
     weight: number;
@@ -326,10 +309,10 @@ function optimizeJointFloat(
   const GAP_TOL = 1e-12;
   for (let iter = 0; iter < 2000; iter++) {
     const scores = crafts.map((craft, i) => Qs[i] * craft + lambdas[i]);
-    const grad = scores.map((s, i) => jointGPrime(s) * Qs[i]); // d/d(craft_i) sum g
+    const grad = scores.map((s, i) => jointGPrime(s) * Qs[i]);
     const c = new Array<number>(template.craftables.length).fill(0);
     for (let i = 0; i < n; i++) c[idxs[i]] = grad[i];
-    const { primal } = simplexMaximizeFloatFull(template.A, b, c);
+    const { primal } = simplexMaximizeFloatFull(template.constraintMatrix, b, c);
     const fwVertex = idxs.map(idx => primal[idx]);
 
     // FW duality gap: an upper bound on distance to the optimum.
@@ -337,7 +320,6 @@ function optimizeJointFloat(
     const gap = dot(grad, fwVertex) - gDotX;
     if (gap < GAP_TOL) break;
 
-    // The active vertex the gradient likes least.
     let awayIdx = 0;
     let awayDotVal = Infinity;
     for (let k = 0; k < active.length; k++) {
@@ -365,7 +347,6 @@ function optimizeJointFloat(
     };
     const gamma = goldenSectionArgmax(phi, 100) * gammaMax;
 
-    // Reweight the active set for the chosen step, then fold in / drop vertices.
     if (useFw) {
       for (const av of active) av.weight *= 1 - gamma;
       const hit = active.find(av => sameVertex(av.crafts, fwVertex));
@@ -395,8 +376,7 @@ function jointContext(inst: OracleInstance): {
   Qs: number[];
   targets: string[];
 } {
-  // n=1 never reaches here: both entry points short-circuit to the union
-  // evaluator, whose single-target arithmetic is exact.
+  // n=1 never reaches here: both entry points short-circuit to the union evaluator.
   if (inst.targets.length < 2) {
     throw new Error(
       `jointContext requires 2+ targets (got ${inst.targets.length}); n=1 short-circuits to the union evaluator`
@@ -412,7 +392,6 @@ function jointContext(inst: OracleInstance): {
   return { template, idxs, Qs, targets: inst.targets };
 }
 
-// Cheap ranking path; evaluateAllocationFloat's counterpart.
 export function evaluateAllocationJointFloat(inst: OracleInstance, allocation: number[]): number {
   if (inst.targets.length === 1) {
     return 1 - Math.exp(-evaluateAllocationFloat(inst, allocation));
@@ -446,8 +425,6 @@ export function evaluateAllocationJoint(inst: OracleInstance, allocation: number
   const b = template.items.map(item => inv.get(item) ?? 0);
   const lambdas = targets.map(t => directDropsFor(inst, allocation, t));
 
-  // Float FW reaches ~1e-12, far inside the 1e-6 honesty tolerance, and the
-  // optimum is usually interior to a face so no vertex is exactly reportable.
   const opt = optimizeJointFloat(template, b, idxs, Qs, lambdas);
   let jointProbability = 1;
   const perTarget: OracleJointTargetResult[] = targets.map((nodeId, i) => {

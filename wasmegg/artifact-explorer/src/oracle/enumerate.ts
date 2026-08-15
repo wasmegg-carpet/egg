@@ -122,7 +122,7 @@ export function countFeasible(inst: OracleInstance, cap: number): number | null 
   const n = inst.options.length;
   const { durations, durIdxByOption } = durationModel(inst);
   const durCounts = new Array<number>(durations.length).fill(0);
-  const S = inst.timeCapacity;
+  const S = inst.timeCapacityPerSlot;
   let count = 0;
 
   const walk = (i: number, fuelLeft: number): boolean => {
@@ -176,7 +176,7 @@ export function bruteForceBest(inst: OracleInstance): BruteForceResult {
 
   const { durations, durIdxByOption } = durationModel(inst);
   const durCounts = new Array<number>(durations.length).fill(0);
-  const S = inst.timeCapacity;
+  const S = inst.timeCapacityPerSlot;
 
   const allocation = new Array<number>(n).fill(0);
   let feasibleCount = 0;
@@ -284,7 +284,7 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
 
   const { durations, durIdxByOption } = durationModel(inst);
   const durCounts = new Array<number>(durations.length).fill(0);
-  const S = inst.timeCapacity;
+  const S = inst.timeCapacityPerSlot;
 
   const allocation = new Array<number>(n).fill(0);
   let feasibleCount = 0;

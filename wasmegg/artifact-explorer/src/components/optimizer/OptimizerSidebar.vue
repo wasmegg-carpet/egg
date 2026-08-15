@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-5">
-    <!-- Player data -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Player data</h3>
       <player-id-form :player-id="playerId" @submit="$emit('submitPlayerId', $event)" />
@@ -12,7 +11,6 @@
       </div>
     </section>
 
-    <!-- Constraints -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Constraints</h3>
       <div class="space-y-3">
@@ -121,7 +119,6 @@
       </div>
     </section>
 
-    <!-- Settings -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Settings</h3>
       <div class="divide-y divide-gray-100">
@@ -189,7 +186,6 @@
       </div>
     </section>
 
-    <!-- Ships -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Ships</h3>
       <div class="text-sm text-gray-600 mb-2">{{ shipsVisibleCount }} of {{ totalShips }} ships visible</div>
@@ -202,7 +198,6 @@
       </button>
     </section>
 
-    <!-- Compute -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Compute</h3>
       <label class="flex items-center gap-2 text-sm mb-2 select-none text-gray-600 cursor-pointer">
@@ -352,7 +347,6 @@ export default defineComponent({
     const maxTankLevel = fuelTankSizes.length - 1;
     const hasPlayerData = computed(() => !!playerShipsConfig.value);
 
-    // Shown when the override is off, in which case each target uses its own.
     const previousCraftEntries = computed(() =>
       currentOptimizerArtifactIds.value
         .filter(id => playerPreviousCraftsByArtifact.value.has(id))
@@ -428,17 +422,18 @@ export default defineComponent({
       e.preventDefault();
     }
 
-    // Shown value for the gem cost filter, in Egg, Inc. order-of-magnitude
-    // notation (e.g. 10S). Input is parsed back through the same notation.
-    const maxGemCostDisplay = computed(() => formatEIValue(missionFilters.value.maxGemCost, { trim: true }));
-
-    function onGemCostInput(event: Event) {
-      const raw = (event.target as HTMLInputElement).value.trim();
-      if (!raw) return;
-      const n = parseValueWithUnit(raw, false);
-      if (n === null || n < 0) return;
-      setMaxGemCost(n);
+    function costFieldHandler(set: (value: number) => void) {
+      return (event: Event) => {
+        const raw = (event.target as HTMLInputElement).value.trim();
+        if (!raw) return;
+        const n = parseValueWithUnit(raw, false);
+        if (n === null || !Number.isFinite(n) || n < 0) return;
+        set(n);
+      };
     }
+
+    const maxGemCostDisplay = computed(() => formatEIValue(missionFilters.value.maxGemCost, { trim: true }));
+    const onGemCostInput = costFieldHandler(setMaxGemCost);
 
     return {
       waitTimeDraft,
@@ -452,7 +447,6 @@ export default defineComponent({
       shipsVisibleCount,
       maxGemCostDisplay,
       onGemCostInput,
-      // effort slider
       EFFORT_LEVELS,
       effortMeta,
       effortTrack,
@@ -462,7 +456,6 @@ export default defineComponent({
       onTrackPointerMove,
       onTrackPointerUp,
       onTrackKeydown,
-      // store state
       config,
       extras,
       overrides,
@@ -472,7 +465,6 @@ export default defineComponent({
       playerPreviousCrafts,
       playerTankLevel,
       playerShipsConfig,
-      // setters
       setAutoCompute,
       setCraftingLevel,
       setPreviousCraftCount,

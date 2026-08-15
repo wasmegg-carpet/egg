@@ -1,6 +1,5 @@
 <template>
   <div v-if="artifactIds.length > 0" class="-mx-4 sm:mx-0 mt-2 mb-4 space-y-4">
-    <!-- Header spans both columns -->
     <div class="bg-gray-100 px-4 py-4 border-b border-gray-200 sm:px-6 sm:rounded-lg sm:shadow-sm">
       <div class="-ml-4 -mt-2 flex items-center justify-between flex-wrap sm:flex-nowrap">
         <div class="ml-4 mt-2 space-y-1">
@@ -132,12 +131,6 @@ function recursiveIngredientsOf(artifact: ReturnType<typeof id2artifact>) {
   const ingredients = [];
   while (queue.length > 0) {
     const item = queue.shift()!;
-    // Dedupe on first pop regardless of whether this is a direct ingredient.
-    // Skipping the check for direct ingredients meant one reachable as a
-    // descendant of another was re-expanded, and its whole subtree re-enqueued,
-    // every time it recurred — same output, repeated work. That cost used to be
-    // paid once per page; with several artifacts selected it is paid per
-    // artifact.
     if (seen.has(item.id)) {
       continue;
     }
@@ -170,16 +163,11 @@ export default defineComponent({
     const { tankPlannerArtifactId: rawParam } = toRefs(props);
     const router = useRouter();
 
-    // Drop any id that doesn't resolve to a real artifact before it ever
-    // reaches id2artifact()/getArtifactTierPropsFromId(), which throws for
-    // unrecognized ids. The route param comes straight from the URL, so a
-    // hand-edited link or a stale bookmark referencing a renamed/removed
-    // artifact must not be able to crash this view.
+    // Drop any id that doesn't resolve before it reaches id2artifact()/getArtifactTierPropsFromId(), which
+    // throw for unrecognized ids. The route param comes straight from the URL, so a stale bookmark must not crash this view.
     const artifactIds = computed(() => parseKnownTankIds(rawParam.value));
     const serializedArtifactIds = computed(() => serializeTankIds(artifactIds.value));
     const artifacts = computed(() => artifactIds.value.map(id => id2artifact(id)));
-    // Keep this deep-linkable-single-artifact-compatible: with one id this is
-    // just that artifact's recursive ingredients, same as before.
     const recursiveIngredientsByArtifact = computed(() => {
       const map = new Map<string, ReturnType<typeof id2artifact>[]>();
       for (const artifact of artifacts.value) {
@@ -188,10 +176,8 @@ export default defineComponent({
       return map;
     });
 
-    // If every id in the URL was unknown, there's nothing left to plan for.
-    // Elsewhere in the app (Main.vue), zero selected artifacts simply means
-    // the tank route is never navigated to; bounce back home to match that
-    // instead of rendering an empty planner.
+    // Every id in the URL was unknown, so there is nothing to plan for. Bounce home, matching Main.vue where
+    // zero selected artifacts simply means this route is never navigated to.
     watchEffect(() => {
       if (rawParam.value && artifactIds.value.length === 0) {
         router.replace({ name: 'home' });
