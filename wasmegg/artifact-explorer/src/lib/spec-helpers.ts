@@ -2,7 +2,7 @@
 // `optimize` lives here rather than in `index.ts` to keep the solver and its Emscripten glue out of the main chunk.
 
 import { ei, MissionType, type ShipsConfig } from 'lib';
-import type { DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from './types';
+import type { CraftBudget, DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from './types';
 import { finalizeSolutions } from './index';
 import { optimizeFull } from './optimizer-core';
 import { enumerateLaunchOptions } from './phases';
@@ -86,7 +86,8 @@ export async function optimize(
   dag: RecipeDAG,
   baseYield: Map<string, number>,
   launchPeriodSeconds = 0,
-  maxGemCost?: number
+  maxGemCost?: number,
+  craftBudget?: CraftBudget
 ): Promise<OptimizerSolution> {
   const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
   const solution = await optimizeFull({
@@ -97,6 +98,7 @@ export async function optimize(
     timeCapacityPerSlot: timeBudgetSeconds,
     maximumCost: maxGemCost,
     baseYield,
+    craftBudget,
   });
   return finalizeSolutions([solution], dag)[0];
 }

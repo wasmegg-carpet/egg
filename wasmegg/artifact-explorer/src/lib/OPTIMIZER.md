@@ -187,6 +187,44 @@ demand, so the per-target breakdowns sum back to the pooled totals instead of
 showing each artifact "using" the whole pool. The root target itself is never
 scaled: every craft of it rolls for its own legendary.
 
+## Golden egg cost
+
+**One linear row, in three models.** The cap has to be written everywhere the
+craft counts are decided or it does not bind on the number the card prints. The
+MILP is where it changes which ingredients get gathered, but the reported
+`craftPrimal` is re-derived downstream by `compileJointInnerLp` and then
+`refineJointCraftSplit`, so both carry the same row. Frank-Wolfe only ever moves
+between the current point and a vertex of that same polytope, and the row is
+linear, so every iterate stays inside the budget.
+
+**Why the row is linear when the cost is not.** The game's price curve decreases
+in the craft index, so the true cost is concave in the craft count and
+$\sum_n cost_n(crafts_n) \leq capacity$ is not a convex constraint. $price_n$ is
+therefore the player's *next* craft of $n$ — the tangent of the true cost at zero
+— which over-states the bill, so a plan that satisfies
+the row is always affordable. It is paid for in the other direction: a plan taking
+many crafts of one node is charged as though every one cost the first one's price,
+so some affordable plans are rejected. The gap is the node's $\frac {base}{low}$ price
+ratio at worst.
+
+**The card reports that same linear price.** Reporting the true curve instead
+reads as a bug in the cap: a player who sets a maximum craft cost and is shown a
+plan priced well below it sees a cap that did not bind where it said it did. The
+cost of that consistency is that the reported figure over-states what the game
+will charge, by the same ratio — the two now err together instead of disagreeing.
+The same over-stating price drives the solution card's "costs more than you have"
+demarcation, so it marks a little early rather than a little late.
+
+Pricing linearly also sidesteps `craftPrimal` being an LP relaxation: lib's curve
+is indexed by an integer craft number, while `fractionalCraftCost` is proportional
+in the craft count with no index to round to.
+
+Two numbers, one bill. The card's total prices the **unsplit** `craftPrimal`; the
+per-node `goldenEggCost` in a craft-chain tree prices that same pooled quantity
+and takes the target's demand-weighted share. Under a linear price, the two orders
+agree, so the split decides which target carries a shared node's bill, not how
+large it is.
+
 ## Module boundaries that are load-bearing
 
 Most of `src/lib` reads as it looks. Four edges do not, and all four exist to keep

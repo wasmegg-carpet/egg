@@ -7,6 +7,7 @@ import type { RecipeDAG } from '../../lib/types';
 import type { Planner } from './contract';
 import {
   budgetsOf,
+  craftUnitPrices,
   feasible,
   fuelWithinCapacity,
   oracleInstanceOf,
@@ -152,6 +153,24 @@ export function checkA2Time(c: CheckContext) {
       over: { timeCapacityPerSlot: Math.round(c.inst.timeCapacityPerSlot * m) },
     }))
   );
+}
+
+export function checkA9GoldenEggs(c: CheckContext) {
+  const base = solve(c);
+  const prices = craftUnitPrices(base.problem.dag, c.inst.previousCrafts);
+  let anchor = 0;
+  for (const t of base.judged.perTarget) {
+    anchor += (prices.get(t.nodeId) ?? 0) * Math.max(0, t.expectedCrafts);
+  }
+  if (!(anchor > 0)) return;
+
+  monotone('A9-golden-eggs', c, [
+    ...[0.25, 0.5, 1, 2, 4].map(m => ({
+      label: `golden eggs x${m}`,
+      over: { craftBudget: { capacity: anchor * m, unitPrices: prices } } as SolveOverrides,
+    })),
+    { label: 'no golden egg cap', over: {} as SolveOverrides },
+  ]);
 }
 
 export function checkA3Menu(c: CheckContext) {
@@ -656,6 +675,7 @@ export const CHEAP_CHECKS: Check[] = [
   checkA6Capacity,
   checkA7CraftingLevel,
   checkA8Targets,
+  checkA9GoldenEggs,
   checkM1M2SoloDominance,
   checkM3UnionLowerBound,
 ];

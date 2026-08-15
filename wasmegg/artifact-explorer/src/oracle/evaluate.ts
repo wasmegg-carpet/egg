@@ -1,7 +1,7 @@
 // Independent evaluator: the legendary probability of an integer launch allocation, re-derived from the
 // documented objective. A float simplex ranks candidates; an exact BigInt-rational simplex produces the asserted numbers.
 
-import type { LaunchOption, RecipeDAG } from '../lib/types';
+import type { CraftBudget, LaunchOption, RecipeDAG } from '../lib/types';
 import { Frac } from './rational';
 import { simplexMaximize, simplexMaximizeFloat, simplexMaximizeFloatFull } from './simplex';
 
@@ -14,6 +14,7 @@ export interface OracleInstance {
   fuelCapacity: number;
   timeCapacityPerSlot: number;
   baseYield: Map<string, number>;
+  craftBudget?: CraftBudget;
 }
 
 export interface OracleEvaluation {
@@ -35,8 +36,10 @@ export function targetQ(inst: OracleInstance, target: string): number {
 interface LpTemplate {
   craftables: string[];
   items: string[];
+  // The budget row is last, so `items` still indexes the conservation rows one-for-one.
   constraintMatrix: number[][];
   objectiveCoefficients: number[];
+  budgetCapacity: number | null; // RHS of that row; null when uncapped
   // The same two in exact arithmetic, built on first use.
   constraintMatrixFrac: Frac[][] | null;
   objectiveCoefficientsFrac: Frac[] | null;
@@ -95,16 +98,47 @@ function lpTemplate(inst: OracleInstance): LpTemplate {
     objectiveCoefficients[j] += targetQ(inst, target);
   }
 
+  let budgetCapacity: number | null = null;
+  const budget = inst.craftBudget;
+  if (budget) {
+    if (!Number.isFinite(budget.capacity) || budget.capacity < 0) {
+      throw new Error(`craft budget capacity must be finite and non-negative, got ${budget.capacity}`);
+    }
+    const row = craftables.map(id => {
+      const price = budget.unitPrices.get(id) ?? 0;
+      return Number.isFinite(price) && price > 0 ? price : 0;
+    });
+    // No priced column is not a cap of zero: nothing here is known to cost anything, so nothing can consume the purse.
+    if (row.some(p => p > 0)) {
+      constraintMatrix.push(row);
+      budgetCapacity = budget.capacity;
+    }
+  }
+
   template = {
     craftables,
     items,
     constraintMatrix,
     objectiveCoefficients,
+    budgetCapacity,
     constraintMatrixFrac: null,
     objectiveCoefficientsFrac: null,
   };
   templateCache.set(inst, template);
   return template;
+}
+
+function rhsFloat(template: LpTemplate, inv: ReadonlyMap<string, number>): number[] {
+  const b = template.items.map(item => inv.get(item) ?? 0);
+  if (template.budgetCapacity !== null) b.push(template.budgetCapacity);
+  return b;
+}
+
+function rhsFrac(template: LpTemplate, inv: ReadonlyMap<string, Frac>): Frac[] {
+  const b = template.items.map(item => inv.get(item) ?? Frac.ZERO);
+  // Prices and capacities are whole golden eggs, so the exact path stays exact.
+  if (template.budgetCapacity !== null) b.push(Frac.fromNumber(template.budgetCapacity));
+  return b;
 }
 
 function inventoryFor(inst: OracleInstance, allocation: number[]): Map<string, Frac> {
@@ -151,8 +185,10 @@ export function evaluateAllocationFloat(inst: OracleInstance, allocation: number
       inv.set(item, (inv.get(item) ?? 0) + allocation[i] * qty);
     }
   });
-  const b = template.items.map(item => inv.get(item) ?? 0);
-  return simplexMaximizeFloat(template.constraintMatrix, b, template.objectiveCoefficients) + directDrops(inst, allocation);
+  return (
+    simplexMaximizeFloat(template.constraintMatrix, rhsFloat(template, inv), template.objectiveCoefficients) +
+    directDrops(inst, allocation)
+  );
 }
 
 export function evaluateAllocation(inst: OracleInstance, allocation: number[]): OracleEvaluation {
@@ -162,7 +198,7 @@ export function evaluateAllocation(inst: OracleInstance, allocation: number[]): 
     template.objectiveCoefficientsFrac = template.objectiveCoefficients.map(x => Frac.fromNumber(x));
   }
   const inv = inventoryFor(inst, allocation);
-  const b = template.items.map(item => inv.get(item) ?? Frac.ZERO);
+  const b = rhsFrac(template, inv);
 
   const lpScore = simplexMaximize(template.constraintMatrixFrac, b, template.objectiveCoefficientsFrac).toNumber();
   const drops = directDrops(inst, allocation);
@@ -398,7 +434,7 @@ export function evaluateAllocationJointFloat(inst: OracleInstance, allocation: n
   }
   const { template, idxs, Qs, targets } = jointContext(inst);
   const inv = inventoryFloat(inst, allocation);
-  const b = template.items.map(item => inv.get(item) ?? 0);
+  const b = rhsFloat(template, inv);
   const lambdas = targets.map(t => directDropsFor(inst, allocation, t));
   const { logProb } = optimizeJointFloat(template, b, idxs, Qs, lambdas);
   return Math.exp(logProb);
@@ -422,7 +458,7 @@ export function evaluateAllocationJoint(inst: OracleInstance, allocation: number
 
   const { template, idxs, Qs, targets } = jointContext(inst);
   const inv = inventoryFloat(inst, allocation);
-  const b = template.items.map(item => inv.get(item) ?? 0);
+  const b = rhsFloat(template, inv);
   const lambdas = targets.map(t => directDropsFor(inst, allocation, t));
 
   const opt = optimizeJointFloat(template, b, idxs, Qs, lambdas);

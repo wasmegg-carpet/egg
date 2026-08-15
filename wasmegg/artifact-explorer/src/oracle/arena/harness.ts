@@ -1,10 +1,11 @@
 // Problem construction and scoring. The only place the arena touches a solver.
 // Every invariant compares a number the harness computed from the candidate's allocation, never one it reported.
 
+import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
 import { buildRecipeDag } from '@/lib';
 import { enumerateLaunchOptions } from '@/lib/phases';
 import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
-import type { LaunchOption } from '../../lib/types';
+import type { CraftBudget, LaunchOption, RecipeDAG } from '../../lib/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../evaluate';
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
 import type { ArenaInstance } from './instances';
@@ -23,11 +24,25 @@ export function fuelWithinCapacity(fuel: number, capacity: number): boolean {
   return fuel <= capacity * (1 + BUDGET_TOL) + FUEL_ABS_TOL;
 }
 
+// Per-craft golden egg prices, derived here from the game's price curve rather than taken from
+// `optimizer-cost.ts`: a shared pricing helper would make a mispriced curve agree with itself.
+export function craftUnitPrices(dag: RecipeDAG, previousCrafts = 0): Map<string, number> {
+  const prices = new Map<string, number>();
+  for (const [nodeId, node] of dag) {
+    if (node.isLeaf) continue;
+    const params = getArtifactTierPropsFromId(nodeId).recipe?.crafting_price;
+    if (!params) continue;
+    prices.set(nodeId, singleCraftCost(params, previousCrafts));
+  }
+  return prices;
+}
+
 export interface SolveOverrides {
   config?: ArenaInstance['config'];
   targets?: string[];
   fuelCapacity?: number;
   timeCapacityPerSlot?: number;
+  craftBudget?: CraftBudget;
   effort?: EffortLevel;
   craftingLevel?: number;
   previousCrafts?: number;
@@ -65,6 +80,9 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     timeCapacityPerSlot: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
     slots: NUM_SLOTS,
     baseYield: over.baseYield ?? new Map<string, number>(),
+    // Only ever set by an override: generated instances are uncapped, so the
+    // sweep every recorded result was measured on is unchanged.
+    craftBudget: over.craftBudget,
   };
 }
 
@@ -113,10 +131,16 @@ function problemKey(problem: PlanProblem): string {
       return `${id}~${node.isLeaf ? 1 : 0}~${node.legendaryCraftProbability}~${children}`;
     })
     .join(';');
+  // The budget belongs in the key like any other. Leaving it out would serve an uncapped plan for a capped
+  // problem, and a cache hit is indistinguishable from a solver that ignored the cap.
+  const budget = problem.craftBudget
+    ? `${problem.craftBudget.capacity}~${sortedEntries(problem.craftBudget.unitPrices)}`
+    : '';
   return [
     problem.targets.join(','),
     problem.fuelCapacity,
     problem.timeCapacityPerSlot,
+    budget,
     problem.slots,
     sortedEntries(problem.baseYield),
     dag,
@@ -157,7 +181,8 @@ export function oracleInstanceOf(problem: PlanProblem): OracleInstance {
       fuelCapacity: problem.fuelCapacity,
       timeCapacityPerSlot: problem.timeCapacityPerSlot,
       baseYield: problem.baseYield as Map<string, number>,
-      };
+      craftBudget: problem.craftBudget,
+    };
     if (instancesByKey.size >= INSTANCE_CACHE_MAX) instancesByKey.clear();
     instancesByKey.set(key, instance);
   }
@@ -231,6 +256,8 @@ export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budge
   };
 }
 
+// The golden egg budget is deliberately absent: missions cost no golden eggs, so no allocation can breach
+// it — the cap binds on the craft split, which the judge chooses in `../evaluate.ts` under the same row.
 export function feasible(problem: PlanProblem, alloc: readonly number[]): boolean {
   const b = budgetsOf(problem, alloc);
   return fuelWithinCapacity(b.fuel, problem.fuelCapacity) && b.pack === 'packs';

@@ -94,6 +94,9 @@ const IMPLEMENTATION = [
   'lp.ts', // the incumbent's LP
   'optimizer-client.ts', // worker-backed entry point to the planner
   'optimizer-core.ts', // the plan pipeline; calls the planner
+  // Prices a finished plan and derives the cap's per-craft prices from the same curve. Everything here
+  // reads a plan, so the module sits downstream.
+  'optimizer-cost.ts',
   'optimizer-tree.ts', // craft-tree assembly from a plan
   'optimizer-views.ts', // render models built from a plan
   'optimizer-worker-protocol.ts',

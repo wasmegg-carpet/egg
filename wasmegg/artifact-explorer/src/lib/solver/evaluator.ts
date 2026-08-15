@@ -10,10 +10,26 @@ export interface EvalResult {
   scores: number[]; // per target; +Infinity for a prob-1 craft
 }
 
-function maxWeightedCraft(model: Model, inventoryByItem: number[], idx: number, c0: number): number {
-  const c = new Array<number>(model.craftables.length).fill(0);
+// The craft LP the judge scores must be the one the MILP solved, budget row included
+// (`milp.ts` adds the same row). Judging over the unbudgeted polytope scores craft splits the
+// plan cannot afford, which shows up as an inflated `reported.jointProbability`.
+interface CraftLp {
+  rows: readonly (readonly number[])[];
+  rhs: number[]; // inventory per item, then the budget capacity when the row is present
+}
+
+function craftLpOf(model: Model, inventoryByItem: number[]): CraftLp {
+  if (!Number.isFinite(model.craftBudgetCapacity)) return { rows: model.consRows, rhs: inventoryByItem };
+  return {
+    rows: [...model.consRows, model.craftPrices],
+    rhs: [...inventoryByItem, model.craftBudgetCapacity],
+  };
+}
+
+function maxWeightedCraft(lp: CraftLp, nCraftables: number, idx: number, c0: number): number {
+  const c = new Array<number>(nCraftables).fill(0);
   c[idx] = c0;
-  return simplexMax(model.consRows, inventoryByItem, c).objective;
+  return simplexMax(lp.rows, lp.rhs, c).objective;
 }
 
 // Decided combinatorially rather than by the LP: the float LP answers "0 or
@@ -38,7 +54,7 @@ function craftAvailable(model: Model, inventoryByItem: readonly number[], root: 
 
 function optimizeJointCrafts(
   model: Model,
-  inventoryByItem: number[],
+  lp: CraftLp,
   idxs: number[],
   Qs: number[],
   legendaryDropsByTarget: number[],
@@ -54,7 +70,7 @@ function optimizeJointCrafts(
   const solveWeighted = (weights: number[]): number[] => {
     const c = new Array<number>(model.craftables.length).fill(0);
     for (let i = 0; i < n; i++) c[idxs[i]] = weights[i] * Qs[i];
-    const { primal } = simplexMax(model.consRows, inventoryByItem, c);
+    const { primal } = simplexMax(lp.rows, lp.rhs, c);
     return idxs.map(idx => primal[idx]);
   };
 
@@ -82,7 +98,7 @@ function optimizeJointCrafts(
     const grad = scores.map((s, i) => gPrime(s) * Qs[i]);
     const c = new Array<number>(model.craftables.length).fill(0);
     for (let i = 0; i < n; i++) c[idxs[i]] = grad[i];
-    const { primal } = simplexMax(model.consRows, inventoryByItem, c);
+    const { primal } = simplexMax(lp.rows, lp.rhs, c);
     const fwVertex = idxs.map(idx => primal[idx]);
 
     const gDotX = dot(grad, crafts);
@@ -180,6 +196,8 @@ function evaluateAt(
 ): EvalResult {
   const Qs = model.Qs;
   const nTargets = model.targets.length;
+  const lp = craftLpOf(model, inventoryByItem);
+  const nCraftables = model.craftables.length;
   const scores = new Array<number>(nTargets).fill(0);
   const fwIdx: number[] = [];
   for (let t = 0; t < nTargets; t++) {
@@ -187,9 +205,12 @@ function evaluateAt(
     if (idx < 0 || !craftAvailable(model, inventoryByItem, idx)) {
       scores[t] = legendaryDropsByTarget[t];
     } else if (Qs[t] === Infinity) {
-      // Any craft_T > 0 gives p_T = 1; an infinitesimal craft consumes an
-      // infinitesimal inventory, so it never competes with other targets.
-      scores[t] = Infinity;
+      // Any craft_T > 0 gives p_T = 1; an infinitesimal craft consumes an infinitesimal
+      // inventory, so it never competes with other targets. A budget of exactly 0 is the one
+      // case where "infinitesimal" is still too much, so the claim is checked against the LP
+      // rather than asserted.
+      const affordable = lp.rows === model.consRows || maxWeightedCraft(lp, nCraftables, idx, 1) > 0;
+      scores[t] = affordable ? Infinity : legendaryDropsByTarget[t];
     } else {
       fwIdx.push(t);
     }
@@ -197,11 +218,11 @@ function evaluateAt(
 
   if (fwIdx.length === 1) {
     const t = fwIdx[0];
-    scores[t] = maxWeightedCraft(model, inventoryByItem, model.targetCraftIdx[t], Qs[t]) + legendaryDropsByTarget[t];
+    scores[t] = maxWeightedCraft(lp, nCraftables, model.targetCraftIdx[t], Qs[t]) + legendaryDropsByTarget[t];
   } else if (fwIdx.length > 1) {
     const joint = optimizeJointCrafts(
       model,
-      inventoryByItem,
+      lp,
       fwIdx.map(t => model.targetCraftIdx[t]),
       fwIdx.map(t => Qs[t]),
       fwIdx.map(t => legendaryDropsByTarget[t]),

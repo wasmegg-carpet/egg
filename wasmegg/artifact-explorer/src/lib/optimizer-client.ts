@@ -6,7 +6,7 @@ import {
   type OptimizerRequest,
   type OptimizerResponse,
 } from './optimizer-worker-protocol';
-import type { LaunchOption, OptimizerSolution, RecipeDAG } from './types';
+import type { CraftBudget, LaunchOption, OptimizerSolution, RecipeDAG } from './types';
 
 export interface OptimizerRequestInput {
   options: LaunchOption[];
@@ -16,6 +16,7 @@ export interface OptimizerRequestInput {
   timeCapacityPerSlot: number;
   maximumCost: number | undefined;
   baseYield: Map<string, number>;
+  craftBudget?: CraftBudget;
 }
 
 export interface OptimizerClient {

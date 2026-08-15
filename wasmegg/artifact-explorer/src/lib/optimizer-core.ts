@@ -1,7 +1,7 @@
 // The mission-plan pipeline: option filtering, objective evaluation, and the assembly of a renderable
 // solution around whatever plan the planner (`./solver/`) returned. See OPTIMIZER.md for the objective.
 
-import type { LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
+import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 import { ei } from 'lib';
 import { alphaToProb, compileJointInnerLp, JointInnerLp, refineJointCraftSplit } from './value-function';
 import { NUM_SLOTS, packWitness } from './packing';
@@ -21,6 +21,9 @@ export interface OptimizeArgs {
   timeCapacityPerSlot: number;
   maximumCost: number | undefined;
   baseYield: Map<string, number>;
+  // Golden egg cap on the plan's crafts, or absent for no cap. It has to reach both the MILP and the inner
+  // LPs, or the cap does not bind on the craft counts the card actually prints.
+  craftBudget?: CraftBudget;
 }
 
 interface Assembly {
@@ -30,6 +33,7 @@ interface Assembly {
   baseYield: Map<string, number>;
   QByTarget: Map<string, number>;
   innerLp: JointInnerLp;
+  craftBudget?: CraftBudget;
 }
 
 function qByTarget(recipeDag: RecipeDAG, targets: string[]): Map<string, number> {
@@ -96,8 +100,16 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     timeCapacityPerSlot: rawS,
     maximumCost,
     baseYield,
+    craftBudget,
   } = args;
 
+  // Rejected here rather than downstream: `model.ts` and `value-function.ts` both drop a budget
+  // they cannot turn into a row, so a negative or NaN capacity would silently become *no* cap —
+  // the one reading a caller who asked for a cap can least afford. `capacity === 0` is a valid
+  // binding cap and passes. A caller wanting no cap omits `craftBudget`.
+  if (craftBudget && (!Number.isFinite(craftBudget.capacity) || craftBudget.capacity < 0)) {
+    throw new Error(`craft budget capacity must be finite and non-negative, got ${craftBudget.capacity}`);
+  }
 
   // An empty input field upstream arrives as NaN; clamp before it reaches the
   // model, where a NaN budget would make every row unsatisfiable.
@@ -122,7 +134,8 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     targets: desiredArtifactNodeIds,
     baseYield,
     QByTarget,
-    innerLp: compileJointInnerLp(recipeDag, desiredArtifactNodeIds, QByTarget),
+    innerLp: compileJointInnerLp(recipeDag, desiredArtifactNodeIds, QByTarget, craftBudget),
+    craftBudget,
   };
 
   const problem: PlanProblem = {
@@ -133,6 +146,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     timeCapacityPerSlot: S,
     slots: NUM_SLOTS,
     baseYield,
+    craftBudget,
   };
 
   const solve = await loadHighs();
@@ -175,7 +189,8 @@ function assembleFullSolution(
     a.QByTarget,
     finalYieldVector,
     totalLegendary,
-    seedSolve
+    seedSolve,
+    a.craftBudget
   );
   const perTarget = targets.map(t => {
     const craftCount =

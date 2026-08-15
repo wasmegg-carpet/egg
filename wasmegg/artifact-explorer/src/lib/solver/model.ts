@@ -31,6 +31,8 @@ export interface Model {
   timeCapacitySeconds: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
+  craftPrices: number[];
+  craftBudgetCapacity: number;
   groups: Group[];
 }
 
@@ -184,6 +186,16 @@ export function buildModel(problem: PlanProblem): Model {
   });
   const targetCraftIdx = targets.map(t => craftIndex.get(t) ?? -1);
 
+  // A negative or non-finite price is dropped: it would be a craft that *earns*
+  // budget, on a continuous column nothing else bounds.
+  const budget = problem.craftBudget;
+  const craftPrices = craftables.map(id => {
+    const price = budget?.unitPrices.get(id) ?? 0;
+    return Number.isFinite(price) && price > 0 ? price : 0;
+  });
+  const capped = budget !== undefined && Number.isFinite(budget.capacity) && budget.capacity >= 0;
+  const craftBudgetCapacity = capped && craftPrices.some(p => p > 0) ? budget!.capacity : Infinity;
+
   // Normalized budgets: fuel 1, per-slot time 1. `fuelCapacity <= 0` reads as
   // "all fuel costs are 0".
   const fuelCap = problem.fuelCapacity;
@@ -277,10 +289,12 @@ export function buildModel(problem: PlanProblem): Model {
     craftChildren,
     baseInventoryByItem,
     Qs,
-    craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, groups),
     targetCraftIdx,
     slots,
     timeCapacitySeconds: timeCap,
+    craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, groups),
+    craftPrices,
+    craftBudgetCapacity,
     groups,
   };
 }

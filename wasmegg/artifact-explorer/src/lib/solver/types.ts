@@ -1,7 +1,7 @@
 // The solver's type surface: what a plan is, and what the MILP backend behind it
 // trades in.
 
-import type { LaunchOption, RecipeDAG } from '../types';
+import type { CraftBudget, LaunchOption, RecipeDAG } from '../types';
 
 export interface PlanProblem {
   // Menu of launches available. `allocation` is indexed against this array, in this
@@ -17,6 +17,8 @@ export interface PlanProblem {
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
   readonly baseYield: ReadonlyMap<string, number>;
+  // Optional cap on the plan's craft cost in golden eggs; absent means unconstrained.
+  readonly craftBudget?: CraftBudget;
 }
 
 // Optional self-report of what a planner believes its own plan is worth; supplying

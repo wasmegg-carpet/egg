@@ -2,7 +2,7 @@
 // builders resolve names and icons through getArtifactTierPropsFromId.
 
 import { describe, expect, it } from 'vitest';
-import { ei, Inventory } from 'lib';
+import { ei, getArtifactTierPropsFromId, Inventory, singleCraftCost } from 'lib';
 
 import {
   buildRecipeTree,
@@ -26,6 +26,13 @@ function totemInventory(): Inventory {
       { artifact: { spec: { name: Name.LUNAR_TOTEM, level: Level.LESSER, rarity: Rarity.RARE } }, quantity: 2 },
     ],
   });
+}
+
+// The unit price straight from lib, so the tree's cost metric is never checked against a number this file
+// made up: every craft at the player's next craft price, matching the golden egg cap's own pricing.
+function libCost(nodeId: string, previousCrafts: number, crafts: number): number {
+  const params = getArtifactTierPropsFromId(nodeId).recipe!.crafting_price;
+  return crafts * singleCraftCost(params, previousCrafts);
 }
 
 describe('computeCanonicalOccurrence', () => {
@@ -143,23 +150,37 @@ describe('computeCraftChainTree', () => {
     expect(tree.depth).toBe(0);
     expect(tree.isDuplicate).toBe(false);
     // never consumed (it's the final target), never dropped/baseYield-tracked
-    expect(tree.metrics).toEqual({ owned: 0, dropped: 0, crafted: 2, consumed: 0 });
+    expect(tree.metrics).toEqual({
+      owned: 0,
+      dropped: 0,
+      crafted: 2,
+      consumed: 0,
+      goldenEggCost: libCost(lt4, 0, 2),
+    });
 
     const lt3Node = tree.children.find(c => c.nodeId === lt3)!;
     expect(lt3Node.qtyPerParentCraft).toBe(2);
     expect(lt3Node.isDuplicate).toBe(false);
-    expect(lt3Node.metrics).toEqual({ owned: 0, dropped: 7, crafted: 4, consumed: 4 });
+    expect(lt3Node.metrics).toEqual({
+      owned: 0,
+      dropped: 7,
+      crafted: 4,
+      consumed: 4,
+      goldenEggCost: libCost(lt3, 0, 4),
+    });
 
     const lt2Node = tree.children.find(c => c.nodeId === lt2)!;
     expect(lt2Node.qtyPerParentCraft).toBe(1);
     expect(lt2Node.isDuplicate).toBe(false);
     // baseYield exceeds finalYield here; dropped clamps to 0
-    expect(lt2Node.metrics).toEqual({ owned: 2, dropped: 0, crafted: 0, consumed: 2 });
+    // nothing crafted, so nothing billed
+    expect(lt2Node.metrics).toEqual({ owned: 2, dropped: 0, crafted: 0, consumed: 2, goldenEggCost: 0 });
 
     const lt1ViaLt3 = lt3Node.children[0];
     expect(lt1ViaLt3.nodeId).toBe(lt1);
     expect(lt1ViaLt3.isDuplicate).toBe(false);
-    expect(lt1ViaLt3.metrics).toEqual({ owned: 5, dropped: 12, crafted: 0, consumed: 12 });
+    // lt1 is a leaf: no recipe, no price
+    expect(lt1ViaLt3.metrics).toEqual({ owned: 5, dropped: 12, crafted: 0, consumed: 12, goldenEggCost: 0 });
 
     const lt1ViaLt2 = lt2Node.children[0];
     expect(lt1ViaLt2.nodeId).toBe(lt1);
@@ -269,8 +290,10 @@ describe('computeCraftChainTree', () => {
     expect(lt3ViaLt4.metrics.crafted).toBeCloseTo(8 * (6 / 8), 9);
     expect(lt3Root.metrics.crafted).toBeCloseTo(8 * (2 / 8), 9);
 
-    // The whole point: the two slices reconstitute the pool instead of over-drawing it.
+    // The whole point: the two slices reconstitute the pool instead of over-drawing it, so the
+    // per-tree bills sum to what the plan actually spends on lt3.
     expect(lt3ViaLt4.metrics.crafted + lt3Root.metrics.crafted).toBeCloseTo(8, 9);
+    expect(lt3ViaLt4.metrics.goldenEggCost + lt3Root.metrics.goldenEggCost).toBeCloseTo(libCost(lt3, 0, 8), 9);
 
     // An uncontested target still keeps its own pool whole.
     expect(computeCraftChainTree(solution, lt4, null)!.metrics.crafted).toBe(3);

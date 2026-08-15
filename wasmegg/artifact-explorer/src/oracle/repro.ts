@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     fuelCapacity: inst.fuelCapacity,
     timeCapacityPerSlot: inst.timeCapacityPerSlot,
     baseYield: inst.baseYield,
+    craftBudget: inst.craftBudget,
     maximumCost: Infinity,
   });
   const alloc = new Array<number>(inst.options.length).fill(0);
