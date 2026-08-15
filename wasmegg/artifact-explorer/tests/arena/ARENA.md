@@ -29,7 +29,7 @@ You return an `allocation` parallel to `problem.options`, plus an optional
 
 The objective is the **product** over targets of `1 - exp(-s_T)`, not the sum and
 not the max. ALL-of rather than ANY-of deliberately: maximising ANY collapses
-onto whichever target is cheapest. `src/oracle/evaluate.ts` is the harness's
+onto whichever target is cheapest. `tests/oracle/evaluate.ts` is the harness's
 independent implementation and is what scores you. It re-optimises the inner
 craft split for whatever allocation you hand back, so you are never penalised for
 reporting a plan whose craft accounting you did not work out yourself.
@@ -66,11 +66,14 @@ planner and its judge would agree with itself no matter what it computed.
   `independence.spec.ts` enforces this. Deriving your own copy of the objective
   or of a packing routine is fine and expected — sharing the harness's is not,
   because then the grader and the candidate are the same code.
-- **Re-derive everything: no value import from `src/lib`.** `import type` is
-  fine and is how you read the problem at all; the bare `lib` workspace package
-  (egg, ship and artifact enums and tables) is game data rather than solver code
-  and stays available. Calling into the incumbent's LP, tangent grid, packer or
-  search would measure the incumbent's method wearing a different hat.
+- **Re-derive everything: no value import from `src/lib` or `tests/unit`.**
+  `import type` is fine and is how you read the problem at all; the bare `lib`
+  workspace package (egg, ship and artifact enums and tables) is game data rather
+  than solver code and stays available. Calling into the incumbent's LP, tangent
+  grid, packer or search would measure the incumbent's method wearing a different
+  hat. `tests/unit` is barred for the same reason and not as tidiness:
+  `spec-helpers.ts` there calls `optimizeFull`, so it is a second door onto the
+  planner.
 
   There is one exception, encoded by name in `independence.spec.ts`:
   `solvers/highs/index.ts` is a shim around `src/lib/solver/`, the planner the

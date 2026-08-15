@@ -8,6 +8,10 @@ import vue from '@vitejs/plugin-vue';
 // dataset, which is 90 seconds before a single `describe` callback runs.
 const ARENA_REQUESTED = process.env.ARENA !== undefined;
 
+// `tests/arena/invariants.spec.ts`. Kept as a constant because getting it wrong fails open: a stale path
+// matches nothing, the exclude silently does nothing, and `pnpm test` starts running the 12-minute sweep.
+const ARENA_SWEEP = 'tests/arena/invariants.spec.ts';
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -17,15 +21,15 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.{test,spec}.ts'],
-    // Only the sweep itself. Excluding the whole of `src/oracle/` would silently retire the plain unit tests
-    // and the self-gating ones — including the specs `arena:check`, `repro` and `test:oracle` name directly,
-    // which would then select no files at all and exit non-zero.
-    exclude: [...configDefaults.exclude, ...(ARENA_REQUESTED ? [] : ['src/oracle/arena/invariants.spec.ts'])],
+    include: ['tests/**/*.{test,spec}.ts'],
+    // Only the sweep itself. Excluding the whole of `tests/arena/` would silently retire the arena's own
+    // checks — including the spec `arena:check` names directly, which would then select no files at all and
+    // exit non-zero.
+    exclude: [...configDefaults.exclude, ...(ARENA_REQUESTED ? [] : [ARENA_SWEEP])],
     coverage: {
       provider: 'v8',
+      // `src/` is production only, so this needs no spec exclusion: the tests live under `tests/`.
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.spec.ts'],
     },
   },
 });

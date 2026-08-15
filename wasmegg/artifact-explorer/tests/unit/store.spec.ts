@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { isMissionFilters, newMissionFilters } from './schema';
+import { isMissionFilters, newMissionFilters } from '@/store/schema';
 
 describe('MissionFilters', () => {
   it('rejects a maxGoldenEggCost that could never bind', () => {

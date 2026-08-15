@@ -3,7 +3,7 @@
 
 import { ei, spaceshipList } from 'lib';
 import { EFFORT_LAUNCH_PERIOD_SECONDS, EFFORT_LEVELS } from '@/store/schema';
-import type { RecipeDAG } from '../../lib/types';
+import type { RecipeDAG } from '@/lib/types';
 import type { Planner } from './contract';
 import {
   budgetsOf,
@@ -17,8 +17,8 @@ import {
   type Solved,
 } from './harness';
 import type { ArenaInstance } from './instances';
-import { evaluateAllocationJoint, evaluateAllocationJointFloat } from '../evaluate';
-import { mulberry32 } from '../generate';
+import { evaluateAllocationJoint, evaluateAllocationJointFloat } from '../oracle/evaluate';
+import { mulberry32 } from '../oracle/generate';
 
 const EXACT_NATS = 1e-9;
 const REBUILT_NATS = 1e-6;

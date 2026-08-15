@@ -6,9 +6,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 const ARENA = __dirname;
-const SRC = resolve(ARENA, '../..');
+const TESTS = resolve(ARENA, '..');
+const SRC = resolve(TESTS, '../src');
 const LIB = join(SRC, 'lib');
-const ORACLE = join(SRC, 'oracle');
+// The shared spec fixtures. `optimize` there runs the planner in-process, so it is as much a way to reach
+// the incumbent as `src/lib` is, and candidates are held away from both.
+const UNIT = join(TESTS, 'unit');
 const SOLVERS = join(ARENA, 'solvers');
 
 function readSource(rel: string): string {
@@ -109,9 +112,6 @@ const IMPLEMENTATION = [
   'solver/oa.ts',
   'solver/simplex.ts',
   'solver/types.ts',
-  // Spec fixtures, but `optimize` there runs the planner in-process — so it is
-  // downstream, and the harness builds its problems from `instances.ts` instead.
-  'spec-helpers.ts',
   'value-function.ts',
 ];
 
@@ -185,15 +185,18 @@ describe('arena independence', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('candidates re-derive everything: no value import from src/lib', () => {
+  it('candidates re-derive everything: no value import from src/lib or tests/unit', () => {
     // Types move no code. What is excluded is running any of the incumbent's machinery — its LP, its tangent
     // grid, its packer, its search. `SHIM_ENTRIES` is a named exception; everything else here is still forbidden.
+    //
+    // `tests/unit` is barred on the same grounds as `src/lib`, not as a tidiness rule: `spec-helpers.ts`
+    // there calls `optimizeFull`, so a candidate reaching it would be the incumbent measured against itself.
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       const rel = path.slice(SOLVERS.length + 1);
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
         const target = resolveSpec(path, spec);
-        if (target === null || !within(LIB, target)) continue;
+        if (target === null || !(within(LIB, target) || within(UNIT, target))) continue;
         if (SHIM_ENTRIES.includes(path) && within(SHIMS_MAY_IMPORT, target)) continue;
         offenders.push(`${rel} imports ${spec}`);
       }
@@ -219,12 +222,12 @@ describe('arena independence', () => {
   });
 
   it('production never imports the arena', () => {
+    // Widened with the move: production may not reach into `tests/` at all, of which the arena is one part.
     const offenders: string[] = [];
     for (const path of walk(LIB)) {
-      if (path.endsWith('.spec.ts')) continue;
       for (const spec of importsOf(readFileSync(path, 'utf8'))) {
         const target = resolveSpec(path, spec);
-        if (target !== null && within(ORACLE, target)) {
+        if (target !== null && within(TESTS, target)) {
           offenders.push(`${relative(SRC, path)} imports ${spec}`);
         }
       }

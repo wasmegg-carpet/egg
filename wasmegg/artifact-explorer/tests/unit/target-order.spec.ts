@@ -4,11 +4,11 @@
 import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
 import { buildRecipeDag } from '@/lib';
-import { loadHighs } from './solver/highs';
-import { DEFAULT_TUNING, solveWith } from './solver/oa';
-import type { PlanProblem } from './solver/types';
+import { loadHighs } from '@/lib/solver/highs';
+import { DEFAULT_TUNING, solveWith } from '@/lib/solver/oa';
+import type { PlanProblem } from '@/lib/solver/types';
 import { makeNode, makeOpt } from './spec-helpers';
-import type { RecipeDAG } from './types';
+import type { RecipeDAG } from '@/lib/types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;

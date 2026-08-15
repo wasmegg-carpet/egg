@@ -3,10 +3,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
-import { optimizeFull } from './optimizer-core';
-import { computeBaseYield } from './index';
+import { optimizeFull } from '@/lib/optimizer-core';
+import { computeBaseYield } from '@/lib';
 import { lt1, lt2, lt4, makeNode, makeOpt, totemDag } from './spec-helpers';
-import type { RecipeDAG } from './types';
+import type { RecipeDAG } from '@/lib/types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;

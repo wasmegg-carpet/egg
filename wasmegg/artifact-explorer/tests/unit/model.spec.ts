@@ -2,11 +2,11 @@
 // or yield must not reach the LP matrix. Asserted through a solve, not the matrix.
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TUNING, envelopeErrorNats, solveWith } from './oa';
-import { loadHighs } from './highs';
-import { makeNode, makeOpt } from '../spec-helpers';
-import type { RecipeDAG } from '../types';
-import type { PlanProblem } from './types';
+import { DEFAULT_TUNING, envelopeErrorNats, solveWith } from '@/lib/solver/oa';
+import { loadHighs } from '@/lib/solver/highs';
+import { makeNode, makeOpt } from './spec-helpers';
+import type { RecipeDAG } from '@/lib/types';
+import type { PlanProblem } from '@/lib/solver/types';
 
 const dag: RecipeDAG = new Map([
   ['A1', makeNode('A1', false, [['B1', 1]], 0.5)],

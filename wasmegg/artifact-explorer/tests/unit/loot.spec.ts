@@ -7,8 +7,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ei, getMissionTypeFromId, itemExpectedFullConsumption, targets, type ShipsConfig } from 'lib';
 
-import type { lootjson, MissionLevelLootStore } from './loot-json';
-import lootFixture from './loot-json';
+import type { lootjson, MissionLevelLootStore } from '@/lib/loot-json';
+import lootFixture from '@/lib/loot-json';
 import {
   getMaxLegendaryCount,
   getMissionLevelLootAverageConsumptionValue,
@@ -18,7 +18,7 @@ import {
   legendaryDataIsSparse,
   MIN_LEGENDARY_OBSERVATIONS,
   missionDataNotEnough,
-} from './loot';
+} from '@/lib/loot';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
@@ -27,7 +27,7 @@ const Ship = ei.MissionInfo.Spaceship;
 const Duration = ei.MissionInfo.DurationType;
 
 // Mocking the actual loot data to ensure tests are minimally brittle against updated loot tables
-vi.mock('./loot-json', async () => {
+vi.mock('@/lib/loot-json', async () => {
   const { ei } = await import('lib');
   const Name = ei.ArtifactSpec.Name;
   const Level = ei.ArtifactSpec.Level;

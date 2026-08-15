@@ -136,7 +136,8 @@ For the same reason `optimizer.worker.ts` imports `optimizeFull` directly rather
 than through the `lib` barrel, which re-exports the loot data.
 
 The traffic goes the other way too: the barrel does not reach `optimizer-core` at
-all, and the in-process `optimize()` the specs drive lives in `spec-helpers.ts`
+all, and the in-process `optimize()` the specs drive lives in
+`tests/unit/spec-helpers.ts`
 precisely so that edge does not exist. Components import the barrel, and a static
 import there would drag the solver and its Emscripten glue into the main chunk.
 Keeping it out by module graph rather than by a lazy import is what makes it hard
@@ -230,38 +231,17 @@ large it is.
 Most of `src/lib` reads as it looks. Four edges do not, and all four exist to keep
 something from becoming circular or from landing in the wrong bundle:
 
-- `packing.ts` imports nothing, and in particular nothing from `../oracle/`,
+- `packing.ts` imports nothing, and in particular nothing from `tests/`,
   because the arena re-checks every plan against its own independent packer
   (invariant C1). Sharing one implementation would make that check circular.
 - `index.ts` (the barrel every component imports) has no path to
-  `optimizer-core`, so the solver stays out of the main chunk; `spec-helpers.ts`
-  holds the in-process `optimize()` for the same reason.
+  `optimizer-core`, so the solver stays out of the main chunk;
+  `tests/unit/spec-helpers.ts` holds the in-process `optimize()` for the same
+  reason.
 - `lp.ts` equilibrates rows and columns before solving, because an absolute
   epsilon on an unscaled tableau stops the pivot loop early while still reporting
   `'optimal'`. Only `value-function.ts` uses it; the fuel and time budgets are the
   MILP's rows, not this one's.
-- `src/oracle/arena/solvers/highs/index.ts` is a shim registering `solver/` as the
+- `tests/arena/solvers/highs/index.ts` is a shim registering `solver/` as the
   arena's entry, so the shipped solver and the measured one are one code path.
 
-## The oracle
-
-`src/oracle/` is an independent correctness harness that treats `optimizeFull` as
-a black box: nothing in it imports the solver's internals, the three-slot packing
-check is re-derived, and the objective is re-derived from this document rather
-than from `value-function.ts`. See `src/oracle/README.md`.
-
-## Tests are local-only
-
-Nothing in `.github/workflows/` runs the test suite — CI only builds. Every spec
-in `src/lib/` and `src/oracle/` is a local development tool:
-
-```sh
-pnpm test                    # unit + smoke oracle
-pnpm test:oracle             # + deep oracle campaign
-pnpm arena                   # the invariant sweep; ARENA=sweep for the full tier
-```
-
-There is no committed latency cap. One existed and was removed: with no CI to run
-it, its only reader was whoever was already doing perf work, and its reference
-figures went stale twice before anyone noticed. Time a solve directly when that is
-the question you have.

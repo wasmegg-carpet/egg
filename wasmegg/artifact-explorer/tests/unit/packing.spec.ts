@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { packWitness } from './packing';
+import { packWitness } from '@/lib/packing';
 
 const NUM_SLOTS = 3;
 const TOL = 1e-9;

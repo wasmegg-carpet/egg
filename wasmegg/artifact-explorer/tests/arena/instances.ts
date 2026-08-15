@@ -3,7 +3,7 @@
 
 import { ei, fuelTankSizes, newShipsConfig, shipMaxLevel, spaceshipList, type ShipsConfig } from 'lib';
 import { EFFORT_LEVELS, type EffortLevel } from '@/store/schema';
-import { candidateTargets, mulberry32, pick, randInt } from '../generate';
+import { candidateTargets, mulberry32, pick, randInt } from '../oracle/generate';
 
 export interface ArenaInstance {
   label: string;
