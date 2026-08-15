@@ -2,10 +2,10 @@
 // generator chooses only the targets, the option subset, the budgets and the owned inventory.
 
 import { perfectShipsConfig } from 'lib';
-import type { LaunchOption, RecipeDAG } from '../lib/types';
-import { buildRecipeDag } from '../lib';
-import { enumerateLaunchOptions } from '../lib/phases';
-import { artifactTiers } from '../lib/artifacts';
+import type { LaunchOption, RecipeDAG } from '@/lib/types';
+import { buildRecipeDag } from '@/lib';
+import { enumerateLaunchOptions } from '@/lib/phases';
+import { artifactTiers } from '@/lib/artifacts';
 import { countFeasible } from './enumerate';
 import type { OracleInstance } from './evaluate';
 

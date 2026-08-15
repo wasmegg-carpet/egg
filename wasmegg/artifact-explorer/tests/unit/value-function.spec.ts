@@ -2,9 +2,9 @@
 // answer and a number a player reads, which nothing else computes.
 
 import { describe, it, expect } from 'vitest';
-import { alphaToProb } from './value-function';
+import { alphaToProb } from '@/lib/value-function';
 import { makeNode } from './spec-helpers';
-import type { RecipeDAG, DAGNode } from './types';
+import type { RecipeDAG, DAGNode } from '@/lib/types';
 
 const PREC = 9;
 

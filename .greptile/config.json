@@ -2,7 +2,7 @@
   "strictness": 2,
   "commentTypes": ["logic", "syntax", "style"],
   "excludeAuthors": ["dependabot[bot]"],
-  "ignorePatterns": "pnpm-lock.yaml\ngo.sum\nperiodicals/uv.lock\n**/dist/**\neicoop/mock/*.txt\nui/heroicons.d.ts\n**/*.proto\nperiodicals/ei.py\nperiodicals/ei.pb.go\nwasmegg/artifact-explorer/src/lib/loot.json\nwasmegg/_common/loot/latest-mission_reward_count.json\nwasmegg/_common/loot_legacy/mission_reward_count.json\n**/contracts.json\n**/events.json\nwasmegg/events/src/legacy_events.json\n**/version_history.json\n**/colleggtible-contracts.json\n**/contractseasons.json\n**/seasoncontracts.json\n**/customeggs.json\nperiodicals/data/**\nwasmegg/virtue-companion/src/lib/catalog.json\nlib/artifacts/data.json\nlib/artifacts/consumption.json\nlib/eiafx-config.json\nwasmegg/_common/eiafx/eiafx-data.json\nwasmegg/_common/eiafx/eiafx-config.json\nwasmegg/_common/consumption/consumption-data.json",
+  "ignorePatterns": "pnpm-lock.yaml\ngo.sum\nperiodicals/uv.lock\n**/dist/**\neicoop/mock/*.txt\nui/heroicons.d.ts\n**/*.proto\nperiodicals/ei.py\nperiodicals/ei.pb.go\nwasmegg/artifact-explorer/data/loot.json\nwasmegg/_common/loot/latest-mission_reward_count.json\nwasmegg/_common/loot_legacy/mission_reward_count.json\n**/contracts.json\n**/events.json\nwasmegg/events/src/legacy_events.json\n**/version_history.json\n**/colleggtible-contracts.json\n**/contractseasons.json\n**/seasoncontracts.json\n**/customeggs.json\nperiodicals/data/**\nwasmegg/virtue-companion/src/lib/catalog.json\nlib/artifacts/data.json\nlib/artifacts/consumption.json\nlib/eiafx-config.json\nwasmegg/_common/eiafx/eiafx-data.json\nwasmegg/_common/eiafx/eiafx-config.json\nwasmegg/_common/consumption/consumption-data.json",
   "rules": [
     {
       "id": "no-formatting-nitpicks",

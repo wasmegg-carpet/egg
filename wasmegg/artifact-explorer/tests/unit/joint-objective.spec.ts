@@ -2,8 +2,8 @@
 // the linearization. See OPTIMIZER.md.
 
 import { describe, it, expect } from 'vitest';
-import { optimizeFull } from './optimizer-core';
-import { compileInnerLp } from './value-function';
+import { optimizeFull } from '@/lib/optimizer-core';
+import { compileInnerLp } from '@/lib/value-function';
 import { craftDag, makeOpt } from './spec-helpers';
 
 describe('the product objective reduces to the linear score at n=1', () => {

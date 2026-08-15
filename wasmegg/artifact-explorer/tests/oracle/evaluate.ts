@@ -1,7 +1,7 @@
 // Independent evaluator: the legendary probability of an integer launch allocation, re-derived from the
 // documented objective. A float simplex ranks candidates; an exact BigInt-rational simplex produces the asserted numbers.
 
-import type { CraftBudget, LaunchOption, RecipeDAG } from '../lib/types';
+import type { CraftBudget, LaunchOption, RecipeDAG } from '@/lib/types';
 import { Frac } from './rational';
 import { simplexMaximize, simplexMaximizeFloat, simplexMaximizeFloatFull } from './simplex';
 

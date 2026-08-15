@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { solveLp } from './lp';
+import { solveLp } from '@/lib/lp';
 
 const PREC = 9;
 
@@ -173,7 +173,7 @@ describe('solveLp iteration limit', () => {
 // basis is primal feasible but its duals are not dual feasible.
 // ---------------------------------------------------------------------------
 
-// same shape as src/oracle/generate.ts:29
+// same shape as tests/oracle/generate.ts:29
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {

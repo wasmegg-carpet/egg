@@ -3,7 +3,7 @@
 // `vite.config.ts`, because the app config's `base` makes `highs/runtime?url` resolve to a prefixed path the
 // wasm loader cannot open outside a browser.
 
-import { optimizeFull } from '../lib/optimizer-core';
+import { optimizeFull } from '@/lib/optimizer-core';
 import { bruteForceBestJoint } from './enumerate';
 import { evaluateAllocationJoint, OracleInstance } from './evaluate';
 import { FAMILIES, Family, generateInstance } from './generate';

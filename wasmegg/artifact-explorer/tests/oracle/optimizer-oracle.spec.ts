@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 
-import { optimizeFull } from '../lib/optimizer-core';
-import type { OptimizerSolution } from '../lib/types';
-import { makeNode, makeOpt } from '../lib/spec-helpers';
+import { optimizeFull } from '@/lib/optimizer-core';
+import type { OptimizerSolution } from '@/lib/types';
+import { makeNode, makeOpt } from '../unit/spec-helpers';
 import { bruteForceBestJoint } from './enumerate';
 import { evaluateAllocation, evaluateAllocationJoint, OracleInstance, targetQ } from './evaluate';
 import { FAMILIES, Family, generateInstance } from './generate';

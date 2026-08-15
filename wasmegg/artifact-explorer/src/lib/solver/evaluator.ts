@@ -1,5 +1,5 @@
 // Judge-equivalent evaluator: the value in nats of an integer allocation over
-// option groups, mirroring `src/oracle/evaluate.ts` numerically without importing it.
+// option groups.
 
 import type { Model } from './model';
 import { gPrime, goldenSectionArgmax, logHit } from '../concave';

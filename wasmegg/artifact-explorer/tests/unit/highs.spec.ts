@@ -2,8 +2,8 @@
 // returned point is checked against the *in-memory* model rather than against the text.
 
 import { describe, expect, it } from 'vitest';
-import { INF, type MilpModel, type MilpSolve } from './types';
-import { loadHighs } from './highs';
+import { INF, type MilpModel, type MilpSolve } from '@/lib/solver/types';
+import { loadHighs } from '@/lib/solver/highs';
 
 const solve: MilpSolve = await loadHighs();
 

@@ -5,9 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import { ei, MissionType } from 'lib';
 
-import { optionsFromWire, optionsToWire, solutionsFromWire, solutionsToWire } from './optimizer-worker-protocol';
+import { optionsFromWire, optionsToWire, solutionsFromWire, solutionsToWire } from '@/lib/optimizer-worker-protocol';
 import { makeOpt, makeSolution } from './spec-helpers';
-import type { LaunchSolution } from './types';
+import type { LaunchSolution } from '@/lib/types';
 
 const Spaceship = ei.MissionInfo.Spaceship;
 const DurationType = ei.MissionInfo.DurationType;

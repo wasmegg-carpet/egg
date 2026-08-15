@@ -9,9 +9,9 @@ import {
   computeCanonicalOccurrence,
   computeCraftChainTree,
   computeInventoryTree,
-} from './optimizer-tree';
+} from '@/lib/optimizer-tree';
 import { lt1, lt2, lt3, lt4, makeNode, makeSolution, totemDag } from './spec-helpers';
-import type { RecipeDAG } from './types';
+import type { RecipeDAG } from '@/lib/types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;

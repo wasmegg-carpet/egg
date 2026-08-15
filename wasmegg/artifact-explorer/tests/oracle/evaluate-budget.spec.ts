@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { makeNode, makeOpt } from '@/lib/spec-helpers';
+import { makeNode, makeOpt } from '../unit/spec-helpers';
 import type { RecipeDAG } from '@/lib/types';
 import { evaluateAllocation, evaluateAllocationFloat, evaluateAllocationJoint, type OracleInstance } from './evaluate';
 

@@ -2,10 +2,10 @@
 // `optimize` lives here rather than in `index.ts` to keep the solver and its Emscripten glue out of the main chunk.
 
 import { ei, MissionType, type ShipsConfig } from 'lib';
-import type { CraftBudget, DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from './types';
-import { finalizeSolutions } from './index';
-import { optimizeFull } from './optimizer-core';
-import { enumerateLaunchOptions } from './phases';
+import type { CraftBudget, DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from '@/lib/types';
+import { finalizeSolutions } from '@/lib';
+import { optimizeFull } from '@/lib/optimizer-core';
+import { enumerateLaunchOptions } from '@/lib/phases';
 
 export function makeNode(id: string, isLeaf: boolean, children: [string, number][] = [], pCraft = 0): DAGNode {
   return {
