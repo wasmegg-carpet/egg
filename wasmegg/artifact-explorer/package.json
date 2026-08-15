@@ -40,6 +40,8 @@
     "format": "prettier --write \"src/**/*.{js,ts,vue}\"",
     "test": "vitest run",
     "test:oracle": "RUN_ORACLE=1 vitest run src/oracle/optimizer-oracle.spec.ts --disable-console-intercept",
+    "arena": "ARENA=${ARENA:-smoke} vitest run src/oracle/arena/invariants.spec.ts --disable-console-intercept",
+    "arena:check": "vitest run src/oracle/arena/independence.spec.ts",
     "coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "repro": "vite-node -c vitest.config.ts src/oracle/repro.ts --"
