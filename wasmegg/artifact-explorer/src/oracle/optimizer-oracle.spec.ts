@@ -35,6 +35,7 @@ async function runOptimizer(inst: OracleInstance): Promise<OptimizerSolution> {
     fuelCapacity: inst.fuelCapacity,
     timeCapacityPerSlot: inst.timeCapacityPerSlot,
     baseYield: inst.baseYield,
+    craftBudget: inst.craftBudget,
     maximumCost: Infinity,
   });
 }
@@ -81,6 +82,7 @@ async function solverPricesAllocation(inst: OracleInstance, allocation: number[]
     fuelCapacity: 1,
     timeCapacityPerSlot: 1,
     baseYield: inst.baseYield,
+    craftBudget: inst.craftBudget,
     maximumCost: Infinity,
   });
   return solution.jointProbability;

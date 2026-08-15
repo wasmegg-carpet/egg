@@ -46,6 +46,19 @@ The harness decides this with its own packer (`pack-feasibility.ts`), which
 imports nothing and which no candidate may import. Returning an infeasible plan
 is a hard failure, not a low score.
 
+**The golden egg budget is not part of this.** Missions cost no golden eggs, so
+no allocation can breach `craftBudget` and there is nothing here for a
+feasibility check to test. It binds on the craft split, which the judge chooses
+for itself, so the judge solves its craft polytope with the row in it and a
+candidate that ignored the cap simply scores worse. That is why the budget
+appears under **A9** and has no C1 twin. Generated instances carry no budget; A9
+introduces one as a perturbation, the way the other A checks perturb fuel and
+time, so every recorded sweep result still measures the problems it always did.
+
+Prices are the harness's own, derived from the game's price curve in `harness.ts`
+rather than shared with `optimizer-cost.ts`: a pricing helper used by both the
+planner and its judge would agree with itself no matter what it computed.
+
 ## Rules
 
 - **Do not import the harness.** Not `evaluate.ts`, `pack-feasibility.ts`,
@@ -92,7 +105,7 @@ holds without knowing the optimum, so none needs a reference answer:
 | **C0** contract | the returned allocation has one entry per option, and every entry is a non-negative whole number |
 | **C1** feasibility | the plan fits the fuel tank and packs into the slots |
 | **C2/C3** honesty | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in) |
-| **A1-A8** monotonicity | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, a higher crafting level, a shorter launch-period floor, one fewer target: each is solved alongside the original, and the relaxed solve must not score below it |
+| **A1-A9** monotonicity | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely): each is solved alongside the original, and the relaxed solve must not score below it |
 | **B1-B6** invariance | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering. |
 | **M1-M3** cross-path | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3) |
 | **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every *pair* — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass. |

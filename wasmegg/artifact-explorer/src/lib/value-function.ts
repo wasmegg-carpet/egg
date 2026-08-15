@@ -1,9 +1,30 @@
 // Inner crafting LPs over the recipe-conservation polytope. Every node consumed by some parent gets a
 // conservation row; a final target has none, so dropped copies of it do not count as crafts.
 
-import type { RecipeDAG } from './types';
+import type { CraftBudget, RecipeDAG } from './types';
 import { gPrime, goldenSectionArgmax, logHit } from './concave';
 import { solveLp } from './lp';
+
+// Returns null when the budget cannot bind — no cap, or no priced column — so callers add no row at all
+// rather than a vacuous one. An unpriced craftable keeps coefficient 0: it cannot consume the budget.
+function craftBudgetRow(
+  nonLeafNodes: readonly string[],
+  totalVars: number,
+  budget: CraftBudget | undefined
+): { row: Float64Array; capacity: number } | null {
+  if (!budget || !Number.isFinite(budget.capacity) || budget.capacity < 0) return null;
+  const row = new Float64Array(totalVars);
+  let priced = false;
+  for (let i = 0; i < nonLeafNodes.length; i++) {
+    const price = budget.unitPrices.get(nonLeafNodes[i]) ?? 0;
+    if (Number.isFinite(price) && price > 0) {
+      row[i] = price;
+      priced = true;
+    }
+  }
+  return priced ? { row, capacity: budget.capacity } : null;
+}
+
 export interface AlphaResult {
   alpha: number; // craftable count of targets[0]; 0 when it's a leaf
   craftByTarget: Map<string, number>;
@@ -25,7 +46,8 @@ export interface InnerLp {
 export function compileInnerLp(
   recipeDag: RecipeDAG,
   desiredArtifactNodeIds: string[],
-  weights?: Map<string, number>
+  weights?: Map<string, number>,
+  budget?: CraftBudget
 ): InnerLp {
   if (desiredArtifactNodeIds.length === 0) {
     return makeTrivialLp('', [], new Map());
@@ -92,7 +114,13 @@ export function compileInnerLp(
     A[i] = row;
   }
 
-  const bScratch = new Float64Array(nCons);
+  // Appended after the conservation rows, so `solve`'s inventory fill — which
+  // walks constraintNodes — never reaches it and its RHS stays the capacity.
+  const budgetRow = craftBudgetRow(nonLeafNodes, nVars, budget);
+  if (budgetRow) A.push(budgetRow.row);
+
+  const bScratch = new Float64Array(A.length);
+  if (budgetRow) bScratch[nCons] = budgetRow.capacity;
 
   return {
     nonLeafNodes,
@@ -216,7 +244,8 @@ export interface JointInnerLp {
 export function compileJointInnerLp(
   recipeDag: RecipeDAG,
   desiredArtifactNodeIds: string[],
-  QByTarget: ReadonlyMap<string, number>
+  QByTarget: ReadonlyMap<string, number>,
+  budget?: CraftBudget
 ): JointInnerLp {
   const targets = desiredArtifactNodeIds;
   const nt = targets.length;
@@ -287,8 +316,14 @@ export function compileJointInnerLp(
     }
   }
 
+  // Last row, after both the conservation and the envelope blocks, so neither
+  // `fillEnvelopeB` nor the inventory fill can overwrite its RHS.
+  const budgetRow = craftBudgetRow(nonLeafNodes, totalVars, budget);
+  if (budgetRow) A.push(budgetRow.row);
+
   const nRows = A.length;
   const bScratch = new Float64Array(nRows);
+  if (budgetRow) bScratch[nRows - 1] = budgetRow.capacity;
 
   function fillEnvelopeB(lambda: Float64Array) {
     for (let r = 0; r < rowTargetIdx.length; r++) {
@@ -337,7 +372,8 @@ export function refineJointCraftSplit(
   QByTarget: ReadonlyMap<string, number>,
   inventory: Map<string, number>,
   lambda: ReadonlyMap<string, number>,
-  seed: JointAlphaResult
+  seed: JointAlphaResult,
+  budget?: CraftBudget
 ): JointAlphaResult {
   // A leaf or Q=0 target's score does not depend on the craft allocation, so
   // it sits out the split and its seed value is reported unchanged.
@@ -366,7 +402,7 @@ export function refineJointCraftSplit(
       const s = Q(t) * (currentCraft.get(t) ?? 0) + lam(t);
       weights.set(t, gPrime(s) * Q(t));
     }
-    const lp = compileInnerLp(recipeDag, [...craftTargets], weights);
+    const lp = compileInnerLp(recipeDag, [...craftTargets], weights, budget);
     const nonLeafNodes = lp.nonLeafNodes;
     const vertex = lp.solve(inventory);
 

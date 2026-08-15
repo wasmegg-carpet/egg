@@ -38,6 +38,14 @@ export interface DAGNode {
 
 export type RecipeDAG = Map<string, DAGNode>;
 
+// A cap on what the plan's crafts may cost in golden eggs. `unitPrices` is a *linear* price per craft, which
+// the real curve is not, so the row is an upper bound on the true bill: a plan that satisfies it is always
+// affordable, while a plan leaning hard on one node may be rejected despite fitting. See OPTIMIZER.md.
+export interface CraftBudget {
+  capacity: number; // golden eggs
+  unitPrices: ReadonlyMap<string, number>; // per craft, by node id
+}
+
 export interface LaunchSolution {
   ship: MissionType;
   actualFuel: number;

@@ -208,6 +208,12 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
   for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, model.groups[g].fuelFraction);
   rows.end(-INF, 1);
 
+  if (Number.isFinite(model.craftBudgetCapacity)) {
+    rows.begin();
+    for (let p = 0; p < layout.crafts; p++) rows.add(layout.cBase + p, model.craftPrices[p]);
+    rows.end(-INF, model.craftBudgetCapacity);
+  }
+
   // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin();

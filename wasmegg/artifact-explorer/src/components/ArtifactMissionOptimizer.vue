@@ -24,7 +24,9 @@
               :solution="view.solution"
               :max-wait-time-seconds="lastComputedMaxWaitTimeSeconds"
               :has-inventory="!!playerInventory"
+              :golden-egg-balance="playerGoldenEggs"
               :targets="view.targets"
+              :plan-cost="view.planCost"
             />
             <p
               v-if="computing && solutionViews.length === 0"
@@ -93,6 +95,7 @@ import {
   effectiveCraftingLevel,
   EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
+  playerGoldenEggs,
   playerInventory,
   setPlayerData,
   setWaitTimeDays,
@@ -102,7 +105,9 @@ import {
   computeBaseYield,
   computeCraftChainTree,
   computeInventoryTree,
+  computeCraftUnitPrices,
   computeMissionLegendaryRows,
+  computePlanCraftingCost,
   finalizeSolutions,
   lambdaFromDropProbability,
   legendaryCraftProbabilityOf,
@@ -181,6 +186,12 @@ export default defineComponent({
       if (!timeBudgetValid.value) return null;
       const launchPeriodSeconds = EFFORT_LAUNCH_PERIOD_SECONDS[missionFilters.value.effort];
       const maxGemCost = missionFilters.value.maxGemCostEnabled ? missionFilters.value.maxGemCost : undefined;
+      const craftBudget = missionFilters.value.maxGoldenEggCostEnabled
+        ? {
+            capacity: missionFilters.value.maxGoldenEggCost,
+            unitPrices: computeCraftUnitPrices(recipeDag.value, playerInventory.value),
+          }
+        : undefined;
       return {
         options: enumerateLaunchOptions(effectiveConfig.value, recipeDag.value, launchPeriodSeconds),
         recipeDag: recipeDag.value,
@@ -189,6 +200,7 @@ export default defineComponent({
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
         baseYield: playerBaseYield.value,
         maximumCost: maxGemCost,
+        craftBudget,
       };
     });
 
@@ -291,7 +303,7 @@ export default defineComponent({
             dropDataIsSparse: legendaryDataIsSparse(nodeId),
           };
         });
-        return { solution, targets };
+        return { solution, targets, planCost: computePlanCraftingCost(solution, playerInventory.value) };
       })
     );
 
@@ -310,6 +322,7 @@ export default defineComponent({
       runCompute,
       submitPlayerId,
       playerInventory,
+      playerGoldenEggs,
       inventoryTrees,
       solutionViews,
     };

@@ -69,6 +69,21 @@ violating a row by up to `mip_feasibility_tolerance`, which is absolute on row
 activity, so a normalized row would license overfilling a slot by that fraction of
 the whole horizon — seconds of it on a month-long plan.
 
+`goldenEggs` is written only when the caller supplies a budget. `price_p` is a
+*linear* stand-in for the game's craft price curve; it over-states the bill, so a
+plan satisfying the row is always affordable (`../OPTIMIZER.md`, "Golden egg
+cost", derives that and the direction it errs in). The true nonlinear form cost
+the solver its ability to converge in reasonable time. Unnormalized, because its
+magnitude sits well inside the window below.
+
+The judge carries the same row on its own craft LP (`evaluator.ts`). It has to:
+its whole job is to re-derive the objective the MILP steered towards, and over
+the unbudgeted polytope it would re-optimise the craft split onto crafts the plan
+cannot pay for — an arena C2-honesty failure, since the harness scores the same
+allocation *with* the budget. A capacity of exactly 0 is the one place the row
+also reaches the `Q = Infinity` shortcut, whose "an infinitesimal craft costs
+infinitesimal inventory" argument does not carry to a purse with nothing in it.
+
 `order_k` forces slot loads non-increasing. Without it every plan appears `slots!`
 times and the tree spends its budget rediscovering the same plan in a different
 order.
