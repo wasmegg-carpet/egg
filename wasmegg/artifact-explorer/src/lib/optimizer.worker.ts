@@ -43,6 +43,7 @@ ctx.onmessage = async (e: MessageEvent<OptimizerRequest>) => {
       recipeDag: req.recipeDag,
       desiredArtifactNodeIds: req.desiredArtifactNodeIds,
       fuelCapacity: req.fuelCapacity,
+      fuelByEggCapacity: req.fuelByEggCapacity,
       timeCapacityPerSlot: req.timeCapacityPerSlot,
       baseYield: req.baseYield,
       craftBudget: req.craftBudget,

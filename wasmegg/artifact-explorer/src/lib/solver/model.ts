@@ -2,7 +2,7 @@
 // filtered and duplicate-merged option groups.
 
 import type { LaunchOption, RecipeDAG } from '../types';
-import type { PlanProblem } from './types';
+import { fuelAxesOf, fuelCostOnAxis, type FuelAxis, type PlanProblem } from './types';
 
 // Stand-ins for a bound no budget gives; see SPEC.md section 2. `MAX_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
@@ -10,8 +10,9 @@ const GROUP_CAP = 1e9;
 export const MAX_PER_SLOT = 1e6;
 
 export interface Group {
-  // Normalized: a fraction of the whole tank, and of one slot's horizon.
-  fuelFraction: number;
+  // Normalized: a fraction of each fuel budget, and of one slot's horizon. One
+  // entry per `Model.fuelAxes`, in that order.
+  fuelFractions: number[];
   timeFraction: number;
   timeSeconds: number;
   yieldByItem: number[];
@@ -33,6 +34,9 @@ export interface Model {
   Qs: number[];
   targetCraftIdx: number[]; // craft column per target; -1 when not craftable
   slots: number;
+  // The budgets `Group.fuelFractions` is normalized against; only the count is
+  // load-bearing downstream, but the axes themselves make a model self-describing.
+  fuelAxes: readonly FuelAxis[];
   timeCapacitySeconds: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
@@ -44,7 +48,7 @@ export interface Model {
 type Entry = [string, number];
 
 interface Candidate {
-  fuelFraction: number;
+  fuelFractions: number[];
   timeFraction: number;
   timeSeconds: number;
   yieldEntries: Entry[]; // sorted by item id
@@ -62,8 +66,18 @@ function cmpEntries(a: Entry[], b: Entry[]): number {
   return a.length - b.length;
 }
 
+// Elementwise, and a total order: two options that cost the same fuel in total but
+// draw it from different eggs must not merge into one group.
+function cmpFractions(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length && i < b.length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return a.length - b.length;
+}
+
 function cmpKey(a: Candidate, b: Candidate): number {
-  if (a.fuelFraction !== b.fuelFraction) return a.fuelFraction - b.fuelFraction;
+  const fuel = cmpFractions(a.fuelFractions, b.fuelFractions);
+  if (fuel !== 0) return fuel;
   if (a.timeFraction !== b.timeFraction) return a.timeFraction - b.timeFraction;
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
@@ -138,8 +152,14 @@ function boundsFollowFromRows(grp: Group): boolean {
 // of every target's legendary drops. Compared exactly rather than to a tolerance, which is what keeps the
 // relation transitive. See SPEC.md section 1.
 function dominates(taker: Group, given: Group): boolean {
-  if (taker.fuelFraction > given.fuelFraction || taker.timeSeconds > given.timeSeconds) return false;
-  let strict = taker.fuelFraction < given.fuelFraction || taker.timeSeconds < given.timeSeconds;
+  if (taker.timeSeconds > given.timeSeconds) return false;
+  let strict = taker.timeSeconds < given.timeSeconds;
+  // Every axis, not the total: drawing less of one egg does not excuse drawing more of another, or a
+  // pruned group's launches would land on a dominator the player cannot fuel.
+  for (let a = 0; a < taker.fuelFractions.length; a++) {
+    if (taker.fuelFractions[a] > given.fuelFractions[a]) return false;
+    if (taker.fuelFractions[a] < given.fuelFractions[a]) strict = true;
+  }
   for (let i = 0; i < taker.yieldByItem.length; i++) {
     if (taker.yieldByItem[i] < given.yieldByItem[i]) return false;
     if (taker.yieldByItem[i] > given.yieldByItem[i]) strict = true;
@@ -244,9 +264,11 @@ export function buildModel(problem: PlanProblem): Model {
   const capped = budget !== undefined && Number.isFinite(budget.capacity) && budget.capacity >= 0;
   const craftBudgetCapacity = capped && craftPrices.some(p => p > 0) ? budget!.capacity : Infinity;
 
-  // Normalized budgets: fuel 1, per-slot time 1. `fuelCapacity <= 0` reads as
-  // "all fuel costs are 0".
-  const fuelCap = problem.fuelCapacity;
+  // Normalized budgets: every fuel axis 1, per-slot time 1. A capacity <= 0 reads as
+  // "all costs on that axis are 0" — the NaN-input defense. `optimizer-core` has
+  // already dropped the options that would abuse it, so no surviving option charges
+  // anything to an axis the player has nothing on.
+  const axes = fuelAxesOf(problem);
   const timeCap = problem.timeCapacityPerSlot;
   const slots = problem.slots;
 
@@ -262,7 +284,9 @@ export function buildModel(problem: PlanProblem): Model {
     ) {
       return;
     }
-    const fuelFraction = fuelCap > 0 ? opt.actualFuel / fuelCap : 0;
+    const costs = axes.map(ax => fuelCostOnAxis(opt, ax));
+    if (costs.some(c => !Number.isFinite(c) || c < 0)) return;
+    const fuelFractions = axes.map((ax, a) => (ax.capacity > 0 ? costs[a] / ax.capacity : 0));
     const timeFraction = timeCap > 0 ? opt.actualTime / timeCap : Infinity;
     if (timeFraction > 1) return;
 
@@ -285,15 +309,17 @@ export function buildModel(problem: PlanProblem): Model {
     yieldEntries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     legendaryEntries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
+    // The tightest axis binds; an option needing more of one egg than the player has
+    // gets a fraction above 1 and falls out on `cap < 1`.
     const cap = Math.min(
-      fuelFraction > 0 ? Math.floor(1 / fuelFraction) : GROUP_CAP,
+      ...fuelFractions.map(f => (f > 0 ? Math.floor(1 / f) : GROUP_CAP)),
       timeFraction > 0 ? Math.floor(slots / timeFraction) : GROUP_CAP,
       GROUP_CAP
     );
     if (cap < 1) return;
 
     candidates.push({
-      fuelFraction,
+      fuelFractions,
       timeFraction,
       timeSeconds: opt.actualTime,
       yieldEntries,
@@ -318,7 +344,7 @@ export function buildModel(problem: PlanProblem): Model {
       return hit ? hit[1] : 0;
     });
     groups.push({
-      fuelFraction: cand.fuelFraction,
+      fuelFractions: cand.fuelFractions,
       timeFraction: cand.timeFraction,
       timeSeconds: cand.timeSeconds,
       yieldByItem,
@@ -344,6 +370,7 @@ export function buildModel(problem: PlanProblem): Model {
     Qs,
     targetCraftIdx,
     slots,
+    fuelAxes: axes,
     timeCapacitySeconds: timeCap,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
