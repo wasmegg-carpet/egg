@@ -113,6 +113,11 @@ export interface MissionFilters {
   // `waitTimeDays`. The window always starts now.
   doubleCapacityEnabled: boolean;
   doubleCapacityRemaining: string;
+  // Budget the plan against the fuel sitting in the tank right now, egg by egg,
+  // instead of against what the tank could hold. Needs a save to mean anything, so
+  // `effectiveFuelByEggCapacity` ignores it when there is none — leaving it on across
+  // a reload without player data degrades to the tank-capacity budget by itself.
+  fuelFromTankContents: boolean;
 }
 
 export function newMissionFilters(): MissionFilters {
@@ -125,6 +130,7 @@ export function newMissionFilters(): MissionFilters {
     waitTimeDays: DEFAULT_WAIT_TIME_DAYS,
     doubleCapacityEnabled: false,
     doubleCapacityRemaining: DEFAULT_DOUBLE_CAPACITY_REMAINING,
+    fuelFromTankContents: false,
   };
 }
 
@@ -150,6 +156,7 @@ export function isMissionFilters(x: unknown): x is MissionFilters {
     (m.maxGoldenEggCost === undefined || (Number.isFinite(m.maxGoldenEggCost) && m.maxGoldenEggCost >= 0)) &&
     (m.waitTimeDays === undefined || typeof m.waitTimeDays === 'string') &&
     (m.doubleCapacityEnabled === undefined || typeof m.doubleCapacityEnabled === 'boolean') &&
-    (m.doubleCapacityRemaining === undefined || typeof m.doubleCapacityRemaining === 'string')
+    (m.doubleCapacityRemaining === undefined || typeof m.doubleCapacityRemaining === 'string') &&
+    (m.fuelFromTankContents === undefined || typeof m.fuelFromTankContents === 'boolean')
   );
 }

@@ -40,17 +40,20 @@ const SLOT_TOL = 1e-9;
 // Same, on the event window row. Seconds, like the row.
 const WINDOW_TOL = 1e-9;
 
-function fuelOf(model: Model, counts: readonly number[]): number {
-  let total = 0;
-  for (let g = 0; g < counts.length; g++) {
-    if (counts[g] > 0) total += counts[g] * model.groups[g].fuelFraction;
+function fuelExceeded(model: Model, counts: readonly number[]): boolean {
+  for (let a = 0; a < model.fuelAxes.length; a++) {
+    let total = 0;
+    for (let g = 0; g < counts.length; g++) {
+      if (counts[g] > 0) total += counts[g] * model.groups[g].fuelFractions[a];
+    }
+    if (total > 1 + FUEL_TOL) return true;
   }
-  return total;
+  return false;
 }
 
 // The schedule this plan will be emitted as, checked against every budget it claims to respect.
 function certifies(model: Model, perSlot: readonly (readonly number[])[], counts: readonly number[]): boolean {
-  if (fuelOf(model, counts) > 1 + FUEL_TOL) return false;
+  if (fuelExceeded(model, counts)) return false;
   const window = model.eventWindowSeconds;
   for (const slot of perSlot) {
     let load = 0;

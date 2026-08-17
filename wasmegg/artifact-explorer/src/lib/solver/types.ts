@@ -1,7 +1,20 @@
 // The solver's type surface: what a plan is, and what the MILP backend behind it
 // trades in.
 
+import type { ei } from 'lib';
 import type { CraftBudget, LaunchOption, RecipeDAG } from '../types';
+
+// One budget the plan has to fit inside. `egg: null` charges the option's whole
+// `actualFuel`; an egg charges only that egg's share, from `fuelByEgg`.
+export interface FuelAxis {
+  readonly egg: ei.Egg | null;
+  readonly capacity: number;
+}
+
+// What one launch of `opt` draws from `axis`.
+export function fuelCostOnAxis(opt: LaunchOption, axis: FuelAxis): number {
+  return axis.egg === null ? opt.actualFuel : (opt.fuelByEgg.get(axis.egg) ?? 0);
+}
 
 export interface PlanProblem {
   // Menu of launches available. A schedule entry is indexed against this array, in this
@@ -12,6 +25,9 @@ export interface PlanProblem {
   // — the product over targets, not the max or the sum.
   readonly targets: readonly string[];
   readonly fuelCapacity: number;
+  // Per-egg budgets, replacing `fuelCapacity` when supplied. Absent means the single
+  // aggregate axis `[{ egg: null, capacity: fuelCapacity }]` — one tank, any mix.
+  readonly fuelAxes?: readonly FuelAxis[];
   // Seconds. Note the asymmetry with `fuelCapacity` above, which is for the whole plan.
   readonly timeCapacityPerSlot: number;
   readonly slots: number;
@@ -23,6 +39,11 @@ export interface PlanProblem {
   // a prefix, never an interval starting at some future offset. 0 or absent means no event, and then the
   // menu carries only `normal` options.
   readonly eventWindowSeconds?: number;
+}
+
+// The axes a problem is actually solved against.
+export function fuelAxesOf(problem: PlanProblem): readonly FuelAxis[] {
+  return problem.fuelAxes ?? [{ egg: null, capacity: problem.fuelCapacity }];
 }
 
 // Optional self-report of what a planner believes its own plan is worth; supplying

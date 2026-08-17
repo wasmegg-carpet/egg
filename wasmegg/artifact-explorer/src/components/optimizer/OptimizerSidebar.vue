@@ -219,19 +219,48 @@
           @update:overridden="setOverridePreviousCrafts"
           @update:manual="setPreviousCraftCount"
         />
-        <optimizer-setting-row
-          label="Fuel tank level"
-          :has-save="playerTankLevel !== null"
-          :overridden="overrides.tankLevel"
-          :save-value="playerTankLevel"
-          :manual-value="extras.tankLevel"
-          :min="0"
-          :max="maxTankLevel"
-          :max-label="`/ ${maxTankLevel}`"
-          :capacity="tankCapacityLabel"
-          @update:overridden="setOverrideTankLevel"
-          @update:manual="setTankLevel"
-        />
+        <!-- Capacity stops feeding the model once the per-egg budget is on, so the
+             control goes inert rather than staying live and changing nothing. -->
+        <div :class="fuelFromTankContents ? 'opacity-40 pointer-events-none' : ''">
+          <optimizer-setting-row
+            label="Fuel tank level"
+            :has-save="playerTankLevel !== null"
+            :overridden="overrides.tankLevel"
+            :save-value="playerTankLevel"
+            :manual-value="extras.tankLevel"
+            :min="0"
+            :max="maxTankLevel"
+            :max-label="`/ ${maxTankLevel}`"
+            :capacity="tankCapacityLabel"
+            @update:overridden="setOverrideTankLevel"
+            @update:manual="setTankLevel"
+          />
+        </div>
+        <div v-if="canBudgetFromTankContents" class="py-2">
+          <label class="flex items-start gap-2 text-sm select-none text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 shrink-0 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              :checked="fuelFromTankContents"
+              @change="setFuelFromTankContents(($event.target as HTMLInputElement).checked)"
+            />
+            <span>
+              Only use fuel in tank
+              <span class="block text-xs text-gray-500">
+                Budget against what you have stocked right now, egg by egg, instead of a full tank.
+              </span>
+            </span>
+          </label>
+          <ul v-if="fuelFromTankContents" class="mt-2 pl-6 space-y-0.5">
+            <li v-for="entry of tankContentEntries" :key="'tank-' + entry.egg" class="flex items-center text-xs">
+              <base-icon :icon-rel-path="entry.icon" :size="64" class="h-4 w-4 mr-1"></base-icon>
+              <span class="text-gray-500">{{ entry.name }}</span>
+              <span class="ml-auto tabular-nums" :class="entry.empty ? 'text-red-500' : 'text-gray-700'">
+                {{ entry.amount }}
+              </span>
+            </li>
+          </ul>
+        </div>
         <optimizer-setting-row
           label="FTL Drive Upgrades"
           :has-save="hasPlayerData"
@@ -310,6 +339,8 @@
 import { computed, defineComponent, ref, watch } from 'vue';
 
 import {
+  eggIconPath,
+  eggName,
   formatDuration,
   formatEIValue,
   fuelTankSizes,
@@ -343,12 +374,14 @@ import {
   playerPreviousCrafts,
   playerPreviousCraftsByArtifact,
   playerShipsConfig,
+  playerTankFuels,
   playerTankLevel,
   setAutoCompute,
   setCraftingLevel,
   setEffort,
   setEpicResearchFTLLevel,
   setEpicResearchZerogLevel,
+  setFuelFromTankContents,
   setMaxGemCost,
   setMaxGemCostEnabled,
   setMaxGoldenEggCost,
@@ -477,6 +510,22 @@ export default defineComponent({
     });
     const tankCapacityLabel = computed(() => formatEIValue(fuelTankSizes[shownTankLevel.value] ?? 0, { trim: true }));
 
+    // The mode is only offered when the save actually carries a readable tank; without
+    // one there is nothing to budget against and the control would be a dead toggle.
+    const canBudgetFromTankContents = computed(() => playerTankFuels.value !== null);
+    const fuelFromTankContents = computed(
+      () => canBudgetFromTankContents.value && missionFilters.value.fuelFromTankContents
+    );
+    const tankContentEntries = computed(() =>
+      [...(playerTankFuels.value ?? new Map())].map(([egg, amount]) => ({
+        egg,
+        name: eggName(egg),
+        icon: eggIconPath(egg),
+        amount: formatEIValue(amount, { trim: true }),
+        empty: amount <= 0,
+      }))
+    );
+
     const totalShips = spaceshipList.length;
     const shipsVisibleCount = computed(() => spaceshipList.filter(s => effectiveConfig.value.shipVisibility[s]).length);
 
@@ -562,6 +611,10 @@ export default defineComponent({
       maxTankLevel,
       previousCraftEntries,
       tankCapacityLabel,
+      canBudgetFromTankContents,
+      fuelFromTankContents,
+      tankContentEntries,
+      setFuelFromTankContents,
       totalShips,
       shipsVisibleCount,
       maxGemCostDisplay,

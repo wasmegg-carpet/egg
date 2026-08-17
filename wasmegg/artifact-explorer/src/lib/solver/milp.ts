@@ -212,9 +212,11 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.end(0, 0);
   }
 
-  rows.begin();
-  for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, model.groups[g].fuelFraction);
-  rows.end(-INF, 1);
+  for (let a = 0; a < model.fuelAxes.length; a++) {
+    rows.begin();
+    for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, model.groups[g].fuelFractions[a]);
+    rows.end(-INF, 1);
+  }
 
   if (Number.isFinite(model.craftBudgetCapacity)) {
     rows.begin();

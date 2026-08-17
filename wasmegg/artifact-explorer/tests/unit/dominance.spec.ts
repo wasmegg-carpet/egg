@@ -80,7 +80,7 @@ describe('dominance pruning', () => {
       makeOpt(1, 10, [['B', 1]]),
     ];
     const key = (m: ReturnType<typeof modelOf>) =>
-      m.groups.map(g => [g.fuelFraction, g.timeSeconds, g.variant, ...g.yieldByItem].join(','));
+      m.groups.map(g => [...g.fuelFractions, g.timeSeconds, g.variant, ...g.yieldByItem].join(','));
 
     const forward = key(modelOf(menu));
     expect(forward.length).toBeLessThan(menu.length);

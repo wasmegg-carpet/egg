@@ -108,7 +108,8 @@ export async function optimize(
   launchPeriodSeconds = 0,
   maxGemCost?: number,
   craftBudget?: CraftBudget,
-  eventWindowSeconds = 0
+  eventWindowSeconds = 0,
+  fuelByEggCapacity?: Map<ei.Egg, number>
 ): Promise<OptimizerSolution> {
   const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
   const solution = await optimizeFull({
@@ -116,6 +117,7 @@ export async function optimize(
     recipeDag: dag,
     desiredArtifactNodeIds,
     fuelCapacity: fuelTankCapacity,
+    fuelByEggCapacity,
     timeCapacityPerSlot: timeBudgetSeconds,
     maximumCost: maxGemCost,
     baseYield,

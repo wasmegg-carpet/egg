@@ -137,6 +137,10 @@ export const playerShipsConfig = ref<ShipsConfig | null>(null);
 export const playerInventory = shallowRef<Inventory | null>(null);
 export const playerTotalCraftingXp = ref<number | null>(null);
 export const playerTankLevel = ref<number | null>(null);
+// What is stocked in the virtue tank right now, per egg. Null when the save carries no
+// readable tank, which is what makes the per-egg budget mode unavailable rather than
+// silently budgeting against four zeroes.
+export const playerTankFuels = shallowRef<Map<ei.Egg, number> | null>(null);
 // Golden eggs the player can actually spend: lifetime earned less lifetime spent.
 export const playerGoldenEggs = ref<number | null>(null);
 
@@ -239,6 +243,30 @@ function computeShipLevelFromPoints(shipType: Spaceship, points: number): number
   return thresholds.length - 1;
 }
 
+// `virtue.afx.tankFuels` is positional, and the virtue eggs sit at indices 20-24 as
+// [Curiosity, Integrity, Humility, Resilience, Kindness]. Humility is absent here on
+// purpose: `phases.ts` strips it from every mission's fuel cost (it is free on the Path
+// of Virtue), so a budget for it would constrain nothing.
+const VIRTUE_TANK_FUEL_INDICES: ReadonlyArray<readonly [ei.Egg, number]> = [
+  [ei.Egg.CURIOSITY, 20],
+  [ei.Egg.INTEGRITY, 21],
+  [ei.Egg.RESILIENCE, 23],
+  [ei.Egg.KINDNESS, 24],
+];
+
+function readVirtueTankFuels(backup: ei.IBackup): Map<ei.Egg, number> | null {
+  const tankFuels = backup.virtue?.afx?.tankFuels;
+  // Too short to hold the virtue eggs at all: an old or partial save, which should fall
+  // back to the tank-capacity budget rather than read as an empty tank.
+  if (!tankFuels || tankFuels.length <= 24) return null;
+  const fuels = new Map<ei.Egg, number>();
+  for (const [egg, index] of VIRTUE_TANK_FUEL_INDICES) {
+    const amount = tankFuels[index];
+    fuels.set(egg, Number.isFinite(amount) && amount > 0 ? amount : 0);
+  }
+  return fuels;
+}
+
 export function setPlayerData(backup: ei.IBackup): void {
   if (!backup.game || !backup.artifactsDb) return;
 
@@ -278,6 +306,7 @@ export function setPlayerData(backup: ei.IBackup): void {
   playerInventory.value = inv;
   playerTotalCraftingXp.value = Math.floor(backup.artifacts?.craftingXp ?? 0);
   playerTankLevel.value = backup.artifacts?.tankLevel ?? null;
+  playerTankFuels.value = readVirtueTankFuels(backup);
   playerGoldenEggs.value = Math.max(0, (backup.game.goldenEggsEarned ?? 0) - (backup.game.goldenEggsSpent ?? 0));
 
   // The cap tracks the save's balance for as long as it is off, so ticking it on means "what I can
@@ -298,6 +327,7 @@ export function clearPlayerData(): void {
   playerInventory.value = null;
   playerTotalCraftingXp.value = null;
   playerTankLevel.value = null;
+  playerTankFuels.value = null;
   playerGoldenEggs.value = null;
 }
 
@@ -395,6 +425,19 @@ export function persistExtras(): void {
 
 export const missionFilters = ref<MissionFilters>(loadMissionFilters());
 
+// The per-egg budget the optimizer should use, or null to budget against tank capacity.
+// The single gate for the whole feature: the mode needs both the flag and a save with a
+// readable tank, so a flag persisted from an earlier session with no save loaded now
+// falls back on its own.
+export const effectiveFuelByEggCapacity = computed<Map<ei.Egg, number> | null>(() => {
+  if (!missionFilters.value.fuelFromTankContents) return null;
+  return playerTankFuels.value;
+});
+
+export function setFuelFromTankContents(enabled: boolean): void {
+  missionFilters.value.fuelFromTankContents = enabled;
+}
+
 export function setEffort(level: EffortLevel): void {
   missionFilters.value.effort = level;
 }
@@ -449,6 +492,7 @@ export function loadMissionFilters(): MissionFilters {
         waitTimeDays: parsed.waitTimeDays ?? DEFAULT_WAIT_TIME_DAYS,
         doubleCapacityEnabled: parsed.doubleCapacityEnabled ?? false,
         doubleCapacityRemaining: parsed.doubleCapacityRemaining ?? DEFAULT_DOUBLE_CAPACITY_REMAINING,
+        fuelFromTankContents: parsed.fuelFromTankContents ?? false,
       };
     }
   } catch (err) {
