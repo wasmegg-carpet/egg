@@ -19,6 +19,7 @@ export interface OptimizerRequest {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
+  fuelByEggCapacity?: Map<ei.Egg, number>;
   timeCapacityPerSlot: number;
   maximumCost: number | undefined;
   baseYield: Map<string, number>;

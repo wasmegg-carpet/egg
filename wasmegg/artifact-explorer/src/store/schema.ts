@@ -102,6 +102,11 @@ export interface MissionFilters {
   maxGoldenEggCost: number;
   // Time budget, stored as typed (e.g. '30', '12d12h') and parsed at use.
   waitTimeDays: string;
+  // Budget the plan against the fuel sitting in the tank right now, egg by egg,
+  // instead of against what the tank could hold. Needs a save to mean anything, so
+  // `effectiveFuelByEggCapacity` ignores it when there is none — leaving it on across
+  // a reload without player data degrades to the tank-capacity budget by itself.
+  fuelFromTankContents: boolean;
 }
 
 export function newMissionFilters(): MissionFilters {
@@ -112,6 +117,7 @@ export function newMissionFilters(): MissionFilters {
     maxGoldenEggCostEnabled: false,
     maxGoldenEggCost: DEFAULT_MAX_GOLDEN_EGG_COST,
     waitTimeDays: DEFAULT_WAIT_TIME_DAYS,
+    fuelFromTankContents: false,
   };
 }
 
@@ -126,6 +132,7 @@ export function isMissionFilters(x: unknown): x is MissionFilters {
     // Finite and non-negative, not merely a number: `buildModel` reads a negative or non-finite capacity as
     // "no cap", so a value that fails this would leave the checkbox on with nothing enforcing it.
     (m.maxGoldenEggCost === undefined || (Number.isFinite(m.maxGoldenEggCost) && m.maxGoldenEggCost >= 0)) &&
-    (m.waitTimeDays === undefined || typeof m.waitTimeDays === 'string')
+    (m.waitTimeDays === undefined || typeof m.waitTimeDays === 'string') &&
+    (m.fuelFromTankContents === undefined || typeof m.fuelFromTankContents === 'boolean')
   );
 }

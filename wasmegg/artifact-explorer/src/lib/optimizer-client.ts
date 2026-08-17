@@ -6,6 +6,7 @@ import {
   type OptimizerRequest,
   type OptimizerResponse,
 } from './optimizer-worker-protocol';
+import type { ei } from 'lib';
 import type { CraftBudget, LaunchOption, OptimizerSolution, RecipeDAG } from './types';
 
 export interface OptimizerRequestInput {
@@ -13,6 +14,7 @@ export interface OptimizerRequestInput {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
+  fuelByEggCapacity?: Map<ei.Egg, number>;
   timeCapacityPerSlot: number;
   maximumCost: number | undefined;
   baseYield: Map<string, number>;
