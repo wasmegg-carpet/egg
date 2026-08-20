@@ -15,6 +15,7 @@ const DurationType = ei.MissionInfo.DurationType;
 function makeChoice(): LaunchSolution {
   return {
     ship: new MissionType(Spaceship.HENERPRISE, DurationType.EPIC),
+    variant: 'event',
     actualFuel: 1234,
     actualFuelByEgg: new Map([[ei.Egg.ROCKET_FUEL, 1234]]),
     actualTime: 5678,
@@ -50,7 +51,7 @@ describe('optimizer worker protocol', () => {
     expect(received[0].legendaryYieldVector.get('tachyon-deflector-4')).toBe(0.01);
     expect(received[1].supplyVector.get('tachyon-stone-2')).toBe(1.5);
     received.forEach((option, i) => {
-      // optimizeFull copies this straight onto the solution's choiceHistory,
+      // optimizeFull copies this straight onto the solution's per-slot runs,
       // where the presentation layer reads its getters.
       expect(option.ship).toBeInstanceOf(MissionType);
       expect(option.ship.shipType).toBe(options[i].ship.shipType);
@@ -62,7 +63,11 @@ describe('optimizer worker protocol', () => {
     const solution = makeSolution({
       bestProbability: 0.42,
       jointProbability: 0.42,
-      choiceHistory: [makeChoice()],
+      slots: [
+        { loadSeconds: 5678 * 7, rawLoadSeconds: 5678 * 7, missionCount: 7, runs: [makeChoice()] },
+        { loadSeconds: 0, rawLoadSeconds: 0, missionCount: 0, runs: [] },
+        { loadSeconds: 0, rawLoadSeconds: 0, missionCount: 0, runs: [] },
+      ],
       finalYieldVector: new Map([['tachyon-stone-1', 17.5]]),
       craftPrimal: new Map([['tachyon-deflector-4', 3]]),
       perTarget: [
@@ -86,7 +91,9 @@ describe('optimizer worker protocol', () => {
     expect(got.craftPrimal.get('tachyon-deflector-4')).toBe(3);
     expect(got.perTarget[0].expectedCrafts).toBe(3);
 
-    const [choice] = got.choiceHistory;
+    expect(got.slots).toHaveLength(3);
+    const [choice] = got.slots[0].runs;
+    expect(choice.variant).toBe('event');
     expect(choice.supplyVector.get('tachyon-stone-1')).toBe(2.5);
     expect(choice.actualFuelByEgg.get(ei.Egg.ROCKET_FUEL)).toBe(1234);
     // The prototype is what a bare clone would lose: the presentation layer

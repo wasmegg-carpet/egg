@@ -39,6 +39,40 @@ describe('parseDurationDays', () => {
   });
 });
 
+describe('formatDuration', () => {
+  it('spells XdXhXm by default, trimmed or not', () => {
+    expect(formatDuration(90_061)).toBe('1d1h1m');
+    expect(formatDuration(90_061, true)).toBe('1d1h1m');
+    expect(formatDuration(86_400, true)).toBe('1d');
+    expect(formatDuration(30)).toBe('0d0h0m');
+    expect(formatDuration(30, true)).toBe('0m');
+  });
+
+  it('caps at the largest unit asked for instead of rolling up', () => {
+    expect(formatDuration(172_800, true, { max: 'h' })).toBe('48h');
+    expect(formatDuration(138_240, true, { max: 'h' })).toBe('38h24m');
+    expect(formatDuration(400 * 86_400, true, { max: 'd' })).toBe('400d');
+  });
+
+  it('goes down to seconds when asked, and stays quiet about them when there are none', () => {
+    expect(formatDuration(172_782, true, { max: 'h', min: 's' })).toBe('47h59m42s');
+    expect(formatDuration(138_240, true, { max: 'h', min: 's' })).toBe('38h24m');
+    expect(formatDuration(90, true, { min: 's' })).toBe('1m30s');
+    expect(formatDuration(30, true, { min: 's' })).toBe('30s');
+  });
+
+  it('says zero in the finest unit on offer rather than nothing', () => {
+    expect(formatDuration(0, true, { min: 's' })).toBe('0s');
+    expect(formatDuration(0, true)).toBe('0m');
+  });
+
+  it('keeps the units it is given out of the year and overflow shortcuts', () => {
+    expect(formatDuration(Infinity, true, { max: 'h' })).toBe('Forever');
+    expect(formatDuration(4_000_000_000, true, { max: 'h' })).toBe('>100yr');
+    expect(formatDuration(31_536_000 + 90_061, true)).toBe('1y1d');
+  });
+});
+
 describe('isDurationNormalizable', () => {
   it('accepts valid positive durations', () => {
     expect(isDurationNormalizable('30')).toBe(true);

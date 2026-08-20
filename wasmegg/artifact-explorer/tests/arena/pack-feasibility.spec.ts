@@ -305,3 +305,48 @@ describe('agrees with brute force on near-exact instances built from a known pac
     expect(wrong.slice(0, 10)).toEqual([]);
   }, 60_000);
 });
+
+// The 2x capacity window adds two more per-slot budgets, and a plan is only flyable when one arrangement
+// satisfies all three.
+describe('under a 2x capacity window', () => {
+  const normal = (n: number) => Array<'normal'>(n).fill('normal');
+
+  it('ignores the window entirely when there is none', () => {
+    const d = [10, 90];
+    const c = [2, 2];
+    expect(packFeasible(d, c, 100, 2, undefined, { seconds: 0, variants: ['event', 'normal'] })).toBe(
+      packFeasible(d, c, 100, 2)
+    );
+  });
+
+  it('rejects an event launch longer than the window', () => {
+    expect(packFeasible([30], [1], 100, 3, undefined, { seconds: 20, variants: ['event'] })).toBe('infeasible');
+    expect(packFeasible([30], [1], 100, 3, undefined, { seconds: 30, variants: ['event'] })).toBe('packs');
+  });
+
+  it('allows one boundary launch per slot and no more', () => {
+    const overhang = (n: number) => Array<'overhang'>(n).fill('overhang');
+    expect(packFeasible([10], [3], 100, 3, undefined, { seconds: 5, variants: overhang(1) })).toBe('packs');
+    expect(packFeasible([10], [4], 100, 3, undefined, { seconds: 5, variants: overhang(1) })).toBe('infeasible');
+    // Two slots, three launches all wanting a boundary.
+    expect(packFeasible([10, 20], [2, 1], 100, 2, undefined, { seconds: 5, variants: overhang(2) })).toBe('infeasible');
+  });
+
+  it('bounds each slot by the window, not just by the horizon', () => {
+    // These fit the horizon three times over, but a 30s window holds three per slot.
+    expect(packFeasible([10], [3], 1000, 1, undefined, { seconds: 30, variants: ['event'] })).toBe('packs');
+    expect(packFeasible([10], [4], 1000, 1, undefined, { seconds: 30, variants: ['event'] })).toBe('infeasible');
+  });
+
+  it('finds an arrangement that satisfies both budgets at once', () => {
+    // On time alone both event launches could share a slot; on the window alone they cannot. One per
+    // slot satisfies both, and the search has to find it rather than commit to the first fit.
+    const variants: ('normal' | 'event')[] = ['normal', 'event'];
+    expect(packFeasible([90, 10], [2, 2], 110, 2, undefined, { seconds: 10, variants })).toBe('packs');
+    expect(packFeasible([90, 10], [2, 3], 110, 2, undefined, { seconds: 10, variants })).toBe('infeasible');
+  });
+
+  it('still refuses a multiset that busts the horizon, window or not', () => {
+    expect(packFeasible([90], [3], 100, 2, undefined, { seconds: 1000, variants: normal(1) })).toBe('infeasible');
+  });
+});

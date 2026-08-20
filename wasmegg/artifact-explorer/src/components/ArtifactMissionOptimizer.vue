@@ -89,6 +89,7 @@ import {
 import {
   autoCompute,
   currentOptimizerArtifactIds,
+  doubleCapacityWindowSeconds,
   effectiveConfig,
   effectiveFuelTankCapacity,
   effectivePreviousCraftsOverride,
@@ -186,6 +187,7 @@ export default defineComponent({
       if (!timeBudgetValid.value) return null;
       const launchPeriodSeconds = EFFORT_LAUNCH_PERIOD_SECONDS[missionFilters.value.effort];
       const maxGemCost = missionFilters.value.maxGemCostEnabled ? missionFilters.value.maxGemCost : undefined;
+      const window = doubleCapacityWindowSeconds.value;
       const craftBudget = missionFilters.value.maxGoldenEggCostEnabled
         ? {
             capacity: missionFilters.value.maxGoldenEggCost,
@@ -193,7 +195,7 @@ export default defineComponent({
           }
         : undefined;
       return {
-        options: enumerateLaunchOptions(effectiveConfig.value, recipeDag.value, launchPeriodSeconds),
+        options: enumerateLaunchOptions(effectiveConfig.value, recipeDag.value, launchPeriodSeconds, window),
         recipeDag: recipeDag.value,
         desiredArtifactNodeIds: [...artifactIds.value],
         fuelCapacity: effectiveFuelTankCapacity.value,
@@ -201,6 +203,7 @@ export default defineComponent({
         baseYield: playerBaseYield.value,
         maximumCost: maxGemCost,
         craftBudget,
+        eventWindowSeconds: window,
       };
     });
 

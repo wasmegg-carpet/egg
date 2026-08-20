@@ -4,14 +4,15 @@
 import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 import { ei } from 'lib';
 import { alphaToProb, compileJointInnerLp, JointInnerLp, refineJointCraftSplit } from './value-function';
-import { NUM_SLOTS, packWitness } from './packing';
 import { loadHighs } from './solver/highs';
 import { Q_CERTAIN_PROXY } from './solver/milp';
 import { solveWith } from './solver/oa';
-import type { PlanProblem } from './solver/types';
+import type { PlanProblem, ScheduleRun } from './solver/types';
 
 // Anything under this is zero: durations, fuel, score differences.
 const ZERO_TOL = 1e-9;
+
+const NUM_SLOTS = 3;
 
 export interface OptimizeArgs {
   options: LaunchOption[];
@@ -24,6 +25,9 @@ export interface OptimizeArgs {
   // Golden egg cap on the plan's crafts, or absent for no cap. It has to reach both the MILP and the inner
   // LPs, or the cap does not bind on the craft counts the card actually prints.
   craftBudget?: CraftBudget;
+  // Seconds of 2x mission capacity remaining. The caller must have enumerated `options` against this
+  // same number; the window rows constrain the doubled options on the menu and cannot invent them.
+  eventWindowSeconds?: number;
 }
 
 interface Assembly {
@@ -47,46 +51,51 @@ function qByTarget(recipeDag: RecipeDAG, targets: string[]): Map<string, number>
   return QByTarget;
 }
 
-// Per-slot occupancy of a chosen allocation. Repacked here because the seam the MILP returns through carries
-// only totals; if the exact packer cannot place the plan, the makespan shown is a best-fit estimate, not a claim.
-function slotsOfAllocation(options: LaunchOption[], alloc: Map<number, number>, capacity: number): SlotSummary[] {
-  const idx = [...alloc.keys()].filter(i => (alloc.get(i) ?? 0) > 0);
-  if (idx.length === 0) return [];
-
-  const durations = idx.map(i => options[i].actualTime);
-  const counts = idx.map(i => alloc.get(i) ?? 0);
-  const witness = packWitness(durations, counts, capacity);
-
-  const load = new Array<number>(NUM_SLOTS).fill(0);
-  const rawLoad = new Array<number>(NUM_SLOTS).fill(0);
-  const count = new Array<number>(NUM_SLOTS).fill(0);
-
-  const place = (j: number, slot: number) => {
-    load[slot] += durations[j];
-    rawLoad[slot] += options[idx[j]].rawTime;
-    count[slot] += 1;
+function launchOf(opt: LaunchOption, count: number): LaunchSolution {
+  return {
+    ship: opt.ship,
+    variant: opt.variant,
+    actualFuel: opt.actualFuel,
+    actualFuelByEgg: opt.fuelByEgg,
+    actualTime: opt.actualTime,
+    target: opt.target ?? '',
+    targetAfxId: opt.targetAfxId,
+    numShipsLaunched: count,
+    supplyVector: opt.supplyVector,
+    legendarySupplyVector: opt.legendaryYieldVector,
   };
+}
 
-  if (witness) {
-    for (let j = 0; j < idx.length; j++) for (const slot of witness[j]) place(j, slot);
-  } else {
-    // No witness (provably unpackable, or the node budget ran out). Longest first into the emptiest slot, so
-    // the summary still describes a real arrangement of these missions even where it overfills.
-    const order = idx.map((_, j) => j).sort((a, b) => durations[b] - durations[a]);
-    for (const j of order) {
-      for (let k = 0; k < counts[j]; k++) {
-        let slot = 0;
-        for (let b = 1; b < NUM_SLOTS; b++) if (load[b] < load[slot]) slot = b;
-        place(j, slot);
-      }
+function slotsOfSchedule(options: LaunchOption[], schedule: readonly ScheduleRun[][]): SlotSummary[] {
+  return schedule.map(runs => {
+    let loadSeconds = 0;
+    let rawLoadSeconds = 0;
+    let missionCount = 0;
+    const launches: LaunchSolution[] = [];
+    for (const run of runs) {
+      const opt = options[run.option];
+      if (opt === undefined || !(run.count > 0)) continue;
+      loadSeconds += run.count * opt.actualTime;
+      rawLoadSeconds += run.count * opt.rawTime;
+      missionCount += run.count;
+      launches.push(launchOf(opt, run.count));
+    }
+    return { loadSeconds, rawLoadSeconds, missionCount, runs: launches };
+  });
+}
+
+// Plan-wide counts per option, folded in ascending option order so no total depends on which slot the
+// solver happened to put a launch in.
+function totalsOfSchedule(schedule: readonly ScheduleRun[][], optionCount: number): Map<number, number> {
+  const byOption = new Array<number>(optionCount).fill(0);
+  for (const runs of schedule) {
+    for (const run of runs) {
+      if (run.option >= 0 && run.option < optionCount && run.count > 0) byOption[run.option] += run.count;
     }
   }
-
-  return load.map((seconds, b) => ({
-    loadSeconds: seconds,
-    rawLoadSeconds: rawLoad[b],
-    missionCount: count[b],
-  }));
+  const totals = new Map<number, number>();
+  for (let i = 0; i < optionCount; i++) if (byOption[i] > 0) totals.set(i, byOption[i]);
+  return totals;
 }
 
 // The whole plan, start to finish. Async because the solver is a WebAssembly module instantiated once;
@@ -101,6 +110,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     maximumCost,
     baseYield,
     craftBudget,
+    eventWindowSeconds,
   } = args;
 
   // Rejected here rather than downstream: `model.ts` and `value-function.ts` both drop a budget
@@ -147,30 +157,28 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     slots: NUM_SLOTS,
     baseYield,
     craftBudget,
+    eventWindowSeconds,
   };
 
   const solve = await loadHighs();
-  const { allocation } = solveWith(problem, solve);
+  const { schedule } = solveWith(problem, solve);
 
-  const alloc = new Map<number, number>();
-  for (let i = 0; i < allocation.length; i++) {
-    if (allocation[i] > 0) alloc.set(i, allocation[i]);
-  }
-
-  return assembleFullSolution(assembly, alloc, slotsOfAllocation(feasibleOptions, alloc, S));
+  return assembleFullSolution(
+    assembly,
+    totalsOfSchedule(schedule, feasibleOptions.length),
+    slotsOfSchedule(feasibleOptions, schedule),
+    eventWindowSeconds ?? 0
+  );
 }
 
 function assembleFullSolution(
   a: Assembly,
   bestAlloc: Map<number, number>,
-  bestSlots: SlotSummary[]
+  bestSlots: SlotSummary[],
+  eventWindowSeconds: number
 ): OptimizerSolution {
   const { recipeDag, baseYield, targets } = a;
-  const { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
-    baseYield,
-    bestAlloc,
-    a.options
-  );
+  const { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg } = assembleSolution(baseYield, bestAlloc, a.options);
 
   // wall-clock is the busiest slot's makespan; running time its raw flight time
   const busiest = bestSlots.reduce<SlotSummary | null>(
@@ -219,8 +227,8 @@ function assembleFullSolution(
     fuelByEgg: fuelByEgg,
     timeUnitsUsed: Math.round(makespan),
     runningTimeSeconds: Math.round(running),
-    slots: bestSlots.length > 0 ? bestSlots : undefined,
-    choiceHistory: choiceHistory,
+    slots: bestSlots,
+    eventWindowSeconds,
     expectedDrops: [], // populated by index.ts
     finalYieldVector: finalYieldVector,
     baseYield: new Map(baseYield),
@@ -232,7 +240,6 @@ function assembleFullSolution(
 }
 
 function assembleSolution(baseYield: Map<string, number>, bestAlloc: Map<number, number>, options: LaunchOption[]) {
-  const choiceHistory: LaunchSolution[] = [];
   let fuelUsed = 0;
   const finalYieldVector = new Map<string, number>(baseYield);
   const totalLegendary = new Map<string, number>();
@@ -250,17 +257,6 @@ function assembleSolution(baseYield: Map<string, number>, bestAlloc: Map<number,
     for (const [egg, rate] of opt.fuelByEgg) {
       fuelByEgg.set(egg, (fuelByEgg.get(egg) ?? 0) + k * rate);
     }
-    choiceHistory.push({
-      ship: opt.ship,
-      actualFuel: opt.actualFuel,
-      actualFuelByEgg: opt.fuelByEgg,
-      actualTime: opt.actualTime,
-      target: opt.target ?? '',
-      targetAfxId: opt.targetAfxId,
-      numShipsLaunched: k,
-      supplyVector: opt.supplyVector,
-      legendarySupplyVector: opt.legendaryYieldVector,
-    });
   }
-  return { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg, choiceHistory };
+  return { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg };
 }

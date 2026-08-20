@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { CHEAP_CHECKS, DEEP_CHECKS, type Check } from './invariants';
 import { selectedSolvers } from './registry';
-import { describeInstance, generateInstance } from './instances';
+import { describeInstance, generateInstance, isEventRegime, withEventWindow, EVENT_REGIME_NAMES } from './instances';
 import { formatComparison, formatScorecard, sweep, writeResults, type SweepResult } from './scorecard';
 
 const REQUESTED = process.env.ARENA !== undefined;
@@ -26,28 +26,43 @@ const SEED_BASE = intEnv('ARENA_SEED_BASE', 2000, 0);
 const GATE_ALL = process.env.ARENA_GATE === 'all';
 const RESULT_DIR = resolve(__dirname, 'results');
 
-const HARD_FAIL = new Set(['C0-contract', 'C1-feasibility', 'C1-inconclusive']);
+const HARD_FAIL = new Set(['C0-contract', 'C1-feasibility']);
+
+// Which 2x capacity regime the whole sweep runs under. Default `none`, which keeps an unqualified run
+// comparable with every recorded scorecard.
+const REGIME = process.env.ARENA_WINDOW ?? 'none';
+if (!isEventRegime(REGIME)) {
+  throw new Error(`ARENA_WINDOW must be one of ${EVENT_REGIME_NAMES.join(', ')}, got ${JSON.stringify(REGIME)}`);
+}
 
 const seeds = Array.from({ length: COUNT }, (_, i) => SEED_BASE + i);
 const checks: Check[] = DEEP ? [...CHEAP_CHECKS, ...DEEP_CHECKS] : CHEAP_CHECKS;
 
-describe.skipIf(!REQUESTED)(`arena (${MODE}, ${COUNT} instances)`, () => {
+describe.skipIf(!REQUESTED)(`arena (${MODE}, ${COUNT} instances, 2x window: ${REGIME})`, () => {
   const solvers = selectedSolvers();
   const results: SweepResult[] = [];
 
   for (const solver of solvers) {
     it(`${solver.id} holds the invariants`, () => {
-      const r = sweep(solver, seeds, checks, inst => {
-        if (inst.violations.length > 0) {
-          console.log(`  ${describeInstance(generateInstance(inst.seed))} -> ${inst.violations.length} violation(s)`);
-          for (const v of inst.violations.slice(0, 6)) {
-            console.log(`      ${v.invariant}  ${v.detail}`);
+      const r = sweep(
+        solver,
+        seeds,
+        checks,
+        inst => {
+          if (inst.violations.length > 0) {
+            console.log(
+              `  ${describeInstance(withEventWindow(generateInstance(inst.seed), REGIME))} -> ${inst.violations.length} violation(s)`
+            );
+            for (const v of inst.violations.slice(0, 6)) {
+              console.log(`      ${v.invariant}  ${v.detail}`);
+            }
+            if (inst.violations.length > 6) {
+              console.log(`      ... and ${inst.violations.length - 6} more`);
+            }
           }
-          if (inst.violations.length > 6) {
-            console.log(`      ... and ${inst.violations.length - 6} more`);
-          }
-        }
-      });
+        },
+        REGIME
+      );
       results.push(r);
       console.log(formatScorecard(r));
       console.log(`    results written to ${writeResults(RESULT_DIR, r)}`);

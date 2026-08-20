@@ -109,6 +109,33 @@ construction, and the crafts are continuous columns over the same conservation
 polytope. This eliminates the need for any repair phase, and the craft split is
 optimised in the same matrix.
 
+**A plan is a schedule.** `solveWith` returns an ordered list of runs per slot, and
+the per-option counts everything downstream reports are summed out of it. The 2x
+capacity window below forces this: whether a doubled mission is legal depends on the
+offset it launches at.
+
+**The 2x mission capacity event.** Egg, Inc. doubles every ship's capacity for 48
+hours, and a mission is doubled if it *launches* inside the window. The player says
+how much of the window is left; the tool never looks it up. Above zero, the menu
+carries up to three capacity variants of each launch and two extra rows per slot
+hold them inside the window. `SPEC.md` has the model and the exactness argument. The
+window is truncated to 48 hours at `doubleCapacityWindowOf`, the single point where
+the typed duration becomes a number.
+
+**The panel shows a schedule only when the plan doubles something**, which
+`planHasDoubledRuns` reads off the plan rather than off the event toggle: a window
+too short to fit any mission produces an ordinary plan. Doubled lines are labelled
+`T+` their offset from the moment the player starts launching, prefix-summed down
+the slot by `slotSchedule`; `T` is deliberately not "now", since a slot with a
+mission still in flight does not start for a while. Lines below the boundary carry
+no clock, which puts every printed offset under 48h — hence `{ max: 'h', min: 's' }`,
+so that hours never roll up into days beside a boundary the offsets are read against.
+
+Note what capacity does **not** touch. `loot.ts` and `phases.ts` divide recorded
+drops by a mission's capacity to decide whether the data is too sparse to quote —
+that is a statement about the dataset, not about this plan, and doubling it there
+would silently change which missions are shown as having enough data.
+
 **What it costs.** About a second on a production-scale instance.
 
 **What is still wrong with it.** Invariant violations across the arena sweep are
@@ -231,9 +258,11 @@ large it is.
 Most of `src/lib` reads as it looks. Four edges do not, and all four exist to keep
 something from becoming circular or from landing in the wrong bundle:
 
-- `packing.ts` imports nothing, and in particular nothing from `tests/`,
-  because the arena re-checks every plan against its own independent packer
-  (invariant C1). Sharing one implementation would make that check circular.
+- `tests/arena/pack-feasibility.ts` imports nothing, and in particular nothing from
+  `src/`, because it is the goalpost the arena's improvement searches filter every
+  candidate move on. Sharing an implementation with the planner would make that
+  circular. Production has no packer at all now: the solver's own per-slot columns
+  are the assignment, so there is nothing left to reconstruct.
 - `index.ts` (the barrel every component imports) has no path to
   `optimizer-core`, so the solver stays out of the main chunk;
   `tests/unit/spec-helpers.ts` holds the in-process `optimize()` for the same

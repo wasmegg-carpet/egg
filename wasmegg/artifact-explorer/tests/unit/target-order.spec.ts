@@ -80,8 +80,9 @@ describe('the model is a function of the target set, not its order', () => {
     const forward = solveWith(problemOf(['A1', 'A2']), solve, DEFAULT_TUNING, { report: true });
     const reversed = solveWith(problemOf(['A2', 'A1']), solve, DEFAULT_TUNING, { report: true });
 
-    // Same plan, same joint — the relabeling moved nothing.
-    expect(reversed.allocation).toEqual(forward.allocation);
+    // Same plan, same joint — the relabeling moved nothing. The schedule and not just the counts, the
+    // launch order being part of the answer.
+    expect(reversed.schedule).toEqual(forward.schedule);
     expect(reversed.reported!.jointProbability).toBe(forward.reported!.jointProbability);
 
     // ...but `perTarget` is parallel to the caller's list, so it flips. The two factors differ, so a seam

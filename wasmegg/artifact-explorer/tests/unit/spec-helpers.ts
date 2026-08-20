@@ -2,7 +2,16 @@
 // `optimize` lives here rather than in `index.ts` to keep the solver and its Emscripten glue out of the main chunk.
 
 import { ei, MissionType, type ShipsConfig } from 'lib';
-import type { CraftBudget, DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from '@/lib/types';
+import type {
+  CapacityVariant,
+  CraftBudget,
+  DAGNode,
+  LaunchOption,
+  OptimizerConfig,
+  OptimizerSolution,
+  RecipeDAG,
+} from '@/lib/types';
+import type { PlanResult } from '@/lib/solver/types';
 import { finalizeSolutions } from '@/lib';
 import { optimizeFull } from '@/lib/optimizer-core';
 import { enumerateLaunchOptions } from '@/lib/phases';
@@ -60,11 +69,13 @@ export function makeOpt(
   actualTime: number,
   yieldEntries: [string, number][],
   legendaryEntries: [string, number][] = [],
-  targetAfxId: ei.ArtifactSpec.Name = ei.ArtifactSpec.Name.UNKNOWN
+  targetAfxId: ei.ArtifactSpec.Name = ei.ArtifactSpec.Name.UNKNOWN,
+  variant: CapacityVariant = 'normal'
 ): LaunchOption {
   return {
     id: `opt-${seq++}`,
     ship: fixtureShip,
+    variant,
     target: null,
     targetAfxId,
     actualFuel,
@@ -80,6 +91,15 @@ export function makeOpt(
   };
 }
 
+// Plan-wide counts per option, summed out of a schedule.
+export function allocationOf(result: PlanResult, optionCount: number): number[] {
+  const alloc = new Array<number>(optionCount).fill(0);
+  for (const runs of result.schedule) {
+    for (const run of runs) alloc[run.option] += run.count;
+  }
+  return alloc;
+}
+
 export async function optimize(
   config: OptimizerConfig,
   playerConfig: ShipsConfig,
@@ -87,11 +107,12 @@ export async function optimize(
   baseYield: Map<string, number>,
   launchPeriodSeconds = 0,
   maxGemCost?: number,
-  craftBudget?: CraftBudget
+  craftBudget?: CraftBudget,
+  eventWindowSeconds = 0
 ): Promise<OptimizerSolution> {
   const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
   const solution = await optimizeFull({
-    options: enumerateLaunchOptions(playerConfig, dag, launchPeriodSeconds),
+    options: enumerateLaunchOptions(playerConfig, dag, launchPeriodSeconds, eventWindowSeconds),
     recipeDag: dag,
     desiredArtifactNodeIds,
     fuelCapacity: fuelTankCapacity,
@@ -99,6 +120,7 @@ export async function optimize(
     maximumCost: maxGemCost,
     baseYield,
     craftBudget,
+    eventWindowSeconds,
   });
   return finalizeSolutions([solution], dag)[0];
 }
@@ -113,7 +135,8 @@ export function makeSolution(overrides: Partial<OptimizerSolution>): OptimizerSo
     fuelByEgg: new Map(),
     timeUnitsUsed: 0,
     runningTimeSeconds: 0,
-    choiceHistory: [],
+    slots: [],
+    eventWindowSeconds: 0,
     expectedDrops: [],
     finalYieldVector: new Map(),
     baseYield: new Map(),

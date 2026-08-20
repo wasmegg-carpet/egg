@@ -6,8 +6,9 @@ export * from './optimizer-tree';
 export * from './optimizer-cost';
 export * from './tank-ids';
 
-import type { DAGNode, LaunchSolution, OptimizerSolution, DropRow, RecipeDAG } from './types';
+import type { DAGNode, OptimizerSolution, DropRow, RecipeDAG } from './types';
 import { generateRecipeDag } from './phases';
+import { launchTotals } from './optimizer-views';
 import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, iconURL, Inventory, InventoryItem } from 'lib';
 
 // An undefined previousCraftsOverride means "read each target's own crafted
@@ -77,7 +78,7 @@ export function computeBaseYield(
 function computeExpectedDrops(solution: OptimizerSolution, dag: Map<string, DAGNode>): DropRow[] {
   const totals = new Map<string, number>();
 
-  for (const choice of solution.choiceHistory) {
+  for (const choice of launchTotals(solution)) {
     for (const [item, rate] of choice.supplyVector) {
       totals.set(item, (totals.get(item) ?? 0) + rate * choice.numShipsLaunched);
     }
@@ -105,7 +106,7 @@ function computeExpectedDrops(solution: OptimizerSolution, dag: Map<string, DAGN
 function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
   const totals = new Map();
 
-  for (const choice of solution.choiceHistory) {
+  for (const choice of launchTotals(solution)) {
     for (const [egg, rate] of choice.actualFuelByEgg) {
       totals.set(egg, (totals.get(egg) ?? 0) + rate * choice.numShipsLaunched);
     }
@@ -119,7 +120,6 @@ function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
 // identical solutions.
 export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG): OptimizerSolution[] {
   for (const solution of solutions) {
-    solution.choiceHistory.sort((a: LaunchSolution, b: LaunchSolution) => a.ship.shipType - b.ship.shipType);
     solution.expectedDrops = computeExpectedDrops(solution, dag);
     solution.fuelByEgg = computeFuelByEgg(solution);
   }
@@ -132,6 +132,8 @@ export type {
   OptimizerSolution,
   LaunchOption,
   LaunchSolution,
+  SlotSummary,
+  CapacityVariant,
   DropRow,
   DAGNode,
   DAGChildRef,

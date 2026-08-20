@@ -6,6 +6,7 @@ import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag, computeBaseYield } from '@/lib';
 import { optimize } from './spec-helpers';
 import { enumerateLaunchOptions } from '@/lib/phases';
+import { launchTotals } from '@/lib/optimizer-views';
 
 const Name = ei.ArtifactSpec.Name;
 
@@ -102,10 +103,10 @@ describe('optimize', () => {
     const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, dag);
     const sol = await optimize(config, perfectShipsConfig, dag, baseYield);
 
-    expect(sol.choiceHistory.length).toBeGreaterThan(0);
+    expect(launchTotals(sol).length).toBeGreaterThan(0);
     // sorted by ship, so the launch list reads in fleet order
-    for (let i = 1; i < sol.choiceHistory.length; i++) {
-      expect(sol.choiceHistory[i - 1].ship.shipType).toBeLessThanOrEqual(sol.choiceHistory[i].ship.shipType);
+    for (let i = 1; i < launchTotals(sol).length; i++) {
+      expect(launchTotals(sol)[i - 1].ship.shipType).toBeLessThanOrEqual(launchTotals(sol)[i].ship.shipType);
     }
     expect(sol.expectedDrops.length).toBeGreaterThan(0);
     for (const row of sol.expectedDrops) {
