@@ -71,8 +71,7 @@
       <span v-tippy="idleTooltip" class="cursor-help border-b border-dotted border-gray-400/60">Idle</span>
       : {{ formatDuration(idleTimeSeconds, true) }}
     </div>
-    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3">Launch plan</div>
-    <optimizer-choice-list :choices="solution.choiceHistory" />
+    <optimizer-slot-plan :solution="solution" />
 
     <optimizer-expected-drops :drops="solution.expectedDrops" />
 
@@ -100,12 +99,12 @@ import { eggIconPath, formatDuration, formatEIValue } from 'lib';
 import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
 import { formatGoldenEggs } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
-import OptimizerChoiceList from './OptimizerChoiceList.vue';
+import OptimizerSlotPlan from './OptimizerSlotPlan.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';
 import OptimizerProbabilityBreakdown from './OptimizerProbabilityBreakdown.vue';
 
 export default defineComponent({
-  components: { BaseIcon, OptimizerChoiceList, OptimizerExpectedDrops, OptimizerProbabilityBreakdown },
+  components: { BaseIcon, OptimizerSlotPlan, OptimizerExpectedDrops, OptimizerProbabilityBreakdown },
   props: {
     solution: { type: Object as PropType<OptimizerSolution>, required: true },
     maxWaitTimeSeconds: { type: Number, required: true },

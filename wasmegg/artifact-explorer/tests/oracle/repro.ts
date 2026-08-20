@@ -4,6 +4,7 @@
 // wasm loader cannot open outside a browser.
 
 import { optimizeFull } from '@/lib/optimizer-core';
+import { launchTotals } from '@/lib/optimizer-views';
 import { bruteForceBestJoint } from './enumerate';
 import { evaluateAllocationJoint, OracleInstance } from './evaluate';
 import { FAMILIES, Family, generateInstance } from './generate';
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
     maximumCost: Infinity,
   });
   const alloc = new Array<number>(inst.options.length).fill(0);
-  for (const h of sol.choiceHistory) {
+  for (const h of launchTotals(sol)) {
     const i = inst.options.findIndex(
       o => o.actualFuel === h.actualFuel && o.actualTime === h.actualTime && o.targetAfxId === h.targetAfxId
     );

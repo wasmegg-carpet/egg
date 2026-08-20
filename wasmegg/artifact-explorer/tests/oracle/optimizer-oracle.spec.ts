@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { optimizeFull } from '@/lib/optimizer-core';
+import { launchTotals } from '@/lib/optimizer-views';
 import type { OptimizerSolution } from '@/lib/types';
 import { makeNode, makeOpt } from '../unit/spec-helpers';
 import { bruteForceBestJoint } from './enumerate';
@@ -44,7 +45,7 @@ async function runOptimizer(inst: OracleInstance): Promise<OptimizerSolution> {
 // guarantees each option a unique (fuel, time, target) triple.
 function reconstructAllocation(inst: OracleInstance, solution: OptimizerSolution): number[] {
   const allocation = new Array<number>(inst.options.length).fill(0);
-  for (const launch of solution.choiceHistory) {
+  for (const launch of launchTotals(solution)) {
     if (launch.numShipsLaunched === 0) {
       continue;
     }

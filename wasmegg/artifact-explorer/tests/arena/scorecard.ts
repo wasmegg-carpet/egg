@@ -5,7 +5,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { ArenaSolver } from './contract';
 import { run } from './harness';
-import { generateInstance } from './instances';
+import { generateInstance, withEventWindow, type EventRegime } from './instances';
 import { runChecks, type Check, type Violation, type ViolationId } from './invariants';
 
 export interface InstanceResult {
@@ -31,12 +31,13 @@ export function sweep(
   solver: ArenaSolver,
   seeds: number[],
   checks: Check[],
-  onInstance?: (r: InstanceResult) => void
+  onInstance?: (r: InstanceResult) => void,
+  regime: EventRegime = 'none'
 ): SweepResult {
   const instances: InstanceResult[] = [];
   const started = Date.now();
   for (const seed of seeds) {
-    const inst = generateInstance(seed);
+    const inst = withEventWindow(generateInstance(seed), regime);
     let solved;
     try {
       solved = run(solver.plan, inst);

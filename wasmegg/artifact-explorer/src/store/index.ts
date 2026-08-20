@@ -23,7 +23,9 @@ import DurationType = ei.MissionInfo.DurationType;
 
 import {
   DEFAULT_MAX_GOLDEN_EGG_COST,
+  DEFAULT_DOUBLE_CAPACITY_REMAINING,
   DEFAULT_WAIT_TIME_DAYS,
+  doubleCapacityWindowOf,
   EffortLevel,
   ExtrasConfig,
   isEffortLevel,
@@ -37,7 +39,12 @@ import {
   OverrideFlags,
 } from './schema';
 export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
-export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
+export {
+  DEFAULT_DOUBLE_CAPACITY_REMAINING,
+  EFFORT_LEVELS,
+  EFFORT_LAUNCH_PERIOD_SECONDS,
+  MAX_DOUBLE_CAPACITY_SECONDS,
+} from './schema';
 
 export const CONFIG_LOCALSTORAGE_KEY = 'config';
 export const OVERRIDES_LOCALSTORAGE_KEY = 'overrides';
@@ -404,6 +411,17 @@ export function setMaxGoldenEggCostEnabled(enabled: boolean): void {
   missionFilters.value.maxGoldenEggCostEnabled = enabled;
 }
 
+export function setDoubleCapacityEnabled(enabled: boolean): void {
+  missionFilters.value.doubleCapacityEnabled = enabled;
+}
+
+// Stored as typed, like `waitTimeDays`, and parsed where it is used.
+export function setDoubleCapacityRemaining(remaining: string): void {
+  missionFilters.value.doubleCapacityRemaining = remaining;
+}
+
+export const doubleCapacityWindowSeconds = computed(() => doubleCapacityWindowOf(missionFilters.value));
+
 // Non-finite is dropped rather than clamped: `Math.max(0, NaN)` is NaN, and a NaN or Infinity capacity
 // reads downstream as "no cap" — the checkbox would stay on with nothing enforcing it.
 export function setMaxGoldenEggCost(cost: number): void {
@@ -429,6 +447,8 @@ export function loadMissionFilters(): MissionFilters {
         maxGoldenEggCostEnabled: parsed.maxGoldenEggCostEnabled ?? false,
         maxGoldenEggCost: parsed.maxGoldenEggCost ?? DEFAULT_MAX_GOLDEN_EGG_COST,
         waitTimeDays: parsed.waitTimeDays ?? DEFAULT_WAIT_TIME_DAYS,
+        doubleCapacityEnabled: parsed.doubleCapacityEnabled ?? false,
+        doubleCapacityRemaining: parsed.doubleCapacityRemaining ?? DEFAULT_DOUBLE_CAPACITY_REMAINING,
       };
     }
   } catch (err) {

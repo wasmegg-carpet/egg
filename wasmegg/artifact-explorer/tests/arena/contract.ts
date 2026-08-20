@@ -1,7 +1,7 @@
 // The one seam the invariant harness solves through: a candidate sees `PlanProblem` and returns
 // `PlanResult`, and the harness never reads its internals or trusts a number it reports. See ARENA.md.
 
-export type { PlanProblem, PlanReport, PlanResult } from '@/lib/solver/types';
+export type { PlanProblem, PlanReport, PlanResult, ScheduleRun } from '@/lib/solver/types';
 
 import type { PlanProblem, PlanResult } from '@/lib/solver/types';
 

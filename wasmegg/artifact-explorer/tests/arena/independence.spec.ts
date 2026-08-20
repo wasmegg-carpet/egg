@@ -104,7 +104,6 @@ const IMPLEMENTATION = [
   'optimizer-views.ts', // render models built from a plan
   'optimizer-worker-protocol.ts',
   'optimizer.worker.ts',
-  'packing.ts', // the app's packer — the arena has its own, on purpose
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
   'solver/highs.ts',
   'solver/milp.ts',

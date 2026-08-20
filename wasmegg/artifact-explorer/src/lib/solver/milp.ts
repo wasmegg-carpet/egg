@@ -140,7 +140,17 @@ class Rows {
 function perSlotCap(model: Model, group: number): number {
   const grp = model.groups[group];
   const byTime = grp.timeFraction > 0 ? Math.floor(1 / grp.timeFraction) : MAX_PER_SLOT;
-  return Math.max(0, Math.min(grp.cap, byTime, MAX_PER_SLOT));
+  // Redundant against the window rows below, and not against the tree: without it branch-and-bound
+  // descends a subtree it can only ever prune.
+  const byWindow =
+    grp.variant === 'event'
+      ? grp.timeSeconds > 0
+        ? Math.floor(model.eventWindowSeconds / grp.timeSeconds)
+        : MAX_PER_SLOT
+      : grp.variant === 'overhang'
+        ? 1
+        : MAX_PER_SLOT;
+  return Math.max(0, Math.min(grp.cap, byTime, byWindow, MAX_PER_SLOT));
 }
 
 interface Core {
@@ -221,6 +231,29 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.end(-INF, model.timeCapacitySeconds);
   }
 
+  // The 2x capacity window, as two rows per slot. Raw seconds again, and for the same reason. The pair
+  // is exact rather than conservative, and equality exactly at W is admitted; see SPEC.md §3.
+  if (model.eventWindowSeconds > 0) {
+    for (let k = 0; k < layout.slots; k++) {
+      rows.begin();
+      for (let g = 0; g < layout.groups; g++) {
+        if (model.groups[g].variant !== 'event') continue;
+        rows.add(nCol(layout, g, k), model.groups[g].timeSeconds);
+      }
+      rows.end(-INF, model.eventWindowSeconds);
+    }
+    for (let k = 0; k < layout.slots; k++) {
+      rows.begin();
+      for (let g = 0; g < layout.groups; g++) {
+        if (model.groups[g].variant !== 'overhang') continue;
+        rows.add(nCol(layout, g, k), 1);
+      }
+      rows.end(-INF, 1);
+    }
+  }
+
+  // All three slots share one window, so the rows above leave them interchangeable and this symmetry
+  // break still holds.
   for (let k = 0; k + 1 < layout.slots; k++) {
     rows.begin();
     for (let g = 0; g < layout.groups; g++) {
@@ -292,15 +325,24 @@ export function buildOaMilp(
   return finisher(core)(objective);
 }
 
-export function decodeCounts(model: Model, layout: Layout, columnValues: Float64Array): number[] {
-  const counts = new Array<number>(model.groups.length).fill(0);
-  for (let g = 0; g < layout.groups; g++) {
-    let total = 0;
-    for (let k = 0; k < layout.slots; k++) {
+// Group counts per slot, straight off the MILP's own columns: `[slot][group]`.
+export function decodeSlotCounts(model: Model, layout: Layout, columnValues: Float64Array): number[][] {
+  const perSlot: number[][] = [];
+  for (let k = 0; k < layout.slots; k++) {
+    const counts = new Array<number>(model.groups.length).fill(0);
+    for (let g = 0; g < layout.groups; g++) {
       const v = columnValues[nCol(layout, g, k)];
-      if (Number.isFinite(v) && v > 0) total += Math.round(v);
+      if (Number.isFinite(v) && v > 0) counts[g] = Math.round(v);
     }
-    counts[g] = Math.min(total, model.groups[g].cap);
+    perSlot.push(counts);
+  }
+  return perSlot;
+}
+
+export function countsOfSlots(perSlot: readonly (readonly number[])[], groups: number): number[] {
+  const counts = new Array<number>(groups).fill(0);
+  for (const slot of perSlot) {
+    for (let g = 0; g < groups; g++) counts[g] += slot[g];
   }
   return counts;
 }

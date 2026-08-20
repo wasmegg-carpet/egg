@@ -4,7 +4,7 @@
 import type { CraftBudget, LaunchOption, RecipeDAG } from '../types';
 
 export interface PlanProblem {
-  // Menu of launches available. `allocation` is indexed against this array, in this
+  // Menu of launches available. A schedule entry is indexed against this array, in this
   // order. Options may repeat, may be shuffled, and may include useless entries.
   readonly options: readonly LaunchOption[];
   readonly dag: RecipeDAG;
@@ -19,6 +19,10 @@ export interface PlanProblem {
   readonly baseYield: ReadonlyMap<string, number>;
   // Optional cap on the plan's craft cost in golden eggs; absent means unconstrained.
   readonly craftBudget?: CraftBudget;
+  // Seconds of 2x mission capacity remaining, measured from the start of the plan; the window is always
+  // a prefix, never an interval starting at some future offset. 0 or absent means no event, and then the
+  // menu carries only `normal` options.
+  readonly eventWindowSeconds?: number;
 }
 
 // Optional self-report of what a planner believes its own plan is worth; supplying
@@ -28,10 +32,20 @@ export interface PlanReport {
   perTarget: number[]; // parallel to problem.targets
 }
 
+// `count` consecutive launches of `problem.options[option]`, flown back to back.
+export interface ScheduleRun {
+  option: number;
+  count: number;
+}
+
 export interface PlanResult {
-  // Missions launched per option, parallel to `problem.options`. Non-negative
-  // integers, fuel within capacity, packable into `slots` slots of `timeCapacityPerSlot`.
-  allocation: number[];
+  // The plan: one launch order per slot, `problem.slots` entries long. Each slot's runs fly in array
+  // order from offset 0, so a run's start offset is the sum of `count * actualTime` over everything
+  // before it. Per-option counts are derived from this by summing; nothing reports them separately.
+  //
+  // The order is checked as given and never reordered, so a schedule the event window rejects is a
+  // breach even where some other permutation of the same runs would pass.
+  schedule: ScheduleRun[][];
   reported?: PlanReport;
 }
 
