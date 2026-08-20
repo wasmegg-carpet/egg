@@ -12,6 +12,11 @@ const ARENA_REQUESTED = process.env.ARENA !== undefined;
 // matches nothing, the exclude silently does nothing, and `pnpm test` starts running the 12-minute sweep.
 const ARENA_SWEEP = 'tests/arena/invariants.spec.ts';
 
+// Same treatment for the node-budget bench, opt-in via `BENCH`: importing it costs the wasm and the loot
+// dataset even though it asserts nothing.
+const BENCH_REQUESTED = process.env.BENCH !== undefined;
+const TUNING_BENCH = 'tests/arena/tuning-bench.spec.ts';
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -25,7 +30,11 @@ export default defineConfig({
     // Only the sweep itself. Excluding the whole of `tests/arena/` would silently retire the arena's own
     // checks — including the spec `arena:check` names directly, which would then select no files at all and
     // exit non-zero.
-    exclude: [...configDefaults.exclude, ...(ARENA_REQUESTED ? [] : [ARENA_SWEEP])],
+    exclude: [
+      ...configDefaults.exclude,
+      ...(ARENA_REQUESTED ? [] : [ARENA_SWEEP]),
+      ...(BENCH_REQUESTED ? [] : [TUNING_BENCH]),
+    ],
     coverage: {
       provider: 'v8',
       // `src/` is production only, so this needs no spec exclusion: the tests live under `tests/`.

@@ -7,9 +7,9 @@ import { enumerateLaunchOptions } from '@/lib/phases';
 import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
 import type { CraftBudget, LaunchOption, RecipeDAG } from '@/lib/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
-import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
+import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner, type ScheduleRun } from './contract';
 import type { ArenaInstance } from './instances';
-import { packFeasible, type PackVerdict } from './pack-feasibility';
+import { packFeasible, type PackVariant, type PackVerdict } from './pack-feasibility';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
 // plan that lands exactly on the cap can read a few ulps over it.
@@ -47,6 +47,9 @@ export interface SolveOverrides {
   craftingLevel?: number;
   previousCrafts?: number;
   baseYield?: Map<string, number>;
+  // Seconds of 2x mission capacity remaining. Reaches the menu and the problem together; a menu
+  // enumerated against one window and solved against another has no rows for its doubled options.
+  eventWindowSeconds?: number;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -60,6 +63,7 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
   const targets = over.targets ?? inst.targets;
   const config = over.config ?? inst.config;
   const effort = over.effort ?? inst.effort;
+  const eventWindowSeconds = over.eventWindowSeconds ?? inst.eventWindowSeconds;
 
   const dag = buildRecipeDag(
     targets,
@@ -67,7 +71,7 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     null,
     over.previousCrafts ?? inst.previousCrafts
   );
-  let options = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  let options = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort], eventWindowSeconds);
   if (over.transformOptions) options = over.transformOptions(options);
 
   return {
@@ -83,6 +87,7 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     // Only ever set by an override: generated instances are uncapped, so the
     // sweep every recorded result was measured on is unchanged.
     craftBudget: over.craftBudget,
+    eventWindowSeconds,
   };
 }
 
@@ -117,10 +122,12 @@ function sortedEntries(map: ReadonlyMap<string, number>): string {
 }
 
 function problemKey(problem: PlanProblem): string {
+  // The capacity variant belongs in the key: an `event` and an `overhang` copy of the same launch are
+  // identical in every number here and differ only in which row holds them.
   const options = problem.options
     .map(
       (o: LaunchOption) =>
-        `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}`
+        `${o.variant}|${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}`
     )
     .join(';');
   const dag = [...problem.dag.keys()]
@@ -136,11 +143,14 @@ function problemKey(problem: PlanProblem): string {
   const budget = problem.craftBudget
     ? `${problem.craftBudget.capacity}~${sortedEntries(problem.craftBudget.unitPrices)}`
     : '';
+  // Leave the window out and the cache serves a no-event plan for an event problem, at which point the
+  // W-monotonicity check compares a plan against itself and passes.
   return [
     problem.targets.join(','),
     problem.fuelCapacity,
     problem.timeCapacityPerSlot,
     budget,
+    problem.eventWindowSeconds ?? 0,
     problem.slots,
     sortedEntries(problem.baseYield),
     dag,
@@ -152,11 +162,23 @@ function problemKey(problem: PlanProblem): string {
 // later solve.
 function copyResult(result: PlanResult): PlanResult {
   return {
-    allocation: result.allocation.slice(),
+    schedule: result.schedule.map(runs => runs.map(r => ({ option: r.option, count: r.count }))),
     reported: result.reported
       ? { jointProbability: result.reported.jointProbability, perTarget: result.reported.perTarget.slice() }
       : undefined,
   };
+}
+
+// Per-option counts, summed out of the schedule.
+export function allocationOf(problem: PlanProblem, schedule: readonly (readonly ScheduleRun[])[]): number[] {
+  const alloc = new Array<number>(problem.options.length).fill(0);
+  for (const runs of schedule) {
+    for (const run of runs) {
+      if (!Number.isInteger(run?.option) || run.option < 0 || run.option >= alloc.length) continue;
+      if (Number.isFinite(run.count) && run.count > 0) alloc[run.option] += Math.floor(run.count);
+    }
+  }
+  return alloc;
 }
 
 // One instance per problem, not one per call: the judge caches its compiled LP template on `OracleInstance`
@@ -194,28 +216,44 @@ export function oracleInstanceOf(problem: PlanProblem): OracleInstance {
 // crash. Normalise what can be normalised, report what cannot.
 function contractBreaches(problem: PlanProblem, result: PlanResult): string[] {
   const out: string[] = [];
-  const alloc = result.allocation;
-  if (!Array.isArray(alloc)) {
-    out.push('allocation is not an array');
+  const schedule = result.schedule;
+  if (!Array.isArray(schedule)) {
+    out.push('schedule is not an array');
     return out;
   }
-  if (alloc.length !== problem.options.length) {
-    out.push(`allocation has ${alloc.length} entries for a menu of ${problem.options.length}`);
+  if (schedule.length !== problem.slots) {
+    out.push(`schedule has ${schedule.length} slot(s) for a problem with ${problem.slots}`);
     return out;
   }
-  for (let i = 0; i < alloc.length; i++) {
-    const n = alloc[i];
-    if (!Number.isFinite(n)) {
-      out.push(`allocation[${i}] is ${n}`);
+  breaches: for (let k = 0; k < schedule.length; k++) {
+    const runs = schedule[k];
+    if (!Array.isArray(runs)) {
+      out.push(`schedule[${k}] is not an array of runs`);
       break;
     }
-    if (n < 0) {
-      out.push(`allocation[${i}] is negative (${n})`);
-      break;
-    }
-    if (!Number.isInteger(n)) {
-      out.push(`allocation[${i}] is fractional (${n}); missions are indivisible`);
-      break;
+    for (let r = 0; r < runs.length; r++) {
+      const run = runs[r];
+      const at = `schedule[${k}][${r}]`;
+      if (!run || typeof run !== 'object') {
+        out.push(`${at} is not a run`);
+        break breaches;
+      }
+      if (!Number.isInteger(run.option) || run.option < 0 || run.option >= problem.options.length) {
+        out.push(`${at}.option is ${run.option} for a menu of ${problem.options.length}`);
+        break breaches;
+      }
+      if (!Number.isFinite(run.count)) {
+        out.push(`${at}.count is ${run.count}`);
+        break breaches;
+      }
+      if (run.count <= 0) {
+        out.push(`${at}.count is ${run.count}; a run names at least one launch`);
+        break breaches;
+      }
+      if (!Number.isInteger(run.count)) {
+        out.push(`${at}.count is fractional (${run.count}); missions are indivisible`);
+        break breaches;
+      }
     }
   }
   if (result.reported) {
@@ -241,6 +279,7 @@ export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budge
   let totalTime = 0;
   const durations: number[] = [];
   const counts: number[] = [];
+  const variants: PackVariant[] = [];
   for (let i = 0; i < alloc.length; i++) {
     const n = alloc[i];
     if (!(n > 0)) continue;
@@ -248,11 +287,16 @@ export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budge
     totalTime += n * problem.options[i].actualTime;
     durations.push(problem.options[i].actualTime);
     counts.push(n);
+    variants.push(problem.options[i].variant);
   }
+  const window = problem.eventWindowSeconds ?? 0;
   return {
     fuel,
     totalTime,
-    pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots),
+    pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots, undefined, {
+      seconds: window,
+      variants,
+    }),
   };
 }
 
@@ -266,6 +310,10 @@ export function feasible(problem: PlanProblem, alloc: readonly number[]): boolea
 export interface Solved {
   problem: PlanProblem;
   result: PlanResult;
+  // The plan as given, one launch order per slot; empty slots for a breached contract, so a check
+  // reading this never has to re-test what C0 already reported.
+  schedule: ScheduleRun[][];
+  // Summed out of `schedule` by the harness, never taken from the candidate.
   allocation: number[];
   breaches: string[];
   // The harness's own valuation of `result.allocation`. Every invariant
@@ -292,20 +340,28 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
     if (cache.size >= PLAN_CACHE_MAX) cache.clear();
     cache.set(key, { result: copyResult(result), elapsedMs });
   }
-  // Score whatever is scoreable. A malformed allocation is reported by C0 and
+  // Score whatever is scoreable. A malformed schedule is reported by C0 and
   // clamped here so one bad return does not abort the rest of the sweep.
-  const allocation = new Array<number>(problem.options.length).fill(0);
-  if (Array.isArray(result.allocation)) {
-    for (let i = 0; i < allocation.length; i++) {
-      const n = result.allocation[i];
-      allocation[i] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-    }
-  }
+  const schedule: ScheduleRun[][] = Array.isArray(result.schedule)
+    ? result.schedule.map(runs =>
+        Array.isArray(runs)
+          ? runs
+              .filter(r => r && Number.isInteger(r.option) && r.option >= 0 && r.option < problem.options.length)
+              .map(r => ({
+                option: r.option,
+                count: Number.isFinite(r.count) && r.count > 0 ? Math.floor(r.count) : 0,
+              }))
+              .filter(r => r.count > 0)
+          : []
+      )
+    : [];
+  const allocation = allocationOf(problem, schedule);
 
   const judged = evaluateAllocationJoint(oracleInstanceOf(problem), allocation);
   return {
     problem,
     result,
+    schedule,
     allocation,
     breaches,
     judged,
@@ -314,9 +370,8 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
   };
 }
 
+// Identity of a plan, including the order it is flown in: the same counts in a different order are
+// different answers, and under a window only one of them may be legal.
 export function signature(s: Solved): string {
-  return s.allocation
-    .map((n, i) => (n > 0 ? `${i}:${n}` : ''))
-    .filter(Boolean)
-    .join('|');
+  return s.schedule.map(runs => runs.map(r => `${r.option}:${r.count}`).join(',')).join('|');
 }

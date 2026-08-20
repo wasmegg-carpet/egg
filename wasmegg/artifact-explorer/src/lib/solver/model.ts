@@ -1,7 +1,7 @@
 // Preprocessing for the planner: restricted recipe DAG, normalized budgets,
 // filtered and duplicate-merged option groups.
 
-import type { LaunchOption, RecipeDAG } from '../types';
+import type { CapacityVariant, LaunchOption, RecipeDAG } from '../types';
 import type { PlanProblem } from './types';
 
 const GROUP_CAP = 1e9;
@@ -11,6 +11,7 @@ export interface Group {
   fuelFraction: number;
   timeFraction: number;
   timeSeconds: number;
+  variant: CapacityVariant;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -31,6 +32,9 @@ export interface Model {
   targetCraftIdx: number[]; // craft column per target; -1 when not craftable
   slots: number;
   timeCapacitySeconds: number;
+  // Seconds of 2x capacity remaining, 0 when there is no event. Zero here means `groups` holds nothing
+  // but `normal` entries and no window rows are built.
+  eventWindowSeconds: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -44,11 +48,17 @@ interface Candidate {
   fuelFraction: number;
   timeFraction: number;
   timeSeconds: number;
+  variant: CapacityVariant;
+  ship: string; // missionTypeId
+  target: number; // targetAfxId
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
   index: number;
 }
+
+// A stable tiebreak for `cmpKey`, not the section order a schedule is emitted in — that lives in `oa.ts`.
+const VARIANT_RANK: Record<CapacityVariant, number> = { normal: 0, event: 1, overhang: 2 };
 
 function cmpEntries(a: Entry[], b: Entry[]): number {
   const n = Math.min(a.length, b.length);
@@ -59,10 +69,23 @@ function cmpEntries(a: Entry[], b: Entry[]): number {
   return a.length - b.length;
 }
 
+// Two options merge into one group only when this returns 0. The capacity variant has to be in the key or
+// an `event` column folds into the `overhang` one — identical in fuel, duration and every yield, and
+// differing only in which row constrains them — and loses its window row. Ship and target are in it so
+// that a schedule entry names a determinate launch; measured to add no columns on a full menu at every
+// effort level and across 400 arena instances.
+//
+// These three compare *last*, after the fields that were always here. Group order is column order and a
+// node-limited search diverges when columns move, so comparing them earlier would rewrite every matrix in
+// the no-event case.
 function cmpKey(a: Candidate, b: Candidate): number {
   if (a.fuelFraction !== b.fuelFraction) return a.fuelFraction - b.fuelFraction;
   if (a.timeFraction !== b.timeFraction) return a.timeFraction - b.timeFraction;
-  return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
+  const byYield = cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
+  if (byYield !== 0) return byYield;
+  if (a.variant !== b.variant) return VARIANT_RANK[a.variant] - VARIANT_RANK[b.variant];
+  if (a.ship !== b.ship) return a.ship < b.ship ? -1 : 1;
+  return a.target - b.target;
 }
 
 function craftUpperBounds(
@@ -211,6 +234,8 @@ export function buildModel(problem: PlanProblem): Model {
   const fuelCap = problem.fuelCapacity;
   const timeCap = problem.timeCapacityPerSlot;
   const slots = problem.slots;
+  const rawWindow = problem.eventWindowSeconds ?? 0;
+  const window = Number.isFinite(rawWindow) && rawWindow > 0 ? rawWindow : 0;
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {
@@ -247,9 +272,24 @@ export function buildModel(problem: PlanProblem): Model {
     yieldEntries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     legendaryEntries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
+    // With no window there is no row to hold a doubled launch inside one, so it is dropped rather than
+    // flown at 2x unconstrained. A menu enumerated against a window the model was not given is therefore
+    // a missing option rather than an unflyable plan.
+    const variant = opt.variant;
+    if (window === 0 && variant !== 'normal') return;
+
+    // Redundant against the window rows, and not against the tree: without a cap here branch-and-bound
+    // explores far looser than the rows allow.
+    const byWindow =
+      variant === 'event'
+        ? slots * (opt.actualTime > 0 ? Math.floor(window / opt.actualTime) : GROUP_CAP)
+        : variant === 'overhang'
+          ? slots
+          : GROUP_CAP;
     const cap = Math.min(
       fuelFraction > 0 ? Math.floor(1 / fuelFraction) : GROUP_CAP,
       timeFraction > 0 ? Math.floor(slots / timeFraction) : GROUP_CAP,
+      byWindow,
       GROUP_CAP
     );
     if (cap < 1) return;
@@ -258,6 +298,9 @@ export function buildModel(problem: PlanProblem): Model {
       fuelFraction,
       timeFraction,
       timeSeconds: opt.actualTime,
+      variant,
+      ship: opt.ship.missionTypeId,
+      target: opt.targetAfxId,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -283,6 +326,7 @@ export function buildModel(problem: PlanProblem): Model {
       fuelFraction: cand.fuelFraction,
       timeFraction: cand.timeFraction,
       timeSeconds: cand.timeSeconds,
+      variant: cand.variant,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,
@@ -303,6 +347,7 @@ export function buildModel(problem: PlanProblem): Model {
     targetCraftIdx,
     slots,
     timeCapacitySeconds: timeCap,
+    eventWindowSeconds: window,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, groups),
     craftPrices,
     craftBudgetCapacity,

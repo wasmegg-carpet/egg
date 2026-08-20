@@ -143,6 +143,43 @@
           </p>
         </div>
 
+        <div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              :checked="missionFilters.doubleCapacityEnabled"
+              @change="setDoubleCapacityEnabled(($event.target as HTMLInputElement).checked)"
+            />
+            2× mission capacity event
+          </label>
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              aria-label="Time left in the 2x mission capacity event"
+              :disabled="!missionFilters.doubleCapacityEnabled"
+              :value="doubleCapacityDraft"
+              placeholder="e.g. 48h, 3h30m"
+              class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
+              @input="onDoubleCapacityInput(($event.target as HTMLInputElement).value)"
+              @blur="onDoubleCapacityBlur"
+            />
+            <span class="text-xs text-gray-500">left</span>
+          </div>
+          <p v-if="missionFilters.doubleCapacityEnabled && doubleCapacityInvalid" class="mt-1 text-xs text-red-500">
+            Enter a positive duration (e.g. 48h, 3h30m)
+          </p>
+          <p
+            v-else-if="missionFilters.doubleCapacityEnabled && doubleCapacityTruncated"
+            class="mt-1 text-xs text-gray-400"
+          >
+            The event runs 48h, so that is all this plan counts on
+          </p>
+          <p v-else-if="missionFilters.doubleCapacityEnabled" class="mt-1 text-xs text-gray-400">
+            Missions launched within this long carry double capacity
+          </p>
+        </div>
+
         <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
           <input
             id="sidebar_show_nodata"
@@ -292,10 +329,12 @@ import {
   autoCompute,
   config,
   currentOptimizerArtifactIds,
+  DEFAULT_DOUBLE_CAPACITY_REMAINING,
   effectiveConfig,
   EFFORT_LEVELS,
   type EffortLevel,
   extras,
+  MAX_DOUBLE_CAPACITY_SECONDS,
   missionFilters,
   openPlayerOverridesModal,
   overrides,
@@ -313,6 +352,8 @@ import {
   setMaxGemCost,
   setMaxGemCostEnabled,
   setMaxGoldenEggCost,
+  setDoubleCapacityEnabled,
+  setDoubleCapacityRemaining,
   setMaxGoldenEggCostEnabled,
   setOverrideCraftingLevel,
   setOverrideFTL,
@@ -372,6 +413,39 @@ export default defineComponent({
     function onWaitTimeInput(value: string) {
       waitTimeDraft.value = value;
       emit('update:waitTimeDays', value);
+    }
+
+    // Same draft-and-normalize-on-blur handling as the time budget above.
+    const doubleCapacityDraft = ref(missionFilters.value.doubleCapacityRemaining);
+    watch(
+      () => missionFilters.value.doubleCapacityRemaining,
+      v => {
+        doubleCapacityDraft.value = v;
+      }
+    );
+    const doubleCapacityInvalid = computed(() => {
+      const seconds = parseDurationDays(doubleCapacityDraft.value);
+      return !(Number.isFinite(seconds) && seconds > 0);
+    });
+
+    const doubleCapacityTruncated = computed(
+      () => parseDurationDays(doubleCapacityDraft.value) > MAX_DOUBLE_CAPACITY_SECONDS
+    );
+
+    function onDoubleCapacityInput(value: string) {
+      doubleCapacityDraft.value = value;
+      setDoubleCapacityRemaining(value);
+    }
+
+    // A truncated entry lands on the literal '48h' rather than the normalizer's '2d', so the field echoes
+    // back the length the note beside it names.
+    function onDoubleCapacityBlur() {
+      if (!isDurationNormalizable(doubleCapacityDraft.value)) return;
+      const seconds = parseDurationDays(doubleCapacityDraft.value);
+      const normalized =
+        seconds >= MAX_DOUBLE_CAPACITY_SECONDS ? DEFAULT_DOUBLE_CAPACITY_REMAINING : formatDuration(seconds, true);
+      doubleCapacityDraft.value = normalized;
+      setDoubleCapacityRemaining(normalized);
     }
 
     function onWaitTimeBlur() {
@@ -494,6 +568,12 @@ export default defineComponent({
       onGemCostInput,
       maxGoldenEggCostDisplay,
       onGoldenEggCostInput,
+      doubleCapacityDraft,
+      doubleCapacityInvalid,
+      doubleCapacityTruncated,
+      onDoubleCapacityInput,
+      onDoubleCapacityBlur,
+      setDoubleCapacityEnabled,
       EFFORT_LEVELS,
       effortMeta,
       effortTrack,

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, envelopeErrorNats, solveWith } from '@/lib/solver/oa';
 import { loadHighs } from '@/lib/solver/highs';
-import { makeNode, makeOpt } from './spec-helpers';
+import { allocationOf, makeNode, makeOpt } from './spec-helpers';
 import type { RecipeDAG } from '@/lib/types';
 import type { PlanProblem } from '@/lib/solver/types';
 
@@ -30,11 +30,12 @@ describe('buildModel rejects non-finite quantities the way it rejects non-finite
       baseYield: new Map([['B1', NaN]]), // clamped to 0
     };
     const result = solveWith(problem, solve);
-    expect(result.allocation).toHaveLength(problem.options.length);
-    expect(result.allocation.every(n => Number.isFinite(n) && n >= 0)).toBe(true);
-    expect(result.allocation[2]).toBeGreaterThan(0);
-    expect(result.allocation[0]).toBe(0);
-    expect(result.allocation[1]).toBe(0);
+    expect(result.schedule).toHaveLength(problem.slots);
+    const alloc = allocationOf(result, problem.options.length);
+    expect(alloc.every(n => Number.isFinite(n) && n >= 0)).toBe(true);
+    expect(alloc[2]).toBeGreaterThan(0);
+    expect(alloc[0]).toBe(0);
+    expect(alloc[1]).toBe(0);
   });
 });
 

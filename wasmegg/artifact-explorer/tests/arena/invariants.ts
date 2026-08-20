@@ -59,6 +59,7 @@ export type InvariantId =
   | 'A7-crafting'
   | 'A8-targets'
   | 'A9-golden-eggs'
+  | 'A10-window'
   | 'B1-option-order'
   | 'B2-target-order'
   | 'B3-fuel-scale'
@@ -66,7 +67,6 @@ export type InvariantId =
   | 'B6-duplicate'
   | 'C0-contract'
   | 'C1-feasibility'
-  | 'C1-inconclusive'
   | 'C2-honesty'
   | 'C3-joint-product'
   | 'M1-solo-product'
@@ -171,6 +171,24 @@ export function checkA9GoldenEggs(c: CheckContext) {
     })),
     { label: 'no golden egg cap', over: {} as SolveOverrides },
   ]);
+}
+
+// More 2x window can only ever help: a doubled launch legal at offset t stays legal when the window
+// extends past t. The axis starts at zero whatever regime the instance runs under, so this also covers
+// the no-event path, and it crosses the horizon, which is where the window stops binding.
+export function checkA10Window(c: CheckContext) {
+  const horizon = c.inst.timeCapacityPerSlot;
+  const windows = [...new Set([0, 3600, 48 * 3600, Math.floor(horizon * 0.75), Math.ceil(horizon * 1.25)])]
+    .filter(w => Number.isFinite(w) && w >= 0)
+    .sort((a, b) => a - b);
+  monotone(
+    'A10-window',
+    c,
+    windows.map(w => ({
+      label: w === 0 ? 'no 2x event' : `2x for ${(w / 3600).toFixed(1)}h`,
+      over: { eventWindowSeconds: w },
+    }))
+  );
 }
 
 export function checkA3Menu(c: CheckContext) {
@@ -396,6 +414,13 @@ export function checkC0Contract(c: CheckContext) {
   }
 }
 
+// Slack on the window and slot comparisons, in seconds. Matched to `oa.ts`'s `SLOT_TOL`/`WINDOW_TOL`, so
+// C1 never fails a plan on a figure the solver was entitled to accept.
+const SCHEDULE_TOL = 1e-9;
+
+// C1 checks a witness and never searches: the schedule is scanned in the order it was given, so a
+// schedule the window rejects is a breach even where some permutation of the same runs would pass.
+// See ARENA.md.
 export function checkC1Feasibility(c: CheckContext) {
   const s = solve(c);
   const b = budgetsOf(s.problem, s.allocation);
@@ -406,18 +431,44 @@ export function checkC1Feasibility(c: CheckContext) {
       `plan burns ${b.fuel.toExponential(4)} fuel against a ${s.problem.fuelCapacity.toExponential(4)} tank`
     );
   }
-  if (b.pack === 'undecided') {
-    reportFlat(
-      c,
-      'C1-inconclusive',
-      `packing undecided within the node budget (${b.totalTime.toFixed(0)}s over ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s)`
-    );
-  } else if (b.pack !== 'packs') {
-    reportFlat(
-      c,
-      'C1-feasibility',
-      `plan does not pack into ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s (${b.totalTime.toFixed(0)}s total)`
-    );
+
+  const capacity = s.problem.timeCapacityPerSlot;
+  const window = s.problem.eventWindowSeconds ?? 0;
+  for (let k = 0; k < s.schedule.length; k++) {
+    let offset = 0;
+    let doubled = 0;
+    let overhangs = 0;
+    for (const run of s.schedule[k]) {
+      const opt = s.problem.options[run.option];
+      const variant = opt.variant;
+      if (variant !== 'normal') {
+        doubled += run.count;
+        if (variant === 'overhang') overhangs += run.count;
+        const lastStart = offset + (run.count - 1) * opt.actualTime;
+        if (lastStart > window + SCHEDULE_TOL) {
+          reportFlat(
+            c,
+            'C1-feasibility',
+            `slot ${k} launches a doubled ${opt.ship.name} -> ${opt.target ?? 'untargeted'} at ` +
+              `${lastStart.toFixed(0)}s, past a ${window.toFixed(0)}s 2x window`
+          );
+        }
+      }
+      offset += run.count * opt.actualTime;
+    }
+    if (overhangs > 1) {
+      reportFlat(
+        c,
+        'C1-feasibility',
+        `slot ${k} holds ${overhangs} boundary launches; at most one may start at the window edge`
+      );
+    }
+    if (window <= 0 && doubled > 0) {
+      reportFlat(c, 'C1-feasibility', `slot ${k} flies ${doubled} doubled launch(es) with no event window`);
+    }
+    if (offset > capacity + SCHEDULE_TOL) {
+      reportFlat(c, 'C1-feasibility', `slot ${k} runs ${offset.toFixed(0)}s against a ${capacity.toFixed(0)}s horizon`);
+    }
   }
 }
 
@@ -676,6 +727,7 @@ export const CHEAP_CHECKS: Check[] = [
   checkA7CraftingLevel,
   checkA8Targets,
   checkA9GoldenEggs,
+  checkA10Window,
   checkM1M2SoloDominance,
   checkM3UnionLowerBound,
 ];

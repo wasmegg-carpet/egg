@@ -71,14 +71,18 @@
       <div
         v-for="(contrib, ci) in missionLegendarySources"
         :key="'contrib-' + ci"
-        class="flex items-center gap-1.5 text-xs py-0.5"
+        class="flex items-start gap-1.5 text-xs py-0.5"
       >
-        <span class="w-2 h-2 rounded-full flex-shrink-0 bg-green-500"></span>
-        <span class="text-gray-700 flex-1">
-          {{ contrib.numShipsLaunched }}×
-          <mission-name :mission="contrib.ship" :target="contrib.targetAfxId" :no-link="true" class="inline-block" />
-        </span>
-        <span class="font-mono text-blue-700">+{{ contrib.legendaryDrops.toFixed(4) }}</span>
+        <span class="mt-2 w-2 h-2 rounded-full flex-shrink-0 bg-green-500"></span>
+        <double-capacity-badge v-if="contrib.doubled" class="mt-1.5 flex-shrink-0" />
+        <span class="mt-0.5 text-gray-700 flex-shrink-0 tabular-nums">{{ contrib.numShipsLaunched }}×</span>
+        <mission-name
+          :mission="contrib.ship"
+          :target="contrib.targetAfxId"
+          :no-link="true"
+          class="min-w-0 flex-1 text-gray-700"
+        />
+        <span class="mt-0.5 font-mono text-blue-700">+{{ contrib.legendaryDrops.toFixed(4) }}</span>
       </div>
     </template>
   </details>
@@ -91,9 +95,10 @@ import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from '@/l
 import { formatGoldenEggs, sumCraftChainCost } from '@/lib';
 import MissionName from '@/components/MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
+import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
 
 export default defineComponent({
-  components: { MissionName, OptimizerRecipeTreeRow },
+  components: { MissionName, OptimizerRecipeTreeRow, DoubleCapacityBadge },
   props: {
     heading: { type: String, default: '' },
     bestProbability: { type: Number, required: true },

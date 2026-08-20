@@ -1,15 +1,33 @@
+export type DurationUnit = 'y' | 'd' | 'h' | 'm' | 's';
+
+const UNIT_ORDER: readonly DurationUnit[] = ['y', 'd', 'h', 'm', 's'];
+const UNIT_SECONDS: Readonly<Record<DurationUnit, number>> = {
+  y: 31_536_000,
+  d: 86_400,
+  h: 3_600,
+  m: 60,
+  s: 1,
+};
+
+export interface DurationUnits {
+  /** Largest unit used; anything above it accumulates into it rather than rolling up. Defaults to 'y'. */
+  max?: DurationUnit;
+  /** Smallest unit used; the remainder below it is discarded. Defaults to 'm'. */
+  min?: DurationUnit;
+}
+
 /**
  * Format duration in the form of XdXhXm.
  * @param seconds - Duration to be formatted, in seconds.
  * @param trim - Whether to trim zero components (e.g. 1d0h5m to 1d5m).
+ * @param units - Which units to spell it in; defaults to years through minutes.
  * @returns
  */
-export function formatDuration(seconds: number, trim = false): string {
+export function formatDuration(seconds: number, trim = false, units: DurationUnits = {}): string {
   if (seconds < 0) {
+    // Dropping `trim` and `units` here is load-bearing: `TrophyForecast.vue` spells a lapsed forecast
+    // as a trimmed negative and its output changes if they are passed on.
     return '-' + formatDuration(-seconds);
-  }
-  if (seconds < 60) {
-    return trim ? '0m' : '0d0h0m';
   }
   if (!isFinite(seconds)) {
     return 'Forever';
@@ -17,30 +35,23 @@ export function formatDuration(seconds: number, trim = false): string {
   if (seconds > 3_153_600_000) {
     return '>100yr';
   }
-  const yy = Math.floor(seconds / 31_536_000);
-  seconds -= yy * 31536000;
-  const dd = Math.floor(seconds / 86400);
-  seconds -= dd * 86400;
-  const hh = Math.floor(seconds / 3600);
-  seconds -= hh * 3600;
-  const mm = Math.floor(seconds / 60);
-  let s = '';
-  if (yy > 0) {
-    s += `${yy}y`;
-  }
-  if (!trim || dd > 0) {
-    s += `${dd}d`;
-  }
-  // leave out hours/seconds for durations > 1yr
-  if (!trim || yy < 1) {
-    if (!trim || hh > 0) {
-      s += `${hh}h`;
+  const first = UNIT_ORDER.indexOf(units.max ?? 'y');
+  const last = UNIT_ORDER.indexOf(units.min ?? 'm');
+  let rest = Math.floor(seconds);
+  let out = '';
+  for (let i = first; i <= last; i++) {
+    const unit = UNIT_ORDER[i];
+    const n = Math.floor(rest / UNIT_SECONDS[unit]);
+    rest -= n * UNIT_SECONDS[unit];
+    if (trim) {
+      if (n === 0) continue;
+      if (i > UNIT_ORDER.indexOf('d') && seconds >= UNIT_SECONDS.y) continue;
+    } else if (unit === 'y' && n === 0) {
+      continue;
     }
-    if (!trim || mm > 0) {
-      s += `${mm}m`;
-    }
+    out += `${n}${unit}`;
   }
-  return s;
+  return out === '' ? `0${UNIT_ORDER[last]}` : out;
 }
 
 /**

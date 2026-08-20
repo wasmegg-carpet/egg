@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { ei } from 'lib';
 import { optimizeFull } from '@/lib/optimizer-core';
+import { launchTotals } from '@/lib/optimizer-views';
 import { computeCraftChainTree } from '@/lib/optimizer-tree';
 import { craftDag, makeNode, makeOpt } from './spec-helpers';
 import type { RecipeDAG } from '@/lib/types';
@@ -22,7 +23,7 @@ describe('optimizeFull', () => {
       maximumCost: Infinity,
     });
     expect(sol.bestProbability).toBeCloseTo(0, 9);
-    expect(sol.choiceHistory).toHaveLength(0);
+    expect(launchTotals(sol)).toHaveLength(0);
     expect(sol.fuelUsed).toBeCloseTo(0, 9);
   });
 
@@ -43,13 +44,13 @@ describe('optimizeFull', () => {
     };
 
     const capped = await optimizeFull({ ...args, maximumCost: 129e24 });
-    expect(capped.choiceHistory.find(c => c.targetAfxId === optDear.targetAfxId)).toBeUndefined();
+    expect(launchTotals(capped).find(c => c.targetAfxId === optDear.targetAfxId)).toBeUndefined();
     // inclusive: a ship priced exactly at the cap is affordable
-    expect(capped.choiceHistory.find(c => c.targetAfxId === optAffordable.targetAfxId)).toBeDefined();
+    expect(launchTotals(capped).find(c => c.targetAfxId === optAffordable.targetAfxId)).toBeDefined();
 
     // An absent cap is no cap, not a cap of zero.
     const uncapped = await optimizeFull({ ...args, maximumCost: undefined });
-    expect(uncapped.choiceHistory.find(c => c.targetAfxId === optDear.targetAfxId)).toBeDefined();
+    expect(launchTotals(uncapped).find(c => c.targetAfxId === optDear.targetAfxId)).toBeDefined();
   });
 
   it('values direct legendary drops when crafting is impossible', async () => {
@@ -115,7 +116,7 @@ describe('optimizeFull', () => {
         baseYield: new Map(),
         maximumCost: Infinity,
       });
-      expect(sol.choiceHistory).toHaveLength(0);
+      expect(launchTotals(sol)).toHaveLength(0);
       expect(sol.fuelUsed).toBe(0);
       expect(sol.timeUnitsUsed).toBe(0);
       expect(Number.isFinite(sol.bestProbability)).toBe(true);

@@ -86,7 +86,58 @@ infinitesimal inventory" argument does not carry to a purse with nothing in it.
 
 `order_k` forces slot loads non-increasing. Without it every plan appears `slots!`
 times and the tree spends its budget rediscovering the same plan in a different
-order.
+order. All three slots share one event window, so slots remain interchangeable
+under the window rows below and the symmetry break is unaffected. Note it orders
+loads only: equal-load slots stay interchangeable, which is why the pre-merge W=0
+parity check compares flattened counts rather than per-slot ones.
+
+### The 2x capacity window
+
+Egg, Inc. periodically doubles every ship's capacity for 48 hours. A mission is
+doubled if it *launches* inside the window; return time is irrelevant. Capacity
+multiplies only what a mission brings home, so `enumerateLaunchOptions` emits each
+launch once per applicable **capacity variant** and the model's whole job is
+deciding which variant flies:
+
+| variant | yield | `slot_k` | `window_k` | `overhang_k` |
+| --- | --- | --- | --- | --- |
+| `normal` | 1x | yes | — | — |
+| `event` | 2x | yes | yes | — |
+| `overhang` | 2x | yes | — | yes |
+
+**`window_k`** bounds a slot's total `event` duration by `W`, the seconds of window
+remaining. **`overhang_k`** admits at most one `overhang` launch per slot. Both are
+written only when `W > 0`, so with no event in progress the matrix is exactly the
+one it was before windows existed — which the pre-merge parity gate checked plan
+for plan on 20 arena instances.
+
+The pair is **exact, not conservative**. If `k` missions launch inside the window
+in some slot, the first `k-1` finish launching before the last one starts, so their
+durations sum to under `W` and they are `event` columns; the `k`-th is the
+`overhang`, which consumes no window budget because nothing follows it inside the
+window. Conversely any assignment satisfying both rows is flyable: run the `event`
+missions first and every prefix is bounded by their total, so each starts inside;
+the `overhang` then starts at that total, also at most `W`. The two sets of
+representable event multisets are identical. Equality exactly at `W` is a
+measure-zero boundary and is admitted rather than modelled as strict.
+
+`overhang` is what makes the common case right rather than an edge case. A player
+with three hours of event left and a 30-day horizon has no mission that fits
+`window_k` at all, so `event` is empty — but a mission launched right now is still
+doubled whenever it lands, and reporting zero doubled missions would be flatly
+wrong. `overhang_k` admits exactly one launch per slot at offset 0, and three
+missions are doubled. That is also exactly right: a second launch in any slot
+starts a full mission later, well past the window.
+
+The rows cost no new integrality. `n[g][k]` is already an integer column, so
+bounding their sum by 1 is a plain row over columns branch-and-bound is already
+branching on; `overhang` adds `groups x slots` columns with an upper bound of 1,
+which the tree disposes of almost for free. Raw seconds in `window_k`, for the same
+reason as `slot_k` above.
+
+Both rows are also stated as *column bounds* in `perSlotCap` and in the group cap
+(`model.ts`). Redundant as modelling and not as arithmetic: without them the tree
+is far looser than the rows allow.
 
 ### Row scaling, and the ingestion window
 
@@ -212,10 +263,25 @@ get; loosening `EXACT_PRECISION` changes only what the arena records.
 
 ## 6. Decode and certify
 
-Both budgets are rows of the model, so a decoded plan is feasible by construction;
+Every budget is a row of the model, so a decoded plan is feasible by construction;
 `certifies` says so out loud rather than assuming it, re-checking the fuel row
-against the rounded counts and reading the three slot loads straight off the
-MILP's own columns — the packing witness that summing over slots threw away.
+against the rounded counts and reading the three slot loads — plus each slot's
+event load and overhang count — straight off the MILP's own columns.
+
+Those per-slot columns are the plan rather than a witness the decode throws away.
+`PlanResult.schedule` is one ordered list of runs per slot, and per-option counts
+are derived from it by summing. Whether a doubled mission is legal depends on its
+launch offset within its slot, so a planner reporting only per-option counts cannot
+state a correct plan under a window at all.
+
+Runs are emitted in sections — `event`, then `overhang`, then `normal` — and in
+group order within each. The section boundary is where the window closes, which is
+what lets `certifies` bound one prefix sum per slot instead of reasoning about
+interleavings, and what lets the results panel draw the boundary as one line. The
+arena checks the order as given and never reorders it (`tests/arena/ARENA.md`, C1).
+
+The window checks carry `WINDOW_TOL`, the same 1e-9 as `SLOT_TOL` and on the same
+absolute-seconds argument.
 
 `SLOT_TOL` is 1e-9 not for resolution — the drift it absorbs is three decades
 smaller — but because that is the judge's own packing tolerance
@@ -245,7 +311,21 @@ parallel MIP search is not reproducible — and there is no `Math.random`, no
 1e-6, tight enough that the node limit rather than the gap ends a hard search, so
 the knob that governs cost is the one that gets tuned.
 
-`DEFAULT_TUNING` is `maxNodes: 400`, which is a latency choice: quality is flat
+`Tuning.maxNodes` is a **base**, for a menu of one capacity variant; `nodeBudget`
+scales what HiGHS actually gets by the mission column count. Event mode roughly
+triples those columns, and the symptom of under-tuning is not a worse plan but no
+plan at all, since the root heuristics find no incumbent and `solveWith` degrades
+silently to the empty one. The ratio is exactly 1 with no event in progress, so
+re-tuning the base is the only thing that moves the no-event path.
+
+That starvation is the *bound* the ratio buys, not an observed failure. Sweeping
+the base over 5/15/40/100 on the slowest event instance (538 columns) left the plan
+identical to three decimals at every base, with no empty plans anywhere, while
+latency ran 4.2s to 14.9s — 4.2s of which is the matrix and the root LP, which no
+node budget touches. In event mode the ratio is insurance on models larger than any
+measured, and its price is tail latency rather than quality.
+
+The base is `maxNodes: 400`, which is a latency choice: quality is flat
 across every tuning ever swept (all means inside 0.005 log10), so what the number
 buys is a solve that stays around a second on a production instance and a lower
 rate of arena monotonicity violations, not a better plan. Two rules for anyone
@@ -254,6 +334,12 @@ swings 3x across seed bases, so **treat any single-campaign delta under about 1.
 as noise**. And the floor is hard: `maxNodes: 0` returns probability zero on
 *every* instance even at `mip_heuristic_effort: 1.0`, because the root heuristics
 never find an incumbent.
+
+The bench that produces those numbers is `tests/arena/tuning-bench.spec.ts`,
+opt-in via `BENCH`. It prints latency and log10(joint) per instance per base and
+asserts nothing. It measures neither invariant severity nor monotonicity, so it can
+rule a base out on cost but cannot on its own justify moving one: the 400 above was
+settled by three sweep campaigns on severity.
 
 ## 8. The backend
 

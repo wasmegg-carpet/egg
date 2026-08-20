@@ -17,6 +17,8 @@ export interface OptimizerRequestInput {
   maximumCost: number | undefined;
   baseYield: Map<string, number>;
   craftBudget?: CraftBudget;
+  // Seconds of 2x mission capacity remaining.
+  eventWindowSeconds?: number;
 }
 
 export interface OptimizerClient {
