@@ -10,12 +10,11 @@ import {
   type MissionType,
 } from 'lib';
 
-import type { DAGChildRef, DAGNode, LaunchOption, RecipeDAG } from './types';
+import type { CapacityVariant, DAGChildRef, DAGNode, LaunchOption, RecipeDAG } from './types';
 import { getMissionLootData, MIN_LEGENDARY_OBSERVATIONS } from '@/lib';
 import { sum } from '@/utils';
 import { Ingredient } from 'lib/artifacts/data-json';
 
-// Recursively add `id` and its whole crafting tree to `recipeDag`.
 export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
   if (recipeDag.has(id)) return;
 
@@ -42,16 +41,33 @@ export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
   }
 }
 
-// Every visible ship crossed with its applicable mission targets, costed per
-// single ship. launchPeriodSeconds floors each mission's effective duration,
-// penalising short missions without banning them.
+// A doubled copy of an enumerated option. The event multiplies mission capacity only: fuel, duration and
+// gem cost are properties of the ship and do not change. `2 * floor(x)` versus `floor(2 * x)` is
+// deliberately not modelled, these being expected drops per launch over sparse data.
+function doubled(option: LaunchOption, variant: CapacityVariant): LaunchOption {
+  const scale = (v: Map<string, number>) => new Map([...v].map(([k, q]) => [k, q * 2]));
+  return {
+    ...option,
+    id: `${option.id}::${variant}`,
+    variant,
+    supplyVector: scale(option.supplyVector),
+    yieldVector: scale(option.yieldVector),
+    legendaryYieldVector: scale(option.legendaryYieldVector),
+  };
+}
+
+// Every visible ship crossed with its applicable mission targets, costed per single ship.
+// `launchPeriodSeconds` floors each mission's effective duration, penalising short missions without banning them.
+// `eventWindowSeconds` is the seconds of 2x mission capacity remaining; above zero, each option is
+// emitted once per applicable capacity variant.
 export function enumerateLaunchOptions(
   playerConfig: ShipsConfig,
   dag: RecipeDAG,
   launchPeriodSeconds = 0,
-  maxGemCost?: number
+  eventWindowSeconds = 0
 ): LaunchOption[] {
   const options: LaunchOption[] = [];
+  const window = Number.isFinite(eventWindowSeconds) && eventWindowSeconds > 0 ? eventWindowSeconds : 0;
 
   // Targeting boosts a whole family, so family is the right granularity here.
   const dagAfxIds = new Set<ei.ArtifactSpec.Name>();
@@ -61,8 +77,6 @@ export function enumerateLaunchOptions(
 
   for (const mission of missions) {
     if (!playerConfig.shipVisibility[mission.shipType]) continue;
-
-    if (maxGemCost !== undefined && mission.virtueGemCost > maxGemCost) continue;
 
     const missionData = getMissionLootData(mission.missionTypeId);
     const levelLootData = missionData.levels[playerConfig.shipLevels[mission.shipType]];
@@ -115,6 +129,11 @@ export function enumerateLaunchOptions(
       }
 
       options.push(option);
+      if (window === 0) continue;
+      // An `event` launch longer than the whole window has its column pinned at zero by the window row,
+      // so it is dropped rather than carried as dead weight.
+      if (option.actualTime <= window) options.push(doubled(option, 'event'));
+      options.push(doubled(option, 'overhang'));
     }
   }
 
@@ -137,12 +156,14 @@ function makeLaunchOption(
   return {
     id,
     ship: mission,
+    variant: 'normal',
     target: getArtifactName(target),
     targetAfxId: target,
     actualFuel: nonHumilityFuelUse.reduce((agg, current) => agg + current.amount, 0),
     actualTime: Math.max(rawTime, launchPeriodSeconds),
     rawTime,
     fuelByEgg: nonHumilityFuelUse.reduce((agg, current) => agg.set(current.egg, current.amount), new Map()),
+    cost: mission.virtueGemCost,
     supplyVector: new Map(),
     yieldVector: new Map(),
     legendaryYieldVector: new Map(),

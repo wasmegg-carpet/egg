@@ -1,10 +1,8 @@
-// Message shapes shared by the optimizer worker and its main-thread client.
-// This wire format exists because structured clone drops prototypes: `ship` is
-// a MissionType whose entire API is getters, so it is narrowed to its two
-// fields on the way out and reconstructed on the way in. See OPTIMIZER.md.
+// Message shapes shared by the optimizer worker and its main-thread client. Structured clone drops
+// prototypes: `ship` is a MissionType whose entire API is getters, so it is narrowed on the way out and rebuilt on the way in.
 
 import { ei, MissionType } from 'lib';
-import type { LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG } from './types';
+import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 
 export interface WireShip {
   shipType: ei.MissionInfo.Spaceship;
@@ -13,7 +11,8 @@ export interface WireShip {
 
 export type WireLaunchOption = Omit<LaunchOption, 'ship'> & { ship: WireShip };
 export type WireLaunchSolution = Omit<LaunchSolution, 'ship'> & { ship: WireShip };
-export type WireSolution = Omit<OptimizerSolution, 'choiceHistory'> & { choiceHistory: WireLaunchSolution[] };
+export type WireSlotSummary = Omit<SlotSummary, 'runs'> & { runs: WireLaunchSolution[] };
+export type WireSolution = Omit<OptimizerSolution, 'slots'> & { slots: WireSlotSummary[] };
 
 export interface OptimizerRequest {
   id: number;
@@ -21,8 +20,13 @@ export interface OptimizerRequest {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
-  timeCapacity: number;
+  timeCapacityPerSlot: number;
+  maximumCost: number | undefined;
   baseYield: Map<string, number>;
+  // Plain data (a number and a Map), so structured clone carries it intact —
+  // no narrow/reconstruct pair needed, unlike `ship`.
+  craftBudget?: CraftBudget;
+  eventWindowSeconds?: number;
 }
 
 export type OptimizerResponse =
@@ -47,13 +51,13 @@ export function optionsFromWire(options: WireLaunchOption[]): LaunchOption[] {
 export function solutionsToWire(solutions: OptimizerSolution[]): WireSolution[] {
   return solutions.map(s => ({
     ...s,
-    choiceHistory: s.choiceHistory.map(c => ({ ...c, ship: toWireShip(c.ship) })),
+    slots: s.slots.map(slot => ({ ...slot, runs: slot.runs.map(c => ({ ...c, ship: toWireShip(c.ship) })) })),
   }));
 }
 
 export function solutionsFromWire(solutions: WireSolution[]): OptimizerSolution[] {
   return solutions.map(s => ({
     ...s,
-    choiceHistory: s.choiceHistory.map(c => ({ ...c, ship: fromWireShip(c.ship) })),
+    slots: s.slots.map(slot => ({ ...slot, runs: slot.runs.map(c => ({ ...c, ship: fromWireShip(c.ship) })) })),
   }));
 }

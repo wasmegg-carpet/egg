@@ -500,13 +500,15 @@ export class InventoryFamily {
   }
 }
 
-function singleCraftCost(params: CraftingPriceParams, previousCrafts: number): number {
+// Golden egg cost of the (previousCrafts + 1)-th craft: the price decays from
+// `base` down to `low` over `domain` crafts, along `curve`.
+export function singleCraftCost(params: CraftingPriceParams, previousCrafts: number): number {
   return Math.floor(
     Math.max(1, params.base - (params.base - params.low) * Math.min(1, previousCrafts / params.domain) ** params.curve)
   );
 }
 
-function multiCraftCost(params: CraftingPriceParams, previousCrafts: number, crafts: number) {
+export function multiCraftCost(params: CraftingPriceParams, previousCrafts: number, crafts: number) {
   let total = 0;
   for (let i = previousCrafts; i < previousCrafts + crafts; i++) {
     total += singleCraftCost(params, i);

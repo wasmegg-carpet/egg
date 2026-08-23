@@ -3,14 +3,13 @@ export * from './missions';
 export * from './loot';
 export * from './optimizer-views';
 export * from './optimizer-tree';
+export * from './optimizer-cost';
 export * from './tank-ids';
 
-import type { DAGNode, LaunchSolution, OptimizerConfig, OptimizerSolution, DropRow, RecipeDAG } from './types';
-import { enumerateLaunchOptions, generateRecipeDag } from './phases';
-import { optimizeFull } from './optimizer-core';
-import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, Inventory, InventoryItem, ShipsConfig } from 'lib';
-
-import { iconURL } from 'lib';
+import type { DAGNode, OptimizerSolution, DropRow, RecipeDAG } from './types';
+import { generateRecipeDag } from './phases';
+import { launchTotals } from './optimizer-views';
+import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, iconURL, Inventory, InventoryItem } from 'lib';
 
 // An undefined previousCraftsOverride means "read each target's own crafted
 // count from the save"; a defined one applies to every target.
@@ -79,7 +78,7 @@ export function computeBaseYield(
 function computeExpectedDrops(solution: OptimizerSolution, dag: Map<string, DAGNode>): DropRow[] {
   const totals = new Map<string, number>();
 
-  for (const choice of solution.choiceHistory) {
+  for (const choice of launchTotals(solution)) {
     for (const [item, rate] of choice.supplyVector) {
       totals.set(item, (totals.get(item) ?? 0) + rate * choice.numShipsLaunched);
     }
@@ -107,7 +106,7 @@ function computeExpectedDrops(solution: OptimizerSolution, dag: Map<string, DAGN
 function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
   const totals = new Map();
 
-  for (const choice of solution.choiceHistory) {
+  for (const choice of launchTotals(solution)) {
     for (const [egg, rate] of choice.actualFuelByEgg) {
       totals.set(egg, (totals.get(egg) ?? 0) + rate * choice.numShipsLaunched);
     }
@@ -116,48 +115,25 @@ function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
   return totals;
 }
 
-// Presentation-only fields. The worker path applies this on the main thread
-// afterwards, so both it and optimize() below produce identical solutions.
+// Presentation-only fields, applied on the main thread after the worker returns. `optimize` in
+// `tests/unit/spec-helpers.ts` calls this too, so the in-process path and the worker path produce
+// identical solutions.
 export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG): OptimizerSolution[] {
   for (const solution of solutions) {
-    solution.choiceHistory.sort((a: LaunchSolution, b: LaunchSolution) => a.ship.shipType - b.ship.shipType);
     solution.expectedDrops = computeExpectedDrops(solution, dag);
     solution.fuelByEgg = computeFuelByEgg(solution);
   }
   return solutions;
 }
 
-// Returns an array though today it's always one solution.
-export function optimize(
-  config: OptimizerConfig,
-  playerConfig: ShipsConfig,
-  dag: RecipeDAG,
-  baseYield: Map<string, number>,
-  launchPeriodSeconds = 0,
-  maxGemCost?: number
-) {
-  const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
-  const options = enumerateLaunchOptions(playerConfig, dag, launchPeriodSeconds, maxGemCost);
-
-  const solutions: OptimizerSolution[] = [
-    optimizeFull({
-      options,
-      recipeDag: dag,
-      desiredArtifactNodeIds: desiredArtifactNodeIds,
-      fuelCapacity: fuelTankCapacity,
-      timeCapacity: timeBudgetSeconds,
-      baseYield: baseYield,
-    }),
-  ];
-
-  return finalizeSolutions(solutions, dag);
-}
-
 export type {
+  CraftBudget,
   OptimizerConfig,
   OptimizerSolution,
   LaunchOption,
   LaunchSolution,
+  SlotSummary,
+  CapacityVariant,
   DropRow,
   DAGNode,
   DAGChildRef,

@@ -6,6 +6,7 @@
     "@headlessui/vue": "^1.7.23",
     "@heroicons/vue": "^1.0.6",
     "copy-text-to-clipboard": "^3.2.2",
+    "highs": "^1.15.2",
     "lib": "workspace:^",
     "scroll-into-view-if-needed": "^3.1.0",
     "tippy.js": "^6.3.7",
@@ -18,8 +19,8 @@
     "@tailwindcss/forms": "^0.5.10",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitejs/plugin-vue-jsx": "^5.1.5",
-    "@vue/compiler-sfc": "^3.5.32",
     "@vitest/coverage-v8": "^4.1.8",
+    "@vue/compiler-sfc": "^3.5.32",
     "autoprefixer": "^10.4.27",
     "pinia": "^3.0.4",
     "postcss": "^8.5.8",
@@ -34,13 +35,15 @@
     "build": "vue-tsc --noEmit && vite build",
     "dev": "vite",
     "fastbuild": "vite build",
-    "lint": "eslint --ext .js,.ts,.vue src",
+    "lint": "eslint --ext .js,.ts,.vue src tests",
     "serve": "vite preview",
-    "format": "prettier --write \"src/**/*.{js,ts,vue}\"",
+    "format": "prettier --write \"{src,tests}/**/*.{js,ts,vue}\"",
     "test": "vitest run",
-    "test:oracle": "RUN_ORACLE=1 vitest run src/oracle/optimizer-oracle.spec.ts --disable-console-intercept",
+    "test:oracle": "RUN_ORACLE=1 vitest run tests/oracle/optimizer-oracle.spec.ts --disable-console-intercept",
+    "arena": "ARENA=${ARENA:-smoke} vitest run tests/arena/invariants.spec.ts --disable-console-intercept",
+    "arena:check": "vitest run tests/arena/independence.spec.ts",
     "coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "repro": "vitest run src/oracle/repro.spec.ts --disable-console-intercept"
+    "repro": "vite-node -c vitest.config.ts tests/oracle/repro.ts --"
   }
 }

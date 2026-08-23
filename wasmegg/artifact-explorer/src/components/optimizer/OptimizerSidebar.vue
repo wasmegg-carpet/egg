@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-5">
-    <!-- Player data -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Player data</h3>
       <player-id-form :player-id="playerId" @submit="$emit('submitPlayerId', $event)" />
@@ -12,7 +11,6 @@
       </div>
     </section>
 
-    <!-- Constraints -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Constraints</h3>
       <div class="space-y-3">
@@ -109,6 +107,79 @@
           </p>
         </div>
 
+        <div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              :checked="missionFilters.maxGoldenEggCostEnabled"
+              @change="setMaxGoldenEggCostEnabled(($event.target as HTMLInputElement).checked)"
+            />
+            Maximum crafting cost
+          </label>
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              aria-label="Maximum crafting cost in golden eggs"
+              :disabled="!missionFilters.maxGoldenEggCostEnabled"
+              :value="maxGoldenEggCostDisplay"
+              placeholder="e.g. 25M"
+              class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
+              @input="onGoldenEggCostInput($event)"
+            />
+            <!-- The unit lives in the input's aria-label; the icon repeats it visually. -->
+            <base-icon
+              icon-rel-path="egginc-extras/icon_golden_egg.png"
+              :size="64"
+              class="h-4 w-4"
+              aria-hidden="true"
+            />
+          </div>
+          <p v-if="missionFilters.maxGoldenEggCostEnabled" class="mt-1 text-xs text-gray-400">
+            Cap the golden eggs the plan's crafts may cost, at your own crafting prices
+          </p>
+          <p v-else-if="playerGoldenEggs !== null" class="mt-1 text-xs text-gray-400">
+            Your balance, until you turn this on and set your own
+          </p>
+        </div>
+
+        <div>
+          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              :checked="missionFilters.doubleCapacityEnabled"
+              @change="setDoubleCapacityEnabled(($event.target as HTMLInputElement).checked)"
+            />
+            2× mission capacity event
+          </label>
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              aria-label="Time left in the 2x mission capacity event"
+              :disabled="!missionFilters.doubleCapacityEnabled"
+              :value="doubleCapacityDraft"
+              placeholder="e.g. 48h, 3h30m"
+              class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
+              @input="onDoubleCapacityInput(($event.target as HTMLInputElement).value)"
+              @blur="onDoubleCapacityBlur"
+            />
+            <span class="text-xs text-gray-500">left</span>
+          </div>
+          <p v-if="missionFilters.doubleCapacityEnabled && doubleCapacityInvalid" class="mt-1 text-xs text-red-500">
+            Enter a positive duration (e.g. 48h, 3h30m)
+          </p>
+          <p
+            v-else-if="missionFilters.doubleCapacityEnabled && doubleCapacityTruncated"
+            class="mt-1 text-xs text-gray-400"
+          >
+            The event runs 48h, so that is all this plan counts on
+          </p>
+          <p v-else-if="missionFilters.doubleCapacityEnabled" class="mt-1 text-xs text-gray-400">
+            Missions launched within this long carry double capacity
+          </p>
+        </div>
+
         <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
           <input
             id="sidebar_show_nodata"
@@ -121,7 +192,6 @@
       </div>
     </section>
 
-    <!-- Settings -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Settings</h3>
       <div class="divide-y divide-gray-100">
@@ -189,7 +259,6 @@
       </div>
     </section>
 
-    <!-- Ships -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Ships</h3>
       <div class="text-sm text-gray-600 mb-2">{{ shipsVisibleCount }} of {{ totalShips }} ships visible</div>
@@ -202,7 +271,6 @@
       </button>
     </section>
 
-    <!-- Compute -->
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Compute</h3>
       <label class="flex items-center gap-2 text-sm mb-2 select-none text-gray-600 cursor-pointer">
@@ -251,6 +319,7 @@ import {
   parseValueWithUnit,
   spaceshipList,
 } from 'lib';
+import BaseIcon from 'ui/components/BaseIcon.vue';
 import BaseInput from 'ui/components/BaseInput.vue';
 import PlayerIdForm from 'ui/components/PlayerIdForm.vue';
 import LootDataCredit from '@/components/LootDataCredit.vue';
@@ -260,14 +329,17 @@ import {
   autoCompute,
   config,
   currentOptimizerArtifactIds,
+  DEFAULT_DOUBLE_CAPACITY_REMAINING,
   effectiveConfig,
   EFFORT_LEVELS,
   type EffortLevel,
   extras,
+  MAX_DOUBLE_CAPACITY_SECONDS,
   missionFilters,
   openPlayerOverridesModal,
   overrides,
   playerCraftingLevel,
+  playerGoldenEggs,
   playerPreviousCrafts,
   playerPreviousCraftsByArtifact,
   playerShipsConfig,
@@ -279,6 +351,10 @@ import {
   setEpicResearchZerogLevel,
   setMaxGemCost,
   setMaxGemCostEnabled,
+  setMaxGoldenEggCost,
+  setDoubleCapacityEnabled,
+  setDoubleCapacityRemaining,
+  setMaxGoldenEggCostEnabled,
   setOverrideCraftingLevel,
   setOverrideFTL,
   setOverridePreviousCrafts,
@@ -312,7 +388,7 @@ const effortMeta: Record<EffortLevel, { short: string; label: string; hint: stri
 };
 
 export default defineComponent({
-  components: { BaseInput, PlayerIdForm, LootDataCredit, OptimizerSettingRow },
+  components: { BaseIcon, BaseInput, PlayerIdForm, LootDataCredit, OptimizerSettingRow },
   props: {
     playerId: { type: String, default: '' },
     pendingCompute: { type: Boolean, required: true },
@@ -339,6 +415,39 @@ export default defineComponent({
       emit('update:waitTimeDays', value);
     }
 
+    // Same draft-and-normalize-on-blur handling as the time budget above.
+    const doubleCapacityDraft = ref(missionFilters.value.doubleCapacityRemaining);
+    watch(
+      () => missionFilters.value.doubleCapacityRemaining,
+      v => {
+        doubleCapacityDraft.value = v;
+      }
+    );
+    const doubleCapacityInvalid = computed(() => {
+      const seconds = parseDurationDays(doubleCapacityDraft.value);
+      return !(Number.isFinite(seconds) && seconds > 0);
+    });
+
+    const doubleCapacityTruncated = computed(
+      () => parseDurationDays(doubleCapacityDraft.value) > MAX_DOUBLE_CAPACITY_SECONDS
+    );
+
+    function onDoubleCapacityInput(value: string) {
+      doubleCapacityDraft.value = value;
+      setDoubleCapacityRemaining(value);
+    }
+
+    // A truncated entry lands on the literal '48h' rather than the normalizer's '2d', so the field echoes
+    // back the length the note beside it names.
+    function onDoubleCapacityBlur() {
+      if (!isDurationNormalizable(doubleCapacityDraft.value)) return;
+      const seconds = parseDurationDays(doubleCapacityDraft.value);
+      const normalized =
+        seconds >= MAX_DOUBLE_CAPACITY_SECONDS ? DEFAULT_DOUBLE_CAPACITY_REMAINING : formatDuration(seconds, true);
+      doubleCapacityDraft.value = normalized;
+      setDoubleCapacityRemaining(normalized);
+    }
+
     function onWaitTimeBlur() {
       if (!isDurationNormalizable(waitTimeDraft.value)) {
         // keep the text as typed rather than overwrite it with e.g. '>100yr'
@@ -352,7 +461,6 @@ export default defineComponent({
     const maxTankLevel = fuelTankSizes.length - 1;
     const hasPlayerData = computed(() => !!playerShipsConfig.value);
 
-    // Shown when the override is off, in which case each target uses its own.
     const previousCraftEntries = computed(() =>
       currentOptimizerArtifactIds.value
         .filter(id => playerPreviousCraftsByArtifact.value.has(id))
@@ -428,17 +536,23 @@ export default defineComponent({
       e.preventDefault();
     }
 
-    // Shown value for the gem cost filter, in Egg, Inc. order-of-magnitude
-    // notation (e.g. 10S). Input is parsed back through the same notation.
-    const maxGemCostDisplay = computed(() => formatEIValue(missionFilters.value.maxGemCost, { trim: true }));
-
-    function onGemCostInput(event: Event) {
-      const raw = (event.target as HTMLInputElement).value.trim();
-      if (!raw) return;
-      const n = parseValueWithUnit(raw, false);
-      if (n === null || n < 0) return;
-      setMaxGemCost(n);
+    function costFieldHandler(set: (value: number) => void) {
+      return (event: Event) => {
+        const raw = (event.target as HTMLInputElement).value.trim();
+        if (!raw) return;
+        const n = parseValueWithUnit(raw, false);
+        if (n === null || !Number.isFinite(n) || n < 0) return;
+        set(n);
+      };
     }
+
+    const maxGemCostDisplay = computed(() => formatEIValue(missionFilters.value.maxGemCost, { trim: true }));
+    const onGemCostInput = costFieldHandler(setMaxGemCost);
+
+    const maxGoldenEggCostDisplay = computed(() =>
+      formatEIValue(missionFilters.value.maxGoldenEggCost, { trim: true })
+    );
+    const onGoldenEggCostInput = costFieldHandler(setMaxGoldenEggCost);
 
     return {
       waitTimeDraft,
@@ -452,7 +566,14 @@ export default defineComponent({
       shipsVisibleCount,
       maxGemCostDisplay,
       onGemCostInput,
-      // effort slider
+      maxGoldenEggCostDisplay,
+      onGoldenEggCostInput,
+      doubleCapacityDraft,
+      doubleCapacityInvalid,
+      doubleCapacityTruncated,
+      onDoubleCapacityInput,
+      onDoubleCapacityBlur,
+      setDoubleCapacityEnabled,
       EFFORT_LEVELS,
       effortMeta,
       effortTrack,
@@ -462,17 +583,16 @@ export default defineComponent({
       onTrackPointerMove,
       onTrackPointerUp,
       onTrackKeydown,
-      // store state
       config,
       extras,
       overrides,
       missionFilters,
       autoCompute,
       playerCraftingLevel,
+      playerGoldenEggs,
       playerPreviousCrafts,
       playerTankLevel,
       playerShipsConfig,
-      // setters
       setAutoCompute,
       setCraftingLevel,
       setPreviousCraftCount,
@@ -485,6 +605,7 @@ export default defineComponent({
       setOverrideFTL,
       setOverrideZerog,
       setMaxGemCostEnabled,
+      setMaxGoldenEggCostEnabled,
       openPlayerOverridesModal,
     };
   },

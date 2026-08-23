@@ -6,15 +6,19 @@ import {
   type OptimizerRequest,
   type OptimizerResponse,
 } from './optimizer-worker-protocol';
-import type { LaunchOption, OptimizerSolution, RecipeDAG } from './types';
+import type { CraftBudget, LaunchOption, OptimizerSolution, RecipeDAG } from './types';
 
 export interface OptimizerRequestInput {
   options: LaunchOption[];
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
-  timeCapacity: number;
+  timeCapacityPerSlot: number;
+  maximumCost: number | undefined;
   baseYield: Map<string, number>;
+  craftBudget?: CraftBudget;
+  // Seconds of 2x mission capacity remaining.
+  eventWindowSeconds?: number;
 }
 
 export interface OptimizerClient {
