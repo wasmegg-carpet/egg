@@ -1,13 +1,11 @@
 // The mixed-integer program handed to HiGHS: the continuous per-target scale
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
-import type { Model } from './model';
+import { MAX_PER_SLOT, type Model } from './model';
 import { logHit } from '../concave';
 import { INF, type MilpModel } from './types';
 
 export const Q_CERTAIN_PROXY = 1e4;
-
-const MAX_PER_SLOT = 1e6;
 
 // Uncapped on purpose — deliberately not `concave.gPrime`. See SPEC.md section 4.
 function slopeAt(s: number): number {
