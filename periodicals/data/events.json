@@ -28420,5 +28420,23 @@
     "startTimestamp": 1787587200,
     "type": "earnings-boost",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1787760000,
+    "id": "event-8-25",
+    "message": "3x FUELING!",
+    "multiplier": 3,
+    "startTimestamp": 1787673600,
+    "type": "mission-fuel",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1787760000,
+    "id": "ultra-8-25",
+    "message": "15% OFF SHELLS!",
+    "multiplier": 0.85,
+    "startTimestamp": 1787673600,
+    "type": "shell-sale",
+    "ultra": true
   }
 ]
