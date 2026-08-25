@@ -498,7 +498,7 @@
               <span class="whitespace-nowrap">Farmers Without Legendaries</span>.
             </template>
             <template v-else-if="randIndex % 5 === 1">
-              The Secretary of Legendary has launched an investigation into the unusual number of legendaries you
+              The Secretary of Legendaries has launched an investigation into the unusual number of legendaries you
               possess.
             </template>
             <template v-else-if="randIndex % 5 === 2">
