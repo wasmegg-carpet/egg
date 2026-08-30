@@ -28494,6 +28494,15 @@
     "ultra": false
   },
   {
+    "endTimestamp": 1788105600,
+    "id": "ultra-8-29",
+    "message": "3x FUELING!",
+    "multiplier": 3,
+    "startTimestamp": 1788019200,
+    "type": "mission-fuel",
+    "ultra": true
+  },
+  {
     "endTimestamp": 1788192000,
     "id": "event-8-29-2",
     "message": "4x PIGGY GROWTH!",
@@ -28503,12 +28512,12 @@
     "ultra": false
   },
   {
-    "endTimestamp": 1788105600,
-    "id": "ultra-8-29",
-    "message": "3x FUELING!",
-    "multiplier": 3,
-    "startTimestamp": 1788019200,
-    "type": "mission-fuel",
-    "ultra": true
+    "endTimestamp": 1788192000,
+    "id": "event-8-30",
+    "message": "35% OFF EPIC RESEARCH!!",
+    "multiplier": 0.65,
+    "startTimestamp": 1788105600,
+    "type": "epic-research-sale",
+    "ultra": false
   }
 ]
