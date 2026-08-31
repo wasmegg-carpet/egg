@@ -28519,5 +28519,23 @@
     "startTimestamp": 1788105600,
     "type": "epic-research-sale",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1788278400,
+    "id": "event-8-31",
+    "message": "2x EARNINGS!",
+    "multiplier": 2,
+    "startTimestamp": 1788192000,
+    "type": "earnings-boost",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1788278400,
+    "id": "ultra-8-31",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1788192000,
+    "type": "vehicle-sale",
+    "ultra": true
   }
 ]
