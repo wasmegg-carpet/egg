@@ -23,16 +23,29 @@
           </div>
         </div>
       </div>
-      <button
-        v-if="truthEggsStore.hasPendingTE"
-        @click="rollUpPendingTE()"
-        class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all shadow-md shadow-emerald-100 flex items-center gap-2 active:scale-95"
-      >
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        Roll Up Pending
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          v-if="teInputsDifferFromDefault"
+          @click="resetTEInputsToDefault"
+          title="Reset starting TE back to what your backup showed when you loaded the page today"
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all border border-slate-200 flex items-center gap-2 active:scale-95"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Reset to Today's Defaults
+        </button>
+        <button
+          v-if="truthEggsStore.hasPendingTE"
+          @click="rollUpPendingTE()"
+          class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all shadow-md shadow-emerald-100 flex items-center gap-2 active:scale-95"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          Roll Up Pending
+        </button>
+      </div>
     </div>
 
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -89,6 +102,7 @@ import { getArtifactLoadoutFromBackup, getOptimalEarningsSet } from '@/lib/artif
 import { useEarningsClothedTE } from '@/composables/useEarningsClothedTE';
 import { computeSnapshot } from '@/engine/compute';
 import { rollUpPendingTE } from '@/lib/modes';
+import { consumeAutoPlannerTEInputs, saveAutoPlannerTEInputs } from '@/lib/autoPlannerFormCache';
 import type { VirtueEgg } from '@/types';
 
 const VIRTUE_EGGS_MAP: Record<number, VirtueEgg> = {
@@ -105,6 +119,11 @@ const initialStateStore = useInitialStateStore();
 const virtueStore = useVirtueStore();
 const fuelTankStore = useFuelTankStore();
 const silosStore = useSilosStore();
+
+// Snapshot "today's" starting TE — whatever the fresh backup fetch put into the store before this
+// component mounted — so the Reset button below has something to reset back to, independent of
+// whatever gets restored from (or later saved to) the local form cache.
+const defaultTeEarned: Partial<Record<VirtueEgg, number>> = { ...truthEggsStore.teEarned };
 
 const currentTE = computed(() => {
   const snapshot = actionsStore.effectiveSnapshot;
@@ -164,6 +183,7 @@ const handleTEEarnedChange = (egg: VirtueEgg, value: string) => {
 
   truthEggsStore.setTEEarnedWithSync(egg, count);
   syncTEAcrossStores(egg);
+  cacheTEInputs();
 };
 
 const syncTEAcrossStores = async (egg: VirtueEgg) => {
@@ -180,6 +200,52 @@ const syncTEAcrossStores = async (egg: VirtueEgg) => {
   const initialSnapshot = computeSnapshot(baseState, getSimulationContext());
   await actionsStore.setInitialSnapshot(initialSnapshot);
 };
+
+// Restore cached starting TE inputs from a previous visit, if any, so a page reload doesn't wipe
+// out edits the user made to these fields. Applied on top of the fresh backup default captured
+// above as `defaultTeEarned`. `consumeAutoPlannerTEInputs` only returns a value the first time
+// it's called per player per page load, so switching Auto/Manual back and forth (which remounts
+// this component) won't keep reapplying a stale cache on top of fresher state from a backup
+// refresh, plan import, or Manual-mode edit.
+const cachedTEInputs = consumeAutoPlannerTEInputs(initialStateStore.playerId);
+if (cachedTEInputs?.teEarned) {
+  for (const egg of VIRTUE_TE_ORDER) {
+    const cachedValue = cachedTEInputs.teEarned[egg];
+    if (cachedValue !== undefined && cachedValue !== truthEggsStore.teEarned[egg]) {
+      truthEggsStore.setTEEarnedWithSync(egg, cachedValue);
+      syncTEAcrossStores(egg);
+    }
+  }
+}
+
+// Persist starting TE inputs so they survive a page reload. Called explicitly from the actual
+// user-driven entry points below (editing a field, resetting to defaults) rather than from a
+// blanket store watcher, so values that change for other reasons (backup refresh, plan import,
+// Manual-mode sync, rolling up pending TE) don't get cached as if the user had typed them.
+function cacheTEInputs() {
+  saveAutoPlannerTEInputs(initialStateStore.playerId, { teEarned: { ...truthEggsStore.teEarned } });
+}
+
+// Whether any starting TE input has drifted from what the backup showed on load — governs
+// whether the Reset button is shown at all.
+const teInputsDifferFromDefault = computed(() =>
+  VIRTUE_TE_ORDER.some(egg => truthEggsStore.teEarned[egg] !== defaultTeEarned[egg])
+);
+
+/**
+ * Reset all starting TE inputs back to the values the backup showed when the page loaded today,
+ * discarding any manual edits (and the cached copy of them).
+ */
+function resetTEInputsToDefault() {
+  for (const egg of VIRTUE_TE_ORDER) {
+    const value = defaultTeEarned[egg];
+    if (value !== undefined) {
+      truthEggsStore.setTEEarnedWithSync(egg, value);
+      syncTEAcrossStores(egg);
+    }
+  }
+  cacheTEInputs();
+}
 </script>
 
 <style scoped>

@@ -1,6 +1,9 @@
 <template>
-  <div class="px-5 py-4 bg-slate-50/30 border-t border-slate-100/50">
-    <div class="flex items-center justify-between mb-4">
+  <div
+    class="border-t border-slate-100/50"
+    :class="[compact ? 'px-3 py-2' : 'px-5 py-4', hideHeader ? 'bg-amber-50/40' : 'bg-slate-50/30']"
+  >
+    <div v-if="!hideHeader" class="flex items-center justify-between" :class="compact ? 'mb-2' : 'mb-4'">
       <div class="flex items-center gap-2">
         <div
           class="w-5 h-5 rounded-lg bg-amber-50 border border-amber-100 shadow-sm flex items-center justify-center p-1"
@@ -15,23 +18,36 @@
           </svg>
         </div>
         <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Curiosity Summary</span>
-        <div v-if="activeArtifactSet === 'earnings'" class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200/50">
-          <span class="text-[9px] font-black font-mono-premium text-slate-700">{{ formatNumber(hourlyOfflineEarnings, 3) }}</span>
+        <div
+          v-if="activeArtifactSet === 'earnings'"
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200/50"
+        >
+          <span class="text-[9px] font-black font-mono-premium text-slate-700">{{
+            formatNumber(hourlyOfflineEarnings, 3)
+          }}</span>
           <span class="text-[8px] font-black uppercase tracking-widest text-slate-400">/hr</span>
         </div>
-        <div v-else-if="activeArtifactSet === 'elr'" class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200/50">
+        <div
+          v-else-if="activeArtifactSet === 'elr'"
+          class="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200/50"
+        >
           <span class="text-[9px] font-black font-mono-premium text-slate-700">{{ formatNumber(hourlyELR, 3) }}</span>
           <span class="text-[8px] font-black uppercase tracking-widest text-slate-400">/hr</span>
         </div>
       </div>
 
-      <div v-if="totalResearchCost > 0" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50/50 border border-amber-100/50">
+      <div
+        v-if="totalResearchCost > 0"
+        class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50/50 border border-amber-100/50"
+      >
         <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-3 h-3" alt="Gems" />
-        <span class="text-[10px] font-black text-amber-600 tracking-tight">{{ formatGemPrice(totalResearchCost) }}</span>
+        <span class="text-[10px] font-black text-amber-600 tracking-tight">{{
+          formatGemPrice(totalResearchCost)
+        }}</span>
       </div>
     </div>
 
-    <div v-if="summaryItems.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div v-if="summaryItems.length > 0" class="grid grid-cols-1 sm:grid-cols-2" :class="compact ? 'gap-1.5' : 'gap-3'">
       <div v-for="(item, index) in summaryItems" :key="index" class="flex items-center gap-2.5">
         <template v-if="item.isPremium">
           <span
@@ -53,7 +69,10 @@
             <span
               v-for="(part, pIdx) in item.parts"
               :key="pIdx"
-              :class="{ 'cursor-pointer hover:text-amber-600 transition-colors underline decoration-amber-400/30 underline-offset-2': !!part.actionId }"
+              :class="{
+                'cursor-pointer hover:text-amber-600 transition-colors underline decoration-amber-400/30 underline-offset-2':
+                  !!part.actionId,
+              }"
               @click="scrollToAction(part.actionId)"
             >
               {{ part.text }}
@@ -62,8 +81,14 @@
         </template>
       </div>
     </div>
-    <div v-else class="flex flex-col items-center py-4 bg-slate-50/50 rounded-xl border border-dashed border-slate-100">
-      <span class="text-[11px] text-slate-400 italic font-medium">No research purchased in this shift</span>
+    <div
+      v-else
+      class="flex flex-col items-center bg-slate-50/50 rounded-xl border border-dashed border-slate-100"
+      :class="compact ? 'py-2' : 'py-4'"
+    >
+      <span class="text-[11px] text-slate-400 italic font-medium"
+        >No research purchased in this {{ hideHeader ? 'date range' : 'shift' }}</span
+      >
     </div>
   </div>
 </template>
@@ -73,6 +98,7 @@ import { computed } from 'vue';
 import type { Action, BuyResearchPayload } from '@/types';
 import { getResearchById, getResearchByTier } from '@/calculations/commonResearch';
 import { formatGemPrice, formatNumber } from '@/lib/format';
+import { scrollToAndHighlight } from '@/lib/scrollToAndHighlight';
 import { iconURL } from 'lib';
 
 import { useActionsStore } from '@/stores/actions';
@@ -80,6 +106,15 @@ import { useActionsStore } from '@/stores/actions';
 const props = defineProps<{
   headerAction: Action;
   actions: Action[];
+  compact?: boolean;
+  hideHeader?: boolean;
+}>();
+
+const emit = defineEmits<{
+  // Fired instead of scrolling directly when the target action isn't in the DOM yet —
+  // e.g. it's inside a collapsed day in compact view. The ancestor ActionGroup is
+  // responsible for expanding the containing day and retrying the scroll.
+  'scroll-to-action': [actionId: string];
 }>();
 
 const actionsStore = useActionsStore();
@@ -117,12 +152,12 @@ interface SummaryItem {
 
 const scrollToAction = (actionId?: string) => {
   if (!actionId) return;
-  const el = document.getElementById(actionId);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Highlight effect
-    el.classList.add('bg-amber-100/50');
-    setTimeout(() => el.classList.remove('bg-amber-100/50'), 2000);
+  if (document.getElementById(actionId)) {
+    scrollToAndHighlight(actionId);
+  } else {
+    // Not rendered yet — most likely its day is collapsed in compact view. Ask the
+    // ancestor ActionGroup to expand it, then retry.
+    emit('scroll-to-action', actionId);
   }
 };
 

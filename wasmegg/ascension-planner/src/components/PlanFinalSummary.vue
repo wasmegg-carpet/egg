@@ -108,6 +108,29 @@
           <img :src="iconURL('egginc/icon_gift.png', 64)" class="w-5 h-5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" alt="Donate" />
         </button>
 
+        <!-- Force Refresh Button: only on localhost / the staging deploy, for testers who need the
+             latest build (clears any service worker + Cache Storage entries, then reloads with a
+             cache-busting URL). Doesn't touch localStorage/IndexedDB, so saved plans are untouched. -->
+        <button
+          v-if="showTestingTools"
+          class="btn-icon-premium"
+          v-tippy="'Force Refresh (clear cache & reload)'"
+          @click="handleHardReload"
+        >
+          <svg
+            class="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+        </button>
+
         <span class="ml-4 text-[10px] text-slate-400 italic font-medium"
           >Developed by
           <span @click="triggerCat" class="cursor-pointer select-none hover:text-slate-600 transition-colors"
@@ -198,6 +221,7 @@ import { useVirtueStore } from '@/stores/virtue';
 import { type CalculationsSnapshot, type VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { formatNumber } from '@/lib/format';
+import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
 import { iconURL } from 'lib';
 import TeBreakdownModal from '@/components/TeBreakdownModal.vue';
 
@@ -214,6 +238,38 @@ const emit = defineEmits<{
 const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 const showDonateModal = ref(false);
 const showTeModal = ref(false);
+
+// Only surfaced on localhost and the staging deploy — these are testing/bug-reporting tools, not
+// something regular production users should see or need.
+const showTestingTools = isTestingEnvironment;
+
+/**
+ * Clears any service worker registrations and Cache Storage entries, then reloads with a
+ * cache-busting query param so the browser can't serve a stale index.html/JS chunk from its own
+ * HTTP cache either. Deliberately does NOT touch localStorage/IndexedDB — that's where saved plans
+ * and preferences live, and this is meant to fix "I'm not seeing the latest build," not wipe data.
+ */
+async function handleHardReload() {
+  if (!confirm('This clears cached app files and reloads the page. Your saved plans are not affected. Continue?')) {
+    return;
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map(r => r.unregister()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) {
+    console.error('Failed to clear service worker/cache storage before hard reload', e);
+  } finally {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_hardReload', Date.now().toString());
+    window.location.href = url.toString();
+  }
+}
 
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value;
@@ -260,7 +316,9 @@ const formattedDuration = computed(() => {
 });
 
 const endDate = computed(() => {
-  return new Date(startDate.value.getTime() + totalDurationSeconds.value * 1000);
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
+  // `totalDurationSeconds` routinely lands a sub-microsecond residue short of a whole second.
+  return new Date(Math.round(startDate.value.getTime() + totalDurationSeconds.value * 1000));
 });
 
 const shiftCount = computed(() => {

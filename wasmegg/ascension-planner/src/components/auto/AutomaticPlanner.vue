@@ -42,17 +42,28 @@
               </div>
               <div class="space-y-1.5">
                 <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1">Target TE(s)</label>
-                <div class="relative">
-                  <input
-                    ref="targetInput"
-                    v-model="targetTE"
-                    @input="handleTargetTEInput"
-                    @keydown.enter="runGenerate()"
-                    type="text"
-                    class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-black text-slate-900 outline-none focus:border-indigo-500/50 transition-all pr-10"
-                    placeholder="e.g. 300 400 490"
-                  />
-                  <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 font-black text-[10px]">TE</div>
+                <div class="flex items-center gap-3">
+                  <div class="relative flex-1">
+                    <input
+                      ref="targetInput"
+                      v-model="targetTE"
+                      @input="handleTargetTEInput"
+                      @keydown.enter="runGenerate()"
+                      type="text"
+                      class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-black text-slate-900 outline-none focus:border-indigo-500/50 transition-all pr-10"
+                      placeholder="e.g. 300 400 490"
+                    />
+                    <div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 font-black text-[10px]">TE</div>
+                  </div>
+                  <button
+                    v-if="deferForEarningsMode"
+                    type="button"
+                    title="Defer for earnings mode is on — click to turn it off"
+                    class="flex-shrink-0 w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center hover:bg-indigo-100 transition-colors"
+                    @click="deferForEarningsMode = false"
+                  >
+                    <img :src="iconURL('egginc-extras/silo.png', 64)" class="w-5 h-5 object-contain" alt="silo" />
+                  </button>
                 </div>
                 <p class="text-[10px] font-bold text-slate-400 leading-relaxed px-1 mt-2">
                   Enter a sequence of target TEs separated by spaces to generate an entire multi-ascension chain at once.
@@ -79,7 +90,7 @@
 
         <button
           class="btn-premium btn-primary w-full py-4 mt-8 text-sm shadow-xl shadow-indigo-500/20 active:scale-[0.98]"
-          :disabled="isGenerating || !isA1Dirty"
+          :disabled="isGenerating"
           @click="runGenerate()"
         >
           <span v-if="isGenerating">{{ generateProgress || 'Generating Plan...' }}</span>
@@ -92,17 +103,16 @@
             <li><span class="font-semibold">Habs are always full.</span> To keep processing fast, Auto-AP assumes full habs throughout. Results are most reliable once you're around 100 TE and time to fill habs is negligible.</li>
             <li><span class="font-semibold">Your artifacts don't improve.</span> The plan is built around whatever artifacts you have right now — it won't account for better gear you might find later.</li>
             <li><span class="font-semibold">No downtime between ascensions.</span> Each ascension is assumed to start the moment the previous one ends.</li>
-            <li><span class="font-semibold">Only 1-sale and 2-sale builds are considered</span> — except for A1, where continuing your current ascension is also evaluated as an option.</li>
             <li><span class="font-semibold">You never sleep.</span> Auto-AP doesn't do any accounting for sleep hours.</li>
           </ul>
           <p class="text-amber-600 leading-relaxed">Use this as a starting point, not a final word. Your actual results may vary.</p>
 
           <div class="border-t border-amber-200 pt-3 mt-1">
-            <p class="font-bold uppercase tracking-wide text-amber-700 mb-2">Each ascension will have exactly this shift order:</p>
+            <p class="font-bold uppercase tracking-wide text-amber-700 mb-2">Each ascension will have exactly this shift order (except that it will consider CKI vs CIK starts):</p>
             <ul class="space-y-1.5 list-disc list-inside leading-relaxed">
               <li><span class="font-semibold">C1</span> — Spends up to 30 minutes with the primary target being fleet size and Graviton Coupling.</li>
-              <li><span class="font-semibold">K1</span> — Spends up to 30 minutes buying the best vehicles it can afford.</li>
-              <li><span class="font-semibold">I1</span> — Max Chicken Universes.</li>
+              <li><span class="font-semibold">K1</span> — Spends up to 30 minutes buying the best vehicles it can afford. Swaps places with I1 below if I1 can finish in under an hour.</li>
+              <li><span class="font-semibold">I1</span> — Max Chicken Universes. Runs before K1 instead if it can finish in under an hour.</li>
               <li><span class="font-semibold">C2</span> — Maxes fleet size research. If it can afford Graviton Coupling within 4 hours, it does.</li>
               <li><span class="font-semibold">K2</span> — Max Vehicles and Hyperloop Train Cars.</li>
               <li><span class="font-semibold">R1</span> — Buys as many silos as possible within one hour.</li>
@@ -169,8 +179,7 @@
         <template v-for="(result, idx) in bestResults" :key="idx">
           <ForcedAscensionPreview
             v-if="ascensionChain[idx]?.forcedTarget490"
-            :result1="ascensionChain[idx].result1"
-            :result2="ascensionChain[idx].result2"
+            :variants="ascensionChain[idx].variants"
             :index="idx"
             :total="visibleTotal"
           />
@@ -181,12 +190,16 @@
             :index="idx"
             :total="visibleTotal"
             :target-t-e="result.targetTE"
-            :result3-available="result.result3Available"
+            :variants="result.variants"
+            :active-variant-key="result.variantKey"
             :result3-skipped-reason="result.result3SkippedReason"
             :is-saving-single="savingIndex === idx"
             :save-single-success="savedIndex === idx"
-            @set-plan-variant="(variant: 'continue' | '1-sale' | '2-sale') => handleSetPlanVariant(idx, variant)"
+            :timezone="timezone"
+            :has-end-time-override="autoPlannerStore.endTimeOverrides[idx] !== undefined"
+            @set-plan-variant="(variant: VariantKey) => handleSetPlanVariant(idx, variant)"
             @save-single-to-library="saveSingleAscensionToLibrary(idx)"
+            @override-end-time="(endTime: number | null) => handleSetEndTimeOverride(idx, endTime)"
           />
         </template>
       </div>
@@ -220,11 +233,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useAutoPlannerStore } from '@/stores/autoPlanner';
+import { useAutoPlannerStore, type VariantKey } from '@/stores/autoPlanner';
 import { useVirtueStore } from '@/stores/virtue';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useAscensionGenerator } from '@/auto/useAscensionGenerator';
 import { useEarningsClothedTE } from '@/composables/useEarningsClothedTE';
+import { loadAutoPlannerSchedule, saveAutoPlannerSchedule } from '@/lib/autoPlannerFormCache';
+import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
+import { iconURL } from 'lib';
 import SchedulingInputs from './SchedulingInputs.vue';
 import VirtueProgressSection from './VirtueProgressSection.vue';
 import ChainSummaryBar from './ChainSummaryBar.vue';
@@ -237,7 +253,7 @@ const autoPlannerStore = useAutoPlannerStore();
 const virtueStore = useVirtueStore();
 const truthEggsStore = useTruthEggsStore();
 
-const { ascensionChain, timezone, startDate, startTime, targetTE } = storeToRefs(autoPlannerStore);
+const { ascensionChain, timezone, startDate, startTime, targetTE, deferForEarningsMode } = storeToRefs(autoPlannerStore);
 
 // The forced-490 ascension is a silent bonus card — don't count it in the "A1 of N" denominator.
 const visibleTotal = computed(() => {
@@ -250,6 +266,18 @@ const showLowClothedTEWarning = computed(() => earningsClothedTe.value !== null 
 
 const targetInput = ref<HTMLInputElement | null>(null);
 const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+// Restore a cached form (start date/time/timezone, target TE) from a previous visit, if any,
+// so a page reload doesn't wipe out what the user had entered. This runs before the defaulting
+// logic below, which only fills in fields that are still empty.
+const cachedSchedule = loadAutoPlannerSchedule();
+if (cachedSchedule) {
+  if (cachedSchedule.timezone) timezone.value = cachedSchedule.timezone;
+  if (cachedSchedule.startDate) startDate.value = cachedSchedule.startDate;
+  if (cachedSchedule.startTime) startTime.value = cachedSchedule.startTime;
+  if (cachedSchedule.targetTE) targetTE.value = cachedSchedule.targetTE;
+  if (cachedSchedule.deferForEarningsMode && isTestingEnvironment) deferForEarningsMode.value = true;
+}
 
 // Initialize timezone default
 if (!timezone.value) {
@@ -283,6 +311,17 @@ watch(
   { immediate: true }
 );
 
+// Persist the form (start date/time/timezone, target TE, defer for earnings mode) so it survives a page reload.
+watch([timezone, startDate, startTime, targetTE, deferForEarningsMode], () => {
+  saveAutoPlannerSchedule({
+    timezone: timezone.value,
+    startDate: startDate.value,
+    startTime: startTime.value,
+    targetTE: targetTE.value,
+    deferForEarningsMode: deferForEarningsMode.value,
+  });
+});
+
 const {
   isGenerating,
   isExporting,
@@ -293,9 +332,8 @@ const {
   isValidationErrorOpen,
   validationErrorMessage,
   copySuccess,
-  isA1Dirty,
   bestResults,
-  generate,
+  regeneratePlan,
   copySummary,
   exportCurrentPlan,
   saveToLibrary,
@@ -303,15 +341,23 @@ const {
   savedIndex,
   saveSingleAscensionToLibrary,
   handleSetPlanVariant,
+  handleSetEndTimeOverride,
 } = useAscensionGenerator();
 
+// The main Generate/Update Plan button (and Enter in the Target TE field) always starts fresh —
+// see `regeneratePlan`'s own doc comment for why it clears both override maps rather than trying to
+// detect what actually changed. Per-ascension overrides (variant dropdown, end-time editor) still
+// regenerate surgically via their own handlers, which call `generate()` directly.
 const runGenerate = () => {
   console.clear();
-  generate(() => nextTick(() => targetInput.value?.focus()));
+  regeneratePlan(() => nextTick(() => targetInput.value?.focus()));
 };
 
 const handleTargetTEInput = (e: Event) => {
   const input = e.target as HTMLInputElement;
+  if (isTestingEnvironment && /g/i.test(input.value)) {
+    deferForEarningsMode.value = true;
+  }
   const formatted = input.value.replace(/\D+/g, ' ');
   targetTE.value = formatted.replace(/^\s+/, '').replace(/\s{2,}/g, ' ');
 };

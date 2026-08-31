@@ -15,12 +15,18 @@
  * 2. Capture live comparison targets BEFORE plan import overwrites stores
  * 3. Load plan from library (overwrites stores with plan data via hydrate)
  * 4. Set reconciliation mode and comparison targets
+ * 5. Re-assert the live backup — step 3's hydrate reads the *plan's own*
+ *    `rawBackup` (a redacted, possibly stale snapshot from whenever the plan
+ *    was last saved — see `redactBackupForStorage`) and would otherwise
+ *    silently replace the live one step 1 fetched, contradicting this mode's
+ *    whole point of comparing against *live* data.
  */
 
 import { resetAllStores } from './reset';
 import { fetchPlayerBackup } from './fetchBackup';
 import { loadAndSyncBackup, captureReconciliationTargets } from './utils';
 import { useActionsStore } from '@/stores/actions';
+import { useInitialStateStore } from '@/stores/initialState';
 import type { PlanData } from '@/lib/storage/db';
 
 export async function initReconcile(
@@ -54,6 +60,9 @@ export async function initReconcile(
   // 7. Load the plan from library — this overwrites stores with plan data
   //    (importPlanLogic → hydrate overwrites initialStateStore, virtue, fuelTank, truthEggs, notes)
   await actionsStore.loadPlanFromLibrary(plan);
+
+  // 8. Re-assert the live backup fetched in step 2 — see the module doc comment's ordering note.
+  useInitialStateStore().rawBackup = backup;
 }
 
 /**

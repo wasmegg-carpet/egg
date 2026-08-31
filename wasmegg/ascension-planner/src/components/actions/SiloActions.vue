@@ -108,7 +108,7 @@
                   >1-Hr Max</span
                 >
                 <span class="text-[9px] font-mono-premium font-black text-violet-500 mt-0.5">
-                  {{ maxSilosIn1Hour.count }} silo{{ maxSilosIn1Hour.count !== 1 ? 's' : '' }} ·
+                  {{ maxSilosIn1Hour.count }} new silo{{ maxSilosIn1Hour.count !== 1 ? 's' : '' }} ·
                   {{ formatDuration(maxSilosIn1Hour.seconds) }}
                 </span>
               </div>
@@ -195,7 +195,7 @@
 
 <script setup lang="ts">
 import { useSiloTime } from '@/composables/useSiloTime';
-import { useSilosStore, nextSiloCost, MAX_SILOS } from '@/stores/silos';
+import { useSilosStore } from '@/stores/silos';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
@@ -205,6 +205,7 @@ import { generateActionId } from '@/types';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computed } from 'vue';
 import { getTimeToSave } from '@/engine/apply';
+import { planSilosWithinBudget } from '@/calculations/siloPurchasePlan';
 
 const ONE_HOUR_SECONDS = 3600;
 
@@ -226,36 +227,8 @@ const timeToBuy = computed(() => {
 // Simulate buying silos back-to-back (waiting to save up gems between purchases)
 // to see how many fit within a 1-hour window.
 const maxSilosIn1Hour = computed<{ count: number; seconds: number }>(() => {
-  const snapshot = actionsStore.effectiveSnapshot;
-  let virtualSnapshot = { ...snapshot };
-  let elapsedSeconds = 0;
-  let count = 0;
-  let currentSiloCount = siloOutput.value.siloCount;
-
-  while (currentSiloCount < MAX_SILOS) {
-    const cost = nextSiloCost(currentSiloCount);
-    const seconds = getTimeToSave(cost, virtualSnapshot);
-    if (!isFinite(seconds) || elapsedSeconds + seconds > ONE_HOUR_SECONDS) break;
-
-    elapsedSeconds += seconds;
-
-    // Advance virtual population/earnings state during the wait
-    const I = virtualSnapshot.offlineIHR / 60;
-    virtualSnapshot.population = Math.min(virtualSnapshot.habCapacity, virtualSnapshot.population + I * seconds);
-    const layRatePerChicken = snapshot.population > 0 ? snapshot.layRate / snapshot.population : 0;
-    virtualSnapshot.layRate = virtualSnapshot.population * layRatePerChicken;
-    virtualSnapshot.elr = Math.min(virtualSnapshot.layRate, virtualSnapshot.shippingCapacity);
-    const earningsPerEgg = snapshot.elr > 0 ? snapshot.offlineEarnings / snapshot.elr : 0;
-    virtualSnapshot.offlineEarnings = virtualSnapshot.elr * earningsPerEgg;
-
-    // Bank is spent down to exactly cover the purchase
-    virtualSnapshot.bankValue = seconds > 0 ? 0 : Math.max(0, (virtualSnapshot.bankValue || 0) - cost);
-
-    currentSiloCount++;
-    count++;
-  }
-
-  return { count, seconds: elapsedSeconds };
+  const plan = planSilosWithinBudget(actionsStore.effectiveSnapshot, siloOutput.value.siloCount, ONE_HOUR_SECONDS);
+  return { count: plan.steps.length, seconds: plan.totalSeconds };
 });
 
 async function handleBuySilo() {

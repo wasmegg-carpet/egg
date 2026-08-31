@@ -22,40 +22,42 @@
         </div>
       </div>
 
-      <!-- Peak ELR row -->
-      <div class="flex items-center gap-3 mb-4 px-1">
+      <!-- Peak ELR row. Minimal/unstyled list of whatever variants are present — visual layout for
+           up to 7 variants is deferred to a later pass. -->
+      <div class="flex items-center gap-3 mb-4 px-1 flex-wrap">
         <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Peak Delivery Rate</span>
-        <div class="flex items-center gap-1.5">
-          <span class="text-[9px] font-black text-slate-500 uppercase tracking-wider">1-sale</span>
-          <span class="text-[13px] font-mono-premium font-black text-indigo-600">
-            {{ formatNumber(result1.summary.maxELR * 3600, 3) }}
-          </span>
-          <span class="text-[9px] font-black text-slate-400">/hr</span>
-        </div>
-        <div class="w-px h-4 bg-slate-200"></div>
-        <div class="flex items-center gap-1.5">
-          <span class="text-[9px] font-black text-slate-500 uppercase tracking-wider">2-sale</span>
-          <span class="text-[13px] font-mono-premium font-black text-indigo-600">
-            {{ formatNumber(result2.summary.maxELR * 3600, 3) }}
-          </span>
-          <span class="text-[9px] font-black text-slate-400">/hr</span>
-        </div>
+        <template v-for="(entry, i) in presentVariants" :key="entry.key">
+          <div v-if="i > 0" class="w-px h-4 bg-slate-200"></div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[9px] font-black text-slate-500 uppercase tracking-wider">{{ entry.key }}</span>
+            <span class="text-[13px] font-mono-premium font-black text-indigo-600">
+              {{ formatNumber(entry.result.summary.maxELR * 3600, 3) }}
+            </span>
+            <span class="text-[9px] font-black text-slate-400">/hr</span>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { formatNumber } from '@/lib/format';
-import type { AscensionSummary } from '@/auto/types';
-import type { Action } from '@/types/actions/meta';
+import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 
-defineProps<{
-  result1: { summary: AscensionSummary; actions: Action[] };
-  result2: { summary: AscensionSummary; actions: Action[] };
+const props = defineProps<{
+  variants: Partial<Record<VariantKey, VariantResult>>;
   index: number;
   total: number;
 }>();
+
+const presentVariants = computed(() =>
+  (Object.entries(props.variants) as [VariantKey, VariantResult | undefined][])
+    .filter((entry): entry is [VariantKey, VariantResult] => !!entry[1])
+    .sort((a, b) => a[1].summary.totalDurationSeconds - b[1].summary.totalDurationSeconds)
+    .map(([key, result]) => ({ key, result }))
+);
 </script>
 
 <style scoped>

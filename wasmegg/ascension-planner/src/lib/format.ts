@@ -4,6 +4,28 @@
  */
 
 /**
+ * Converts an absolute Unix timestamp in SECONDS into a `Date`, rounding to the nearest millisecond
+ * first instead of handing the raw product straight to `new Date()`.
+ *
+ * Every one of these timestamps is, in practice, the sum of a base start time plus a chain of
+ * accumulated purchase/wait durations — ordinary floating-point addition across hundreds of steps
+ * routinely leaves a sub-microsecond residue even when the "true" value is exactly a whole second
+ * (see `BOUNDARY_EPSILON_SECONDS` in `lib/events.ts` for why that's expected and harmless to
+ * price/timing decisions). The problem is specifically `new Date(ms)`: per spec it TRUNCATES a
+ * fractional millisecond value toward zero rather than rounding, so a timestamp landing at, say,
+ * `X.9999998601` seconds — 140 nanoseconds short of an exact sale boundary — displays as `X:59.999`,
+ * a full second early, which any HH:MM-only view then renders as a full minute early. Rounding here
+ * makes the display match the value's actual (sub-microsecond) precision instead of its worst case.
+ *
+ * Use this instead of a bare `new Date(seconds * 1000)` for any user-facing display of a COMPUTED
+ * timestamp (anything derived from `lastStepTime`, action durations, etc.) — not needed for genuinely
+ * literal/already-integer timestamps (e.g. `Date.now()`, a stored millisecond field).
+ */
+export function secondsToDate(seconds: number): Date {
+  return new Date(Math.round(seconds * 1000));
+}
+
+/**
  * Format a large number with suffixes (K, M, B, T, etc.) or scientific notation.
  *
  * @param value - The number to format
@@ -164,6 +186,16 @@ export function formatMultiplier(value: number, asPercent: boolean = false): str
 export function formatDuration(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return '∞';
 
+  // Round to the nearest whole second up front — every branch below floors seconds into minutes,
+  // then minutes into hours, then hours into days, and this function never shows sub-second
+  // precision anyway. Without this, a value that's THEORETICALLY exact (e.g. a duration
+  // back-derived as `gems / gemsPerSecond` from a delta that was itself `gemsPerSecond * exactSeconds`)
+  // but lands a sub-microsecond epsilon under a whole unit due to the two floating-point ops not
+  // perfectly inverting each other gets floored down a full unit at every level it cascades through
+  // — confirmed in the wild: a 27h-exact silo credit displaying as "1d 2h" (26h) instead of "1d 3h"
+  // (27h) because 27h's worth of seconds landed at 97199.99999999999, not 97200.
+  seconds = Math.round(seconds);
+
   if (seconds < 60) {
     return `${Math.round(seconds)}s`;
   }
@@ -203,7 +235,11 @@ export function formatDuration(seconds: number): string {
 export function formatAbsoluteTime(seconds: number, baseTimestamp?: number, timeZone?: string): string {
   if (!isFinite(seconds)) return '∞';
   const start = baseTimestamp ?? Date.now();
-  const date = new Date(start + seconds * 1000);
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment for why a
+  // sub-millisecond float residue (routine after accumulating many purchases/waits) needs rounding
+  // rather than truncation here, or a value a fraction of a second short of a whole second displays
+  // as a full second (and, in an HH:MM-only view, a full minute) early.
+  const date = new Date(Math.round(start + seconds * 1000));
   return date.toLocaleString(undefined, {
     weekday: 'short',
     month: 'short',

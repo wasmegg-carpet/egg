@@ -126,7 +126,9 @@ const props = defineProps<{
 }>();
 
 const formatTime = (ts: number) => {
-  return new Date(ts * 1000).toLocaleString('en-US', {
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
+  // `ts` routinely lands a sub-microsecond residue short of a whole second.
+  return new Date(Math.round(ts * 1000)).toLocaleString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

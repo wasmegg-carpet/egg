@@ -99,50 +99,108 @@ const earningsBoostWait = computed(() => {
 
 async function handleWaitResearchSale() {
   await batch(async () => {
-    // 1. Add Wait Action
-    const waitBefore = prepareExecution();
-    const waitId = generateActionId();
-    const waitPayload = { totalTimeSeconds: researchSaleWait.value };
+    // Chains each new action off the previous one so ordering (and undo) stays correct.
+    // The very first action instead depends on whatever preceded this batch.
+    let lastId: string | null = null;
 
-    await completeExecution(
-      {
-        id: waitId,
-        timestamp: Date.now(),
-        type: 'wait_for_research_sale',
-        payload: waitPayload,
-        cost: 0,
-        dependsOn: computeDependencies(
-          'wait_for_research_sale',
-          waitPayload,
-          actionsStore.actionsBeforeInsertion,
-          actionsStore.initialSnapshot.researchLevels
-        ),
-      },
-      waitBefore
-    );
+    async function addWait(type: 'wait_for_time' | 'wait_for_research_sale' | 'wait_for_earnings_boost', totalTimeSeconds: number) {
+      const before = prepareExecution();
+      const id = generateActionId();
+      const payload = { totalTimeSeconds: Math.max(0, totalTimeSeconds) };
 
-    // 2. Add Toggle Action
-    const toggleBefore = prepareExecution();
-    const togglePayload = {
-      saleType: 'research' as const,
-      active: true,
-      multiplier: 0.3,
-    };
+      await completeExecution(
+        {
+          id,
+          timestamp: Date.now(),
+          type,
+          payload,
+          cost: 0,
+          dependsOn: lastId
+            ? [lastId]
+            : computeDependencies(
+                type,
+                payload,
+                actionsStore.actionsBeforeInsertion,
+                actionsStore.initialSnapshot.researchLevels
+              ),
+        },
+        before
+      );
+      lastId = id;
+    }
 
-    // Apply side effect to store
-    salesStore.setSaleActive('research', true);
+    async function addToggleEarningsBoost(active: boolean) {
+      const before = prepareExecution();
+      const id = generateActionId();
+      const payload = { active, multiplier: 2 };
 
-    await completeExecution(
-      {
-        id: generateActionId(),
-        timestamp: Date.now() + 1,
-        type: 'toggle_sale',
-        payload: togglePayload,
-        cost: 0,
-        dependsOn: [waitId], // This ensures it stays after the wait
-      },
-      toggleBefore
-    );
+      salesStore.setEarningsBoost(active, active ? 2 : 1);
+
+      await completeExecution(
+        {
+          id,
+          timestamp: Date.now() + 1,
+          type: 'toggle_earnings_boost',
+          payload,
+          cost: 0,
+          dependsOn: lastId ? [lastId] : [],
+        },
+        before
+      );
+      lastId = id;
+    }
+
+    async function addToggleResearchSale(active: boolean) {
+      const before = prepareExecution();
+      const id = generateActionId();
+      const payload = { saleType: 'research' as const, active, multiplier: 0.3 };
+
+      salesStore.setSaleActive('research', active);
+
+      await completeExecution(
+        {
+          id,
+          timestamp: Date.now() + 1,
+          type: 'toggle_sale',
+          payload,
+          cost: 0,
+          dependsOn: lastId ? [lastId] : [],
+        },
+        before
+      );
+      lastId = id;
+    }
+
+    const startTime = absoluteSimTime.value;
+    const researchSaleTarget = getNextPacificTime(5, 9, startTime);
+    const boostActive = actionsStore.effectiveSnapshot.earningsBoost.active;
+
+    if (boostActive) {
+      // 2x Earnings is already running: ride it out to 9AM the next morning, end it,
+      // then keep waiting for the research sale.
+      const boostEnd = getNextPacificTime(2, 9, startTime);
+      await addWait('wait_for_time', boostEnd - startTime);
+      await addToggleEarningsBoost(false);
+      await addWait('wait_for_research_sale', researchSaleTarget - boostEnd);
+      await addToggleResearchSale(true);
+    } else {
+      const boostStart = getNextPacificTime(1, 9, startTime);
+      if (boostStart < researchSaleTarget) {
+        // 2x Earnings will start before the research sale does: wait for it, start it,
+        // ride out the full 24h, end it, then keep waiting for the research sale.
+        const boostEnd = getNextPacificTime(2, 9, boostStart);
+        await addWait('wait_for_earnings_boost', boostStart - startTime);
+        await addToggleEarningsBoost(true);
+        await addWait('wait_for_time', boostEnd - boostStart);
+        await addToggleEarningsBoost(false);
+        await addWait('wait_for_research_sale', researchSaleTarget - boostEnd);
+        await addToggleResearchSale(true);
+      } else {
+        // No overlap with 2x Earnings — just wait for the research sale.
+        await addWait('wait_for_research_sale', researchSaleTarget - startTime);
+        await addToggleResearchSale(true);
+      }
+    }
   });
 }
 
