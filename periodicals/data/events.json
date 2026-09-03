@@ -28573,5 +28573,14 @@
     "startTimestamp": 1788364800,
     "type": "drone-boost",
     "ultra": true
+  },
+  {
+    "endTimestamp": 1788537600,
+    "id": "event-9-3",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1788451200,
+    "type": "vehicle-sale",
+    "ultra": false
   }
 ]
