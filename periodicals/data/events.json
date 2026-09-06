@@ -28618,5 +28618,23 @@
     "startTimestamp": 1788624000,
     "type": "piggy-boost",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1788796800,
+    "id": "event-9-6",
+    "message": "30% OFF CRAFTING!",
+    "multiplier": 0.7,
+    "startTimestamp": 1788710400,
+    "type": "crafting-sale",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1788796800,
+    "id": "ultra-9-6",
+    "message": "2x GIFTS!",
+    "multiplier": 2,
+    "startTimestamp": 1788710400,
+    "type": "gift-boost",
+    "ultra": true
   }
 ]
