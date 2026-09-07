@@ -1,17 +1,31 @@
 <template>
   <div
     :id="action.id"
-    class="px-3 sm:px-5 py-2 sm:py-3 flex flex-col gap-1 transition-colors"
-    :class="isStartAction ? 'bg-slate-50/80 border-l-4 border-brand-primary' : 'hover:bg-slate-50/50'"
+    class="transition-colors"
+    :class="[
+      compact ? 'px-2 py-0.5 flex items-center' : 'px-3 sm:px-5 py-2 sm:py-3 flex flex-col gap-1',
+      isStartAction
+        ? compact
+          ? 'bg-slate-50/80 border-l-2 border-brand-primary'
+          : 'bg-slate-50/80 border-l-4 border-brand-primary'
+        : 'hover:bg-slate-50/50',
+    ]"
   >
     <!-- Top Row: Icon, Name, Time, Recon, Undo -->
-    <div class="flex items-center gap-2 sm:gap-3">
+    <div class="flex items-center w-full" :class="compact ? 'gap-1.5' : 'gap-2 sm:gap-3'">
       <!-- Action Icon (Small) -->
       <div
         v-if="actionIconPath"
-        class="h-6 flex-shrink-0 border border-slate-100 p-0.5 shadow-inner overflow-hidden flex items-center justify-center"
+        class="flex-shrink-0 border border-slate-100 shadow-inner overflow-hidden flex items-center justify-center"
         :class="[
-          isVehicleAction ? 'w-auto min-w-[1.5rem] rounded-lg' : 'w-6 rounded-full',
+          compact ? 'h-4 p-0' : 'h-6 p-0.5',
+          isVehicleAction
+            ? compact
+              ? 'w-auto min-w-[1rem] rounded-lg'
+              : 'w-auto min-w-[1.5rem] rounded-lg'
+            : compact
+              ? 'w-4 rounded-full'
+              : 'w-6 rounded-full',
           isMissionAction || actionIconPath === 'egginc-extras/icon_research_sale.png'
             ? 'bg-slate-900 shadow-lg'
             : 'bg-white shadow-sm',
@@ -26,8 +40,8 @@
 
       <!-- Name -->
       <div
-        class="flex-1 min-w-0 text-xs sm:text-sm font-bold truncate flex items-center gap-1.5"
-        :class="isStartAction ? 'text-slate-800' : 'text-slate-700'"
+        class="flex-1 min-w-0 font-bold truncate flex items-center gap-1.5"
+        :class="[compact ? 'text-[10px]' : 'text-xs sm:text-sm', isStartAction ? 'text-slate-800' : 'text-slate-700']"
       >
         <span v-if="eggType" class="text-[9px] uppercase font-black text-slate-400 tracking-widest">
           {{ action.type === 'start_ascension' ? 'Start:' : 'Egg:' }}
@@ -64,7 +78,11 @@
       <!-- Actions (Recon + Undo) -->
       <div class="flex items-center gap-1 shrink-0">
         <!-- Recon Status -->
-        <div v-if="actionsStore.isReconciling" class="flex items-center justify-center w-5 sm:w-6">
+        <div
+          v-if="actionsStore.isReconciling"
+          class="flex items-center justify-center"
+          :class="compact ? 'w-4' : 'w-5 sm:w-6'"
+        >
           <!-- Manual completion / Unaudiated -->
           <div
             v-if="isManuallyCompleted || reconciliationStatus === 'na' || reconciliationStatus === 'pending'"
@@ -125,7 +143,8 @@
         <button
           v-if="!isStartAction"
           v-tippy="'Undo this action'"
-          class="p-1 sm:p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+          class="text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+          :class="compact ? 'p-0.5' : 'p-1 sm:p-1.5'"
           @click="handleUndo"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,7 +160,7 @@
     </div>
 
     <!-- Bottom Row: Description & Cost -->
-    <div class="flex items-start justify-between gap-2 ml-[2rem] sm:ml-[2.25rem]">
+    <div v-if="!compact" class="flex items-start justify-between gap-2 ml-[2rem] sm:ml-[2.25rem]">
       <div class="flex-1 min-w-0">
         <!-- Description -->
         <div
@@ -152,7 +171,7 @@
         <!-- Deltas -->
         <div
           v-if="!isStartAction || isContinued"
-          class="text-[8px] mt-1 hidden sm:flex flex-wrap gap-x-3 gap-y-0.5 font-black uppercase tracking-wider"
+          class="text-[8px] mt-1 hidden sm:flex flex-wrap gap-x-3 gap-y-0.5 font-black tracking-wider"
         >
           <span v-if="action.eggValueDelta" :class="deltaClass(action.eggValueDelta)"
             >Val {{ formatDelta(action.eggValueDelta) }}</span
@@ -273,6 +292,7 @@ import { useVirtueStore } from '@/stores/virtue';
 
 const props = defineProps<{
   action: Action;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -454,7 +474,12 @@ const absoluteEndTime = computed(() => {
   const offset = actionsStore.planStartOffset;
   const simTime = props.action.endState.lastStepTime || 0;
 
-  return new Date(startTime + (simTime - offset) * 1000);
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment: `simTime` is the
+  // sum of hundreds of accumulated purchase/wait durations and routinely lands a sub-microsecond
+  // residue short of a whole second even when it's "really" exactly on a boundary; `new Date`
+  // truncates rather than rounds, which was displaying e.g. an exact sale-start toggle as one minute
+  // early.
+  return new Date(Math.round(startTime + (simTime - offset) * 1000));
 });
 
 /**

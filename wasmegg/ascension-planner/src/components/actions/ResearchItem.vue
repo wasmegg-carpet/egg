@@ -53,33 +53,51 @@
             </span>
           </div>
         </div>
-
-        <div
-          v-if="recommendationNote"
-          class="mt-1.5 p-1.5 inline-block bg-blue-50 border border-blue-100 rounded text-[9px] text-blue-800 leading-tight shadow-sm"
-        >
-          <div class="flex items-start gap-1">
-            <svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fill-rule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            <span>
-              <span class="font-bold uppercase tracking-tight mr-1">Pair Suggestion:</span>
-              {{ recommendationNote }}
-            </span>
-          </div>
-        </div>
       </div>
-      
+
       <!-- Gem Cost -->
       <div class="text-right shrink-0">
         <template v-if="!isMaxed">
           <div class="flex items-center justify-end gap-1 text-[11px] font-mono text-amber-600 font-bold">
             {{ formatGemPrice(price) }}
             <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Gem" />
+          </div>
+          <div v-if="duringSale || duringEarningsBoost" class="flex items-center justify-end gap-1 mt-0.5">
+            <span
+              v-if="duringSale"
+              class="text-[8px] font-black uppercase tracking-tight text-rose-600 bg-rose-50 rounded px-1 py-0.5 cursor-help"
+              v-tippy="'This price reflects the 70% research sale discount.'"
+            >
+              Sale
+            </span>
+            <span
+              v-if="duringEarningsBoost"
+              class="text-[8px] font-black uppercase tracking-tight text-orange-600 bg-orange-50 rounded px-1 py-0.5 cursor-help"
+              v-tippy="'This purchase completes during the 2x earnings boost.'"
+            >
+              2x
+            </span>
+          </div>
+          <div
+            v-if="showEventCrossingDetails && (eventCrossings?.sale.length || eventCrossings?.boost.length)"
+            class="flex flex-col items-end gap-0.5 mt-0.5"
+          >
+            <span
+              v-for="(crossing, i) in eventCrossings?.sale ?? []"
+              :key="`sale-${i}`"
+              v-tippy="crossingTooltip('research sale', crossing)"
+              class="text-[8px] font-bold text-gray-400 whitespace-nowrap cursor-help"
+            >
+              ⏳ Sale {{ crossing.togglesTo ? 'starts' : 'ends' }} in {{ formatDuration(crossing.waitSeconds) }}
+            </span>
+            <span
+              v-for="(crossing, i) in eventCrossings?.boost ?? []"
+              :key="`boost-${i}`"
+              v-tippy="crossingTooltip('2x earnings boost', crossing)"
+              class="text-[8px] font-bold text-gray-400 whitespace-nowrap cursor-help"
+            >
+              ⏳ 2x {{ crossing.togglesTo ? 'starts' : 'ends' }} in {{ formatDuration(crossing.waitSeconds) }}
+            </span>
           </div>
         </template>
         <div v-else class="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-0.5">Maxed</div>
@@ -190,6 +208,31 @@
       </div>
     </div>
 
+    <!-- Row 3b: Pair Suggestion (Conditional, full width, own line) -->
+    <div
+      v-if="recommendationNote"
+      class="w-full pl-[38px]"
+    >
+      <div class="p-1.5 inline-block bg-blue-50 border border-blue-100 rounded text-[9px] text-blue-800 leading-tight shadow-sm">
+        <div class="flex items-start gap-1">
+          <svg class="w-3 h-3 text-blue-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fill-rule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <span>
+            <span class="font-bold uppercase tracking-tight mr-1">Pair Suggestion:</span>
+            {{ recommendationNote }}
+            <span v-if="showSaleWarning" class="block mt-0.5 text-amber-600 font-bold">
+              ⚠️ Even paired, this won't earn back 70% before the next sale.
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <!-- Row 4: Realistic Stats Comparison (Conditional) -->
     <div v-if="realisticStats" class="mt-1 flex items-center justify-between w-full pl-[38px] py-1 border-t border-gray-50">
        <div class="flex items-center gap-6">
@@ -229,6 +272,7 @@ import { getResearchIconPath } from '@/lib/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
+import { type PurchaseEventCrossings } from '@/calculations/researchROI';
 
 const props = defineProps<{
   research: CommonResearch;
@@ -260,6 +304,10 @@ const props = defineProps<{
   lookahead?: { minLevels: number; impact: number; hpp: number };
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
+  duringSale?: boolean;
+  duringEarningsBoost?: boolean;
+  eventCrossings?: PurchaseEventCrossings;
+  showEventCrossingDetails?: boolean;
 }>();
 
 const actionsStore = useActionsStore();
@@ -271,6 +319,15 @@ const baseTimestamp = computed(() => {
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
 });
+
+// `crossing.waitSeconds` is the length of the wait segment leading up to that crossing (from the
+// previous crossing, or from now for the first one) — so "after a Xh wait" is accurate regardless
+// of whether this is the first event boundary saving up for this purchase hits, or a later one
+// (e.g. a multi-day purchase that saves through an entire boost cycle, start and end both).
+function crossingTooltip(eventLabel: string, crossing: { waitSeconds: number; togglesTo: boolean }): string {
+  const direction = crossing.togglesTo ? 'starts' : 'ends';
+  return `Saving up for this crosses the ${eventLabel} ${direction}, after a ${formatDuration(crossing.waitSeconds)} wait.`;
+}
 
 function deadlineWarningTooltip(seconds?: number, extraText?: string) {
   if (seconds === undefined) return extraText || '';

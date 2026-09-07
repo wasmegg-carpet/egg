@@ -33,6 +33,7 @@
             <div
               v-if="playerId && !loading"
               class="mt-6 flex justify-center animate-in fade-in slide-in-from-top-4 duration-500"
+              :class="plannerTab === 'automatic' ? 'pb-8' : ''"
             >
               <div class="bg-slate-50 p-1.5 rounded-2xl border border-slate-200/50 shadow-sm flex gap-1">
                 <button
@@ -80,12 +81,15 @@
             </div>
 
             <!-- Plan Library Section -->
-            <div v-if="playerId" class="max-w-6xl mx-auto mt-6">
+            <div v-if="playerId && plannerTab === 'manual'" class="max-w-6xl mx-auto mt-6">
               <PlanLibrary @plan-loaded="handlePlanLoaded" />
             </div>
 
             <!-- Ascension Action Buttons -->
-            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-6xl mx-auto">
+            <div
+              v-if="plannerTab === 'manual'"
+              class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-6xl mx-auto"
+            >
               <!-- Start from Scratch -->
               <div class="section-premium p-5 flex flex-col items-center text-center group relative overflow-hidden">
                 <div
@@ -361,12 +365,30 @@
           <div class="section-premium overflow-visible">
             <div class="px-4 py-3 flex justify-between items-center rounded-t-lg">
               <h2 class="text-lg font-semibold text-gray-800">Action History</h2>
-              <button
-                class="p-1 -mr-1 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
-                @click="expandedSections.actionHistory = !expandedSections.actionHistory"
-              >
-                <ChevronIcon :expanded="expandedSections.actionHistory" />
-              </button>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                  <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Compact</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="compactActionHistory"
+                    class="relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none"
+                    :class="compactActionHistory ? 'bg-brand-primary' : 'bg-gray-200'"
+                    @click="compactActionHistory = !compactActionHistory"
+                  >
+                    <span
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform shadow-sm"
+                      :class="compactActionHistory ? 'translate-x-[18px]' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </label>
+                <button
+                  class="p-1 -mr-1 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors"
+                  @click="expandedSections.actionHistory = !expandedSections.actionHistory"
+                >
+                  <ChevronIcon :expanded="expandedSections.actionHistory" />
+                </button>
+              </div>
             </div>
             <div v-if="expandedSections.actionHistory" class="border-t border-gray-200 p-4 bg-gray-50 rounded-b-lg">
               <ActionHistory @undo="showUndoConfirmation" @clear-all="handleClearAll" />
@@ -472,6 +494,12 @@
 
       <RecalculationOverlay />
 
+      <LoadingOverlay
+        :show="loading"
+        title="One Moment..."
+        message="Fetching your data and crunching the numbers to set up your plan..."
+      />
+
       <PlanFinalSummary
         v-if="plannerTab === 'manual'"
         @update:collapsed="isFooterCollapsed = $event"
@@ -510,6 +538,7 @@ import FloatingStats from '@/components/FloatingStats.vue';
 import FloatingNotes from '@/components/FloatingNotes.vue';
 import WarningDialog from '@/components/WarningDialog.vue';
 import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
+import LoadingOverlay from '@/components/LoadingOverlay.vue';
 import PlanLibrary from '@/components/PlanLibrary.vue';
 import PlanSelectionDialog from '@/components/PlanSelectionDialog.vue';
 import AutomaticPlanner from '@/components/auto/AutomaticPlanner.vue';
@@ -517,6 +546,7 @@ import { useSalesStore } from '@/stores/sales';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { usePersistence } from '@/composables/usePersistence';
+import { compactActionHistory } from '@/composables/useCompactActionHistory';
 import { generateActionId } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';

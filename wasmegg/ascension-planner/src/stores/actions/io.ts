@@ -12,6 +12,7 @@ import { useNotesStore } from '@/stores/notes';
 import { useSilosStore } from '@/stores/silos';
 import { createEmptySnapshot, type VirtueEgg, type Action, type CalculationsSnapshot } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
+import { redactBackupForStorage } from '@/lib/artifacts';
 
 export function exportPlanData(actions: Action[], initialSnapshot?: CalculationsSnapshot, activePlanId: string | null = null) {
   const initialStateStore = useInitialStateStore();
@@ -31,6 +32,15 @@ export function exportPlanData(actions: Action[], initialSnapshot?: Calculations
   const baseFuelAmounts = initialSnapshot ? initialSnapshot.fuelTankAmounts : fuelTankStore.fuelAmounts;
   const baseEggsDelivered = initialSnapshot ? initialSnapshot.eggsDelivered : truthEggsStore.eggsDelivered;
   const baseTeEarned = initialSnapshot ? initialSnapshot.teEarned : truthEggsStore.teEarned;
+
+  // Redacted backup (virtue artifact inventory only — no username, contracts,
+  // missions, or serverId) stored as `initialState.rawBackup`, the same field
+  // `initialStateStore.hydrate()` already reads on import. Lets artifact
+  // recalculation (optimal set search, beam search) work after reloading a
+  // saved plan without re-fetching the player's full backup. TEMPORARY:
+  // logged to console so the shape/content can be reviewed before we rely on
+  // it long-term.
+  const redactedBackup = initialStateStore.rawBackup ? redactBackupForStorage(initialStateStore.rawBackup) : null;
 
   return {
     version: 1,
@@ -52,6 +62,7 @@ export function exportPlanData(actions: Action[], initialSnapshot?: Calculations
       initialFuelAmounts: baseFuelAmounts,
       initialEggsDelivered: baseEggsDelivered,
       initialTeEarned: baseTeEarned,
+      rawBackup: redactedBackup,
     },
     virtueState: {
       shiftCount: virtueStore.initialShiftCount,
@@ -151,7 +162,6 @@ export function importPlanLogic(jsonString: string) {
 
   // Safeguard: Ensure a start_ascension action is present for the UI Action History
   if (data.actions && data.actions.length > 0 && data.actions[0].type !== 'start_ascension') {
-    console.log('[ActionIO] Repairing imported plan: prepending missing start_ascension');
     const startAction = {
       id: 'start_' + Math.random().toString(36).substring(2, 9),
       index: 0,

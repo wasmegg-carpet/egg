@@ -50,6 +50,12 @@ import { useNotesStore } from '@/stores/notes';
 export async function resetAllStores(): Promise<void> {
   const actionsStore = useActionsStore();
 
+  // Mark the plan as "mid-init" until setInitialSnapshot()/importPlan() settles everything back
+  // into a consistent state. Reactive consumers that combine values from multiple stores (e.g. the
+  // milestone chain watchEffect in useResearchViews.ts) must not compute against the transitional
+  // state between here and then — see the isPlanInitializing doc comment in stores/actions/types.ts.
+  actionsStore.isPlanInitializing = true;
+
   // 1. Clean the start action payload before clearAll preserves it
   const startAction = actionsStore.getStartAction();
   if (startAction) {

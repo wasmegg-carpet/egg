@@ -90,7 +90,9 @@ defineEmits<{
 const virtueStore = useVirtueStore();
 
 function formatTime(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleString(undefined, {
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
+  // `timestamp` routinely lands a sub-microsecond residue short of a whole second.
+  return new Date(Math.round(timestamp * 1000)).toLocaleString(undefined, {
     timeZone: virtueStore.ascensionTimezone,
     month: 'short',
     day: 'numeric',

@@ -9,10 +9,15 @@
     "fastbuild": "vite build",
     "lint": "eslint --ext .js,.ts,.vue src",
     "serve": "vite preview",
-    "format": "prettier --write \"src/**/*.{js,ts,vue}\""
+    "format": "prettier --write \"src/**/*.{js,ts,vue}\"",
+    "generate:pacific-time-table": "node --experimental-strip-types scripts/generatePacificTimeTable.ts",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@heroicons/vue": "^1.0.6",
+    "echarts": "^6.1.0",
     "lib": "workspace:^",
     "pinia": "^3.0.4",
     "tippy.js": "^6.3.7",
@@ -24,12 +29,14 @@
     "@tailwindcss/forms": "^0.5.10",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitejs/plugin-vue-jsx": "^5.1.5",
+    "@vitest/coverage-v8": "^4.1.8",
     "@vue/compiler-sfc": "^3.5.32",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.4",
     "typescript": "^6.0.2",
     "vite": "^8.0.16",
+    "vitest": "^4.1.8",
     "vue-tsc": "^3.2.6"
   }
 }

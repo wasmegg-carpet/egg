@@ -308,9 +308,11 @@ const dates = computed(() => {
   const startMs = startTime + timeBeforeShift * 1000;
   const endMs = startMs + shiftDuration * 1000;
 
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
+  // these routinely land a sub-microsecond residue short of a whole second.
   return {
-    start: new Date(startMs),
-    end: new Date(endMs),
+    start: new Date(Math.round(startMs)),
+    end: new Date(Math.round(endMs)),
     duration: shiftDuration,
   };
 });

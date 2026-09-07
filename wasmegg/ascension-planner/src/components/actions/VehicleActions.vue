@@ -217,7 +217,8 @@ import {
   calculateMaxTrainLength,
 } from '@/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { calculateEarningsForTime, getTimeToSave } from '@/engine/apply';
+import { getTimeToSave } from '@/engine/apply';
+import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from '@/calculations/vehiclePurchasePlan';
 
 const shippingStore = useShippingCapacityStore();
 const initialStateStore = useInitialStateStore();
@@ -353,10 +354,6 @@ function getMaxCarsTimeToBuy(slot: { vehicleId: number | null; trainLength: numb
 }
 
 function getVehicleCapacity(slot: { vehicleId: number | null; trainLength: number }, _index: number): number {
-  if (slot.vehicleId === null) return 0;
-  const vt = getVehicleType(slot.vehicleId);
-  if (!vt) return 0;
-
   const {
     universalMultiplier,
     hoverMultiplier,
@@ -366,19 +363,13 @@ function getVehicleCapacity(slot: { vehicleId: number | null; trainLength: numbe
     artifactMultiplier,
   } = effectiveMultipliers.value;
 
-  const trainLength = vt.isHyperloop ? slot.trainLength : 1;
-  const baseCapacity = vt.baseCapacityPerSecond * trainLength;
-
-  const vehicleHoverMult = vt.isHover ? hoverMultiplier : 1;
-  const vehicleHyperloopMult = vt.isHyperloop ? hyperloopMultiplier : 1;
-
-  return (
-    baseCapacity *
-    universalMultiplier *
-    epicMultiplier *
-    vehicleHoverMult *
-    vehicleHyperloopMult *
-    shippingCapMultiplier *
+  return calculateVehicleCapacity(
+    slot,
+    universalMultiplier,
+    hoverMultiplier,
+    hyperloopMultiplier,
+    epicMultiplier,
+    shippingCapMultiplier,
     artifactMultiplier
   );
 }
@@ -627,101 +618,20 @@ function handleToggleSale() {
   );
 }
 
-const maxVehiclesSeconds = computed(() => {
-  const HYPERLOOP_ID = 11;
+const maxVehiclesSim = computed(() => {
   const snapshot = actionsStore.effectiveSnapshot;
-  const offlineEarnings = snapshot.offlineEarnings;
-
-  if (offlineEarnings <= 0) return Infinity;
-
-  const maxSlots = maxVehicleSlots.value;
-  const maxLength = getMaxTrainLength();
-  let totalSeconds = 0;
-  let virtualVehicles = (snapshot.vehicles ? snapshot.vehicles.map(v => ({ ...v })) : []).slice(0, maxSlots);
-  let virtualBank = snapshot.bankValue || 0;
-
-  // Clone snapshot for virtual simulation
-  let virtualSnapshot = { ...snapshot, bankValue: virtualBank };
-
-  // Track earnings per egg (this stays constant as long as no research is bought)
-  const earningsPerEgg = snapshot.elr > 0 ? (snapshot.offlineEarnings / snapshot.elr) : 0;
-  if (earningsPerEgg <= 0) return Infinity;
-
-  // Pad to max slots
-  while (virtualVehicles.length < maxSlots) {
-    virtualVehicles.push({ vehicleId: null, trainLength: 1 });
-  }
-
-  for (let i = 0; i < maxSlots; i++) {
-    const slot = virtualVehicles[i];
-    let currentLength = 1;
-
-    // 1. Upgrade to Hyperloop
-    if (slot.vehicleId !== HYPERLOOP_ID) {
-      // Calculate current price based on how many Hyperloops we already "bought" in this simulation
-      const currentHyperloopCount = virtualVehicles.filter(v => v.vehicleId === HYPERLOOP_ID).length;
-      const price = getDiscountedVehiclePrice(HYPERLOOP_ID, currentHyperloopCount, costModifiers.value, isVehicleSaleActive.value);
-      
-      const seconds = getTimeToSave(price, virtualSnapshot);
-      if (seconds === Infinity) return Infinity;
-
-      totalSeconds += seconds;
-
-      // Update virtual state
-      const oldCap = getVehicleCapacity(slot, i);
-      const newCap = getVehicleCapacity({ vehicleId: HYPERLOOP_ID, trainLength: 1 }, i);
-
-      const P0 = virtualSnapshot.population;
-      const I = virtualSnapshot.offlineIHR / 60;
-      virtualSnapshot.population = Math.min(virtualSnapshot.habCapacity, P0 + I * seconds);
-      virtualSnapshot.shippingCapacity += newCap - oldCap;
-      
-      // Update derived metrics
-      virtualSnapshot.layRate = virtualSnapshot.population * virtualSnapshot.ratePerChickenPerSecond;
-      virtualSnapshot.elr = Math.min(virtualSnapshot.layRate, virtualSnapshot.shippingCapacity);
-      virtualSnapshot.offlineEarnings = virtualSnapshot.elr * earningsPerEgg;
-      
-      // Update bank (getTimeToSave ensures we have at least 'price' at the end)
-      virtualSnapshot.bankValue = Math.max(0, virtualSnapshot.bankValue - price);
-
-      virtualVehicles[i] = { vehicleId: HYPERLOOP_ID, trainLength: 1 };
-      virtualSnapshot.vehicles = [...virtualVehicles];
-    } else {
-      currentLength = slot.trainLength;
-    }
-
-    // 2. Add cars
-    for (let l = currentLength; l < maxLength; l++) {
-      const carPrice = getDiscountedTrainCarPrice(l, costModifiers.value, isVehicleSaleActive.value);
-      const seconds = getTimeToSave(carPrice, virtualSnapshot);
-      if (seconds === Infinity) return Infinity;
-
-      totalSeconds += seconds;
-
-      // Update virtual state
-      const oldCap = getVehicleCapacity({ vehicleId: HYPERLOOP_ID, trainLength: l }, i);
-      const newCap = getVehicleCapacity({ vehicleId: HYPERLOOP_ID, trainLength: l + 1 }, i);
-
-      const P0 = virtualSnapshot.population;
-      const I = virtualSnapshot.offlineIHR / 60;
-      virtualSnapshot.population = Math.min(virtualSnapshot.habCapacity, P0 + I * seconds);
-      virtualSnapshot.shippingCapacity += newCap - oldCap;
-      
-      // Update derived metrics
-      virtualSnapshot.layRate = virtualSnapshot.population * virtualSnapshot.ratePerChickenPerSecond;
-      virtualSnapshot.elr = Math.min(virtualSnapshot.layRate, virtualSnapshot.shippingCapacity);
-      virtualSnapshot.offlineEarnings = virtualSnapshot.elr * earningsPerEgg;
-      
-      // Update bank
-      virtualSnapshot.bankValue = Math.max(0, virtualSnapshot.bankValue - carPrice);
-
-      virtualVehicles[i].trainLength = l + 1;
-      virtualSnapshot.vehicles = [...virtualVehicles];
-    }
-  }
-
-  return totalSeconds;
+  return planMaxVehicles(
+    snapshot.vehicles || [],
+    maxVehicleSlots.value,
+    getMaxTrainLength(),
+    costModifiers.value,
+    isVehicleSaleActive.value,
+    effectiveMultipliers.value,
+    snapshot
+  );
 });
+
+const maxVehiclesSeconds = computed(() => maxVehiclesSim.value.totalSeconds);
 
 const maxVehiclesTime = computed(() => {
   const seconds = maxVehiclesSeconds.value;
@@ -730,33 +640,24 @@ const maxVehiclesTime = computed(() => {
   return formatDuration(seconds);
 });
 
-const canBuyMax = computed(() => {
-  const HYPERLOOP_ID = 11;
-  const maxLength = getMaxTrainLength();
-  return displaySlots.value.some(slot => slot.vehicleId !== HYPERLOOP_ID || slot.trainLength < maxLength);
-});
+const canBuyMax = computed(() => !maxVehiclesSim.value.allMaxed);
 
 function handleBuyMax() {
   const HYPERLOOP_ID = 11;
-  const maxSlots = maxVehicleSlots.value;
-  const maxLength = getMaxTrainLength();
+  const sim = maxVehiclesSim.value;
+  if (sim.steps.length === 0) return;
 
-  withExpiryCheck(maxVehiclesSeconds.value, false, () => {
+  withExpiryCheck(sim.totalSeconds, false, () => {
     batch(() => {
-      for (let i = 0; i < maxSlots; i++) {
-        const slot = displaySlots.value[i];
-        let currentLength = 1;
-
-        // 1. Upgrade to Hyperloop if not already
-        if (slot.vehicleId !== HYPERLOOP_ID) {
-          handleVehicleChange(i, HYPERLOOP_ID);
+      const trainLengths: Record<number, number> = {};
+      for (const step of sim.steps) {
+        if (step.type === 'upgrade_hyperloop') {
+          handleVehicleChange(step.slotIndex, HYPERLOOP_ID);
+          trainLengths[step.slotIndex] = 1;
         } else {
-          currentLength = slot.trainLength;
-        }
-
-        // 2. Add remaining cars
-        for (let l = currentLength; l < maxLength; l++) {
-          addTrainCarAction(i, l, l + 1);
+          const fromLength = trainLengths[step.slotIndex] ?? displaySlots.value[step.slotIndex].trainLength;
+          addTrainCarAction(step.slotIndex, fromLength, fromLength + 1);
+          trainLengths[step.slotIndex] = fromLength + 1;
         }
       }
     });
@@ -765,94 +666,34 @@ function handleBuyMax() {
 
 function handleBuy5MinCap() {
   const snapshot = actionsStore.effectiveSnapshot;
-  const offlineEarnings = snapshot.offlineEarnings;
-  if (offlineEarnings <= 0) return;
+  if (snapshot.offlineEarnings <= 0) return;
 
-  const maxBudget = calculateEarningsForTime(5 * 60, snapshot);
-  let spent = 0;
+  // Same purchase-picking logic K1 uses for its (much longer) shift budget, just with a
+  // 5-minute allowance — see planVehiclesForTimeLimit's doc comment.
+  const plan = planVehiclesForTimeLimit(
+    snapshot.vehicles || [],
+    maxVehicleSlots.value,
+    getMaxTrainLength(),
+    costModifiers.value,
+    isVehicleSaleActive.value,
+    effectiveMultipliers.value,
+    5 * 60,
+    snapshot
+  );
 
-  // Track virtual state to calculate costs and capacities correctly in the loop
-  const virtualSlots = displaySlots.value.map(s => ({ ...s }));
-
-  const maxTrainLength = getMaxTrainLength();
+  if (plan.steps.length === 0) return;
 
   batch(() => {
-    while (spent < maxBudget) {
-      let bestAction:
-        | { type: 'vehicle'; slotIndex: number; vehicleId: number; cost: number }
-        | { type: 'car'; slotIndex: number; cost: number }
-        | null = null;
-      let bestRoi = -1;
-
-      // Track current counts for virtue cost scaling
-      const vehicleCounts: Record<number, number> = {};
-      for (const slot of virtualSlots) {
-        if (slot.vehicleId !== null) {
-          vehicleCounts[slot.vehicleId] = (vehicleCounts[slot.vehicleId] || 0) + 1;
-        }
-      }
-
-      for (let i = 0; i < virtualSlots.length; i++) {
-        const slot = virtualSlots[i];
-
-        // 1. Consider upgrading vehicle
-        const currentId = slot.vehicleId;
-        const startId = currentId === null ? 0 : currentId + 1;
-
-        for (let nextId = startId; nextId <= 11; nextId++) {
-          const cost = getDiscountedVehiclePrice(
-            nextId,
-            vehicleCounts[nextId] || 0,
-            costModifiers.value,
-            isVehicleSaleActive.value
-          );
-
-          if (spent + cost <= maxBudget) {
-            const deltaCap = getVehicleCapacity({ vehicleId: nextId, trainLength: 1 }, i) - getVehicleCapacity(slot, i);
-            if (deltaCap >= 0) {
-              const roi = deltaCap / Math.max(cost, 1e-10);
-              const score = deltaCap > 1000 ? deltaCap * 1000 + roi : roi;
-              if (score > bestRoi) {
-                bestRoi = score;
-                bestAction = { type: 'vehicle', slotIndex: i, vehicleId: nextId, cost };
-              }
-            }
-          }
-        }
-
-        // 2. Consider adding Hyperloop car
-        if (slot.vehicleId === 11 && slot.trainLength < maxTrainLength) {
-          const cost = getDiscountedTrainCarPrice(slot.trainLength, costModifiers.value, isVehicleSaleActive.value);
-          if (spent + cost <= maxBudget) {
-            const currentCap = getVehicleCapacity(slot, i);
-            const nextCap = getVehicleCapacity({ ...slot, trainLength: slot.trainLength + 1 }, i);
-            const deltaCap = nextCap - currentCap;
-            if (deltaCap > 0) {
-              const roi = deltaCap / Math.max(cost, 1e-10);
-              const score = deltaCap > 1000 ? deltaCap * 1000 + roi : roi;
-              if (score > bestRoi) {
-                bestRoi = score;
-                bestAction = { type: 'car', slotIndex: i, cost };
-              }
-            }
-          }
-        }
-      }
-
-      if (!bestAction) break;
-
-      // Apply action
-      if (bestAction!.type === 'vehicle') {
-        handleVehicleChange(bestAction!.slotIndex, bestAction!.vehicleId);
-        virtualSlots[bestAction!.slotIndex].vehicleId = bestAction!.vehicleId;
-        virtualSlots[bestAction!.slotIndex].trainLength = 1;
+    const trainLengths: Record<number, number> = {};
+    for (const step of plan.steps) {
+      if (step.type === 'vehicle') {
+        handleVehicleChange(step.slotIndex, step.vehicleId);
+        trainLengths[step.slotIndex] = 1;
       } else {
-        const fromLength = virtualSlots[bestAction!.slotIndex].trainLength;
-        addTrainCarAction(bestAction!.slotIndex, fromLength, fromLength + 1);
-        virtualSlots[bestAction!.slotIndex].trainLength++;
+        const fromLength = trainLengths[step.slotIndex] ?? displaySlots.value[step.slotIndex].trainLength;
+        addTrainCarAction(step.slotIndex, fromLength, fromLength + 1);
+        trainLengths[step.slotIndex] = fromLength + 1;
       }
-
-      spent += bestAction.cost;
     }
   });
 }

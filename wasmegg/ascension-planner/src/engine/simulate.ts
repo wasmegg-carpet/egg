@@ -1,5 +1,5 @@
 import type { Action, CalculationsSnapshot } from '@/types';
-import type { EngineState, SimulationContext, SimulationResult } from './types';
+import type { EngineState, SimulationContext } from './types';
 import {
   applyAction,
   computePassiveEggsDelivered,
@@ -7,9 +7,11 @@ import {
   applyTime,
   getActionDuration,
   refreshActionPayload,
+  boostTransitionsFrom,
 } from './apply';
 import { computeSnapshot } from './compute';
 import { computeDeltas } from '@/lib/actions/snapshot';
+import { yieldForOverlayPaint } from '@/lib/yieldForOverlayPaint';
 
 /**
  * Simulate a list of actions to produce a timeline of states.
@@ -57,13 +59,15 @@ export function simulate(
 
     // 1b. Add passively delivered eggs during this action's duration
     // Uses the PREVIOUS snapshot's ELR (eggs are shipped at the old rate while saving for the action)
-    const durationSeconds = getActionDuration(action, currentSnapshot);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot);
+    const durationSeconds = getActionDuration(action, currentSnapshot, context);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
       skipEarnings: action.type === 'store_fuel',
+      transitions: boostTransitionsFrom(currentSnapshot, absoluteSimTime),
     });
 
     // 2. Compute full snapshot
@@ -136,7 +140,7 @@ export async function simulateAsync(
     // Yield check
     if (i % YIELD_INTERVAL === 0) {
       if (onProgress) onProgress(i, actions.length);
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await yieldForOverlayPaint();
     }
 
     let action = actions[i];
@@ -144,13 +148,16 @@ export async function simulateAsync(
 
     action = refreshActionPayload(action, currentSnapshot, context);
     currentState = applyAction(currentState, action);
-    const durationSeconds = getActionDuration(action, currentSnapshot);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot);
+    const durationSeconds = getActionDuration(action, currentSnapshot, context);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
+    const transitions = boostTransitionsFrom(currentSnapshot, absoluteSimTime);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
       skipEarnings: action.type === 'store_fuel',
+      transitions,
     });
 
     const newSnapshot = computeSnapshot(currentState, context, {

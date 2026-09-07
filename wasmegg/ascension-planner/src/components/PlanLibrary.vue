@@ -6,7 +6,7 @@ import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanDa
 import { downloadFile } from '@/utils/export';
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import { initLoadPlan, initPlanFuture } from '@/lib/modes';
-import { useAutoPlannerStore, type ChainedAscension } from '@/stores/autoPlanner';
+import { useAutoPlannerStore, pickVariant, type ChainedAscension, type VariantKey } from '@/stores/autoPlanner';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useUIStore } from '@/stores/ui';
@@ -16,6 +16,7 @@ import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
 import PlanAlreadyOpenWarning from '@/components/PlanAlreadyOpenWarning.vue';
 import { createEmptySnapshot } from '@/types';
 import { buildLibraryPlansFromExport } from '@/auto/buildLibraryPlans';
+import { migrateExportedPlanV1, type ExportedPlan } from '@/auto/export';
 
 const actionsStore = useActionsStore();
 const autoPlannerStore = useAutoPlannerStore();
@@ -292,11 +293,15 @@ async function handleImport(event: Event) {
         // Single plan export (from our new format)
         plansToImport = [{ name: imported.name || file.name.replace('.json', ''), data: imported.data }];
       } else if (imported.version && imported.ascensions && imported.initialState) {
-        // Sequential Roadmap (Auto-Plan)
+        // Sequential Roadmap (Auto-Plan). Migrate version-1 exports (result1/result2/result3?) to
+        // the current variants-map shape up front so everything below only ever deals with one shape.
+        const plan: ExportedPlan =
+          imported.version === 1 ? migrateExportedPlanV1(imported) : (imported as ExportedPlan);
+
         showAutoPlanDialog.value = true;
-        autoPlanToImport.value = imported;
+        autoPlanToImport.value = plan;
         autoPlanName.value = file.name.replace('.json', '');
-        autoPlanAscensionCount.value = imported.ascensions.length;
+        autoPlanAscensionCount.value = plan.ascensions.length;
 
         const resolution = await new Promise<'restore' | 'individual' | 'cancel'>(resolve => {
           autoPlanResolver = resolve;
@@ -318,74 +323,65 @@ async function handleImport(event: Event) {
             }
 
             // 3. Restore to Auto Planner (now overwriting the fresh backup state)
-            const importedOverrides: Record<number, string> = imported.planVariantOverrides ?? (
-              imported.a1ForceMode === 'continue' ? { 0: 'continue' } : {}
-            );
+            const importedOverrides: Record<number, VariantKey> =
+              plan.planVariantOverrides ?? (plan.a1ForceMode === 'continue' ? { 0: 'continue' } : {});
+            const importedEndTimeOverrides: Record<number, number> = plan.endTimeOverrides ?? {};
 
-            // Pick the best result for an imported ascension, respecting planVariantOverrides
-            const getBestImportResult = (a: any, aIdx: number) => {
-              const override = importedOverrides[aIdx];
-              if (override === 'continue' && a.result3) return a.result3;
-              if (override === '1-sale') return a.result1;
-              if (override === '2-sale') return a.result2;
-              const r1 = a.result1;
-              const r2 = a.result2;
-              return r1.summary.totalDurationSeconds <= r2.summary.totalDurationSeconds ? r1 : r2;
-            };
-
-            const chain: ChainedAscension[] = imported.ascensions.map((a: any) => {
+            const chain: ChainedAscension[] = plan.ascensions.map(a => {
               const item: ChainedAscension = {
                 index: a.index,
-                result1: a.result1,
-                result2: a.result2,
+                variants: a.variants,
                 goal: a.goal,
               };
-              if (a.result3) item.result3 = a.result3;
               if (a.result3SkippedReason) item.result3SkippedReason = a.result3SkippedReason;
               return item;
             });
 
             const nextGoalsMap: Record<number, { te: number | null, date: string, time: string }> = {};
-            imported.ascensions.forEach((a: any, idx: number) => {
+            plan.ascensions.forEach((a, idx) => {
               // Populate with the original goal
               nextGoalsMap[idx] = { ...a.goal };
 
               // If it was a TE goal, pre-fill the date/time fields with the actual result for better UX
               if (a.goal.type === 'te' || !a.goal.date) {
-                const bestResult = getBestImportResult(a, idx);
-                nextGoalsMap[idx].date = formatUnixToDateInput(bestResult.summary.endTime, imported.timezone);
-                nextGoalsMap[idx].time = formatUnixToTimeInput(bestResult.summary.endTime, imported.timezone);
+                const bestResult = pickVariant(a.variants, importedOverrides[idx], !!importedEndTimeOverrides[idx]);
+                nextGoalsMap[idx].date = formatUnixToDateInput(bestResult.summary.endTime, plan.timezone);
+                nextGoalsMap[idx].time = formatUnixToTimeInput(bestResult.summary.endTime, plan.timezone);
               }
             });
             // Add the next step goal (empty placeholder for new ascension)
-            const lastImportedA = imported.ascensions[imported.ascensions.length - 1];
-            const lastBestResult = getBestImportResult(lastImportedA, imported.ascensions.length - 1);
+            const lastImportedA = plan.ascensions[plan.ascensions.length - 1];
+            const lastIdx = plan.ascensions.length - 1;
+            const lastBestResult = pickVariant(
+              lastImportedA.variants, importedOverrides[lastIdx], !!importedEndTimeOverrides[lastIdx]
+            );
             nextGoalsMap[chain.length] = {
               te: Math.min(490, lastBestResult.summary.endTE + 30),
               date: '',
               time: ''
             };
 
-            const firstA = imported.ascensions[0];
-            const bestFirstA = getBestImportResult(firstA, 0);
+            const firstA = plan.ascensions[0];
+            const bestFirstA = pickVariant(firstA.variants, importedOverrides[0], !!importedEndTimeOverrides[0]);
             const a1EndTime = bestFirstA.summary.endTime;
 
             autoPlannerStore.setPlan({
               ascensionChain: chain,
-              timezone: imported.timezone,
-              startDate: formatUnixToDateInput(imported.startTime, imported.timezone),
-              startTime: formatUnixToTimeInput(imported.startTime, imported.timezone),
-              targetTE: imported.ascensions.map((a: any) => a.goal.te || a.result1.summary.endTE).join(' '),
+              timezone: plan.timezone,
+              startDate: formatUnixToDateInput(plan.startTime, plan.timezone),
+              startTime: formatUnixToTimeInput(plan.startTime, plan.timezone),
+              targetTE: plan.ascensions.map(a => a.goal.te || pickVariant(a.variants).summary.endTE).join(' '),
               // Always populate date/time fields with results for visibility
-              targetEndDate: formatUnixToDateInput(a1EndTime, imported.timezone),
-              targetEndTime: formatUnixToTimeInput(a1EndTime, imported.timezone),
+              targetEndDate: formatUnixToDateInput(a1EndTime, plan.timezone),
+              targetEndTime: formatUnixToTimeInput(a1EndTime, plan.timezone),
               nextGoals: nextGoalsMap,
-              planVariantOverrides: importedOverrides as Record<number, 'continue' | '1-sale' | '2-sale'>,
+              planVariantOverrides: importedOverrides,
+              endTimeOverrides: plan.endTimeOverrides ?? {},
             });
 
             // Hydrate stores so the form shows the correct numbers from the plan
-            initialStateStore.hydrate(imported.initialState);
-            truthEggsStore.hydrate(imported.initialState);
+            initialStateStore.hydrate(plan.initialState);
+            truthEggsStore.hydrate(plan.initialState);
           } catch (e) {
             console.error('Failed to restore roadmap:', e);
             alert('Failed to restore roadmap simulation state.');
@@ -396,9 +392,9 @@ async function handleImport(event: Event) {
 
         if (resolution === 'individual') {
           // 2. Import Individual Ascensions into Library
-          const exportDate = new Date(imported.exportedAt).toISOString().split('T')[0];
-          
-          plansToImport = buildLibraryPlansFromExport(imported, exportDate);
+          const exportDate = new Date(plan.exportedAt).toISOString().split('T')[0];
+
+          plansToImport = buildLibraryPlansFromExport(plan, exportDate);
         } else {
           // Restore only — we're done
           return;

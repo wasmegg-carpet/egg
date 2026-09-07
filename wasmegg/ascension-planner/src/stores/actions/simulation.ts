@@ -12,28 +12,18 @@
  * 6. Store is synchronized to the new snapshot.
  */
 
-import { markRaw } from 'vue';
-import type {
-  Action,
-  CalculationsSnapshot,
-  VirtueEgg,
-  StartAscensionPayload,
-  ToggleSalePayload,
-  ToggleEarningsBoostPayload,
-  UpdateArtifactSetPayload,
-} from '@/types';
+import type { Action, CalculationsSnapshot, VirtueEgg } from '@/types';
 import { createEmptySnapshot, generateActionId } from '@/types';
-import { computeDeltas } from '@/lib/actions/snapshot';
-import { simulateAsync } from '@/engine/simulate';
 import {
   applyAction,
   computePassiveEggsDelivered,
   applyPassiveEggs,
   applyTime,
   getActionDuration,
+  boostTransitionsFrom,
 } from '@/engine/apply';
 import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
+import { getSimulationContext } from '@/engine/adapter';
 import { type EngineState } from '@/engine/types';
 
 /**
@@ -74,12 +64,14 @@ export function calculateActionResult(
   const context = getSimulationContext();
 
   let newState = applyAction(prevState, action);
-  const durationSeconds = getActionDuration(action, prevSnapshot);
-  const passiveEggs = computePassiveEggsDelivered(action, prevSnapshot);
+  const durationSeconds = getActionDuration(action, prevSnapshot, context);
+  const passiveEggs = computePassiveEggsDelivered(action, prevSnapshot, context);
   newState = applyPassiveEggs(newState, passiveEggs);
+  const absoluteSimTime = context.ascensionStartTime + (prevSnapshot.lastStepTime - context.planStartOffset);
   newState = applyTime(newState, durationSeconds, prevSnapshot, {
     skipGrowth: action.type === 'wait_for_no_earnings',
     skipEarnings: action.type === 'store_fuel',
+    transitions: boostTransitionsFrom(prevSnapshot, absoluteSimTime),
   });
 
   const newSnapshot = computeSnapshot(newState, context, {

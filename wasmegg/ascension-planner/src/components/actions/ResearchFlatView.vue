@@ -65,6 +65,10 @@
         :recommendation-note="item.recommendationNote"
         :show-sale-warning="item.showSaleWarning"
         :show-deadline-warning="item.showDeadlineWarning"
+        :during-sale="item.duringSale"
+        :during-earnings-boost="item.duringEarningsBoost"
+        :event-crossings="item.eventCrossings"
+        :show-event-crossing-details="showEventCrossingDetails"
         @buy="$emit('buy', item.research)"
         @max="$emit('max', item.research)"
         @buy-to-here="$emit('buy-to-here', idx)"
@@ -75,8 +79,9 @@
       <div v-if="isMissingRealisticData" class="max-w-xs mx-auto">
         <p class="text-gray-900 font-bold not-italic mb-1 text-sm">Artifact Data Required</p>
         <p class="text-[11px] leading-relaxed mb-4 not-italic">
-          Realistic predictions require your artifact inventory. We omit this data from saved plans for privacy when sharing files.
-          Click below to refresh your local data and enable the realistic view for this session.
+          Realistic predictions require your artifact inventory, which this plan doesn't have yet (older plan, or we
+          couldn't resolve a player ID to fetch it automatically). Click below to refresh your local data and enable
+          the realistic view for this session.
         </p>
         <button
           class="btn-premium btn-primary w-full mt-2"
@@ -88,8 +93,11 @@
       <template v-else-if="view === 'milestones' && !milestoneTargetSelected">
         Pick a milestone above to see the fastest path.
       </template>
-      <template v-else-if="view === 'milestones'">
+      <template v-else-if="view === 'milestones' && milestoneAlreadyReached">
         This milestone has already been reached.
+      </template>
+      <template v-else-if="view === 'milestones'">
+        Unable to find a path to this milestone from the current state.
       </template>
       <template v-else>
         No researches match this criteria or all are maxed.
@@ -106,6 +114,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
 import { formatAbsoluteTime } from '@/lib/format';
+import { type PurchaseEventCrossings } from '@/calculations/researchROI';
 import ResearchItem from './ResearchItem.vue';
 
 interface SortedResearchItem {
@@ -133,6 +142,9 @@ interface SortedResearchItem {
   recommendationNote?: string;
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
+  duringSale?: boolean;
+  duringEarningsBoost?: boolean;
+  eventCrossings?: PurchaseEventCrossings;
 }
 
 const props = defineProps<{
@@ -140,6 +152,8 @@ const props = defineProps<{
   view: ViewType;
   thresholds: readonly number[];
   milestoneTargetSelected?: boolean;
+  milestoneAlreadyReached?: boolean;
+  showEventCrossingDetails?: boolean;
   getResearchTimeToBuy: (r: CommonResearch) => string;
   getResearchTimeToBuySeconds: (r: CommonResearch) => number;
   roiDisplayMode?: ElrRoiDisplayMode;

@@ -4,10 +4,11 @@
     <div class="relative">
       <button
         @click="open = !open"
-        class="w-full flex items-center justify-between gap-2 px-4 py-3 text-base font-bold text-white bg-slate-800 rounded-lg shadow-md hover:bg-slate-900 transition-colors"
+        class="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-sm font-bold text-gray-800 bg-white border-2 rounded-lg shadow-sm transition-colors"
+        :class="open ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-indigo-300 hover:border-indigo-400'"
       >
         <span>{{ selectedLabel }}</span>
-        <ChevronDownIcon class="w-5 h-5 text-slate-400 transition-transform" :class="{ 'rotate-180': open }" />
+        <ChevronDownIcon class="w-5 h-5 text-indigo-500 transition-transform" :class="{ 'rotate-180': open }" />
       </button>
 
       <div

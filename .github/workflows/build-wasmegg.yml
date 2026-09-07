@@ -58,7 +58,7 @@ jobs:
           echo '759703ab432d52da4def118f98a7f811c0ec59354afad7151f08cba8f09f6171  ets_0.2.1_linux_amd64.deb' | sha256sum -c -
           sudo dpkg -i ets_0.2.1_linux_amd64.deb
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '^1.22'
       - name: Install pnpm
@@ -148,7 +148,7 @@ jobs:
           echo '759703ab432d52da4def118f98a7f811c0ec59354afad7151f08cba8f09f6171  ets_0.2.1_linux_amd64.deb' | sha256sum -c -
           sudo dpkg -i ets_0.2.1_linux_amd64.deb
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '^1.22'
       - name: Install pnpm

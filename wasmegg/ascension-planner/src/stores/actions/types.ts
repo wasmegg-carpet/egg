@@ -8,6 +8,14 @@ export interface ActionsState {
   // IDs of groups that are currently expanded
   expandedGroupIds: Set<string>;
   isRecalculating: boolean;
+  // True from the start of resetAllStores() through the end of setInitialSnapshot() — i.e. the
+  // whole "switching to a new mode" window during which stores are mutated in several separate,
+  // individually-observable steps and can briefly disagree with each other (e.g. virtueStore
+  // already reset while actionsStore still holds the previous plan's snapshot). Reactive consumers
+  // that derive absolute timestamps from multiple stores (like the milestone chain watchEffect in
+  // useResearchViews.ts) must not compute against that transitional state — doing so has produced
+  // nonsensical timestamps and hung the tab.
+  isPlanInitializing: boolean;
   pendingRecalculate: boolean;
   recalculationProgress: { current: number; total: number };
   batchMode: boolean;

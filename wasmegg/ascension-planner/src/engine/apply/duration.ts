@@ -1,6 +1,19 @@
-import { Action, CalculationsSnapshot, LaunchMissionsPayload, WaitForTEPayload, StoreFuelPayload, WaitForResearchSalePayload, WaitForEarningsBoostPayload, WaitForGemsPayload } from '@/types';
+import {
+  Action,
+  CalculationsSnapshot,
+  LaunchMissionsPayload,
+  WaitForTEPayload,
+  StoreFuelPayload,
+  WaitForGemsPayload,
+} from '@/types';
 import { getNextPacificTime } from '@/lib/events';
-import { solveForTime, integrateRate, getTimeToSave, calculateEggsDeliveredForTime } from './math';
+import {
+  solveForTime,
+  integrateRate,
+  getTimeToSave,
+  calculateEggsDeliveredForTime,
+  boostTransitionsFrom,
+} from './math';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { getResearchById, getDiscountedVirtuePrice } from '@/calculations/commonResearch';
@@ -126,9 +139,7 @@ export function refreshActionPayload(
         prevSnapshot.shippingCapacity, // shipping caps the shipped portion
         prevSnapshot.habCapacity
       );
-      const valuePerEgg = prevSnapshot.elr > 0
-        ? prevSnapshot.offlineEarnings / prevSnapshot.elr
-        : 0;
+      const valuePerEgg = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
       payload.gemsEarnedDuringFuel = payload.eggsShippedDuringFuel * valuePerEgg;
     } else {
       payload.eggsShippedDuringFuel = 0;
@@ -157,7 +168,11 @@ export function refreshActionPayload(
 
   if (action.type === 'wait_for_research_sale' || action.type === 'wait_for_earnings_boost') {
     if (context) {
-      const payload = { ...(action.payload as any) };
+      const payload = {
+        ...(action.payload as
+          | import('@/types').WaitForResearchSalePayload
+          | import('@/types').WaitForEarningsBoostPayload),
+      };
       const targetDay = action.type === 'wait_for_research_sale' ? 5 : 1; // Friday or Monday
       const targetHour = 9; // 9 AM
       // (Plan Start Time) + (Total Simulation Relative Seconds - Start Offset)
@@ -180,9 +195,28 @@ export function refreshActionPayload(
 }
 
 /**
- * Calculate the duration of an action in seconds.
+ * Seconds-since-epoch that `prevSnapshot` represents, for calendar-boundary lookups (earnings
+ * boost start/end). Same derivation `refreshActionPayload`'s `wait_for_research_sale`/
+ * `wait_for_earnings_boost` branch already uses above.
  */
-export function getActionDuration(action: Action, prevSnapshot: CalculationsSnapshot): number {
+function absoluteSimTimeFor(prevSnapshot: CalculationsSnapshot, context: SimulationContext): number {
+  return context.ascensionStartTime + (prevSnapshot.lastStepTime - context.planStartOffset);
+}
+
+/**
+ * Calculate the duration of an action in seconds.
+ *
+ * `context`, when provided, makes gem-costing actions boundary-aware: the wait is split at the
+ * earnings boost's real next start/end (via `boostTransitionsFrom`) instead of assuming
+ * `prevSnapshot.earningsBoost.active` holds flat for the whole wait — without it, a wait that
+ * starts just before the boost turns on (or off) is mis-priced in time, since `prevSnapshot`'s own
+ * flag may already be stale by the time this runs (see `boostTransitionsFrom`'s doc comment).
+ */
+export function getActionDuration(
+  action: Action,
+  prevSnapshot: CalculationsSnapshot,
+  context?: SimulationContext
+): number {
   if (action.type === 'store_fuel' || action.type === 'wait_for_te' || action.type === 'wait_for_gems') {
     return (action.payload as { timeSeconds?: number }).timeSeconds || 0;
   }
@@ -198,14 +232,18 @@ export function getActionDuration(action: Action, prevSnapshot: CalculationsSnap
     return (action.payload as { totalTimeSeconds?: number }).totalTimeSeconds || 0;
   }
 
+  const transitions = context
+    ? boostTransitionsFrom(prevSnapshot, absoluteSimTimeFor(prevSnapshot, context))
+    : undefined;
+
   if (action.type === 'launch_missions') {
-    const T = action.cost > 0 ? getTimeToSave(action.cost, prevSnapshot) : 0;
+    const T = action.cost > 0 ? getTimeToSave(action.cost, prevSnapshot, transitions) : 0;
     return T + ((action.payload as LaunchMissionsPayload).totalTimeSeconds || 0);
   }
 
   const GEM_COSTING_TYPES = ['buy_research', 'buy_hab', 'buy_vehicle', 'buy_train_car', 'buy_silo'];
   if (GEM_COSTING_TYPES.includes(action.type) && action.cost > 0) {
-    return getTimeToSave(action.cost, prevSnapshot);
+    return getTimeToSave(action.cost, prevSnapshot, transitions);
   }
 
   return 0;
@@ -214,7 +252,11 @@ export function getActionDuration(action: Action, prevSnapshot: CalculationsSnap
 /**
  * Calculate the number of eggs passively delivered during an action's duration.
  */
-export function computePassiveEggsDelivered(action: Action, prevSnapshot: CalculationsSnapshot): number {
+export function computePassiveEggsDelivered(
+  action: Action,
+  prevSnapshot: CalculationsSnapshot,
+  context?: SimulationContext
+): number {
   const NO_PASSIVE_TYPES = [
     'store_fuel',
     'wait_for_te',
@@ -232,7 +274,7 @@ export function computePassiveEggsDelivered(action: Action, prevSnapshot: Calcul
   ];
   if (NO_PASSIVE_TYPES.includes(action.type)) return 0;
 
-  const durationSeconds = getActionDuration(action, prevSnapshot);
+  const durationSeconds = getActionDuration(action, prevSnapshot, context);
   if (durationSeconds > 0) {
     return calculateEggsDeliveredForTime(durationSeconds, prevSnapshot);
   }

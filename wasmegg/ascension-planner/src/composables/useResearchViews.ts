@@ -1,7 +1,6 @@
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, watchEffect } from 'vue';
 import {
   getCommonResearches,
-  getResearchById,
   getTiers,
   getResearchByTier,
   getTierSummary,
@@ -17,10 +16,14 @@ import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { applyAction, applyTime, getTimeToSave, calculateEarningsForTime } from '@/engine/apply';
-import { calculateMaxVehicleSlots, calculateMaxTrainLength, calculateShippingCapacity } from '@/calculations/shippingCapacity';
-import type { SimulationContext, EngineState } from '@/engine/types';
-import { getNextPacificTime } from '@/lib/events';
+import { applyAction, applyTime, getTimeToSave } from '@/engine/apply';
+import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
+import {
+  getNextPacificTime,
+  getBuildPhaseEndForSaleCount,
+  countSalesThrough,
+  isResearchSaleActive as isRealSaleActiveAt,
+} from '@/lib/events';
 import { type CalculationsSnapshot } from '@/types';
 import { getOptimalELRSet } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
@@ -28,34 +31,67 @@ import { calculateLayRate } from '@/calculations/layRate';
 import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
 import { computeRealisticELR } from '@/calculations/realisticELR';
-import { calculateResearchROI } from '@/calculations/researchROI';
-import { createSimAction } from '@/types/actions/meta';
+import {
+  type MilestoneTarget,
+  type MilestoneChainItem,
+  type MilestoneChainResult,
+  isMilestoneReached,
+  computeMilestoneBaseline,
+  computeMilestoneSummaryCore,
+} from '@/calculations/milestoneChain';
+import { type ResearchRankingItem, rankResearchByROI, rankResearchByELRImpact } from '@/calculations/researchRanking';
+import { type PurchaseEventCrossings, isActuallyDuringSale } from '@/calculations/researchROI';
+import {
+  summarizeResearchLevelChanges,
+  type SaleAwareBuyPlan,
+  type SaleEndsPlan,
+} from '@/calculations/smartBuyPreview';
+import { useResearchCalcWorker } from '@/composables/useResearchCalcWorker';
+import type { SimulationContext } from '@/engine/types';
+import { ei } from 'lib';
 
-export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones';
+/**
+ * Shared by `realisticSummary` (current research levels) and the Smart Buy tab's before/after
+ * delivery-rate comparisons (simulated post-purchase levels) — same "optimal artifacts + max
+ * habs/vehicles" pipeline, just parameterized over which research levels to evaluate instead of
+ * always reading the live store, so both callers stay in sync by construction.
+ */
+function computeRealisticDeliverySummary(
+  researchLevels: Record<string, number>,
+  rawBackup: ei.IBackup | null | undefined,
+  context: SimulationContext
+): { layRate: number; shippingRate: number; elr: number } | null {
+  if (!rawBackup) return null;
+
+  const optimal = getOptimalELRSet(rawBackup, {
+    assumeMaxHabsVehicles: true,
+    excludeGusset: false,
+    commonResearch: researchLevels,
+    epicResearchLevels: context.epicResearchLevels,
+    colleggtibleModifiers: context.colleggtibleModifiers,
+  });
+  const artifactMods = calculateArtifactModifiers(optimal);
+  const stats = computeRealisticELR(
+    researchLevels,
+    artifactMods,
+    context.epicResearchLevels,
+    context.colleggtibleModifiers
+  );
+
+  return {
+    layRate: stats.layRate * 3600,
+    shippingRate: stats.shippingRate * 3600,
+    elr: stats.effectiveRate * 3600,
+  };
+}
+
+export type { MilestoneTarget } from '@/calculations/milestoneChain';
+
+export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'smart_buy';
 export type ElrViewMode = 'realistic' | 'potential';
 export type ElrSortMode = 'efficiency' | 'impact';
 export type ElrRoiDisplayMode = 'hpp' | 'time';
 export type RoiMode = 'immediate' | 'maxed_vehicles';
-
-export type MilestoneTarget =
-  | { kind: 'tier'; tier: number }
-  | { kind: 'research'; researchId: string; targetLevel: number };
-
-function buildMaxVehiclesSnapshot(
-  baseSnapshot: CalculationsSnapshot,
-  researchLevels: Record<string, number>,
-  context: SimulationContext
-): CalculationsSnapshot {
-  const maxSlots = calculateMaxVehicleSlots(researchLevels);
-  const maxTrainLen = calculateMaxTrainLength(researchLevels);
-  const engineState = createBaseEngineState(baseSnapshot);
-  const modifiedState = {
-    ...engineState,
-    researchLevels,
-    vehicles: Array(maxSlots).fill(null).map(() => ({ vehicleId: 11, trainLength: maxTrainLen })),
-  };
-  return computeSnapshot(modifiedState, context);
-}
 
 /**
  * Common interface for research items across different views.
@@ -66,7 +102,9 @@ export interface ResearchViewItem {
   currentLevel: number;
   price: number;
   timeToBuy: string;
-  timeToBuySeconds: number;
+  // Only the cheapest/roi/milestone branches simulate this step-by-step; the elr branch omits it
+  // so consumers fall back to a live rate-based estimate instead (see ResearchFlatView.vue).
+  timeToBuySeconds?: number;
   canBuy: boolean;
   isMaxed: boolean;
   canBuyToHere?: boolean;
@@ -79,12 +117,30 @@ export interface ResearchViewItem {
   isLaying?: boolean;
   isShipping?: boolean;
   recommendationNote?: string;
+  pairRoiSeconds?: number;
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
+  // Whether this purchase's price reflects a research sale, and whether it would complete during
+  // a 2x earnings boost. Distinct from showSaleWarning/showDeadlineWarning ("you should hold off").
+  duringSale?: boolean;
+  duringEarningsBoost?: boolean;
+  // Event boundaries (if any) this purchase's own wait crosses while saving up. Only set on the
+  // milestones branch — lets the preview show the same wait/toggle split the manual planner
+  // inserts when actually executing the chain, instead of only revealing it after clicking "Buy".
+  eventCrossings?: PurchaseEventCrossings;
+  // Extra $/sec this purchase would add to earnings once bought. Only set on the roi branch
+  // (see ResearchRankingItem's field of the same name).
+  earningsDelta?: number;
+  // Absolute sim timestamp (seconds) this purchase would actually complete at (absoluteSimTime +
+  // timeToBuySeconds). Only set on the roi branch — lets callers run meetsROIByDeadline against an
+  // arbitrary target without re-deriving absoluteSimTime themselves.
+  purchaseTimestamp?: number;
 
   // ELR specific
   impact?: number;
   hpp?: number;
+  timeRoiSeconds?: number;
+  lookahead?: { minLevels: number; impact: number; hpp: number };
 
   // Cheapest specific / generic
   buyToHereTime?: string;
@@ -100,10 +156,16 @@ export interface ResearchViewItem {
 
 export const VIEWS = [
   { id: 'game', label: 'Game View', description: 'Grouped by tier, exactly like the game.' },
-  { id: 'cheapest', label: 'Cheapest First', description: 'All unpurchased researches sorted by price.' },
+  // Hidden for now (not removed in case someone asks for it back):
+  // { id: 'cheapest', label: 'Cheapest First', description: 'All unpurchased researches sorted by price.' },
   { id: 'roi', label: 'Earnings ROI', description: 'Prioritizes upgrades that pay for themselves fastest.' },
   { id: 'elr', label: 'Delivery Impact', description: 'Sorted by impact to your Delivery Rate.' },
   { id: 'milestones', label: 'Milestones', description: 'Fastest ROI path to a tier unlock or research level.' },
+  {
+    id: 'smart_buy',
+    label: 'Smart Buy',
+    description: 'Auto-buy research: sale-aware and threshold-based buying in one place.',
+  },
 ] as const;
 
 const RESEARCH_VIEW_STORAGE_KEY = 'ascension_research_view';
@@ -113,10 +175,26 @@ const ELR_ROI_DISPLAY_MODE_STORAGE_KEY = 'ascension_research_elr_roi_display_mod
 const DELIVERY_IMPACT_ONLY_STORAGE_KEY = 'ascension_research_delivery_impact_only';
 const ROI_MODE_STORAGE_KEY = 'ascension_research_roi_mode';
 const MILESTONE_TARGET_STORAGE_KEY = 'ascension_research_milestone_target';
+const SMART_BUY_SALE_TARGET_END_STORAGE_KEY = 'ascension_smart_buy_sale_target_end';
+
+const DEFAULT_RESEARCH_VIEW: ViewType = 'smart_buy';
+
+/** Upper bound on how many sales out the "70% Return" card's sale-count stepper can reach — matches
+ *  C3's own default max `saleCount` (see `auto/shifts/c3.ts`'s `runC3Variants`), keeping the manual
+ *  tool aligned with what auto-planning actually considers. */
+export const SMART_BUY_SALE_COUNT_CAP = 3;
 
 function loadStoredResearchView(): ViewType {
   const stored = localStorage.getItem(RESEARCH_VIEW_STORAGE_KEY);
-  return VIEWS.some(v => v.id === stored) ? (stored as ViewType) : 'game';
+  return VIEWS.some(v => v.id === stored) ? (stored as ViewType) : DEFAULT_RESEARCH_VIEW;
+}
+
+/**
+ * Called when the player shifts into Curiosity so the research tab greets them with Smart Buy
+ * again, rather than leaving them on whatever view they last happened to be looking at.
+ */
+export function resetResearchViewForCuriosityShift(): void {
+  localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, DEFAULT_RESEARCH_VIEW);
 }
 
 function loadStoredElrViewMode(): ElrViewMode {
@@ -143,6 +221,19 @@ function loadStoredRoiMode(): RoiMode {
   return stored === 'immediate' || stored === 'maxed_vehicles' ? stored : 'immediate';
 }
 
+/**
+ * The "70% Return" card's pinned full-ROI-deadline timestamp — `null` means "no pin, track the live
+ * default" (see `smartBuyFullRoiDeadline`'s own doc comment below for what the default is and why a
+ * stale/expired pin falls back to it automatically without needing this loader to validate anything
+ * itself).
+ */
+function loadStoredSmartBuySaleTargetEnd(): number | null {
+  const stored = localStorage.getItem(SMART_BUY_SALE_TARGET_END_STORAGE_KEY);
+  if (!stored) return null;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function loadStoredMilestoneTarget(): MilestoneTarget | null {
   const stored = localStorage.getItem(MILESTONE_TARGET_STORAGE_KEY);
   if (!stored) return null;
@@ -151,7 +242,11 @@ function loadStoredMilestoneTarget(): MilestoneTarget | null {
     if (parsed?.kind === 'tier' && typeof parsed.tier === 'number') {
       return { kind: 'tier', tier: parsed.tier };
     }
-    if (parsed?.kind === 'research' && typeof parsed.researchId === 'string' && typeof parsed.targetLevel === 'number') {
+    if (
+      parsed?.kind === 'research' &&
+      typeof parsed.researchId === 'string' &&
+      typeof parsed.targetLevel === 'number'
+    ) {
       return { kind: 'research', researchId: parsed.researchId, targetLevel: parsed.targetLevel };
     }
   } catch {
@@ -160,40 +255,18 @@ function loadStoredMilestoneTarget(): MilestoneTarget | null {
   return null;
 }
 
-// Evaluation IDs for ELR Impact
-const FLEET_RESEARCH_IDS = [
-  'vehicle_reliablity',
-  'excoskeletons',
-  'traffic_management',
-  'egg_loading_bots',
-  'autonomous_vehicles',
-];
-const TRAIN_CAR_RESEARCH_ID = 'micro_coupling';
-
-// Research categories to exclude from specific views
-const ROI_EXCLUDED_CATEGORIES = [
-  'hatchery_capacity',
-  'internal_hatchery_rate',
-  'running_chicken_bonus',
-  'hatchery_refill_rate',
-];
-const ELR_EXCLUDED_CATEGORIES = [
-  'hatchery_capacity',
-  'internal_hatchery_rate',
-  'running_chicken_bonus',
-  'hatchery_refill_rate',
-  'egg_value',
-];
-
-
-
-const DELIVERY_IMPACT_CATEGORIES = new Set(['hab_capacity', 'fleet_size', 'egg_laying_rate', 'shipping_capacity']);
-
 export function useResearchViews() {
   const commonResearchStore = useCommonResearchStore();
   const initialStateStore = useInitialStateStore();
   const actionsStore = useActionsStore();
   const virtueStore = useVirtueStore();
+  // Owns the one Web Worker all four heavy research-plan simulations below run on — see
+  // useResearchCalcWorker.ts's doc comment for why (keeps a large computation from tripping
+  // Chrome's main-thread-only "Page Unresponsive" hang detector). `computeThresholdBuy` is unused
+  // here — it's returned below purely so ResearchActions.vue's own `quickBuyPlan` watchEffect can
+  // share this same worker instance instead of spawning a second one.
+  const { computeMilestoneChain, computeSaleAwareBuy, computeSaleEndsBuy, computeThresholdBuy } =
+    useResearchCalcWorker();
 
   const currentView = ref<ViewType>(loadStoredResearchView());
   watch(currentView, v => localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, v));
@@ -207,6 +280,17 @@ export function useResearchViews() {
   watch(deliveryImpactOnly, v => localStorage.setItem(DELIVERY_IMPACT_ONLY_STORAGE_KEY, String(v)));
   const roiMode = ref<RoiMode>(loadStoredRoiMode());
   watch(roiMode, v => localStorage.setItem(ROI_MODE_STORAGE_KEY, v));
+  // The "70% Return" card's pinned full-ROI-deadline (Gate B) target — `null` = no pin, track the
+  // live default. Persisted like every other Smart Buy pref above, but unlike them this can hold a
+  // stale value indefinitely (a timestamp from days ago) without correctness issues: nothing here
+  // ever needs to actively clear it, because `smartBuyFullRoiDeadline` below already ignores a pin
+  // once it's in the past and falls back to the live default on its own — see that computed's doc
+  // comment for the full reasoning (SMART_BUY_DUAL_ROI_DESIGN.md §2.1/§2.2).
+  const smartBuySaleTargetEnd = ref<number | null>(loadStoredSmartBuySaleTargetEnd());
+  watch(smartBuySaleTargetEnd, v => {
+    if (v === null) localStorage.removeItem(SMART_BUY_SALE_TARGET_END_STORAGE_KEY);
+    else localStorage.setItem(SMART_BUY_SALE_TARGET_END_STORAGE_KEY, String(v));
+  });
   const milestoneTarget = ref<MilestoneTarget | null>(loadStoredMilestoneTarget());
   watch(
     milestoneTarget,
@@ -219,29 +303,30 @@ export function useResearchViews() {
     },
     { deep: true }
   );
+  // `milestoneTarget` is a localStorage-backed ref, entirely outside the Pinia store system —
+  // resetAllStores() (which every mode-init flow calls first) only resets Pinia stores, so it never
+  // touches this. Left alone, a milestone target selected in one plan (possibly deep into a
+  // developed save) silently survives into a brand new blank ascension and immediately re-triggers
+  // an expensive computation against a near-zero earn rate — this is exactly the "cross-mode state
+  // leakage" resetAllStores() exists to prevent (see its own doc comment), just missed because this
+  // particular piece of state doesn't live in a store. Clear it in lockstep with isPlanInitializing
+  // so it's gone before the milestoneChain watchEffect below gets a chance to act on it.
+  watch(
+    () => actionsStore.isPlanInitializing,
+    initializing => {
+      if (initializing && milestoneTarget.value !== null) {
+        milestoneTarget.value = null;
+      }
+    }
+  );
 
   const realisticSummary = computed(() => {
-    const rawBackup = initialStateStore.rawBackup;
-    if (!rawBackup || elrViewMode.value !== 'realistic') return null;
-
-    const researchLevels = commonResearchStore.researchLevels;
-    const context = getSimulationContext();
-    
-    const optimal = getOptimalELRSet(rawBackup, {
-      assumeMaxHabsVehicles: true,
-      excludeGusset: false,
-      commonResearch: researchLevels,
-      epicResearchLevels: context.epicResearchLevels,
-      colleggtibleModifiers: context.colleggtibleModifiers,
-    });
-    const artifactMods = calculateArtifactModifiers(optimal);
-    const stats = computeRealisticELR(researchLevels, artifactMods, context.epicResearchLevels, context.colleggtibleModifiers);
-
-    return {
-      layRate: stats.layRate * 3600,
-      shippingRate: stats.shippingRate * 3600,
-      elr: stats.effectiveRate * 3600,
-    };
+    if (elrViewMode.value !== 'realistic') return null;
+    return computeRealisticDeliverySummary(
+      commonResearchStore.researchLevels,
+      initialStateStore.rawBackup,
+      getSimulationContext()
+    );
   });
 
   const viewDescription = computed(() => {
@@ -267,6 +352,8 @@ export function useResearchViews() {
       }
       case 'milestones':
         return 'Pick a tier unlock or a specific research level, and see the fastest ROI-optimal path to it.';
+      case 'smart_buy':
+        return 'Auto-buy research: sale-aware ROI buying and threshold-based smart buy, all in one place.';
       default:
         return '';
     }
@@ -315,464 +402,239 @@ export function useResearchViews() {
     return getNextPacificTime(6, 9, absoluteSimTime);
   });
 
-  function isMilestoneReached(target: MilestoneTarget, levels: Record<string, number>): boolean {
-    return target.kind === 'tier' ? isTierUnlocked(levels, target.tier) : (levels[target.researchId] || 0) >= target.targetLevel;
-  }
-
-  const MILESTONE_MAX_STEPS = 2000;
-
-  // For a "research level" milestone there's always a well-defined fallback: just save up and buy
-  // the target directly. So a detour through some other research is only worth suggesting if it
-  // provably shortens the total time versus that direct purchase — not merely because the detour
-  // has good ROI in isolation (a great-ROI item can still make you arrive at the target *later*,
-  // since you also have to spend time saving up for the detour itself).
-  function computeResearchMilestoneChain(target: { researchId: string; targetLevel: number }, context: SimulationContext) {
-    const mods = costModifiers.value;
-    const isSale = isResearchSaleActive.value;
-
-    const targetResearch = getResearchById(target.researchId);
-
-    let state = createBaseEngineState(actionsStore.effectiveSnapshot);
-    let snapshot = actionsStore.effectiveSnapshot;
-    let totalSeconds = 0;
-    const items: ResearchViewItem[] = [];
-
-    if (!targetResearch) return { items, reached: false, totalSeconds };
-
-    while (items.length < MILESTONE_MAX_STEPS && (state.researchLevels[targetResearch.id] || 0) < target.targetLevel) {
-      const levels = state.researchLevels;
-      const targetLevel = levels[targetResearch.id] || 0;
-      const targetPrice = getDiscountedVirtuePrice(targetResearch, targetLevel, mods, isSale);
-      const directSeconds = getTimeToSave(targetPrice, snapshot);
-
-      let best: { research: CommonResearch; level: number; price: number; secondsToBuy: number; pathSeconds: number } | null = null;
-
-      for (const r of getCommonResearches()) {
-        if (r.id === targetResearch.id) continue;
-        const level = levels[r.id] || 0;
-        if (level >= r.levels || !isTierUnlocked(levels, r.tier)) continue;
-
-        const price = getDiscountedVirtuePrice(r, level, mods, isSale);
-        const secondsToBuy = getTimeToSave(price, snapshot);
-        if (secondsToBuy === Infinity) continue;
-
-        const stateAfter = applyTime(
-          applyAction(state, {
-            type: 'buy_research',
-            payload: { researchId: r.id, fromLevel: level, toLevel: level + 1 },
-            cost: price,
-          }),
-          secondsToBuy,
-          snapshot
-        );
-        const snapshotAfter = computeSnapshot(stateAfter, context);
-        const secondsToTargetAfter = getTimeToSave(targetPrice, snapshotAfter);
-        const pathSeconds = secondsToBuy + secondsToTargetAfter;
-
-        if (pathSeconds < directSeconds && (!best || pathSeconds < best.pathSeconds)) {
-          best = { research: r, level, price, secondsToBuy, pathSeconds };
-        }
-      }
-
-      if (best) {
-        totalSeconds += best.secondsToBuy;
-        state = applyAction(state, {
-          type: 'buy_research',
-          payload: { researchId: best.research.id, fromLevel: best.level, toLevel: best.level + 1 },
-          cost: best.price,
-        });
-        state = applyTime(state, best.secondsToBuy, snapshot);
-        snapshot = computeSnapshot(state, context);
-
-        const timeSaved = directSeconds - best.pathSeconds;
-        items.push({
-          research: best.research,
-          targetLevel: best.level + 1,
-          currentLevel: best.level,
-          price: best.price,
-          timeToBuy: best.secondsToBuy < 0.1 ? '0s' : formatDuration(best.secondsToBuy),
-          timeToBuySeconds: best.secondsToBuy,
-          buyToHereTime: totalSeconds < 0.1 ? '0s' : formatDuration(totalSeconds),
-          buyToHereSeconds: totalSeconds,
-          canBuy: true,
-          isMaxed: false,
-          canBuyToHere: true,
-          extraStats: isFinite(timeSaved) ? formatDuration(timeSaved) : '—',
-          extraLabel: 'Saves',
-        });
-      } else {
-        if (directSeconds === Infinity) break;
-
-        totalSeconds += directSeconds;
-        state = applyAction(state, {
-          type: 'buy_research',
-          payload: { researchId: targetResearch.id, fromLevel: targetLevel, toLevel: targetLevel + 1 },
-          cost: targetPrice,
-        });
-        state = applyTime(state, directSeconds, snapshot);
-        snapshot = computeSnapshot(state, context);
-
-        items.push({
-          research: targetResearch,
-          targetLevel: targetLevel + 1,
-          currentLevel: targetLevel,
-          price: targetPrice,
-          timeToBuy: directSeconds < 0.1 ? '0s' : formatDuration(directSeconds),
-          timeToBuySeconds: directSeconds,
-          buyToHereTime: totalSeconds < 0.1 ? '0s' : formatDuration(totalSeconds),
-          buyToHereSeconds: totalSeconds,
-          canBuy: true,
-          isMaxed: false,
-          canBuyToHere: true,
-        });
-      }
-    }
-
-    return { items, reached: (state.researchLevels[targetResearch.id] || 0) >= target.targetLevel, totalSeconds };
-  }
-
-  // Tier-unlock milestone, cheapest-first strategy from an arbitrary starting point: buys whatever's
-  // cheapest (ignoring ROI) until the tier unlocks. Much cheaper to compute per step than the ROI
-  // strategy (just a price compare, no ROI/snapshot projection).
-  function simulateCheapestFirstTierChain(
-    state: EngineState,
-    snapshot: CalculationsSnapshot,
-    totalSecondsSoFar: number,
-    target: { tier: number },
-    context: SimulationContext
-  ) {
-    const mods = costModifiers.value;
-    const isSale = isResearchSaleActive.value;
-
-    let curState = state;
-    let curSnapshot = snapshot;
-    let totalSeconds = totalSecondsSoFar;
-    const items: ResearchViewItem[] = [];
-
-    while (items.length < MILESTONE_MAX_STEPS && !isTierUnlocked(curState.researchLevels, target.tier)) {
-      const levels = curState.researchLevels;
-
-      const candidates = getCommonResearches()
-        .filter(r => (levels[r.id] || 0) < r.levels && isTierUnlocked(levels, r.tier))
-        .map(r => {
-          const level = levels[r.id] || 0;
-          return { research: r, level, price: getDiscountedVirtuePrice(r, level, mods, isSale) };
-        });
-
-      if (candidates.length === 0) break;
-
-      candidates.sort((a, b) => a.price - b.price);
-      const best = candidates[0];
-      const secondsToBuy = getTimeToSave(best.price, curSnapshot);
-      if (secondsToBuy === Infinity) break;
-
-      totalSeconds += secondsToBuy;
-
-      curState = applyAction(curState, {
-        type: 'buy_research',
-        payload: { researchId: best.research.id, fromLevel: best.level, toLevel: best.level + 1 },
-        cost: best.price,
-      });
-      curState = applyTime(curState, secondsToBuy, curSnapshot);
-      curSnapshot = computeSnapshot(curState, context);
-
-      items.push({
-        research: best.research,
-        targetLevel: best.level + 1,
-        currentLevel: best.level,
-        price: best.price,
-        timeToBuy: secondsToBuy < 0.1 ? '0s' : formatDuration(secondsToBuy),
-        timeToBuySeconds: secondsToBuy,
-        buyToHereTime: totalSeconds < 0.1 ? '0s' : formatDuration(totalSeconds),
-        buyToHereSeconds: totalSeconds,
-        canBuy: true,
-        isMaxed: false,
-        canBuyToHere: true,
-      });
-    }
-
-    return { items, reached: isTierUnlocked(curState.researchLevels, target.tier), totalSeconds };
-  }
-
-  function computeCheapestFirstTierChain(target: { tier: number }, context: SimulationContext) {
-    return simulateCheapestFirstTierChain(createBaseEngineState(actionsStore.effectiveSnapshot), actionsStore.effectiveSnapshot, 0, target, context);
-  }
-
-  // Re-sequences a FIXED set of purchases (same researches, same levels — just picked by price) into
-  // ROI order instead. The set of purchases and their total price don't change, but since each
-  // purchase's own price only depends on its own current level (never on what else has been bought),
-  // buying the ROI-positive ones earlier can only grow earnings sooner and speed up the rest — never
-  // slower than the original price-only order. Per-research level order is preserved (you can't buy
-  // level N+1 before level N of the same research).
-  function reorderTierChainByROI(
-    tailItems: ResearchViewItem[],
-    startState: EngineState,
-    startSnapshot: CalculationsSnapshot,
-    startTotalSeconds: number,
-    context: SimulationContext
-  ) {
-    const mods = costModifiers.value;
-    const isSale = isResearchSaleActive.value;
-
+  const nextSaleStart = computed(() => {
     const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
+    return getNextPacificTime(5, 9, absoluteSimTime);
+  });
 
-    const pendingByResearch = new Map<string, { research: CommonResearch; levels: number[] }>();
-    for (const item of tailItems) {
-      const entry = pendingByResearch.get(item.research.id);
-      if (entry) {
-        entry.levels.push(item.targetLevel);
-      } else {
-        pendingByResearch.set(item.research.id, { research: item.research, levels: [item.targetLevel] });
-      }
-    }
-
-    let state = startState;
-    let snapshot = startSnapshot;
-    let totalSeconds = startTotalSeconds;
-    const items: ResearchViewItem[] = [];
-
-    while (items.length < tailItems.length) {
-      const currentAbsoluteTime = absoluteSimTime + totalSeconds;
-      const nextSaleStart = getNextPacificTime(5, 9, currentAbsoluteTime);
-      const upcoming9amDurations = Array.from({ length: 7 }, (_, i) => getNextPacificTime(i, 9, currentAbsoluteTime) - currentAbsoluteTime);
-      const eventExpirationSeconds = Math.min(...upcoming9amDurations);
-
-      const candidates = Array.from(pendingByResearch.values())
-        .filter(entry => entry.levels.length > 0)
-        .map(entry => {
-          const targetLevel = entry.levels[0];
-          const level = targetLevel - 1;
-          const price = getDiscountedVirtuePrice(entry.research, level, mods, isSale);
-          const roiResult = calculateResearchROI({
-            research: entry.research,
-            level,
-            price,
-            snapshot,
-            context,
-            eventTiming: {
-              absoluteSimTime: currentAbsoluteTime,
-              nextSaleStart,
-              eventExpirationSeconds,
-              researchSaleDeadline: researchSaleDeadline.value,
-              isSaleActive: isSale,
-            },
-          });
-          return { research: entry.research, level, targetLevel, price, roiResult };
-        });
-
-      if (candidates.length === 0) break;
-
-      candidates.sort((a, b) => {
-        if (a.roiResult.roiSeconds !== b.roiResult.roiSeconds) return a.roiResult.roiSeconds - b.roiResult.roiSeconds;
-        return a.price - b.price;
-      });
-
-      const best = candidates[0];
-      const secondsToBuy = getTimeToSave(best.price, snapshot);
-      if (secondsToBuy === Infinity) break;
-
-      totalSeconds += secondsToBuy;
-
-      state = applyAction(state, {
-        type: 'buy_research',
-        payload: { researchId: best.research.id, fromLevel: best.level, toLevel: best.targetLevel },
-        cost: best.price,
-      });
-      state = applyTime(state, secondsToBuy, snapshot);
-      snapshot = computeSnapshot(state, context);
-
-      const roiLabel =
-        best.roiResult.roiSeconds === Infinity || best.roiResult.roiSeconds > 999 * 86400
-          ? '>999d'
-          : formatDuration(best.roiResult.roiSeconds);
-
-      items.push({
-        research: best.research,
-        targetLevel: best.targetLevel,
-        currentLevel: best.level,
-        price: best.price,
-        timeToBuy: secondsToBuy < 0.1 ? '0s' : formatDuration(secondsToBuy),
-        timeToBuySeconds: secondsToBuy,
-        buyToHereTime: totalSeconds < 0.1 ? '0s' : formatDuration(totalSeconds),
-        buyToHereSeconds: totalSeconds,
-        canBuy: true,
-        isMaxed: false,
-        canBuyToHere: true,
-        roiSeconds: best.roiResult.roiSeconds,
-        totalRoiSeconds: best.roiResult.totalRoiSeconds,
-        roiLabel,
-        extraStats: roiLabel,
-        extraLabel: 'ROI',
-        extraSeconds: best.roiResult.roiSeconds,
-        showSaleWarning: best.roiResult.showSaleWarning,
-        showDeadlineWarning: best.roiResult.showDeadlineWarning,
-      });
-
-      pendingByResearch.get(best.research.id)!.levels.shift();
-    }
-
-    return { items, totalSeconds };
-  }
-
-  // Tier-unlock milestone: every purchase (in an already-unlocked tier) counts toward the threshold,
-  // so there's no "wasted" purchase the way there is for a research-level target. But that doesn't
-  // mean ROI-first is always fastest — an expensive, high-ROI purchase only pays off if there's
-  // enough remaining runway for its earnings boost to matter; buying it when the milestone could
-  // instead be finished with a pile of purchases cheaper than it just wastes time saving up.
+  // Converts the pure-calculation MilestoneChainItem shape (raw seconds, no formatting) into the
+  // view's ResearchViewItem shape. roiSeconds/totalRoiSeconds are only set on detour items — both
+  // computeTierMilestoneChain's ROI-reorder path and computeResearchMilestoneChain's ROI-ranked
+  // detour path populate them the same way; direct target/cheapest-first purchases leave them
+  // unset.
   //
-  // At each step: compare (a) finishing via pure cheapest-first from here, against (b) buying the
-  // single best-ROI candidate now, then finishing via cheapest-first from THAT state. Whichever is
-  // faster wins. If (b) wins, commit to that one purchase and repeat the comparison (another detour
-  // may or may not be worth it next); if (a) wins, stop inserting detours and finish with the
-  // cheapest-first tail. This naturally orders the result as [ROI detours..., cheap purchases...],
-  // since detours are only ever prepended while they keep winning, and once cheapest-first wins the
-  // remaining tail is pure cheapest-first.
-  function computeTierMilestoneChain(target: { tier: number }, context: SimulationContext) {
-    const mods = costModifiers.value;
-    const isSale = isResearchSaleActive.value;
+  // `item.duringSale` (from `getSaleAwareTimeToSave`) means "priced at a sale discount, whichever
+  // sale that turns out to be" — correct for the actual gems charged, but not what the "Sale" badge
+  // should mean to a player glancing at the list: a purchase that only becomes worthwhile several
+  // sale cycles out is still priced at a discount, but showing the same badge as an item landing in
+  // NEXT week's sale is misleading. `isActuallyDuringSale` (already re-derived against calendar
+  // truth for `showSaleWarning`'s sake) narrows it to "actually the very next sale" for display.
+  // Anchored on THIS item's own purchase-start time (`completesAt - timeToBuySeconds`, i.e. when its
+  // wait began), not the live `nextSaleStart`/"now" — a chain item several purchases (or idle-forward
+  // sale-boundary crossings) deep can be evaluated well after the plan's own start, and using the
+  // live "now" instead of the chain's simulated "now" at that point is the same "which sale is
+  // actually next" mistake `isActuallyDuringSale` itself guards against internally.
+  function toResearchViewItem(item: MilestoneChainItem, startAbsoluteTime: number): ResearchViewItem {
+    const completesAt = startAbsoluteTime + item.buyToHereSeconds;
+    const purchaseStartTime = completesAt - item.timeToBuySeconds;
+    const result: ResearchViewItem = {
+      research: item.research,
+      targetLevel: item.targetLevel,
+      currentLevel: item.currentLevel,
+      price: item.price,
+      timeToBuy: item.timeToBuySeconds < 0.1 ? '0s' : formatDuration(item.timeToBuySeconds),
+      timeToBuySeconds: item.timeToBuySeconds,
+      buyToHereTime: item.buyToHereSeconds < 0.1 ? '0s' : formatDuration(item.buyToHereSeconds),
+      buyToHereSeconds: item.buyToHereSeconds,
+      canBuy: true,
+      isMaxed: false,
+      canBuyToHere: true,
+      showSaleWarning: item.showSaleWarning,
+      showDeadlineWarning: item.showDeadlineWarning,
+      duringSale: isActuallyDuringSale(item.duringSale, completesAt, purchaseStartTime),
+      duringEarningsBoost: item.duringEarningsBoost,
+      eventCrossings: item.eventCrossings,
+    };
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
-    const offset = actionsStore.planStartOffset;
-    const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
-
-    let state = createBaseEngineState(actionsStore.effectiveSnapshot);
-    let snapshot = actionsStore.effectiveSnapshot;
-    let totalSeconds = 0;
-    const items: ResearchViewItem[] = [];
-
-    while (items.length < MILESTONE_MAX_STEPS && !isTierUnlocked(state.researchLevels, target.tier)) {
-      const cheapPlan = simulateCheapestFirstTierChain(state, snapshot, totalSeconds, target, context);
-
-      const levels = state.researchLevels;
-      const currentAbsoluteTime = absoluteSimTime + totalSeconds;
-      const nextSaleStart = getNextPacificTime(5, 9, currentAbsoluteTime);
-      const upcoming9amDurations = Array.from({ length: 7 }, (_, i) => getNextPacificTime(i, 9, currentAbsoluteTime) - currentAbsoluteTime);
-      const eventExpirationSeconds = Math.min(...upcoming9amDurations);
-
-      const roiCandidates = getCommonResearches()
-        .filter(r => (levels[r.id] || 0) < r.levels && isTierUnlocked(levels, r.tier))
-        .map(r => {
-          const level = levels[r.id] || 0;
-          const price = getDiscountedVirtuePrice(r, level, mods, isSale);
-          const roiResult = calculateResearchROI({
-            research: r,
-            level,
-            price,
-            snapshot,
-            context,
-            eventTiming: {
-              absoluteSimTime: currentAbsoluteTime,
-              nextSaleStart,
-              eventExpirationSeconds,
-              researchSaleDeadline: researchSaleDeadline.value,
-              isSaleActive: isSale,
-            },
-          });
-          return { research: r, level, price, roiResult };
-        });
-
-      roiCandidates.sort((a, b) => {
-        if (a.roiResult.roiSeconds !== b.roiResult.roiSeconds) return a.roiResult.roiSeconds - b.roiResult.roiSeconds;
-        return a.price - b.price;
-      });
-
-      let detourPlan: { detourItem: ResearchViewItem; secondsToBuy: number; totalSeconds: number; reached: boolean } | null = null;
-
-      if (roiCandidates.length > 0) {
-        const bestRoi = roiCandidates[0];
-        const secondsToBuy = getTimeToSave(bestRoi.price, snapshot);
-
-        if (secondsToBuy !== Infinity) {
-          const stateAfterDetour = applyTime(
-            applyAction(state, {
-              type: 'buy_research',
-              payload: { researchId: bestRoi.research.id, fromLevel: bestRoi.level, toLevel: bestRoi.level + 1 },
-              cost: bestRoi.price,
-            }),
-            secondsToBuy,
-            snapshot
-          );
-          const snapshotAfterDetour = computeSnapshot(stateAfterDetour, context);
-          const restOfPlan = simulateCheapestFirstTierChain(
-            stateAfterDetour,
-            snapshotAfterDetour,
-            totalSeconds + secondsToBuy,
-            target,
-            context
-          );
-
-          const roiLabel =
-            bestRoi.roiResult.roiSeconds === Infinity || bestRoi.roiResult.roiSeconds > 999 * 86400
-              ? '>999d'
-              : formatDuration(bestRoi.roiResult.roiSeconds);
-
-          detourPlan = {
-            detourItem: {
-              research: bestRoi.research,
-              targetLevel: bestRoi.level + 1,
-              currentLevel: bestRoi.level,
-              price: bestRoi.price,
-              timeToBuy: secondsToBuy < 0.1 ? '0s' : formatDuration(secondsToBuy),
-              timeToBuySeconds: secondsToBuy,
-              buyToHereTime: totalSeconds + secondsToBuy < 0.1 ? '0s' : formatDuration(totalSeconds + secondsToBuy),
-              buyToHereSeconds: totalSeconds + secondsToBuy,
-              canBuy: true,
-              isMaxed: false,
-              canBuyToHere: true,
-              roiSeconds: bestRoi.roiResult.roiSeconds,
-              totalRoiSeconds: bestRoi.roiResult.totalRoiSeconds,
-              roiLabel,
-              extraStats: roiLabel,
-              extraLabel: 'ROI',
-              extraSeconds: bestRoi.roiResult.roiSeconds,
-              showSaleWarning: bestRoi.roiResult.showSaleWarning,
-              showDeadlineWarning: bestRoi.roiResult.showDeadlineWarning,
-            },
-            secondsToBuy,
-            totalSeconds: restOfPlan.totalSeconds,
-            reached: restOfPlan.reached,
-          };
-        }
-      }
-
-      const detourWins = detourPlan && detourPlan.reached && (!cheapPlan.reached || detourPlan.totalSeconds < cheapPlan.totalSeconds);
-
-      if (detourWins && detourPlan) {
-        items.push(detourPlan.detourItem);
-        totalSeconds += detourPlan.secondsToBuy;
-        state = applyAction(state, {
-          type: 'buy_research',
-          payload: {
-            researchId: detourPlan.detourItem.research.id,
-            fromLevel: detourPlan.detourItem.currentLevel,
-            toLevel: detourPlan.detourItem.targetLevel,
-          },
-          cost: detourPlan.detourItem.price,
-        });
-        state = applyTime(state, detourPlan.secondsToBuy, snapshot);
-        snapshot = computeSnapshot(state, context);
-        continue;
-      }
-
-      // Cheapest-first wins (or no detour is viable) — buy the same set of items, but re-sequenced
-      // by ROI so any ROI-positive purchases in the tail happen before the zero-ROI filler.
-      const reordered = reorderTierChainByROI(cheapPlan.items, state, snapshot, totalSeconds, context);
-      items.push(...reordered.items);
-      return { items, reached: cheapPlan.reached, totalSeconds: reordered.totalSeconds };
+    if (item.roiSeconds !== undefined) {
+      const roiLabel =
+        item.roiSeconds === Infinity || item.roiSeconds > 999 * 86400 ? '>999d' : formatDuration(item.roiSeconds);
+      result.roiSeconds = item.roiSeconds;
+      result.totalRoiSeconds = item.totalRoiSeconds;
+      result.roiLabel = roiLabel;
+      result.extraStats = roiLabel;
+      result.extraLabel = 'ROI';
+      result.extraSeconds = item.roiSeconds;
     }
 
-    return { items, reached: isTierUnlocked(state.researchLevels, target.tier), totalSeconds };
+    return result;
   }
 
-  const milestoneChainResult = computed(() => {
+  // Converts the pure-calculation ResearchRankingItem shape (raw seconds, no formatting) from
+  // rankResearchByROI into the view's ResearchViewItem shape.
+  function toResearchViewItemFromROI(item: ResearchRankingItem, absoluteSimTime: number): ResearchViewItem {
+    const roiSeconds = item.roiSeconds!;
+    const totalRoiSeconds = item.totalRoiSeconds!;
+    const timeToBuySeconds = item.timeToBuySeconds!;
+    const roiLabel = roiSeconds === Infinity || roiSeconds > 999 * 86400 ? '>999d' : formatDuration(roiSeconds);
+    const totalRoiLabel =
+      totalRoiSeconds === Infinity || totalRoiSeconds > 999 * 86400
+        ? '>999d'
+        : totalRoiSeconds < 1
+          ? '0s'
+          : formatDuration(totalRoiSeconds);
+
+    return {
+      research: item.research,
+      price: item.price,
+      currentLevel: item.currentLevel,
+      targetLevel: item.targetLevel,
+      timeToBuy:
+        timeToBuySeconds > 0
+          ? timeToBuySeconds === Infinity
+            ? '∞'
+            : timeToBuySeconds < 1
+              ? '0s'
+              : formatDuration(timeToBuySeconds)
+          : '',
+      timeToBuySeconds,
+      canBuy: item.canBuy,
+      isMaxed: false,
+      roiSeconds,
+      totalRoiSeconds,
+      roiLabel,
+      totalRoiLabel,
+      isLaying: item.isLaying,
+      isShipping: item.isShipping,
+      recommendationNote:
+        item.pairPartnerResearch && item.pairRoiSeconds !== undefined
+          ? `Buying this with "${item.pairPartnerResearch.name}" would have a much better combined payback time of ${formatDuration(item.pairRoiSeconds)}.`
+          : undefined,
+      pairRoiSeconds: item.pairRoiSeconds,
+      showSaleWarning: item.showSaleWarning,
+      showDeadlineWarning: item.showDeadlineWarning,
+      // See `toResearchViewItem`'s identical comment: narrow "priced at a sale, whichever one" down
+      // to "actually the very next sale" for the badge's sake, anchored on this ranking's own `now`
+      // rather than the live `nextSaleStart`.
+      duringSale: isActuallyDuringSale(item.duringSale, absoluteSimTime + timeToBuySeconds, absoluteSimTime),
+      duringEarningsBoost: item.duringEarningsBoost,
+      earningsDelta: item.earningsDelta,
+      purchaseTimestamp: absoluteSimTime + timeToBuySeconds,
+      extraStats: totalRoiLabel,
+      extraLabel: 'Achieve ROI',
+      extraSeconds: totalRoiSeconds,
+    };
+  }
+
+  // Converts the pure-calculation ResearchRankingItem shape from rankResearchByELRImpact into the
+  // view's ResearchViewItem shape. Deliberately omits timeToBuySeconds (see ResearchViewItem's
+  // doc comment) — matches pre-hoist behavior of never populating it for this view.
+  function toResearchViewItemFromELR(item: ResearchRankingItem): ResearchViewItem {
+    const la = item.lookahead;
+    return {
+      research: item.research,
+      price: item.price,
+      currentLevel: item.currentLevel,
+      targetLevel: item.targetLevel,
+      timeToBuy: '',
+      canBuy: item.canBuy,
+      isMaxed: false,
+      impact: item.impact,
+      hpp: la ? la.hpp : item.hpp,
+      timeRoiSeconds: la ? la.timeRoiSeconds : item.timeRoiSeconds,
+      realisticStats: la ? la.realisticStats : item.realisticStats,
+      lookahead: la ? { minLevels: la.minLevels, impact: la.impact, hpp: la.hpp } : undefined,
+      showDeadlineWarning: item.showDeadlineWarning,
+      duringSale: item.duringSale,
+      duringEarningsBoost: item.duringEarningsBoost,
+      extraStats: `+${((la ? la.impact : item.impact!) * 100).toFixed(3)}%`,
+      extraLabel: la ? `${la.minLevels}-lvl impact` : 'Impact',
+    };
+  }
+
+  // `computeTierMilestoneChain`/`computeResearchMilestoneChain` can take a couple of seconds for a
+  // large tier-unlock chain — long enough, run on the main thread, to trip Chrome's "Page
+  // Unresponsive" hang detector (confirmed happening in practice, not just theoretical). Both now
+  // run in a Web Worker instead (`computeMilestoneChain`, from useResearchCalcWorker.ts — see its
+  // doc comment for why that fixes the hang detector specifically, not just the visual freeze). A
+  // plain `computed` still couldn't drive the loading flag below correctly even with the computation
+  // off-thread: Vue computeds are fully synchronous, and `await`ing inside one isn't meaningful —
+  // Vue never awaits a computed getter's return value. So this stays a `watchEffect`, which captures
+  // every reactive dependency it needs SYNCHRONOUSLY (so Vue's automatic dependency tracking — which
+  // only sees reads before the first `await` — still picks all of them up), flips the loading flag,
+  // then `await`s the worker request.
+  const isComputingMilestoneChain = ref(false);
+  const milestoneChainResultRef = ref<MilestoneChainResult>({
+    items: [],
+    reached: false,
+    totalSeconds: 0,
+  });
+  // Paired with `milestoneChainResultRef` so `toResearchViewItem` can turn each item's
+  // chain-relative `buyToHereSeconds` into an absolute completion time (needed to correctly gate
+  // its "Sale" badge — see that function's own comment). Always the exact `absoluteSimTime` the
+  // chain currently in `milestoneChainResultRef` was computed from, kept in sync with it below.
+  const milestoneChainStartTimeRef = ref(0);
+  let milestoneChainGeneration = 0;
+
+  watchEffect(async () => {
+    // Must be the first read so Vue tracks it and re-runs this effect once mode-init settles.
+    // While a mode switch (start from scratch / plan future / reconcile / load plan / etc.) is
+    // resetting stores, they briefly disagree with each other (e.g. virtueStore already reset while
+    // actionsStore still holds the previous plan's snapshot) — computing a milestone chain against
+    // that transitional mix has produced nonsensical absolute timestamps and hung the tab.
+    if (actionsStore.isPlanInitializing) {
+      return;
+    }
+
+    // Same reasoning as `saleAwarePlan70`'s watchEffect in the Smart Buy section below: a bulk
+    // purchase mutates `actionsStore.effectiveSnapshot` once per item bought, then again when
+    // recalculateFrom() installs the final recalculated result — without this guard this effect
+    // computes the chain once against the doomed mid-batch intermediate state, then again against
+    // the final one once things settle.
+    if (actionsStore.batchMode || actionsStore.isRecalculating) {
+      return;
+    }
+
     const target = milestoneTarget.value;
-    if (!target) return { items: [] as ResearchViewItem[], reached: false, totalSeconds: 0 };
+    const generation = ++milestoneChainGeneration;
+
+    if (!target) {
+      milestoneChainResultRef.value = { items: [], reached: false, totalSeconds: 0 };
+      // Must clear this here too, not just after a completed compute below: if a prior invocation
+      // (for the previous target) is still in flight when the target is cleared, it will later find
+      // itself superseded (`generation !== milestoneChainGeneration`) and discard its result without
+      // touching this flag — leaving the overlay stuck on forever with nothing left computing.
+      isComputingMilestoneChain.value = false;
+      return;
+    }
 
     const context = getSimulationContext();
-    return target.kind === 'tier' ? computeTierMilestoneChain(target, context) : computeResearchMilestoneChain(target, context);
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const mods = costModifiers.value;
+    const deadline = researchSaleDeadline.value;
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
+
+    // No explicit yield needed here (unlike this file's other watchEffects before this one moved to
+    // a worker): `await computeMilestoneChain(...)` below is a genuine postMessage round-trip, so
+    // control already returns to the browser — and the loading flag set just above gets to paint —
+    // before the (now off-main-thread) computation itself even starts.
+    isComputingMilestoneChain.value = true;
+
+    let result: MilestoneChainResult;
+    try {
+      result = await computeMilestoneChain({ target, startSnapshot, context, mods, absoluteSimTime, deadline });
+    } finally {
+      // In this `finally` (not just after a successful compute below) so a thrown error still stops
+      // the milestones panel spinning — even showing a stale chain — rather than leaving it dimmed
+      // forever with nothing left to reset it.
+      if (generation === milestoneChainGeneration) {
+        isComputingMilestoneChain.value = false;
+      }
+    }
+
+    // Discard if a newer invocation has started since (e.g. the user changed the milestone target
+    // again before this one finished) — only the latest result should ever land.
+    if (generation === milestoneChainGeneration) {
+      milestoneChainResultRef.value = result;
+      milestoneChainStartTimeRef.value = absoluteSimTime;
+    }
   });
+
+  const milestoneChainResult = computed(() => milestoneChainResultRef.value);
 
   // Baseline comparison ("without this research"). For a research-level milestone there's a
   // well-defined direct alternative — just save up and buy that research's next level with no
@@ -784,46 +646,52 @@ export function useResearchViews() {
     const target = milestoneTarget.value;
     if (!target) return { reached: false, totalSeconds: 0 };
 
-    const mods = costModifiers.value;
-    const isSale = isResearchSaleActive.value;
-
-    if (target.kind === 'research') {
-      const targetResearch = getResearchById(target.researchId);
-      if (!targetResearch) return { reached: false, totalSeconds: 0 };
-
-      const level = commonResearchStore.researchLevels[targetResearch.id] || 0;
-      const price = getDiscountedVirtuePrice(targetResearch, level, mods, isSale);
-      const seconds = getTimeToSave(price, actionsStore.effectiveSnapshot);
-      return { reached: seconds !== Infinity, totalSeconds: seconds };
-    }
-
     const context = getSimulationContext();
-    const cheapChain = computeCheapestFirstTierChain(target, context);
-    return { reached: cheapChain.reached, totalSeconds: cheapChain.totalSeconds };
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
+    return computeMilestoneBaseline(target, startSnapshot, context, costModifiers.value, absoluteSimTime);
+  });
+
+  // Whether the currently-selected milestone target is already reached at the current research
+  // levels — exposed separately from `milestoneSummary` (which returns `null` in this case) so
+  // `ResearchFlatView`'s empty state can tell "already done" apart from "chain got stuck/truncated
+  // with zero purchases queued," which also produces an empty `sortedResearches` list but means
+  // something very different.
+  const milestoneAlreadyReached = computed(() => {
+    const target = milestoneTarget.value;
+    if (!target) return false;
+    return isMilestoneReached(target, commonResearchStore.researchLevels);
   });
 
   const milestoneSummary = computed(() => {
     const target = milestoneTarget.value;
     if (!target) return null;
-    if (isMilestoneReached(target, commonResearchStore.researchLevels)) return null;
+    if (milestoneAlreadyReached.value) return null;
 
-    const chain = milestoneChainResult.value;
-    const baseline = milestoneBaselineResult.value;
+    const core = computeMilestoneSummaryCore(milestoneChainResult.value, milestoneBaselineResult.value);
 
-    if (!chain.reached || !baseline.reached) {
-      return { truncated: true as const };
+    if (core.truncated) {
+      return {
+        truncated: true as const,
+        partialPurchaseCount: core.partialPurchaseCount ?? 0,
+        partialSeconds: core.partialSeconds ?? 0,
+      };
     }
 
     const baseTimestamp =
-      virtueStore.planStartTime.getTime() + (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset) * 1000;
+      virtueStore.planStartTime.getTime() +
+      (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset) * 1000;
 
     return {
       truncated: false as const,
-      baselineSeconds: baseline.totalSeconds,
-      optimizedSeconds: chain.totalSeconds,
-      timeSavedSeconds: baseline.totalSeconds - chain.totalSeconds,
-      purchaseCount: chain.items.length,
-      finishAbsoluteTime: formatAbsoluteTime(chain.totalSeconds, baseTimestamp, virtueStore.ascensionTimezone),
+      baselineSeconds: core.baselineSeconds!,
+      optimizedSeconds: core.optimizedSeconds!,
+      timeSavedSeconds: core.timeSavedSeconds!,
+      purchaseCount: core.purchaseCount!,
+      gemsSpent: core.gemsSpent!,
+      finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
     };
   });
 
@@ -852,7 +720,7 @@ export function useResearchViews() {
         let rSnapshot = baseSnapshot;
         let rSeconds = 0;
         let rInfinite = false;
-        let rVirtualBank = baseSnapshot.bankValue || 0;
+        const rVirtualBank = baseSnapshot.bankValue || 0;
 
         for (let l = currentLevel; l < r.levels; l++) {
           const price = getDiscountedVirtuePrice(r, l, mods, rSnapshot.activeSales.research);
@@ -920,8 +788,409 @@ export function useResearchViews() {
     };
   });
 
+  // Independent, reactive wrapper around `rankResearchByROI` — deliberately has no `currentView`
+  // dependency of its own. Vue computeds are lazy (only re-run when actually read), so whether this
+  // does real work already tracks "is something currently reading it" rather than "which tab is
+  // selected" — the roi/elr/smart_buy tabs' own `v-if`s already gate that for template consumers.
+  // Baking a view check in here would just mean updating an allowlist by hand every time a new
+  // consumer (e.g. the smart_buy tab) needs this list, which is the exact rigidity being avoided.
+  const roiRankedResearches = computed(() => {
+    const researchLevels = commonResearchStore.researchLevels;
+    const isSale = isResearchSaleActive.value;
+    const mods = costModifiers.value;
+    const context = getSimulationContext();
+    const effectiveSnapshot = actionsStore.effectiveSnapshot;
+
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (effectiveSnapshot.lastStepTime - offset);
+
+    const ranked = rankResearchByROI(
+      researchLevels,
+      effectiveSnapshot,
+      context,
+      mods,
+      isSale,
+      absoluteSimTime,
+      researchSaleDeadline.value,
+      roiMode.value,
+      deliveryImpactOnly.value
+    );
+
+    return ranked.map(item => toResearchViewItemFromROI(item, absoluteSimTime));
+  });
+
+  // Independent, reactive wrapper around `rankResearchByELRImpact` — see `roiRankedResearches`'
+  // doc comment above for why this has no `currentView` dependency of its own either.
+  const elrRankedResearches = computed(() => {
+    const researchLevels = commonResearchStore.researchLevels;
+    const isSale = isResearchSaleActive.value;
+    const mods = costModifiers.value;
+    const context = getSimulationContext();
+
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
+
+    const ranked = rankResearchByELRImpact(
+      researchLevels,
+      initialStateStore.rawBackup,
+      actionsStore.effectiveSnapshot,
+      context,
+      mods,
+      isSale,
+      absoluteSimTime,
+      researchSaleDeadline.value,
+      elrViewMode.value,
+      elrSortMode.value
+    );
+
+    return ranked.map(toResearchViewItemFromELR);
+  });
+
+  // The "70% Return" card's own live "now" — same formula every other absolute-time computed in this
+  // file already repeats inline (`nextSaleStart`/`researchSaleDeadline` above, etc.); kept as its own
+  // small helper here since the sale-count stepper logic below reads it from three separate places.
+  function smartBuyAbsoluteSimTime(): number {
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    return baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
+  }
+
+  // The "70% Return" card's Gate B deadline (see `rankResearchByROI`'s `fullRoiDeadline` doc comment
+  // in researchRanking.ts) — "how many sales are in play," default 1 (the very next sale). Pinned to
+  // a captured absolute timestamp once the stepper's touched (`smartBuySaleTargetEnd`), rather than
+  // continuously re-derived as "N sales from whatever now happens to be": re-deriving live would mean
+  // riding out a chosen sale, one button click per cycle, silently re-targets one sale further out
+  // after each click, since "now" keeps advancing — defeating the entire point of picking a fixed
+  // target (see SMART_BUY_DUAL_ROI_DESIGN.md §2.1). A pin that's fallen into the past (the ride it
+  // pointed at already finished) is treated exactly like no pin at all — this is what makes
+  // persisting `smartBuySaleTargetEnd` across sessions safe (§2.2): a stale timestamp from days ago
+  // just falls back to today's live default on its own, without needing anything to actively clear it.
+  const smartBuyFullRoiDeadline = computed(() => {
+    const pinned = smartBuySaleTargetEnd.value;
+    if (pinned !== null && pinned > smartBuyAbsoluteSimTime()) return pinned;
+    return getBuildPhaseEndForSaleCount(smartBuyAbsoluteSimTime(), 1);
+  });
+
+  // The "70% Return" flow's structural per-click stop point (fed to `simulateSaleAwareBuy`'s own
+  // `nextSaleStart` param, and `runSaleAwareBuyFlow`'s `targetDeadline` in ResearchActions.vue) —
+  // normally just `nextSaleStart` itself (the immediate next sale: one click handles "before that
+  // sale," riding out further sales is "click again next week" — see `runSaleAwareBuyFlow`'s own doc
+  // comment), but capped at `smartBuyFullRoiDeadline` so a click that's already buying WITHIN the
+  // ride's final sale doesn't get pushed an entire extra week further, into a sale beyond what this
+  // ride was ever aiming for.
+  //
+  // `Math.min` is a no-op outside that case: `nextSaleStart` is always earlier than
+  // `smartBuyFullRoiDeadline` for every sale before the final one (the ride's deadline is, by
+  // definition, further out than the very next sale until you actually reach it), and only drops
+  // below it once `getNextSaleStart` has skipped past a currently-active sale to the FOLLOWING one
+  // (its "always strictly after now" guarantee) while `smartBuyFullRoiDeadline` — this active sale's
+  // own end, if it's the final one — hasn't. Confirmed via a live report: with N=1 (default) picked
+  // while 2 hours into a sale, this used to pad the clock a full 6 more days to the sale after next,
+  // even though `smartBuyFullRoiDeadline` (this same sale's own end) was only 22 hours out.
+  const smartBuyStructuralDeadline = computed(() => Math.min(nextSaleStart.value, smartBuyFullRoiDeadline.value));
+
+  // Whether the cap above actually won — i.e. purchasing is already happening WITHIN the ride's
+  // final sale, rather than in the ordinary "before the next sale starts" case. `runSaleAwareBuyFlow`
+  // (ResearchActions.vue) reads this to decide whether it's worth padding the plan's clock the rest
+  // of the way to `smartBuyStructuralDeadline` once the buy loop stops: when `false` (the deadline is
+  // `nextSaleStart`, a sale START), parking the clock there is useful setup for whatever comes next
+  // — the sale toggling on, more purchases becoming affordable, etc. When `true` (the deadline is
+  // this active sale's own END), there's nothing waiting at that boundary once purchasing has
+  // genuinely run out of qualifying candidates — advancing to it would just burn the rest of the sale
+  // for no reason, so that flow stops right after the last real purchase instead.
+  const smartBuyDeadlineIsFinalSaleCap = computed(() => smartBuyFullRoiDeadline.value < nextSaleStart.value);
+
+  // How many sales `smartBuyFullRoiDeadline` currently represents — display value for the stepper,
+  // and what its own `+`/`-` handlers below count from/to. Derived from the deadline itself (not
+  // tracked as separate state) so it can never disagree with what's actually being sent to the plan.
+  const smartBuySaleCount = computed(() => countSalesThrough(smartBuyAbsoluteSimTime(), smartBuyFullRoiDeadline.value));
+
+  function incrementSmartBuySaleCount(): void {
+    const nextCount = Math.min(SMART_BUY_SALE_COUNT_CAP, smartBuySaleCount.value + 1);
+    smartBuySaleTargetEnd.value = getBuildPhaseEndForSaleCount(smartBuyAbsoluteSimTime(), nextCount);
+  }
+
+  function decrementSmartBuySaleCount(): void {
+    const nextCount = Math.max(1, smartBuySaleCount.value - 1);
+    smartBuySaleTargetEnd.value = getBuildPhaseEndForSaleCount(smartBuyAbsoluteSimTime(), nextCount);
+  }
+
+  // Dry-run plan for the sale-aware ROI buy flow ("70% Return") — the single source of truth for
+  // "what gets bought, in what order" for both the Smart Buy preview and the real button click
+  // (see `simulateSaleAwareBuy`'s own doc comment). No `currentView` gate, same rationale as
+  // `roiRankedResearches` above.
+  //
+  // Unlike `roiRankedResearches`, this dry-run simulates purchases one at a time (same class of
+  // work as the milestone chain above) and can take a noticeable moment against a large backlog —
+  // long enough on the main thread to trip Chrome's "Page Unresponsive" hang detector (confirmed in
+  // practice). So, same as the milestone chain, this runs in the shared Web Worker
+  // (`computeSaleAwareBuy`, from useResearchCalcWorker.ts) instead of a plain `computed`, with its
+  // own `isComputingSaleAwarePlan` flag so the "Buy Earnings research" card can show a spinner
+  // scoped to just that card while it (re)computes.
+  const isComputingSaleAwarePlan = ref(false);
+  const saleAwarePlan70Ref = ref<SaleAwareBuyPlan>({
+    entries: [],
+    endLevels: {},
+    endSnapshot: actionsStore.effectiveSnapshot,
+  });
+  let saleAwarePlanGeneration = 0;
+
+  watchEffect(async () => {
+    // Same transitional-state guard as the milestone chain watchEffect below, PLUS `batchMode`/
+    // `isRecalculating`: a bulk purchase (Quick Buy, 70% Return, Buy Until Sale Ends, Buy Entire
+    // Chain) pushes one action onto `actionsStore.actions` per item bought, then — once the whole
+    // batch is applied — recalculateFrom() splices the final recalculated result back in. Both are
+    // mutations of the exact array `effectiveSnapshot` (read below) depends on, so without this
+    // guard this effect fires once on the mid-batch intermediate state (already obsolete the moment
+    // recalculation finishes) AND once more on the final state — paying for two full simulated
+    // buy-throughs, of which only the second's result is ever actually used. Waiting for
+    // `batchMode`/`isRecalculating` to clear means only the state that's actually going to stick
+    // ever gets simulated.
+    if (actionsStore.isPlanInitializing || actionsStore.batchMode || actionsStore.isRecalculating) {
+      return;
+    }
+
+    const researchLevels = commonResearchStore.researchLevels;
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const context = getSimulationContext();
+    const mods = costModifiers.value;
+    const deadline = researchSaleDeadline.value;
+    const saleStart = smartBuyStructuralDeadline.value;
+    const fullRoiDeadline = smartBuyFullRoiDeadline.value;
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
+
+    const generation = ++saleAwarePlanGeneration;
+    // No explicit yield needed: `await computeSaleAwareBuy(...)` below is a genuine postMessage
+    // round-trip to the worker, so control already returns to the browser before the computation
+    // itself starts.
+    isComputingSaleAwarePlan.value = true;
+
+    try {
+      // `roiMode: 'immediate'`/`deliveryImpactOnly: false` are hardcoded here, not read from the
+      // `roiMode`/`deliveryImpactOnly` refs above (those still back the separate ROI tab) — there's
+      // exactly one correct way to run Smart Buy's sale-aware purchasing, so the card offers no
+      // override for either. This also means changing the ROI tab's own mode can no longer silently
+      // change what this card buys, which it used to.
+      const result = await computeSaleAwareBuy({
+        researchLevels,
+        startSnapshot,
+        context,
+        mods,
+        absoluteSimTime,
+        deadline,
+        nextSaleStart: saleStart,
+        roiMode: 'immediate',
+        deliveryImpactOnly: false,
+        fullRoiDeadline,
+      });
+
+      // Discard if a newer invocation has started since — only the latest result should ever land.
+      if (generation === saleAwarePlanGeneration) {
+        saleAwarePlan70Ref.value = result;
+      }
+    } finally {
+      // In a `finally`, not just after a successful assignment above: if the worker request throws
+      // (or rejects — see useResearchCalcWorker.ts's `onerror` handling), the card should stop
+      // spinning (even showing a stale plan) rather than being stuck dimmed forever with no way for
+      // a future run to know it needs to reset this.
+      if (generation === saleAwarePlanGeneration) {
+        isComputingSaleAwarePlan.value = false;
+      }
+    }
+  });
+
+  const saleAwarePlan70 = computed(() => saleAwarePlan70Ref.value);
+
+  const saleAwarePreview = computed(() =>
+    summarizeResearchLevelChanges(commonResearchStore.researchLevels, saleAwarePlan70.value.endLevels)
+  );
+
+  // Dry-run plan for "Buy Until Sale Ends" — only computed while a sale is actually active, same
+  // gating `canBuyUntilSaleDeadline` already applies (there's nothing meaningful to preview
+  // otherwise). Same worker treatment as `saleAwarePlan70` above, for the same reason — its own
+  // `isComputingSaleEndsPlan` flag scopes the spinner to the "Buy Delivery Research" card. The
+  // no-active-sale branch stays a cheap synchronous assignment (nothing to wait on, nothing worth a
+  // worker round-trip for), same as the original computed's early return.
+  const isComputingSaleEndsPlan = ref(false);
+  const saleEndsPlanRef = ref<SaleEndsPlan>({
+    researchIds: [],
+    earningsResearchIds: [],
+    deliveryResearchIds: [],
+    earningsEndLevels: {},
+    earningsEndSnapshot: actionsStore.effectiveSnapshot,
+    endLevels: {},
+    endSnapshot: actionsStore.effectiveSnapshot,
+    lastPurchaseTimestamp: 0,
+  });
+  let saleEndsPlanGeneration = 0;
+
+  watchEffect(async () => {
+    // Same reasoning as `saleAwarePlan70`'s watchEffect above — wait for a bulk purchase's
+    // intermediate mid-batch state to settle rather than simulating it too.
+    if (actionsStore.isPlanInitializing || actionsStore.batchMode || actionsStore.isRecalculating) {
+      return;
+    }
+
+    const isSaleActive = isResearchSaleActive.value;
+    const generation = ++saleEndsPlanGeneration;
+
+    if (!isSaleActive) {
+      saleEndsPlanRef.value = {
+        researchIds: [],
+        earningsResearchIds: [],
+        deliveryResearchIds: [],
+        earningsEndLevels: {},
+        earningsEndSnapshot: actionsStore.effectiveSnapshot,
+        endLevels: {},
+        endSnapshot: actionsStore.effectiveSnapshot,
+        lastPurchaseTimestamp: 0,
+      };
+      isComputingSaleEndsPlan.value = false;
+      return;
+    }
+
+    const researchLevels = commonResearchStore.researchLevels;
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const context = getSimulationContext();
+    const mods = costModifiers.value;
+    const deadline = researchSaleDeadline.value;
+    const mode = elrViewMode.value;
+    const sort = elrSortMode.value;
+    const rawBackup = initialStateStore.rawBackup;
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
+
+    // No explicit yield needed — see `saleAwarePlan70`'s watchEffect above.
+    isComputingSaleEndsPlan.value = true;
+
+    try {
+      const result = await computeSaleEndsBuy({
+        researchLevels,
+        startSnapshot,
+        context,
+        mods,
+        absoluteSimTime,
+        deadline,
+        elrViewMode: mode,
+        elrSortMode: sort,
+        rawBackup,
+      });
+
+      if (generation === saleEndsPlanGeneration) {
+        saleEndsPlanRef.value = result;
+      }
+    } finally {
+      // See `saleAwarePlan70`'s watchEffect above for why this is in a `finally`.
+      if (generation === saleEndsPlanGeneration) {
+        isComputingSaleEndsPlan.value = false;
+      }
+    }
+  });
+
+  const saleEndsPlan = computed(() => saleEndsPlanRef.value);
+
+  // Split into two summaries instead of one combined diff, so the UI can label the earnings-prelude
+  // purchases (bought purely to speed up the delivery research that follows) separately from the
+  // delivery research they were bought to speed up. `earningsEndLevels` is the midpoint `simulateSaleEndsBuy`
+  // already computes between the plan's start levels and its final `endLevels`.
+  const saleEndsEarningsPreview = computed(() =>
+    summarizeResearchLevelChanges(commonResearchStore.researchLevels, saleEndsPlan.value.earningsEndLevels)
+  );
+
+  const saleEndsPreview = computed(() =>
+    summarizeResearchLevelChanges(saleEndsPlan.value.earningsEndLevels, saleEndsPlan.value.endLevels)
+  );
+
+  // Current vs. simulated-post-purchase earnings rate for the 70% Return button — the
+  // `endSnapshot` the plan already carries (see `simulateSaleAwareBuy`'s doc comment) is exactly
+  // what this needed, no extra simulation required.
+  const currentOfflineEarningsHourly = computed(() => actionsStore.effectiveSnapshot.offlineEarnings * 3600);
+
+  const saleAwareEarningsSummary70 = computed(() => ({
+    before: currentOfflineEarningsHourly.value,
+    after: saleAwarePlan70.value.endSnapshot.offlineEarnings * 3600,
+  }));
+
+  // Purchase count / duration spanned / gems spent for the "70% Return" card — the same three
+  // figures its note reports (`buildSaleAwareBuyNotePayload` in `src/lib/actions/notes.ts`), shown
+  // live in the card itself before the button is clicked.
+  //
+  // `seconds` is the ACTUAL plan's own span (last purchase's `purchaseTimestamp` minus now), not
+  // `nextSaleStart - now` (the structural boundary this used to report unconditionally, pre-dating
+  // the sale-count picker). That structural figure never changed no matter what deadline was picked
+  // — before the picker existed there was nothing to contrast it against, but it's actively
+  // misleading now: a tight Gate B (e.g. "1 sale," mid-sale) legitimately stops finding qualifying
+  // candidates well before the structural cap, and the card should show that shorter span, not
+  // "6d 22h" every single time regardless of what was actually bought. Falls back to `0` when the
+  // plan is empty (nothing to span).
+  const saleAwareStats70 = computed(() => {
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
+    const entries = saleAwarePlan70.value.entries;
+    const lastPurchaseTimestamp = entries.length > 0 ? entries[entries.length - 1].purchaseTimestamp : absoluteSimTime;
+    return {
+      purchaseCount: entries.length,
+      seconds: Math.max(0, lastPurchaseTimestamp - absoluteSimTime),
+      gems: entries.reduce((sum, entry) => sum + entry.price, 0),
+    };
+  });
+
+  // Current vs. simulated-post-earnings-prelude earnings rate for "Buy Until Sale Ends" — same
+  // shape as `saleAwareEarningsSummary70` above, just measured at `earningsEndSnapshot` (the
+  // midpoint between the plan's earnings-prelude and delivery portions) instead of a whole plan's
+  // `endSnapshot`.
+  const saleEndsEarningsSummary = computed(() => ({
+    before: currentOfflineEarningsHourly.value,
+    after: saleEndsPlan.value.earningsEndSnapshot.offlineEarnings * 3600,
+  }));
+
+  // Purchase count / duration spanned / gems spent for "Buy Until Sale Ends" — the same three
+  // figures its note reports (`buildSaleEndsBuyNotePayload` in `src/lib/actions/notes.ts`), shown
+  // live in the card itself before the button is clicked.
+  //
+  // `seconds` is the plan's own span (`lastPurchaseTimestamp - now`), not `researchSaleDeadline -
+  // now` — the latter is just the structural window this plan is bounded BY, not how long it
+  // actually takes; a plan that runs out of qualifying candidates early legitimately finishes well
+  // before the sale ends, and should say so (same fix as `saleAwareStats70` above, for the same
+  // reason — see that computed's own comment).
+  const saleEndsStats = computed(() => {
+    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const offset = actionsStore.planStartOffset;
+    const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
+    return {
+      purchaseCount: saleEndsPlan.value.researchIds.length,
+      seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
+      gems: saleEndsPlan.value.totalGemsSpent ?? 0,
+    };
+  });
+
+  // Current vs. simulated-post-purchase Delivery Rate for "Buy Until Sale Ends" — same "realistic"
+  // (optimal artifacts + max habs/vehicles) calculation `realisticSummary` uses, just evaluated
+  // against the plan's simulated end levels instead of the live research levels.
+  const saleEndsDeliverySummary = computed(() => {
+    const rawBackup = initialStateStore.rawBackup;
+    const context = getSimulationContext();
+    const before = computeRealisticDeliverySummary(commonResearchStore.researchLevels, rawBackup, context);
+    const after = computeRealisticDeliverySummary(saleEndsPlan.value.endLevels, rawBackup, context);
+    if (!before || !after) return null;
+    return { before: before.elr, after: after.elr };
+  });
+
   const sortedResearches = computed(() => {
-    if (currentView.value === 'game') return [];
+    if (currentView.value === 'game' || currentView.value === 'smart_buy') return [];
+
+    if (currentView.value === 'roi') return roiRankedResearches.value;
+    if (currentView.value === 'elr') return elrRankedResearches.value;
+    if (currentView.value === 'milestones') {
+      const startAbsoluteTime = milestoneChainStartTimeRef.value;
+      return milestoneChainResult.value.items.map(item => toResearchViewItem(item, startAbsoluteTime));
+    }
 
     const all = getCommonResearches();
     const researchLevels = commonResearchStore.researchLevels;
@@ -931,12 +1200,6 @@ export function useResearchViews() {
     const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
-
-    const filterByCategories = (r: CommonResearch) => {
-      const categories = r.categories.split(',').map(c => c.trim());
-      const excluded = currentView.value === 'roi' ? ROI_EXCLUDED_CATEGORIES : ELR_EXCLUDED_CATEGORIES;
-      return !categories.some(c => excluded.includes(c));
-    };
 
     interface UnpurchasedResearch {
       research: CommonResearch;
@@ -1025,7 +1288,11 @@ export function useResearchViews() {
             isMaxed: false,
             showDivider: item.showDivider || false,
             unlockTier: item.unlockTier || 0,
-            showDeadlineWarning: isSale && (absoluteSimTime + totalSeconds > researchSaleDeadline.value),
+            // `isSale` alone can be a stale plan-snapshot flag rather than calendar truth (see
+            // `isActuallyDuringSale`'s doc comment in researchROI.ts) — re-verify against the real
+            // calendar before letting it gate this warning.
+            showDeadlineWarning:
+              isRealSaleActiveAt(absoluteSimTime) && absoluteSimTime + totalSeconds > researchSaleDeadline.value,
           });
 
           currentSimState = applyAction(currentSimState, {
@@ -1096,10 +1363,17 @@ export function useResearchViews() {
             timeToBuySeconds: rawSecondsToBuy,
             buyToHereTime: totalSeconds > 0 ? formatDuration(totalSeconds) : '0s',
             buyToHereSeconds: totalSeconds,
-            buyToHereTooltip: totalSeconds < rawSecondsToBuy ? 'Includes existing gems from your bank. Individual research wait times show the time to save from 0.' : undefined,
+            buyToHereTooltip:
+              totalSeconds < rawSecondsToBuy
+                ? 'Includes existing gems from your bank. Individual research wait times show the time to save from 0.'
+                : undefined,
             canBuy: true,
             isMaxed: false,
-            showDeadlineWarning: isSale && (absoluteSimTime + totalSeconds > researchSaleDeadline.value),
+            // `isSale` alone can be a stale plan-snapshot flag rather than calendar truth (see
+            // `isActuallyDuringSale`'s doc comment in researchROI.ts) — re-verify against the real
+            // calendar before letting it gate this warning.
+            showDeadlineWarning:
+              isRealSaleActiveAt(absoluteSimTime) && absoluteSimTime + totalSeconds > researchSaleDeadline.value,
           });
         }
       });
@@ -1113,423 +1387,6 @@ export function useResearchViews() {
       }
 
       return result;
-    }
-
-    if (currentView.value === 'roi') {
-      const context = getSimulationContext();
-      const effectiveSnapshot = actionsStore.effectiveSnapshot;
-      const baseState = createBaseEngineState(effectiveSnapshot);
-      const currentEarnings = effectiveSnapshot.offlineEarnings;
-
-      const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
-      const offset = actionsStore.planStartOffset;
-      const absoluteSimTime = baseTimestamp + (effectiveSnapshot.lastStepTime - offset);
-      const nextSaleStart = getNextPacificTime(5, 9, absoluteSimTime);
-      
-      // Every earnings event (2x, 3x, etc.) is currently assumed to end at the next 9AM Los Angeles time.
-      const upcoming9amDurations = Array.from({ length: 7 }, (_, i) => getNextPacificTime(i, 9, absoluteSimTime) - absoluteSimTime);
-      const eventExpirationSeconds = Math.min(...upcoming9amDurations);
-
-      if (currentEarnings <= 0) return [];
-
-      const unpurchased = all.filter(r => (researchLevels[r.id] || 0) < r.levels && filterByCategories(r));
-      const uniqueUnpurchased = Array.from(new Map(unpurchased.map(r => [r.id, r])).values());
-
-      const baseMaxVehiclesSnapshot = roiMode.value === 'maxed_vehicles'
-        ? buildMaxVehiclesSnapshot(effectiveSnapshot, researchLevels, context)
-        : null;
-
-      const basicCandidates = uniqueUnpurchased.map(r => {
-        const level = researchLevels[r.id] || 0;
-        const price = getDiscountedVirtuePrice(r, level, mods, isSale);
-        const canBuy = isTierUnlocked(researchLevels, r.tier);
-        const categories = r.categories.split(',').map(c => c.trim());
-        const isLaying = categories.includes('egg_laying_rate');
-        const isShipping = categories.includes('shipping_capacity');
-
-        let roiSeconds: number;
-        let totalRoiSeconds: number;
-        let showSaleWarning: boolean;
-        let showDeadlineWarning: boolean;
-        let resultTimeToBuySeconds: number;
-        let nextSnapshot: CalculationsSnapshot;
-
-        if (roiMode.value === 'maxed_vehicles' && baseMaxVehiclesSnapshot) {
-          resultTimeToBuySeconds = getTimeToSave(price, effectiveSnapshot);
-          const afterMaxSnapshot = buildMaxVehiclesSnapshot(effectiveSnapshot, { ...researchLevels, [r.id]: level + 1 }, context);
-          nextSnapshot = afterMaxSnapshot;
-          const maxTime = 1e9;
-          const getExtra = (t: number) =>
-            calculateEarningsForTime(t, afterMaxSnapshot) -
-            calculateEarningsForTime(t, baseMaxVehiclesSnapshot);
-          if (getExtra(maxTime) >= price) {
-            let low = 0, high = maxTime;
-            for (let i = 0; i < 60; i++) {
-              const mid = (low + high) / 2;
-              if (getExtra(mid) >= price) high = mid;
-              else low = mid;
-            }
-            roiSeconds = high;
-          } else {
-            roiSeconds = Infinity;
-          }
-          totalRoiSeconds = isFinite(resultTimeToBuySeconds) ? resultTimeToBuySeconds + roiSeconds : Infinity;
-          showSaleWarning = !isSale && (absoluteSimTime + resultTimeToBuySeconds >= nextSaleStart);
-          showDeadlineWarning = isSale && (absoluteSimTime + resultTimeToBuySeconds > researchSaleDeadline.value);
-        } else {
-          const roiResult = calculateResearchROI({
-            research: r,
-            level,
-            price,
-            snapshot: effectiveSnapshot,
-            context,
-            eventTiming: {
-              absoluteSimTime,
-              nextSaleStart,
-              eventExpirationSeconds,
-              researchSaleDeadline: researchSaleDeadline.value,
-              isSaleActive: isSale,
-            },
-          });
-          ({ roiSeconds, totalRoiSeconds, showSaleWarning, showDeadlineWarning, nextSnapshot } = roiResult);
-          resultTimeToBuySeconds = roiResult.timeToBuySeconds;
-        }
-
-        return {
-          research: r,
-          price,
-          currentLevel: level,
-          targetLevel: level + 1,
-          timeToBuy:
-            resultTimeToBuySeconds > 0
-              ? resultTimeToBuySeconds === Infinity
-                ? '∞'
-                : resultTimeToBuySeconds < 1
-                  ? '0s'
-                  : formatDuration(resultTimeToBuySeconds)
-              : '',
-          canBuy,
-          isMaxed: false,
-          roiSeconds,
-          totalRoiSeconds,
-          roiLabel: roiSeconds === Infinity || roiSeconds > 999 * 86400 ? '>999d' : formatDuration(roiSeconds),
-          totalRoiLabel:
-            totalRoiSeconds === Infinity || totalRoiSeconds > 999 * 86400 ? '>999d' : totalRoiSeconds < 1 ? '0s' : formatDuration(totalRoiSeconds),
-          isLaying,
-          isShipping,
-          nextSnapshot,
-          showSaleWarning,
-          showDeadlineWarning,
-        };
-      });
-
-      const bestLaying = [...basicCandidates]
-        .filter(c => c.isLaying && c.canBuy && c.roiSeconds !== Infinity)
-        .sort((a, b) => a.roiSeconds - b.roiSeconds)[0];
-
-      const bestShipping = [...basicCandidates]
-        .filter(c => c.isShipping && c.canBuy && c.roiSeconds !== Infinity)
-        .sort((a, b) => a.roiSeconds - b.roiSeconds)[0];
-
-      return basicCandidates
-        .map(c => {
-          let recommendationNote: string | undefined = undefined;
-
-          if (roiMode.value === 'immediate') {
-            const isBottlenecked = c.roiSeconds === Infinity || c.roiSeconds > 3600 * 24 * 7;
-
-            if (isBottlenecked && (c.isLaying || c.isShipping)) {
-              const partner = c.isLaying ? bestShipping : bestLaying;
-              if (partner && partner.research.id !== c.research.id) {
-                const level1 = researchLevels[c.research.id] || 0;
-                const level2 = researchLevels[partner.research.id] || 0;
-
-                let pairState = applyAction(baseState, createSimAction('buy_research', {
-                  researchId: c.research.id,
-                  fromLevel: level1,
-                  toLevel: level1 + 1,
-                }, c.price));
-
-                pairState = applyAction(pairState, createSimAction('buy_research', {
-                  researchId: partner.research.id,
-                  fromLevel: level2,
-                  toLevel: level2 + 1,
-                }, partner.price));
-
-                const pairSnapshot = computeSnapshot(pairState, context);
-                const pairEarnings = pairSnapshot.offlineEarnings;
-                const partnerEarnings = partner.nextSnapshot.offlineEarnings;
-
-                if (pairEarnings > partnerEarnings) {
-                  const pairTotalCost = c.price + partner.price;
-                  const pairDelta = pairEarnings - currentEarnings;
-                  const pairRoiSeconds = pairTotalCost / pairDelta;
-
-                  if (pairRoiSeconds < c.roiSeconds) {
-                    recommendationNote = `Buying this with "${partner.research.name}" would have a much better combined payback time of ${formatDuration(pairRoiSeconds)}.`;
-                  }
-                }
-              }
-            }
-          }
-
-          return {
-            ...c,
-            extraStats: c.totalRoiLabel,
-            extraLabel: 'Achieve ROI',
-            extraSeconds: c.totalRoiSeconds,
-            recommendationNote,
-          };
-        })
-        .filter(c => {
-          if (!deliveryImpactOnly.value) return true;
-          const cats = c.research.categories.split(',').map(s => s.trim());
-          return cats.some(cat => DELIVERY_IMPACT_CATEGORIES.has(cat));
-        })
-        .sort((a, b) => {
-          if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
-          if (a.totalRoiSeconds === b.totalRoiSeconds) {
-            return a.price - b.price;
-          }
-          return a.totalRoiSeconds - b.totalRoiSeconds;
-        });
-    }
-
-    if (currentView.value === 'elr') {
-      const researchLevels = commonResearchStore.researchLevels;
-
-      const unpurchased = all.filter(r => (researchLevels[r.id] || 0) < r.levels && filterByCategories(r));
-      const uniqueUnpurchased = Array.from(new Map(unpurchased.map(r => [r.id, r])).values());
-
-      // Build candidate list based on view mode
-      let candidates: {
-        research: CommonResearch;
-        price: number;
-        currentLevel: number;
-        targetLevel: number;
-        timeToBuy: string;
-        canBuy: boolean;
-        isMaxed: boolean;
-        impact: number;
-        hpp: number;
-        timeRoiSeconds: number;
-        realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-        showDeadlineWarning: boolean;
-      }[];
-
-      if (elrViewMode.value === 'realistic') {
-        // Realistic mode: full ELR pipeline with optimal artifacts, max habs/vehicles, gusset included
-        const rawBackup = initialStateStore.rawBackup;
-        if (!rawBackup) return [];
-
-        const context = getSimulationContext();
-        
-        // Baseline: Optimal artifacts for CURRENT research levels
-        const baselineOptimal = getOptimalELRSet(rawBackup, {
-          assumeMaxHabsVehicles: true,
-          excludeGusset: false,
-          commonResearch: researchLevels,
-          epicResearchLevels: context.epicResearchLevels,
-          colleggtibleModifiers: context.colleggtibleModifiers,
-        });
-        const baselineArtifactMods = calculateArtifactModifiers(baselineOptimal);
-        const baseline = computeRealisticELR(researchLevels, baselineArtifactMods, context.epicResearchLevels, context.colleggtibleModifiers);
-
-        if (baseline.effectiveRate <= 0) return [];
-
-        const baselineFmt = (n: number) => n.toExponential(3);
-        // console.log(`[ELR View] Baseline (max Hyperloops): lay=${baselineFmt(baseline.layRate * 3600)}/hr, ship=${baselineFmt(baseline.shippingRate * 3600)}/hr, ELR=${baselineFmt(baseline.effectiveRate * 3600)}/hr — bottleneck: ${baseline.layRate < baseline.shippingRate ? 'LAY RATE' : 'SHIPPING'}`);
-
-        candidates = uniqueUnpurchased
-          .map(r => {
-            const level = researchLevels[r.id] || 0;
-            const price = getDiscountedVirtuePrice(r, level, mods, isSale);
-
-            const tempLevels = { ...researchLevels, [r.id]: level + 1 };
-
-            const tempOptimal = getOptimalELRSet(rawBackup, {
-              assumeMaxHabsVehicles: true,
-              excludeGusset: false,
-              commonResearch: tempLevels,
-              epicResearchLevels: context.epicResearchLevels,
-              colleggtibleModifiers: context.colleggtibleModifiers,
-            });
-
-            const tempArtifactMods = calculateArtifactModifiers(tempOptimal);
-            const stats = computeRealisticELR(tempLevels, tempArtifactMods, context.epicResearchLevels, context.colleggtibleModifiers);
-            const impact = (stats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-
-            const noBankSnapshot = { ...actionsStore.effectiveSnapshot, bankValue: 0 };
-            const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot);
-            const secondsToBuyWithBank = getTimeToSave(price, actionsStore.effectiveSnapshot);
-            const hoursToBuy = secondsToBuyNoBank / 3600;
-            const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
-            // Time-to-ROI: how long, laying at the new (boosted) rate, it takes for the
-            // extra production to pay back the buy-time cost (expressed in egg-equivalent
-            // terms via the baseline rate). Equivalent to hpp * 100, in seconds.
-            const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
-
-            // Lookahead: find minimum N levels that unlock positive ELR impact.
-            let lookahead:
-              | {
-                  minLevels: number;
-                  impact: number;
-                  hpp: number;
-                  timeRoiSeconds: number;
-                  realisticStats: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-                }
-              | undefined;
-            if (impact <= 0 && level + 1 < r.levels) {
-              for (let n = 2; n <= r.levels - level; n++) {
-                const laLevels = { ...researchLevels, [r.id]: level + n };
-                const laOptimal = getOptimalELRSet(rawBackup, {
-                  assumeMaxHabsVehicles: true,
-                  excludeGusset: false,
-                  commonResearch: laLevels,
-                  epicResearchLevels: context.epicResearchLevels,
-                  colleggtibleModifiers: context.colleggtibleModifiers,
-                });
-                const laArtifactMods = calculateArtifactModifiers(laOptimal);
-                const laStats = computeRealisticELR(laLevels, laArtifactMods, context.epicResearchLevels, context.colleggtibleModifiers);
-                const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-                if (laImpact > 0) {
-                  let totalPriceForN = 0;
-                  for (let l = level; l < level + n; l++) {
-                    totalPriceForN += getDiscountedVirtuePrice(r, l, mods, isSale);
-                  }
-                  const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot);
-                  const totalHoursForN = totalSecondsForN / 3600;
-                  lookahead = {
-                    minLevels: n,
-                    impact: laImpact,
-                    hpp: totalHoursForN / (laImpact * 100),
-                    timeRoiSeconds: totalSecondsForN / laImpact,
-                    realisticStats: {
-                      layRate: laStats.layRate * 3600,
-                      shippingRate: laStats.shippingRate * 3600,
-                      elr: laStats.effectiveRate * 3600,
-                      elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
-                    },
-                  };
-                  break;
-                }
-              }
-            }
-
-            return {
-              research: r,
-              price,
-              currentLevel: level,
-              targetLevel: level + 1,
-              timeToBuy: '',
-              canBuy: isTierUnlocked(researchLevels, r.tier),
-              isMaxed: false,
-              impact,
-              hpp,
-              timeRoiSeconds,
-              lookahead,
-              realisticStats: {
-                layRate: stats.layRate * 3600,
-                shippingRate: stats.shippingRate * 3600,
-                elr: stats.effectiveRate * 3600,
-                elrDelta: (stats.effectiveRate - baseline.effectiveRate) * 3600,
-              },
-              showDeadlineWarning: isSale && (absoluteSimTime + secondsToBuyWithBank > researchSaleDeadline.value),
-            };
-          })
-          .map(c => {
-            const fmt = (n: number) => n.toExponential(3);
-            const DEBUG_IDS = ['neural_net_refine', 'hyper_portalling'];
-            if (DEBUG_IDS.includes(c.research.id) || c.impact > 0 || c.lookahead) {
-              const stats = c.realisticStats!;
-              const laNote = c.lookahead ? ` [lookahead ${c.lookahead.minLevels} levels → +${(c.lookahead.impact * 100).toFixed(4)}%]` : '';
-              // console.log(`[ELR View] ${c.research.name}: impact=${(c.impact * 100).toFixed(4)}%, lay=${fmt(stats.layRate)}/hr, ship=${fmt(stats.shippingRate)}/hr, elr=${fmt(stats.elr)}/hr${laNote}`);
-            }
-            return c;
-          })
-          .filter(c => c.impact > 0 || c.lookahead !== undefined);
-      } else {
-        // Potential mode: theoretical formula-based impact
-        const currentSlots = calculateMaxVehicleSlots(researchLevels);
-        const currentMaxCars = calculateMaxTrainLength(researchLevels);
-
-        candidates = uniqueUnpurchased
-          .map(r => {
-            const level = researchLevels[r.id] || 0;
-            const price = getDiscountedVirtuePrice(r, level, mods, isSale);
-            let impact = 0;
-
-            if (FLEET_RESEARCH_IDS.includes(r.id)) {
-              impact = 1 / currentSlots;
-            } else if (r.id === TRAIN_CAR_RESEARCH_ID) {
-              impact = 1 / currentMaxCars;
-            } else {
-              impact = r.per_level / (1 + level * r.per_level);
-            }
-
-            // Hours per percentage point
-            // Use a snapshot with bankValue zeroed so hpp reflects pure earnings time, not savings.
-            const noBankSnapshot = { ...actionsStore.effectiveSnapshot, bankValue: 0 };
-            const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot);
-            const secondsToBuyWithBank = getTimeToSave(price, actionsStore.effectiveSnapshot);
-            const hoursToBuy = secondsToBuyNoBank / 3600;
-            const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
-            const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
-
-            return {
-              research: r,
-              price,
-              currentLevel: level,
-              targetLevel: level + 1,
-              timeToBuy: '',
-              canBuy: isTierUnlocked(researchLevels, r.tier),
-              isMaxed: false,
-              impact,
-              hpp,
-              timeRoiSeconds,
-              showDeadlineWarning: isSale && (absoluteSimTime + secondsToBuyWithBank > researchSaleDeadline.value),
-            };
-          })
-          .filter(c => c.impact > 0);
-      }
-
-      // Sort based on elrSortMode
-      if (elrSortMode.value === 'efficiency') {
-        candidates.sort((a, b) => {
-          if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
-          if (isFinite(a.hpp) || isFinite(b.hpp)) {
-            if (a.hpp !== b.hpp) return a.hpp - b.hpp;
-          }
-          return b.impact - a.impact;
-        });
-      } else {
-        candidates.sort((a, b) => {
-          if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
-          if (a.impact !== b.impact) return b.impact - a.impact;
-          return a.hpp - b.hpp;
-        });
-      }
-
-      return candidates.map(c => {
-        const la = (
-          c as {
-            lookahead?: { minLevels: number; impact: number; hpp: number; timeRoiSeconds: number; realisticStats: typeof c.realisticStats };
-          }
-        ).lookahead;
-        return {
-          ...c,
-          extraStats: la ? `+${(la.impact * 100).toFixed(3)}%` : `+${(c.impact * 100).toFixed(3)}%`,
-          extraLabel: la ? `${la.minLevels}-lvl impact` : 'Impact',
-          hpp: la ? la.hpp : c.hpp,
-          timeRoiSeconds: la ? la.timeRoiSeconds : c.timeRoiSeconds,
-          realisticStats: la ? la.realisticStats : c.realisticStats,
-          lookahead: la ? { minLevels: la.minLevels, impact: la.impact, hpp: la.hpp } : undefined,
-        };
-      });
-    }
-
-    if (currentView.value === 'milestones') {
-      return milestoneChainResult.value.items;
     }
 
     return [];
@@ -1546,6 +1403,8 @@ export function useResearchViews() {
     milestoneNextLockedTier,
     milestoneResearchOptions,
     milestoneSummary,
+    milestoneAlreadyReached,
+    isComputingMilestoneChain,
     viewDescription,
     costModifiers,
     isResearchSaleActive,
@@ -1554,8 +1413,33 @@ export function useResearchViews() {
     tierSummaries,
     gameViewTimes,
     sortedResearches,
+    roiRankedResearches,
+    elrRankedResearches,
+    saleAwarePlan70,
+    isComputingSaleAwarePlan,
+    saleAwarePreview,
+    saleAwareStats70,
+    smartBuyFullRoiDeadline,
+    smartBuyStructuralDeadline,
+    smartBuyDeadlineIsFinalSaleCap,
+    smartBuySaleCount,
+    incrementSmartBuySaleCount,
+    decrementSmartBuySaleCount,
+    saleEndsPlan,
+    isComputingSaleEndsPlan,
+    saleEndsPreview,
+    saleEndsEarningsPreview,
+    saleEndsEarningsSummary,
+    saleAwareEarningsSummary70,
+    saleEndsDeliverySummary,
+    saleEndsStats,
     realisticSummary,
     researchSaleDeadline,
+    nextSaleStart,
+    // Not used within this composable — returned so ResearchActions.vue's own `quickBuyPlan`
+    // watchEffect can share this composable's one Web Worker instance (see
+    // useResearchCalcWorker.ts's doc comment) instead of spawning a second one.
+    computeThresholdBuy,
     TIER_THRESHOLDS: TIER_UNLOCK_THRESHOLDS,
   };
 }

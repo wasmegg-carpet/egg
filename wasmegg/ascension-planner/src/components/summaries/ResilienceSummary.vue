@@ -1,8 +1,8 @@
 <template>
-  <div class="px-5 py-4 bg-slate-50/30 border-t border-slate-100/50">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+  <div class="bg-slate-50/30 border-t border-slate-100/50" :class="compact ? 'px-3 py-2' : 'px-5 py-4'">
+    <div class="flex flex-wrap items-center justify-between" :class="compact ? 'gap-2' : 'gap-4'">
       <!-- Label -->
-      <div class="flex items-center gap-3">
+      <div v-if="!hideHeader" class="flex items-center gap-3">
         <div
           class="w-5 h-5 rounded-lg bg-rose-50 border border-rose-100 shadow-sm flex items-center justify-center p-1"
         >
@@ -27,7 +27,11 @@
       </div>
 
       <!-- Stats Grid -->
-      <div v-if="silosPurchased > 0" class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div
+        v-if="silosPurchased > 0"
+        class="flex flex-wrap items-center"
+        :class="compact ? 'gap-x-3 gap-y-1' : 'gap-x-6 gap-y-2'"
+      >
         <div class="flex flex-col items-end">
           <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Silos</span>
           <div class="flex items-center gap-1.5">
@@ -46,7 +50,9 @@
         </div>
       </div>
 
-      <div v-else class="text-[11px] text-slate-400 italic font-medium">No silos purchased in this shift</div>
+      <div v-else class="text-[11px] text-slate-400 italic font-medium">
+        No silos purchased in this {{ hideHeader ? 'date range' : 'shift' }}
+      </div>
     </div>
   </div>
 </template>
@@ -59,6 +65,8 @@ import { formatNumber } from '@/lib/format';
 const props = defineProps<{
   headerAction: Action;
   actions: Action[];
+  compact?: boolean;
+  hideHeader?: boolean;
 }>();
 
 const finalState = computed(() => {

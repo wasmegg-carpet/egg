@@ -1,6 +1,6 @@
 import type { CalculationsSnapshot } from '@/types';
 import type { EngineState } from '../types';
-import { calculateEarningsForTime } from './math';
+import { calculateEarningsForTime, type EarningsRateTransition } from './math';
 
 /**
  * Advance the simulation time in the engine state and add earned gems to the bank.
@@ -9,7 +9,7 @@ export function applyTime(
   state: EngineState,
   seconds: number,
   prevSnapshot: CalculationsSnapshot,
-  options: { skipGrowth?: boolean, skipEarnings?: boolean } = {}
+  options: { skipGrowth?: boolean, skipEarnings?: boolean, transitions?: EarningsRateTransition[] } = {}
 ): EngineState {
   if (seconds <= 0) return state;
 
@@ -32,7 +32,7 @@ export function applyTime(
   if (!options.skipEarnings) {
     const V = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
     if (V > 0) {
-      earnedGems = calculateEarningsForTime(seconds, prevSnapshot);
+      earnedGems = calculateEarningsForTime(seconds, prevSnapshot, options.transitions);
     }
   }
 

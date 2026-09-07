@@ -2,6 +2,7 @@ import type { EngineState, SimulationContext } from './types';
 import { CalculationsSnapshot, VIRTUE_EGGS, VirtueEgg } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useVirtueStore } from '@/stores/virtue';
+import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
@@ -30,6 +31,7 @@ export function getSimulationContext(): SimulationContext {
     planStartOffset: (useActionsStore() as any).planStartOffset || 0,
     assumeDoubleEarnings: initialStateStore.assumeDoubleEarnings,
     rawBackup: initialStateStore.rawBackup || undefined,
+    deferForEarningsMode: useAutoPlannerStore().deferForEarningsMode,
   };
 }
 
@@ -38,13 +40,13 @@ export function getSimulationContext(): SimulationContext {
  * This represents the state BEFORE the first action (start_ascension).
  */
 export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | null): EngineState {
-  const virtueStore = useVirtueStore();
-  const initialStateStore = useInitialStateStore();
-  const silosStore = useSilosStore();
-  const fuelTankStore = useFuelTankStore();
-
-  // If a specific snapshot is provided (e.g. from existing action history), use it.
-  // Otherwise, read the current "base" state from the hydrated stores.
+  // Deliberately NOT hoisted to the top of the function: this branch (a snapshot was provided)
+  // never reads any of the four stores below, and several callers — computeTierMilestoneChain
+  // (calculations/milestoneChain.ts), reused unchanged by both auto/shifts/c3.ts and the beam
+  // search engine (src/beam-search/engine/macros.ts) — call this with a snapshot from contexts
+  // with no active Pinia instance (a Web Worker, or a plain vitest unit test). Hoisting these calls
+  // unconditionally previously broke exactly that: `useXStore()` throws immediately if there's no
+  // active Pinia app, even though this branch's return value never depends on any store.
   if (initialSnapshot) {
     return {
       currentEgg: initialSnapshot.currentEgg,
@@ -72,6 +74,11 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
       earningsBoost: { ...initialSnapshot.earningsBoost },
     };
   }
+
+  const virtueStore = useVirtueStore();
+  const initialStateStore = useInitialStateStore();
+  const silosStore = useSilosStore();
+  const fuelTankStore = useFuelTankStore();
 
   const isContinuing = initialStateStore.isContinuing;
 

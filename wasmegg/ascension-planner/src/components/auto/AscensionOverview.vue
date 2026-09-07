@@ -5,7 +5,7 @@
     <div class="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl"></div>
 
     <div class="relative z-10">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
+      <div class="flex flex-col gap-2 sm:gap-3 mb-3">
         <div class="flex items-center gap-2.5 sm:gap-3">
           <div class="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md shadow-indigo-100/50 flex-shrink-0">
             <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -20,8 +20,51 @@
                   — {{ summary.strategyLabel === 'Continue current' ? 'Continue current ascension' : 'Prestige Now' }}
                 </span>
               </h3>
-              <span class="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">{{ formatTimeRange(summary.startTime, summary.endTime) }}</span>
+              <span v-if="!isEditingEndTime" class="flex items-center gap-1">
+                <span class="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none">{{ formatTimeRange(summary.startTime, summary.endTime) }}</span>
+                <button
+                  v-tippy="hasEndTimeOverride ? 'Edit overridden end time' : 'Override end time'"
+                  class="text-slate-300 hover:text-indigo-500 transition-colors flex-shrink-0"
+                  @click="startEditingEndTime"
+                >
+                  <svg class="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <span
+                  v-if="hasEndTimeOverride"
+                  class="px-1 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-100 text-[7px] font-black uppercase tracking-wider leading-none"
+                >Overridden</span>
+              </span>
             </div>
+
+            <!-- Inline end-time override editor -->
+            <div v-if="isEditingEndTime" class="flex flex-wrap items-center gap-1.5 mt-1.5">
+              <input
+                v-model="editEndDate"
+                type="date"
+                class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500/50 bg-white transition-all w-36"
+              />
+              <input
+                v-model="editEndTime"
+                type="time"
+                class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500/50 bg-white transition-all w-28"
+              />
+              <button
+                class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                @click="saveEndTimeOverride"
+              >Save</button>
+              <button
+                class="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-500 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                @click="cancelEditingEndTime"
+              >Cancel</button>
+              <button
+                v-if="hasEndTimeOverride"
+                class="px-2 py-1 bg-slate-50 hover:bg-rose-50 border border-slate-200/80 hover:border-rose-200/50 text-slate-500 hover:text-rose-600 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                @click="resetEndTimeOverride"
+              >Reset to Auto</button>
+            </div>
+            <div v-if="endTimeEditError" class="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-1">{{ endTimeEditError }}</div>
 
             <div v-if="displayComparisons.length > 0" class="flex flex-wrap gap-2 mt-1">
               <div v-for="(comp, ci) in displayComparisons" :key="ci"
@@ -40,7 +83,7 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap ml-[38px] sm:ml-[44px]">
           <button
             @click="isExpanded = !isExpanded"
             class="flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-200/50 rounded-lg text-[9px] font-black text-slate-500 hover:text-indigo-600 transition-colors uppercase tracking-wider group shadow-sm flex-shrink-0"
@@ -69,30 +112,50 @@
 
             <div
               v-if="isDropdownOpen"
-              class="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[148px]"
+              class="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[190px]"
             >
-              <button
-                v-for="opt in saleOptions"
-                :key="opt.value"
-                @click="selectVariant(opt.value)"
-                class="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
-                :class="opt.value === activeVariant ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'"
-              >
-                <svg v-if="opt.value === activeVariant" class="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
-                <span v-else class="w-2.5 flex-shrink-0" />
-                {{ opt.label }}
-              </button>
+              <div v-for="row in variantRows" :key="row.saleCount" class="flex items-center gap-1 px-1">
+                <button
+                  class="flex-1 text-left px-2 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 rounded-lg"
+                  :class="
+                    (row.plainKey ?? row.tier13Key) === activeVariantKey
+                      ? 'bg-indigo-50 text-indigo-600'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  "
+                  @click="selectVariant(row.plainKey ?? row.tier13Key!)"
+                >
+                  <svg
+                    v-if="(row.plainKey ?? row.tier13Key) === activeVariantKey"
+                    class="w-2.5 h-2.5 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                  </svg>
+                  <span v-else class="w-2.5 flex-shrink-0" />
+                  {{ row.saleCount }}-sale build{{ row.plainKey ? '' : ' +T13' }}
+                </button>
+                <!-- Only worth its own toggle when the plain build survived alongside Tier 13 —
+                     otherwise Tier 13 is baked into the row above with no non-T13 alternative to pick. -->
+                <button
+                  v-if="row.tier13Key && row.plainKey"
+                  v-tippy="'Also unlocks Tier 13 research'"
+                  class="px-1.5 py-1 text-[8px] font-black uppercase tracking-wider rounded-md border transition-colors flex-shrink-0"
+                  :class="
+                    row.tier13Key === activeVariantKey
+                      ? 'bg-amber-50 text-amber-600 border-amber-200'
+                      : 'text-slate-400 border-slate-200 hover:bg-slate-50'
+                  "
+                  @click="selectVariant(row.tier13Key)"
+                >
+                  T13
+                </button>
+              </div>
 
               <!-- Continue Ascension (A1 only) -->
               <template v-if="index === 0">
                 <div class="border-t border-slate-100 my-1" />
-                <span
-                  v-if="!result3Available"
-                  v-tippy="continueDisabledTooltip"
-                  class="block"
-                >
+                <span v-if="!continueAvailable" v-tippy="continueDisabledTooltip" class="block">
                   <button
                     disabled
                     class="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 opacity-40 cursor-not-allowed text-slate-500"
@@ -103,12 +166,21 @@
                 </span>
                 <button
                   v-else
-                  @click="selectVariant('continue')"
                   class="w-full text-left px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5"
-                  :class="activeVariant === 'continue' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'"
+                  :class="
+                    activeVariantKey === 'continue'
+                      ? 'bg-indigo-50 text-indigo-600'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  "
+                  @click="selectVariant('continue')"
                 >
-                  <svg v-if="activeVariant === 'continue'" class="w-2.5 h-2.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  <svg
+                    v-if="activeVariantKey === 'continue'"
+                    class="w-2.5 h-2.5 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                   </svg>
                   <span v-else class="w-2.5 flex-shrink-0" />
                   Continue Asc.
@@ -116,6 +188,24 @@
               </template>
             </div>
           </div>
+
+          <!-- Compare variants -->
+          <button
+            v-if="variantRows.length > 1 || continueAvailable"
+            v-tippy="'Compare all variants side by side'"
+            class="flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-200/50 rounded-lg text-[9px] font-black text-slate-500 hover:text-indigo-600 transition-colors uppercase tracking-wider shadow-sm flex-shrink-0"
+            @click="isComparisonOpen = true"
+          >
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
+              />
+            </svg>
+            Compare
+          </button>
 
           <!-- Save single ascension to library -->
           <button
@@ -172,9 +262,12 @@
               :key="alt.label"
               class="flex items-baseline gap-0.5 sm:gap-1"
             >
-              <span class="text-[7px] sm:text-[10px] font-mono-premium font-bold text-slate-400">{{ formatNumber(alt.elr * 3600, 3) }}</span>
-              <span class="text-[6px] sm:text-[8px] font-black text-slate-300 uppercase tracking-wide">/hr</span>
-              <span class="text-[6px] sm:text-[8px] font-black text-slate-400 uppercase tracking-wide">{{ alt.label }}</span>
+              <span
+                class="text-[7px] sm:text-[10px] font-mono-premium font-bold"
+                :class="alt.isActive ? 'text-indigo-500' : 'text-slate-400'"
+              >{{ formatNumber(alt.elr * 3600, 3) }}</span>
+              <span class="text-[6px] sm:text-[8px] font-black uppercase tracking-wide" :class="alt.isActive ? 'text-indigo-400' : 'text-slate-300'">/hr</span>
+              <span class="text-[6px] sm:text-[8px] font-black uppercase tracking-wide" :class="alt.isActive ? 'text-indigo-500' : 'text-slate-400'">{{ alt.label }}<span v-if="alt.isActive"> (used)</span></span>
             </div>
           </div>
         </div>
@@ -302,15 +395,27 @@
         />
       </div>
     </div>
+
+    <VariantComparisonModal
+      :show="isComparisonOpen"
+      :variants="variants"
+      :active-variant-key="activeVariantKey"
+      :target-t-e="targetTE"
+      @close="isComparisonOpen = false"
+      @select="onCompareSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { formatNumber, formatDuration } from '@/lib/format';
+import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
+import { getLocalTimestampInTimezone } from '@/lib/events';
 import { iconURL } from 'lib';
 import type { AscensionSummary } from '@/auto/types';
 import type { VirtueEgg } from '@/types';
+import VariantComparisonModal from './VariantComparisonModal.vue';
+import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import ShiftSummary from './ShiftSummary.vue';
 
 const props = defineProps<{
@@ -320,34 +425,78 @@ const props = defineProps<{
       otherPlanLabel: string;
       message?: string;
     };
-    comparisons?: {
-      daysFaster: number;
-      otherPlanLabel: string;
-      message?: string;
-    }[];
     alternativeELRs?: {
       elr: number;
       label: string;
+      isActive: boolean;
     }[];
   };
   actions: any[];
   index: number;
   total: number;
   targetTE: number | null;
-  result3Available?: boolean;
+  variants: Partial<Record<VariantKey, VariantResult>>;
+  activeVariantKey?: VariantKey;
   result3SkippedReason?: string;
   isSavingSingle?: boolean;
   saveSingleSuccess?: boolean;
+  /** IANA timezone name, same one the initial Start Time form (`SchedulingInputs.vue`) uses — the
+   * end-time editor below reads and writes through this same timezone so an edited value lines up
+   * with what the user typed for the plan's start. */
+  timezone: string;
+  /** True when this ascension already has a user-set end-time override active (`autoPlannerStore.endTimeOverrides`). */
+  hasEndTimeOverride?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'setPlanVariant', variant: 'continue' | '1-sale' | '2-sale'): void;
+  (e: 'setPlanVariant', variant: VariantKey): void;
   (e: 'saveSingleToLibrary'): void;
+  /** Sets (a finite unix timestamp) or clears (`null`) this ascension's end-time override. */
+  (e: 'overrideEndTime', endTime: number | null): void;
 }>();
 
 const isExpanded = ref(false);
 const isDropdownOpen = ref(false);
+const isComparisonOpen = ref(false);
 const dropdownRef = ref<HTMLElement | null>(null);
+
+const isEditingEndTime = ref(false);
+const editEndDate = ref('');
+const editEndTime = ref('');
+const endTimeEditError = ref('');
+
+const startEditingEndTime = () => {
+  editEndDate.value = formatUnixToDateInput(props.summary.endTime, props.timezone);
+  editEndTime.value = formatUnixToTimeInput(props.summary.endTime, props.timezone);
+  endTimeEditError.value = '';
+  isEditingEndTime.value = true;
+};
+
+const cancelEditingEndTime = () => {
+  isEditingEndTime.value = false;
+  endTimeEditError.value = '';
+};
+
+const saveEndTimeOverride = () => {
+  if (!editEndDate.value || !editEndTime.value) {
+    endTimeEditError.value = 'Enter both a date and a time.';
+    return;
+  }
+  const newEndTime = getLocalTimestampInTimezone(editEndDate.value, editEndTime.value, props.timezone);
+  if (newEndTime <= props.summary.startTime) {
+    endTimeEditError.value = "End time must be after this ascension's own start time.";
+    return;
+  }
+  emit('overrideEndTime', newEndTime);
+  isEditingEndTime.value = false;
+  endTimeEditError.value = '';
+};
+
+const resetEndTimeOverride = () => {
+  emit('overrideEndTime', null);
+  isEditingEndTime.value = false;
+  endTimeEditError.value = '';
+};
 
 const handleClickOutside = (e: MouseEvent) => {
   if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {
@@ -357,22 +506,34 @@ const handleClickOutside = (e: MouseEvent) => {
 onMounted(() => document.addEventListener('click', handleClickOutside));
 onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside));
 
-const activeVariant = computed<'1-sale' | '2-sale' | 'continue'>(() => {
-  const label = props.summary.strategyLabel;
-  if (label.includes('1-sale')) return '1-sale';
-  if (label.includes('2-sale')) return '2-sale';
-  return 'continue';
-});
+// The variant key that actually produced `props.summary` — passed down from `bestResults`
+// (`useAscensionGenerator.ts`) rather than re-derived by string-matching `strategyLabel`, which can't
+// distinguish e.g. a 3-sale-tier13 build from a 1-sale one.
+const activeVariantKey = computed(() => props.activeVariantKey ?? 'continue');
 
 const activeVariantShortLabel = computed(() => {
-  if (activeVariant.value === 'continue') return 'Continue';
-  return activeVariant.value;
+  if (activeVariantKey.value === 'continue') return 'Continue';
+  return activeVariantKey.value.replace('-tier13', '+T13');
 });
 
-const saleOptions = [
-  { value: '1-sale' as const, label: '1-sale build' },
-  { value: '2-sale' as const, label: '2-sale build' },
-];
+// One row per sale count that has either variant present. The plain (non-Tier-13) variant is NOT
+// guaranteed whenever the Tier-13 one is: runC3Variants (auto/shifts/c3.ts) skips computing the
+// plain sibling once a Tier-13 attempt for that sale count succeeds, since it would always lose the
+// comparison anyway — so a sale count can appear with only its `-tier13` key present.
+const variantRows = computed(() => {
+  const rows: { saleCount: number; plainKey?: VariantKey; tier13Key?: VariantKey }[] = [];
+  for (const saleCount of [1, 2, 3] as const) {
+    const plainKey: VariantKey = `${saleCount}-sale`;
+    const tier13Key: VariantKey = `${saleCount}-sale-tier13`;
+    const hasPlain = !!props.variants[plainKey];
+    const hasTier13 = !!props.variants[tier13Key];
+    if (!hasPlain && !hasTier13) continue;
+    rows.push({ saleCount, plainKey: hasPlain ? plainKey : undefined, tier13Key: hasTier13 ? tier13Key : undefined });
+  }
+  return rows;
+});
+
+const continueAvailable = computed(() => !!props.variants.continue);
 
 const continueDisabledTooltip = computed(() => {
   if (props.result3SkippedReason === 'startTimeTooFar') {
@@ -381,19 +542,23 @@ const continueDisabledTooltip = computed(() => {
   return 'No farm backup loaded — upload a backup to use Continue Ascension';
 });
 
-const selectVariant = (variant: 'continue' | '1-sale' | '2-sale') => {
+const selectVariant = (variant: VariantKey) => {
   isDropdownOpen.value = false;
+  emit('setPlanVariant', variant);
+};
+
+// The modal is an alternate view onto the same picking mechanism as the dropdown, not a second
+// source of truth — selecting a row calls the exact same emit.
+const onCompareSelect = (variant: VariantKey) => {
+  isComparisonOpen.value = false;
   emit('setPlanVariant', variant);
 };
 const eggs: VirtueEgg[] = ['curiosity', 'integrity', 'humility', 'resilience', 'kindness'];
 
-const displayComparisons = computed(() => {  
-  if (props.summary.comparisons && props.summary.comparisons.length > 0) {
-    return props.summary.comparisons;
-  }
-  if (props.summary.comparison && props.summary.comparison.daysFaster > 0.01) {
-    return [props.summary.comparison];
-  }
+const displayComparisons = computed(() => {
+  const comparison = props.summary.comparison;
+  if (!comparison) return [];
+  if (comparison.message || comparison.daysFaster > 0.01) return [comparison];
   return [];
 });
 
@@ -430,13 +595,18 @@ const shifts = computed(() => {
     endTime: absoluteTime,
   };
 
+  // Indices 1 and 2 are deliberately absent: the C1 -> {K1, I1} order is chosen dynamically at
+  // simulation time (see runC1K1I1Segment in ascension.ts), so whichever shift lands in that
+  // position isn't always K1 then I1 — those two are labeled from the shift's actual target egg
+  // below instead of by fixed position.
   const titles = [
-    'C1 Shift', 'K1 Shift', 'I1 Shift', 
-    'C2 Shift', 'K2 Shift', 'R1 Shift', 
-    'C3 Shift', 'H1 Shift', 'K3 Shift', 
-    'C4 Shift', 'I2 Shift', 'R2 Shift', 
+    'C1 Shift', undefined, undefined,
+    'C2 Shift', 'K2 Shift', 'R1 Shift',
+    'C3 Shift', 'H1 Shift', 'K3 Shift',
+    'C4 Shift', 'I2 Shift', 'R2 Shift',
     'H2 Shift',
   ];
+  const eggShiftTitles: Partial<Record<VirtueEgg, string>> = { kindness: 'K1 Shift', integrity: 'I1 Shift' };
   let shiftIndex = 0;
 
   for (const action of actions) {
@@ -447,9 +617,12 @@ const shifts = computed(() => {
       }
       shiftIndex++;
       const nextEgg = action.payload.toEgg;
+      const defaultTitle = `${nextEgg.charAt(0).toUpperCase() + nextEgg.slice(1)} Shift`;
       const title = isContinueCurrent
-        ? `${nextEgg.charAt(0).toUpperCase() + nextEgg.slice(1)} Shift`
-        : (titles[shiftIndex] || `${nextEgg.charAt(0).toUpperCase() + nextEgg.slice(1)} Shift`);
+        ? defaultTitle
+        : (shiftIndex === 1 || shiftIndex === 2)
+          ? (eggShiftTitles[nextEgg as VirtueEgg] || defaultTitle)
+          : (titles[shiftIndex] || defaultTitle);
 
       currentShift = {
         title: title,
@@ -480,18 +653,27 @@ const shifts = computed(() => {
 });
 
 const formatTimeRange = (start: number, end: number) => {
-  const s = new Date(start * 1000);
-  const e = new Date(end * 1000);
-  
-  const options: Intl.DateTimeFormatOptions = { 
+  // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
+  // `start`/`end` (an ascension's `summary.startTime`/`endTime`) are sums of hundreds of accumulated
+  // purchase/wait durations and routinely land a sub-microsecond residue short of a whole second
+  // even when "really" exactly on a boundary.
+  const s = new Date(Math.round(start * 1000));
+  const e = new Date(Math.round(end * 1000));
+
+  const options: Intl.DateTimeFormatOptions = {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
+    // Without this, `toLocaleString` falls back to the browser's own local timezone rather than the
+    // plan's configured one (`props.timezone`, the same zone the Start Time form and the end-time
+    // editor both read/write through) — whenever those two differ, this display and the editor it
+    // opens would silently disagree by the zones' offset.
+    timeZone: props.timezone,
   };
-  
+
   return `${s.toLocaleString('en-US', options)} — ${e.toLocaleString('en-US', options)}`;
 };
 </script>

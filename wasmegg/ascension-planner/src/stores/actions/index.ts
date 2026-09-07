@@ -45,6 +45,7 @@ export const useActionsStore = defineStore('actions', {
       editingGroupId: null,
       expandedGroupIds: new Set([startAction.id]),
       isRecalculating: false,
+      isPlanInitializing: false,
       pendingRecalculate: false,
       recalculationProgress: { current: 0, total: 0 },
       batchMode: false,
@@ -186,7 +187,10 @@ export const useActionsStore = defineStore('actions', {
   actions: {
     async setInitialSnapshot(snapshot: CalculationsSnapshot, options?: { silent?: boolean }) {
       this._initialSnapshot = snapshot;
-      if (options?.silent) return;
+      if (options?.silent) {
+        this.isPlanInitializing = false;
+        return;
+      }
 
       if (this.actions.length === 0) {
         const startAction = createDefaultStartAction();
@@ -208,6 +212,7 @@ export const useActionsStore = defineStore('actions', {
 
       await this.recalculateFrom(0);
       this.lastSavedActionsJson = JSON.stringify(this.actions);
+      this.isPlanInitializing = false;
     },
 
     pushWaitForFullHabsAction() {
@@ -697,6 +702,7 @@ export const useActionsStore = defineStore('actions', {
 
     async importPlan(jsonString: string, skipRecalculate = false, preserveId = false) {
       if (this.lastSavedActionsJson === jsonString && this._initialSnapshot) {
+        this.isPlanInitializing = false;
         return true;
       }
       const data = importPlanLogic(jsonString);
@@ -745,6 +751,7 @@ export const useActionsStore = defineStore('actions', {
         syncStoresToSnapshot(this.effectiveSnapshot);
       }
       this.lastSavedActionsJson = JSON.stringify(this.actions);
+      this.isPlanInitializing = false;
       return true;
     },
 
