@@ -6,7 +6,7 @@ import type { ArtifactParameters, CraftingLevelInfo, SpaceshipParameters } from 
 import config from '../eiafx-config-json';
 
 export default data;
-export type { Family as AfxFamily, Tier as AfxTier, Recipe, Effect } from './data-json';
+export type { Family as AfxFamily, Tier as AfxTier, Recipe, Effect, CraftingPriceParams } from './data-json';
 
 import Name = ei.ArtifactSpec.Name;
 import Level = ei.ArtifactSpec.Level;

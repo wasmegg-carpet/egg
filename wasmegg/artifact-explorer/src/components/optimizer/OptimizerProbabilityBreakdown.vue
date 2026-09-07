@@ -4,7 +4,6 @@
       Probability breakdown<template v-if="heading"> — {{ heading }}</template>
     </summary>
 
-    <!-- Formula decomposition -->
     <div class="mt-2 text-xs bg-gray-50 rounded p-2 space-y-0.5">
       <div class="font-medium text-gray-700">
         P(legendary) = {{ (bestProbability * 100).toFixed(2) }}%
@@ -24,42 +23,47 @@
       <div class="pl-6 text-gray-500">λ = {{ lambda.toFixed(3) }} expected direct legendary drops</div>
     </div>
 
-    <!-- Craft chain -->
     <template v-if="craftChainTree">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">Craft chain</div>
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
+        Craft chain<template v-if="craftChainCost > 0.5"> — {{ formatGoldenEggs(craftChainCost) }} GE</template>
+      </div>
       <div class="flex items-baseline gap-1 text-xs py-0.5 font-medium text-gray-700 pl-1">
         Target: α = {{ expectedCrafts.toFixed(2) }} craftable
       </div>
       <ul class="text-xs">
         <optimizer-recipe-tree-row :node="craftChainTree">
           <template #metrics="{ node }">
-            <span class="font-mono text-xs whitespace-nowrap flex-shrink-0">
-              <template v-if="hasInventory && node.metrics.owned > 0.005">
-                <span class="text-amber-600">{{ formatCount(node.metrics.owned) }} inv</span>
-                <span class="text-gray-400"> + </span>
-              </template>
-              <span class="text-blue-600">{{ node.metrics.dropped.toFixed(1) }} drop</span>
-              <template v-if="node.metrics.crafted > 0.005">
-                <span class="text-gray-400"> + </span>
-                <span class="text-purple-600">{{ node.metrics.crafted.toFixed(1) }} craft</span>
-              </template>
-              <span class="text-gray-400"> → </span>
-              <span
-                class="font-semibold"
-                :class="
-                  node.metrics.owned + node.metrics.dropped + node.metrics.crafted >= node.metrics.consumed - 0.01
-                    ? 'text-green-700'
-                    : 'text-amber-600'
-                "
-                >{{ node.metrics.consumed.toFixed(1) }} used</span
-              >
+            <span class="font-mono text-xs inline-flex flex-col items-end">
+              <span class="whitespace-nowrap">
+                <template v-if="hasInventory && node.metrics.owned > 0.005">
+                  <span class="text-amber-600">{{ formatCount(node.metrics.owned) }} inv</span>
+                  <span class="text-gray-400"> + </span>
+                </template>
+                <span class="text-blue-600">{{ node.metrics.dropped.toFixed(1) }} drop</span>
+                <template v-if="node.metrics.crafted > 0.005">
+                  <span class="text-gray-400"> + </span>
+                  <span class="text-purple-600">{{ node.metrics.crafted.toFixed(1) }} craft</span>
+                </template>
+                <span class="text-gray-400"> → </span>
+                <span
+                  class="font-semibold"
+                  :class="
+                    node.metrics.owned + node.metrics.dropped + node.metrics.crafted >= node.metrics.consumed - 0.01
+                      ? 'text-green-700'
+                      : 'text-amber-600'
+                  "
+                  >{{ node.metrics.consumed.toFixed(1) }} used</span
+                >
+              </span>
+              <span v-if="node.metrics.goldenEggCost > 0.5" class="whitespace-nowrap text-yellow-600">
+                {{ formatGoldenEggs(node.metrics.goldenEggCost) }} GE
+              </span>
             </span>
           </template>
         </optimizer-recipe-tree-row>
       </ul>
     </template>
 
-    <!-- Per-mission legendary contributions -->
     <template v-if="missionLegendarySources.length > 0">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
         Direct legendary sources (λ = {{ lambda.toFixed(3) }})
@@ -81,9 +85,10 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, PropType } from 'vue';
+import { computed, defineComponent, PropType } from 'vue';
 
 import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from '@/lib';
+import { formatGoldenEggs, sumCraftChainCost } from '@/lib';
 import MissionName from '@/components/MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
 
@@ -101,10 +106,12 @@ export default defineComponent({
     missionLegendarySources: { type: Array as PropType<MissionLegendaryRow[]>, required: true },
     hasInventory: { type: Boolean, required: true },
   },
-  setup() {
+  setup(props) {
     // Owned stock is whole at n=1 but demand-split (so fractional) for n>=2.
     const formatCount = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
-    return { formatCount };
+    // This target's share of the plan's bill, not the plan total.
+    const craftChainCost = computed(() => sumCraftChainCost(props.craftChainTree));
+    return { formatCount, craftChainCost, formatGoldenEggs };
   },
 });
 </script>

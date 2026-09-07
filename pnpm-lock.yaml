@@ -290,6 +290,9 @@ importers:
       copy-text-to-clipboard:
         specifier: ^3.2.2
         version: 3.2.2
+      highs:
+        specifier: ^1.15.2
+        version: 1.15.2
       lib:
         specifier: workspace:^
         version: link:../../lib
@@ -3771,6 +3774,9 @@ packages:
   highlight.js@11.11.1:
     resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
     engines: {node: '>=12.0.0'}
+
+  highs@1.15.2:
+    resolution: {integrity: sha512-IugrQ7Z8nSMHgVneTFwzV8fIfaR85l/kGhN+jvEDbm5k5MlGXtq1Zp2hy1fkmHA71nCmIg9F7ayWfEPxLpfUyA==}
 
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
@@ -7906,6 +7912,8 @@ snapshots:
 
   highlight.js@11.11.1:
     optional: true
+
+  highs@1.15.2: {}
 
   hookable@5.5.3: {}
 

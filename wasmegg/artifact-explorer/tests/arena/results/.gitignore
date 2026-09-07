@@ -1,0 +1,4 @@
+# Scorecards are local scratch output: every sweep rewrites them, and several
+# agents running sweeps in parallel would otherwise collide on every file.
+# Re-generate with `ARENA=sweep pnpm arena`.
+*.json

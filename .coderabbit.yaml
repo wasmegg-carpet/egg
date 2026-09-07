@@ -74,7 +74,7 @@ reviews:
     - "!periodicals/ei.pb.go"
 
     # Game data refreshed by .github/workflows/update-*.yml
-    - "!wasmegg/artifact-explorer/src/lib/loot.json"
+    - "!wasmegg/artifact-explorer/data/loot.json"
     # Scoped to the data files only: these directories also hold the
     # hand-written loot.go transformation logic, which must stay reviewable.
     - "!wasmegg/_common/loot/latest-mission_reward_count.json"

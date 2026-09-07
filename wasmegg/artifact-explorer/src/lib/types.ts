@@ -15,6 +15,7 @@ export interface LaunchOption {
   // level's launch period
   actualTime: number;
   rawTime: number; // true (unfloored) boosted duration
+  cost: number;
   // everything this launch drops, per single ship — display only
   supplyVector: Map<string, number>;
   // subset of supplyVector restricted to recipe ingredients; this is what
@@ -36,6 +37,14 @@ export interface DAGNode {
 }
 
 export type RecipeDAG = Map<string, DAGNode>;
+
+// A cap on what the plan's crafts may cost in golden eggs. `unitPrices` is a *linear* price per craft, which
+// the real curve is not, so the row is an upper bound on the true bill: a plan that satisfies it is always
+// affordable, while a plan leaning hard on one node may be rejected despite fitting. See OPTIMIZER.md.
+export interface CraftBudget {
+  capacity: number; // golden eggs
+  unitPrices: ReadonlyMap<string, number>; // per craft, by node id
+}
 
 export interface LaunchSolution {
   ship: MissionType;
@@ -85,7 +94,7 @@ export interface OptimizerSolution {
   fuelByEgg: Map<ei.Egg, number>;
   timeUnitsUsed: integer; // makespan: the busiest slot's floored load
   runningTimeSeconds: integer; // the busiest slot's real (raw) flight time
-  slots?: SlotSummary[]; // per-slot occupancy of the chosen plan
+  slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];
   finalYieldVector: Map<string, number>;

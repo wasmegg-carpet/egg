@@ -1,6 +1,5 @@
-// Persisted config shapes, defaults, and the type guards that validate
-// localStorage values. Kept free of side effects (no localStorage or window
-// access at import time) so it can be unit tested under node.
+// Persisted config shapes, defaults, and the type guards that validate localStorage values.
+// Free of side effects at import time, so it can be unit tested under node.
 
 import { virtueShipGemCosts, ei } from 'lib';
 
@@ -68,9 +67,6 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
   );
 }
 
-// How much effort the player will put into relaunching missions. Lower effort
-// means a longer launch period, biasing the optimizer away from lots of tiny,
-// babysitting-heavy launches.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const;
 
 export type EffortLevel = (typeof EFFORT_LEVELS)[number];
@@ -90,11 +86,20 @@ export function isEffortLevel(x: unknown): x is EffortLevel {
 
 export const DEFAULT_WAIT_TIME_DAYS = '30';
 
+// Golden egg budget used when no save has been loaded to seed one from. Only
+// ever seen by a player planning without player data, since `setPlayerData`
+// overwrites it with the real balance while the cap is off.
+export const DEFAULT_MAX_GOLDEN_EGG_COST = 1e7;
+
 export interface MissionFilters {
   effort: EffortLevel;
   // Maximum gem cost of a mission's ship on the Egg of Humility.
   maxGemCostEnabled: boolean;
   maxGemCost: number;
+  // Golden eggs the plan's crafts may cost in total. Off by default; while off
+  // the value tracks the loaded save's balance.
+  maxGoldenEggCostEnabled: boolean;
+  maxGoldenEggCost: number;
   // Time budget, stored as typed (e.g. '30', '12d12h') and parsed at use.
   waitTimeDays: string;
 }
@@ -104,6 +109,8 @@ export function newMissionFilters(): MissionFilters {
     effort: 'medium',
     maxGemCostEnabled: false,
     maxGemCost: virtueShipGemCosts[ei.MissionInfo.Spaceship.ATREGGIES],
+    maxGoldenEggCostEnabled: false,
+    maxGoldenEggCost: DEFAULT_MAX_GOLDEN_EGG_COST,
     waitTimeDays: DEFAULT_WAIT_TIME_DAYS,
   };
 }
@@ -115,6 +122,10 @@ export function isMissionFilters(x: unknown): x is MissionFilters {
     (m.effort === undefined || isEffortLevel(m.effort)) &&
     (m.maxGemCostEnabled === undefined || typeof m.maxGemCostEnabled === 'boolean') &&
     (m.maxGemCost === undefined || typeof m.maxGemCost === 'number') &&
+    (m.maxGoldenEggCostEnabled === undefined || typeof m.maxGoldenEggCostEnabled === 'boolean') &&
+    // Finite and non-negative, not merely a number: `buildModel` reads a negative or non-finite capacity as
+    // "no cap", so a value that fails this would leave the checkbox on with nothing enforcing it.
+    (m.maxGoldenEggCost === undefined || (Number.isFinite(m.maxGoldenEggCost) && m.maxGoldenEggCost >= 0)) &&
     (m.waitTimeDays === undefined || typeof m.waitTimeDays === 'string')
   );
 }

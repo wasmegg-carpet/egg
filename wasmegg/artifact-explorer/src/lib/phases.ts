@@ -15,7 +15,6 @@ import { getMissionLootData, MIN_LEGENDARY_OBSERVATIONS } from '@/lib';
 import { sum } from '@/utils';
 import { Ingredient } from 'lib/artifacts/data-json';
 
-// Recursively add `id` and its whole crafting tree to `recipeDag`.
 export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
   if (recipeDag.has(id)) return;
 
@@ -42,14 +41,12 @@ export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
   }
 }
 
-// Every visible ship crossed with its applicable mission targets, costed per
-// single ship. launchPeriodSeconds floors each mission's effective duration,
-// penalising short missions without banning them.
+// Every visible ship crossed with its applicable mission targets, costed per single ship.
+// `launchPeriodSeconds` floors each mission's effective duration, penalising short missions without banning them.
 export function enumerateLaunchOptions(
   playerConfig: ShipsConfig,
   dag: RecipeDAG,
-  launchPeriodSeconds = 0,
-  maxGemCost?: number
+  launchPeriodSeconds = 0
 ): LaunchOption[] {
   const options: LaunchOption[] = [];
 
@@ -61,8 +58,6 @@ export function enumerateLaunchOptions(
 
   for (const mission of missions) {
     if (!playerConfig.shipVisibility[mission.shipType]) continue;
-
-    if (maxGemCost !== undefined && mission.virtueGemCost > maxGemCost) continue;
 
     const missionData = getMissionLootData(mission.missionTypeId);
     const levelLootData = missionData.levels[playerConfig.shipLevels[mission.shipType]];
@@ -143,6 +138,7 @@ function makeLaunchOption(
     actualTime: Math.max(rawTime, launchPeriodSeconds),
     rawTime,
     fuelByEgg: nonHumilityFuelUse.reduce((agg, current) => agg.set(current.egg, current.amount), new Map()),
+    cost: mission.virtueGemCost,
     supplyVector: new Map(),
     yieldVector: new Map(),
     legendaryYieldVector: new Map(),

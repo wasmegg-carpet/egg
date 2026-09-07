@@ -55,6 +55,17 @@
         <base-icon :icon-rel-path="eggIconPath(egg)" :size="64" class="inline-block -ml-0.5 h-4 w-4"></base-icon>
       </li>
     </ul>
+    <div v-if="planCost.total > 0" :class="unaffordable ? 'text-red-600' : 'text-gray-600'">
+      <span
+        v-tippy="unaffordable ? unaffordableTooltip : craftingCostTooltip"
+        class="cursor-help border-b border-dotted"
+        :class="unaffordable ? 'border-red-400/60' : 'border-gray-400/60'"
+        >Crafting cost</span
+      >
+      : {{ formatGoldenEggs(planCost.total) }}
+      <base-icon icon-rel-path="egginc-extras/icon_golden_egg.png" :size="64" class="inline-block -ml-0.5 h-4 w-4" />
+      <span v-if="unaffordable" class="font-medium">— more than you have</span>
+    </div>
     <div class="text-gray-600">Ships in flight: {{ formatDuration(solution.runningTimeSeconds, true) }}</div>
     <div v-if="idleTimeSeconds > 0" class="text-gray-600">
       <span v-tippy="idleTooltip" class="cursor-help border-b border-dotted border-gray-400/60">Idle</span>
@@ -86,7 +97,8 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { eggIconPath, formatDuration, formatEIValue } from 'lib';
-import type { OptimizerSolution, TargetView } from '@/lib';
+import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
+import { formatGoldenEggs } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';
@@ -98,12 +110,15 @@ export default defineComponent({
     solution: { type: Object as PropType<OptimizerSolution>, required: true },
     maxWaitTimeSeconds: { type: Number, required: true },
     hasInventory: { type: Boolean, required: true },
+    // The player's spendable golden eggs, or null with no save loaded — in which case there is no balance to
+    // measure the bill against and the cost is never marked.
+    goldenEggBalance: { type: Number as PropType<number | null>, default: null },
     targets: { type: Array as PropType<TargetView[]>, required: true },
+    planCost: { type: Object as PropType<PlanCost>, required: true },
   },
   setup(props) {
-    // One row per target for any count, so the markup below needs no n=1 arm.
-    // targets can be empty, in which case the solution's own top-level fields
-    // (which mirror perTarget[0]) stand in for the single row.
+    // One row per target for any count. `targets` can be empty, in which case the solution's own top-level
+    // fields (which mirror `perTarget[0]`) stand in for the single row.
     const rows = computed<TargetView[]>(() =>
       props.targets.length > 0
         ? props.targets
@@ -136,8 +151,21 @@ export default defineComponent({
     const craftTooltip =
       'Probability of crafting at least one legendary from the gathered ingredients (plus anything already in your inventory).';
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
+    const craftingCostTooltip =
+      'Golden eggs needed to perform every craft in this plan, at your own crafting prices (the price of an item drops the more times you have crafted it). Crafts come out of the LP relaxation, so counts — and therefore the bill — are fractional.';
     const idleTooltip =
       'Budget time with no ships in flight — gaps between launches (per your effort setting) plus unused budget at the end. Ships in flight + idle = your max wait time.';
+    const unaffordable = computed(
+      () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
+    );
+    const unaffordableTooltip = computed(() =>
+      props.goldenEggBalance === null
+        ? ''
+        : `This plan's crafts cost ${formatGoldenEggs(props.planCost.total)} golden eggs, ` +
+          `${formatGoldenEggs(props.planCost.total - props.goldenEggBalance)} more than your balance of ` +
+          `${formatGoldenEggs(props.goldenEggBalance)}. Cap it under Constraints to make the planner ` +
+          `stay inside what you can spend.`
+    );
     const idleTimeSeconds = computed(() =>
       Math.max(0, Math.round(props.maxWaitTimeSeconds) - props.solution.runningTimeSeconds)
     );
@@ -145,12 +173,16 @@ export default defineComponent({
       eggIconPath,
       formatDuration,
       formatEIValue,
+      formatGoldenEggs,
+      craftingCostTooltip,
       sparseTooltip,
       chanceTooltip,
       jointTooltip,
       craftTooltip,
       dropTooltip,
       idleTooltip,
+      unaffordable,
+      unaffordableTooltip,
       idleTimeSeconds,
       rows,
       multi,

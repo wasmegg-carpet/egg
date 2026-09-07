@@ -24,6 +24,7 @@
     "src/**/*.d.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
+    "tests/**/*.ts",
     "../../ui/**/*.vue",
     "../../ui/heroicons.d.ts",
     "vite.config.ts"
