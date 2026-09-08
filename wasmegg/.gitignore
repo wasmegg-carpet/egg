@@ -3,3 +3,6 @@ dist/*
 !/dist/_headers
 !/dist/favicon.ico
 !/dist/index.html
+
+# Local Netlify folder
+.netlify
