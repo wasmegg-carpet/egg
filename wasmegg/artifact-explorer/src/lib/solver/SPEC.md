@@ -24,6 +24,36 @@ carry nothing useful, and merges exact duplicates into groups under a numeric
 canonical key. Together these make the result independent of the order the user
 clicked buttons.
 
+### Dominance
+
+`pruneDominated` then drops a group when another can stand in for it launch for
+launch: no more fuel, no more seconds, and at least as much of every item the
+conservation rows read and of every target's legendary drops. What it buys is
+columns, and a mission column is `slots` integer columns plus a nonzero in every row
+it touches.
+
+**Why it cannot cut off the optimum.** Take any point feasible for the full model and
+move every launch of the dropped group `i` onto its dominator `j`, *in the slot it
+already flew in*. The fuel row and every slot load only fall; item supply and every
+`s_t` only rise, so the conservation rows gain slack and the tangent cuts on `z_t`
+relax. Crafts can be held where they were, so the price row is untouched and the
+objective does not fall. The one row that can break is `order_k`, and it is a
+symmetry break over slots the remaining rows leave interchangeable — re-sorting the
+slots by load restores it and moves nothing else. So the pruned model's optimum is at
+least the full model's, and being a restriction it is also no more.
+
+That argument is about rows, so it needs the *column bounds* to say nothing the rows
+do not. `boundsFollowFromRows` refuses a dominator whose per-slot bound is the
+`MAX_PER_SLOT` stand-in rather than its own duration (section 2): absorbing another
+group's launches is exactly what can push a column past a cap no row implied.
+
+The relation is strict on at least one axis, so it is a strict partial order and
+every dropped group has a dominator that itself survives — testing against the whole
+menu rather than against the survivors is what makes the result independent of the
+order groups are walked in. It reads only a group's own numbers, and group order is
+already a function of the target set and the option set rather than of menu order, so
+arena B1 and B5 are unaffected.
+
 ## 2. Columns
 
 A column summing each mission's allocation across slots keeps every row that does

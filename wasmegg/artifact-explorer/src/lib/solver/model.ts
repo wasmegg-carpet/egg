@@ -4,7 +4,10 @@
 import type { LaunchOption, RecipeDAG } from '../types';
 import type { PlanProblem } from './types';
 
+// Stand-ins for a bound no budget gives; see SPEC.md section 2. `MAX_PER_SLOT` is `milp.ts`'s column
+// bound and lives here so `boundsFollowFromRows` below can read the same number.
 const GROUP_CAP = 1e9;
+export const MAX_PER_SLOT = 1e6;
 
 export interface Group {
   // Normalized: a fraction of the whole tank, and of one slot's horizon.
@@ -120,6 +123,41 @@ function craftUpperBounds(
     caps[idx] = Number.isFinite(bound) && bound >= 0 ? bound : Infinity;
   }
   return caps;
+}
+
+// Whether the rows alone bound this group's columns. They do not when a zero fraction leaves `perSlotCap`
+// or `cap` on a stand-in, and a group taking another's launches on is the one thing that can walk a column
+// into such a cap. A positive duration whose slot-row bound is under `MAX_PER_SLOT` settles it: every other
+// term in either minimum is then that bound or smaller.
+function boundsFollowFromRows(grp: Group): boolean {
+  return grp.timeFraction > 0 && Math.floor(1 / grp.timeFraction) <= MAX_PER_SLOT;
+}
+
+// `taker` dominates `given` when every launch of `given` could have been flown as a `taker` in the same
+// slot: no more fuel, no more seconds, and at least as much of every item the conservation rows read and
+// of every target's legendary drops. Compared exactly rather than to a tolerance, which is what keeps the
+// relation transitive. See SPEC.md section 1.
+function dominates(taker: Group, given: Group): boolean {
+  if (taker.fuelFraction > given.fuelFraction || taker.timeSeconds > given.timeSeconds) return false;
+  let strict = taker.fuelFraction < given.fuelFraction || taker.timeSeconds < given.timeSeconds;
+  for (let i = 0; i < taker.yieldByItem.length; i++) {
+    if (taker.yieldByItem[i] < given.yieldByItem[i]) return false;
+    if (taker.yieldByItem[i] > given.yieldByItem[i]) strict = true;
+  }
+  for (let t = 0; t < taker.legendaryByTarget.length; t++) {
+    if (taker.legendaryByTarget[t] < given.legendaryByTarget[t]) return false;
+    if (taker.legendaryByTarget[t] > given.legendaryByTarget[t]) strict = true;
+  }
+  return strict;
+}
+
+// Requiring strictness makes `dominates` a strict partial order, so every dropped group has a dominator
+// that itself survives, and testing each group against the whole menu — dropped ones included — leaves the
+// survivors a function of the group set rather than of the order it was walked in.
+function pruneDominated(groups: readonly Group[]): Group[] {
+  return groups.filter(
+    given => !groups.some(taker => taker !== given && boundsFollowFromRows(taker) && dominates(taker, given))
+  );
 }
 
 export function buildModel(problem: PlanProblem): Model {
@@ -291,6 +329,10 @@ export function buildModel(problem: PlanProblem): Model {
   }
   for (const grp of groups) grp.members.sort((a, b) => a - b);
 
+  // Dropped before `craftUpperBounds`, which counts every group at its cap: fewer groups only tightens a
+  // bound that stays an over-statement of what the remaining ones can supply.
+  const kept = pruneDominated(groups);
+
   return {
     targets,
     requestedOrder,
@@ -303,9 +345,9 @@ export function buildModel(problem: PlanProblem): Model {
     targetCraftIdx,
     slots,
     timeCapacitySeconds: timeCap,
-    craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, groups),
+    craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,
-    groups,
+    groups: kept,
   };
 }
