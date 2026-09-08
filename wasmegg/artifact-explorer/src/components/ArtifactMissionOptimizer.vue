@@ -183,18 +183,26 @@ export default defineComponent({
     );
 
     // Launch-option enumeration stays on the main thread: it is the only step needing the loot dataset, which this bundle already loads.
+    // Kept off `computeInputs` so that editing a budget — which cannot change the menu — does not re-enumerate it.
+    const launchMenu = computed(() =>
+      enumerateLaunchOptions(
+        effectiveConfig.value,
+        recipeDag.value,
+        EFFORT_LAUNCH_PERIOD_SECONDS[missionFilters.value.effort]
+      )
+    );
+
+    // Likewise: the prices are a function of the tree and the inventory, not of the cap they are compared against.
+    const craftUnitPrices = computed(() => computeCraftUnitPrices(recipeDag.value, playerInventory.value));
+
     const computeInputs = computed<OptimizerRequestInput | null>(() => {
       if (!timeBudgetValid.value) return null;
-      const launchPeriodSeconds = EFFORT_LAUNCH_PERIOD_SECONDS[missionFilters.value.effort];
       const maxGemCost = missionFilters.value.maxGemCostEnabled ? missionFilters.value.maxGemCost : undefined;
       const craftBudget = missionFilters.value.maxGoldenEggCostEnabled
-        ? {
-            capacity: missionFilters.value.maxGoldenEggCost,
-            unitPrices: computeCraftUnitPrices(recipeDag.value, playerInventory.value),
-          }
+        ? { capacity: missionFilters.value.maxGoldenEggCost, unitPrices: craftUnitPrices.value }
         : undefined;
       return {
-        options: enumerateLaunchOptions(effectiveConfig.value, recipeDag.value, launchPeriodSeconds),
+        options: launchMenu.value,
         recipeDag: recipeDag.value,
         desiredArtifactNodeIds: [...artifactIds.value],
         fuelCapacity: effectiveFuelTankCapacity.value,
