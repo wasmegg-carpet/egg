@@ -5,9 +5,9 @@
         <span class="text-sm text-gray-700 truncate">{{ label }}</span>
         <span
           class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide flex-shrink-0"
-          :class="badgeClass"
+          :class="badge.class"
         >
-          {{ badge }}
+          {{ badge.text }}
         </span>
       </div>
       <label
@@ -37,7 +37,7 @@
         </div>
         <span v-if="maxLabel" class="text-xs text-gray-400">{{ maxLabel }}</span>
         <span v-if="hasSave && !perTargetSave && saveValue !== null" class="text-xs text-gray-400">
-          save: {{ saveValue }}
+          {{ sourceLabel }}: {{ saveValue }}
         </span>
       </template>
       <template v-else>
@@ -69,6 +69,9 @@ export default defineComponent({
     label: { type: String, required: true },
     // Whether a value for this field is available from the loaded save.
     hasSave: { type: Boolean, required: true },
+    // What supplied `saveValue`. A plan visit is the other source, and says so: its figures are the
+    // plan's simulation of a moment the save knows nothing about.
+    sourceLabel: { type: String, default: 'save' },
     // Whether the manual override flag is on (only meaningful when hasSave).
     overridden: { type: Boolean, default: false },
     // The value loaded from the save, shown when not overriding (null if none).
@@ -93,25 +96,18 @@ export default defineComponent({
     'update:manual': (_n: number) => true,
   },
   setup(props) {
-    const { hasSave, overridden, saveEntries } = toRefs(props);
+    const { hasSave, overridden, saveEntries, sourceLabel } = toRefs(props);
     // No save data → edit inline; save data + override on → edit inline.
     const editable = computed(() => !hasSave.value || overridden.value);
     const perTargetSave = computed(() => hasSave.value && saveEntries.value.length > 0);
-    const badge = computed<'save' | 'override' | 'manual'>(() => {
-      if (!hasSave.value) return 'manual';
-      return overridden.value ? 'override' : 'save';
+    // Text and colour are one decision, so they are made once: branching twice on the same pair is
+    // how a fourth state ends up labelled one way and coloured another.
+    const badge = computed(() => {
+      if (!hasSave.value) return { text: 'manual', class: 'bg-gray-100 text-gray-500' };
+      if (overridden.value) return { text: 'override', class: 'bg-amber-100 text-amber-700' };
+      return { text: sourceLabel.value, class: 'bg-green-100 text-green-700' };
     });
-    const badgeClass = computed(() => {
-      switch (badge.value) {
-        case 'save':
-          return 'bg-green-100 text-green-700';
-        case 'override':
-          return 'bg-amber-100 text-amber-700';
-        default:
-          return 'bg-gray-100 text-gray-500';
-      }
-    });
-    return { editable, perTargetSave, badge, badgeClass };
+    return { editable, perTargetSave, badge };
   },
 });
 </script>

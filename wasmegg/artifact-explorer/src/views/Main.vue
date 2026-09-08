@@ -2,7 +2,8 @@
   <spoiler-alert class="my-4" />
   <mission-selector :key="route.path" v-model="selectedMissionId" class="my-4" />
   <artifact-selector :key="route.path" v-model="selectedArtifactId" class="my-4" />
-  <tank-artifact-selector :key="route.name" v-model="selectedTankArtifactIds" class="my-4" />
+  <tank-artifact-selector v-model="selectedTankArtifactIds" class="my-4" />
+  <p class="my-4 text-sm text-gray-500">Planning a Humility cycle? Pick your targets, then load your ascension plan.</p>
   <router-view name="mission" />
   <div class="my-4 text-xs text-red-900">
     <p class="font-medium">Artifact notes:</p>
@@ -13,21 +14,23 @@
     <p>&dagger; Artifacts marked with &dagger; are not available from missions.</p>
   </div>
   <router-view name="artifact" />
-  <router-view name="tank" />
+  <fuel-tank-planner v-if="selectedTankArtifactIds.length > 0" :artifact-ids="selectedTankArtifactIds" />
   <artifact-grid />
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, PropType, toRefs, watch } from 'vue';
+import { computed, defineComponent, PropType, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { serializeTankIds } from '@/lib';
 import { parseKnownTankIds } from '@/lib/filter';
+import { offPlanTankTargets } from '@/store';
+import { activePlanVisit, activeVisitSettings, setVisitTargets } from '@/store/plan';
 import SpoilerAlert from '@/components/SpoilerAlert.vue';
 import ArtifactGrid from '@/components/ArtifactGrid.vue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import TankArtifactSelector from '@/components/TankArtifactSelector.vue';
 import MissionSelector from '@/components/MissionSelector.vue';
+import FuelTankPlanner from '@/views/FuelTankPlanner.vue';
 
 export default defineComponent({
   components: {
@@ -36,6 +39,7 @@ export default defineComponent({
     ArtifactSelector,
     TankArtifactSelector,
     MissionSelector,
+    FuelTankPlanner,
   },
   props: {
     missionId: {
@@ -82,50 +86,30 @@ export default defineComponent({
       }
     });
 
-    const selectedTankArtifactIds = ref<string[]>(parseKnownTankIds(tankPlannerArtifactId.value));
-    watch(tankPlannerArtifactId, current => {
-      selectedTankArtifactIds.value = parseKnownTankIds(current);
+    // The one target selector on the page. It reads and writes the active plan visit's targets
+    // whenever a visit is selected, so that picking a visit repoints it and editing it writes
+    // back; with no visit it is the page's own selection. Nothing here navigates: the ids stopped
+    // living in the URL, and a selection change that pushed a route would put the optimizer's
+    // budgets one step behind the address bar.
+    const selectedTankArtifactIds = computed<string[]>({
+      get: () => activeVisitSettings.value?.targetIds ?? offPlanTankTargets.value,
+      set: ids => {
+        const visit = activePlanVisit.value;
+        if (visit) setVisitTargets(visit.visitId, ids);
+        else offPlanTankTargets.value = [...ids];
+      },
     });
+
+    // `/tank/:ids` is a deserializer, not a page: it hands the ids to whatever the selector is
+    // currently pointed at and then leaves, so old links land on the same page every other route
+    // does. Immediate, because the link is read once on arrival and never again.
     watch(
-      selectedTankArtifactIds,
+      tankPlannerArtifactId,
       current => {
-        if (current.length === 0) {
-          // Removing the last chip has to leave the tank route: staying on
-          // /tank/<id>/ would keep the planner rendering the artifact that was
-          // just removed. Same destination FuelTankPlanner falls back to when
-          // none of its ids resolve. Guarded on the route so clearing a
-          // selection that was never in the URL doesn't navigate anywhere.
-          if (route.name === 'tank') {
-            router.replace({ name: 'home' });
-          }
-          return;
-        }
-        const serialized = serializeTankIds(current);
-        // Already exactly what the URL says: nothing to do. This is the common
-        // case on every load of a well-formed link, and skipping it here is
-        // what lets the watcher run immediately without navigating to the
-        // address it is already at.
-        if (serialized === tankPlannerArtifactId.value) {
-          return;
-        }
-        // The URL differs. Either it is a non-canonical spelling of this same
-        // selection (`#/tank/a,a`, `#/tank/a,,b`, stray whitespace, an id that
-        // names no artifact), or the user actually changed the selection.
-        // Canonicalizing is a rewrite, not a navigation: pushing it would
-        // leave the non-canonical entry one step back in history, where Back
-        // lands, the param watcher re-normalizes, and we push forward again --
-        // so the user could never get past it. Replace in that case; a genuine
-        // selection change still pushes so Back undoes it.
-        //
-        // Running immediately matters because a link can arrive non-canonical.
-        // Without it the URL would keep its stray commas or dead ids until the
-        // user happened to add or remove a chip.
-        const sameSelection = serialized === serializeTankIds(parseKnownTankIds(tankPlannerArtifactId.value));
-        const navigate = sameSelection ? router.replace : router.push;
-        navigate({
-          name: 'tank',
-          params: { tankPlannerArtifactId: serialized },
-        });
+        if (current === null) return;
+        const ids = parseKnownTankIds(current);
+        if (ids.length > 0) selectedTankArtifactIds.value = ids;
+        router.replace({ name: 'home' });
       },
       { immediate: true }
     );

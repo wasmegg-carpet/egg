@@ -3,7 +3,6 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import Main from '@/views/Main.vue';
 import Mission from '@/views/Mission.vue';
 import Artifact from '@/views/Artifact.vue';
-import FuelTankPlanner from '@/views/FuelTankPlanner.vue';
 
 const router = createRouter({
   routes: [
@@ -29,15 +28,16 @@ const router = createRouter({
           },
           props: true,
         },
-        {
-          name: 'tank',
-          path: 'tank/:tankPlannerArtifactId/',
-          components: {
-            tank: FuelTankPlanner,
-          },
-          props: true,
-        },
       ],
+    },
+    // Inbound only. The selection no longer lives in the URL, but `Share` still writes links in
+    // this shape and every one already out there has to keep resolving, so Main reads the ids out
+    // of the param into the store and replaces the address with `/`.
+    {
+      name: 'tank',
+      path: '/tank/:tankPlannerArtifactId/',
+      component: Main,
+      props: true,
     },
     {
       path: '/:catchAll(.*)',

@@ -105,6 +105,11 @@ const IMPLEMENTATION = [
   'optimizer-worker-protocol.ts',
   'optimizer.worker.ts',
   'packing.ts', // the app's packer — the arena has its own, on purpose
+  // The ascension-planner seam. `write.ts` projects a finished plan; the other two read the file
+  // that supplies one's budgets. None of it is anything the arena states a problem with.
+  'plan/read.ts',
+  'plan/schema.ts',
+  'plan/write.ts',
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
   'solver/highs.ts',
   'solver/milp.ts',

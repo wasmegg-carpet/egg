@@ -12,6 +12,53 @@
     </section>
 
     <section>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Ascension plan</h3>
+      <div class="space-y-2">
+        <label
+          class="w-full flex items-center justify-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm rounded-md text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer"
+        >
+          {{ plan ? 'Load another plan…' : 'Load ascension plan…' }}
+          <input type="file" accept=".json,application/json" class="hidden" @change="onPlanFilePicked" />
+        </label>
+
+        <p v-if="planLoadError" class="text-xs text-red-500">{{ planLoadError }}</p>
+
+        <template v-if="plan">
+          <div class="text-sm text-gray-700 truncate">{{ plan.label }}</div>
+
+          <div>
+            <label for="planVisitSelect" class="block text-sm text-gray-700">Visit</label>
+            <select
+              id="planVisitSelect"
+              class="mt-1 block w-full pl-3 pr-8 py-1.5 sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              :value="planVisit ? planVisit.visitId : ''"
+              @change="onVisitPicked(($event.target as HTMLSelectElement).value)"
+            >
+              <!-- Off the plan: every budget goes back to the save's, and the plan stays loaded. -->
+              <option value="">-</option>
+              <option v-for="option in visitOptions" :key="option.visitId" :value="option.visitId">
+                {{ option.text }}
+              </option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            :disabled="solvedCount === 0"
+            class="w-full flex items-center justify-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            @click="onExportPlan"
+          >
+            Export {{ solvedCount }} solved visit{{ solvedCount === 1 ? '' : 's' }}
+          </button>
+        </template>
+
+        <p v-else class="text-xs text-gray-400">
+          Solve a cycle's Humility visits against the budgets the plan says you will have at each of them.
+        </p>
+      </div>
+    </section>
+
+    <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Constraints</h3>
       <div class="space-y-3">
         <div>
@@ -29,7 +76,17 @@
           <p v-if="timeBudgetInvalid" class="mt-1 text-xs text-red-500">
             Enter a positive duration (e.g. 30, 12d12h, 10h5m)
           </p>
-          <p v-else class="mt-1 text-xs text-gray-400">Maximum time you're willing to spend launching missions</p>
+          <!-- Not chained off the error above: a visit with nothing scheduled reports zero, which
+               empties this field and so is exactly the case the error fires on. Saying only
+               "enter a positive duration" there leaves the player with no idea why the plan gave
+               them nothing to start from. -->
+          <p v-if="planVisit" class="mt-1 text-xs text-gray-400">
+            From plan: how long this visit stays on Humility. The plan reports zero until the visit has missions
+            scheduled, so type one over it.
+          </p>
+          <p v-else-if="!timeBudgetInvalid" class="mt-1 text-xs text-gray-400">
+            Maximum time you're willing to spend launching missions
+          </p>
         </div>
 
         <div>
@@ -95,7 +152,7 @@
             <input
               type="text"
               :disabled="!missionFilters.maxGemCostEnabled"
-              :value="maxGemCostDisplay"
+              :value="gemCostFieldValue"
               placeholder="e.g. 10S"
               class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
               @input="onGemCostInput($event)"
@@ -104,6 +161,10 @@
           </div>
           <p v-if="missionFilters.maxGemCostEnabled" class="mt-1 text-xs text-gray-400">
             Only schedule ships costing at most this many gems (e.g. 10S = 10 septillion)
+          </p>
+          <p v-else-if="planVisit" class="mt-1 text-xs text-gray-400">
+            From plan: the bank on arrival plus what the visit earns, capping one ship rather than the whole visit. Turn
+            this on to set your own.
           </p>
         </div>
 
@@ -184,12 +245,13 @@
         />
         <!-- Capacity stops feeding the model once the per-egg budget is on, so the
              control goes inert rather than staying live and changing nothing. -->
-        <div :class="fuelFromTankContents ? 'opacity-40 pointer-events-none' : ''">
+        <div :class="perEggBudget ? 'opacity-40 pointer-events-none' : ''">
           <optimizer-setting-row
             label="Fuel tank level"
-            :has-save="playerTankLevel !== null"
+            :has-save="sourceTankLevel !== null"
+            :source-label="planSourceLabel"
             :overridden="overrides.tankLevel"
-            :save-value="playerTankLevel"
+            :save-value="sourceTankLevel"
             :manual-value="extras.tankLevel"
             :min="0"
             :max="maxTankLevel"
@@ -199,23 +261,27 @@
             @update:manual="setTankLevel"
           />
         </div>
-        <div v-if="canBudgetFromTankContents" class="py-2">
+        <div v-if="canBudgetPerEgg" class="py-2">
           <label class="flex items-start gap-2 text-sm select-none text-gray-600 cursor-pointer">
             <input
               type="checkbox"
               class="mt-0.5 h-4 w-4 shrink-0 text-green-600 border-gray-300 rounded focus:ring-green-500"
-              :checked="fuelFromTankContents"
-              @change="setFuelFromTankContents(($event.target as HTMLInputElement).checked)"
+              :checked="perEggBudget"
+              @change="writePerEggBudget(($event.target as HTMLInputElement).checked)"
             />
             <span>
               Only use fuel in tank
               <span class="block text-xs text-gray-500">
-                Budget against what you have stocked right now, egg by egg, instead of a full tank.
+                {{
+                  planVisit
+                    ? 'Budget against what the plan banks here, egg by egg. Off, the answer may spend the whole tank and say how much of each egg to go store.'
+                    : 'Budget against what you have stocked right now, egg by egg, instead of a full tank.'
+                }}
               </span>
             </span>
           </label>
-          <ul v-if="fuelFromTankContents" class="mt-2 pl-6 space-y-0.5">
-            <li v-for="entry of tankContentEntries" :key="'tank-' + entry.egg" class="flex items-center text-xs">
+          <ul v-if="perEggBudget" class="mt-2 pl-6 space-y-0.5">
+            <li v-for="entry of perEggBudgetEntries" :key="'tank-' + entry.egg" class="flex items-center text-xs">
               <base-icon :icon-rel-path="entry.icon" :size="64" class="h-4 w-4 mr-1"></base-icon>
               <span class="text-gray-500">{{ entry.name }}</span>
               <span class="ml-auto tabular-nums" :class="entry.empty ? 'text-red-500' : 'text-gray-700'">
@@ -226,9 +292,10 @@
         </div>
         <optimizer-setting-row
           label="FTL Drive Upgrades"
-          :has-save="hasPlayerData"
+          :has-save="sourceFTLLevel !== null"
+          :source-label="planSourceLabel"
           :overridden="overrides.epicResearchFTLLevel"
-          :save-value="playerShipsConfig ? playerShipsConfig.epicResearchFTLLevel : null"
+          :save-value="sourceFTLLevel"
           :manual-value="config.epicResearchFTLLevel"
           :min="0"
           :max="60"
@@ -238,9 +305,10 @@
         />
         <optimizer-setting-row
           label="Zero-g Quantum Containment"
-          :has-save="hasPlayerData"
+          :has-save="sourceZerogLevel !== null"
+          :source-label="planSourceLabel"
           :overridden="overrides.epicResearchZerogLevel"
-          :save-value="playerShipsConfig ? playerShipsConfig.epicResearchZerogLevel : null"
+          :save-value="sourceZerogLevel"
           :manual-value="config.epicResearchZerogLevel"
           :min="0"
           :max="10"
@@ -305,6 +373,7 @@ import {
   eggIconPath,
   eggName,
   formatDuration,
+  ei,
   formatEIValue,
   fuelTankSizes,
   getArtifactTierPropsFromId,
@@ -323,7 +392,9 @@ import {
   autoCompute,
   config,
   currentOptimizerArtifactIds,
+  effectiveMaxGemCost,
   effectiveConfig,
+  effectiveFuelByEggCapacity,
   EFFORT_LEVELS,
   type EffortLevel,
   extras,
@@ -355,6 +426,25 @@ import {
   setPreviousCraftCount,
   setTankLevel,
 } from '@/store';
+import {
+  activePlanVisit,
+  loadedPlan,
+  setCurrentVisit,
+  setLoadedPlan,
+  setVisitFuelBudget,
+  solvedVisitCount,
+} from '@/store/plan';
+import { parsePlanSave, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import { buildHumilityPlanFile } from '@/lib/plan/write';
+
+function downloadJson(filename: string, body: unknown): void {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 const effortMeta: Record<EffortLevel, { short: string; label: string; hint: string }> = {
   low: {
@@ -407,6 +497,17 @@ export default defineComponent({
       emit('update:waitTimeDays', value);
     }
 
+    // Every per-visit setting writes the same way: the visit's own field while one is open, the
+    // global filter otherwise. One helper, so a setting added later cannot be the one that forgets
+    // and writes the global filter out from under an open visit.
+    function writeVisitOrGlobal<T>(setVisit: (visitId: string, value: T) => void, setGlobal: (value: T) => void) {
+      return (value: T) => {
+        const visit = activePlanVisit.value;
+        if (visit) setVisit(visit.visitId, value);
+        else setGlobal(value);
+      };
+    }
+
     function onWaitTimeBlur() {
       if (!isDurationNormalizable(waitTimeDraft.value)) {
         // keep the text as typed rather than overwrite it with e.g. '>100yr'
@@ -430,20 +531,42 @@ export default defineComponent({
         }))
     );
 
+    // A plan visit's figures beat the save's wherever it has one — it simulates a moment the save
+    // knows nothing about — and the manual override still beats both. The rows say which of the two
+    // they are showing rather than both claiming to come from the save.
+    const planSourceLabel = computed(() => (activePlanVisit.value ? 'from plan' : 'save'));
+
+    const sourceTankLevel = computed(() => activePlanVisit.value?.tankLevel ?? playerTankLevel.value);
+    const sourceFTLLevel = computed(
+      () => activePlanVisit.value?.epicResearchFTLLevel ?? playerShipsConfig.value?.epicResearchFTLLevel ?? null
+    );
+    const sourceZerogLevel = computed(
+      () => activePlanVisit.value?.epicResearchZerogLevel ?? playerShipsConfig.value?.epicResearchZerogLevel ?? null
+    );
     const shownTankLevel = computed(() => {
-      const editable = playerTankLevel.value === null || overrides.value.tankLevel;
-      return editable ? extras.value.tankLevel : (playerTankLevel.value ?? 0);
+      const editable = sourceTankLevel.value === null || overrides.value.tankLevel;
+      return editable ? extras.value.tankLevel : sourceTankLevel.value;
     });
     const tankCapacityLabel = computed(() => formatEIValue(fuelTankSizes[shownTankLevel.value] ?? 0, { trim: true }));
 
-    // The mode is only offered when the save actually carries a readable tank; without
-    // one there is nothing to budget against and the control would be a dead toggle.
-    const canBudgetFromTankContents = computed(() => playerTankFuels.value !== null);
-    const fuelFromTankContents = computed(
-      () => canBudgetFromTankContents.value && missionFilters.value.fuelFromTankContents
+    // Per-egg amounts to budget against: the plan's bank on arrival at a visit, the save's tank
+    // otherwise. Without either there is nothing to budget against and the control would be a dead
+    // toggle, which is why it is not rendered at all then.
+    const perEggBudgetSource = computed<Map<ei.Egg, number> | null>(
+      () => activePlanVisit.value?.fuelByEgg ?? playerTankFuels.value
     );
-    const tankContentEntries = computed(() =>
-      [...(playerTankFuels.value ?? new Map())].map(([egg, amount]) => ({
+    const canBudgetPerEgg = computed(() => perEggBudgetSource.value !== null);
+    // The store's gate is the one the solver runs against; restating it here is how the checkbox
+    // and the answer drift apart.
+    const perEggBudget = computed(() => effectiveFuelByEggCapacity.value !== null);
+
+    const writePerEggBudget = writeVisitOrGlobal<boolean>(
+      (visitId, enabled) => setVisitFuelBudget(visitId, enabled ? 'banked' : 'full-tank'),
+      setFuelFromTankContents
+    );
+
+    const perEggBudgetEntries = computed(() =>
+      [...(perEggBudgetSource.value ?? new Map<ei.Egg, number>())].map(([egg, amount]) => ({
         egg,
         name: eggName(egg),
         icon: eggIconPath(egg),
@@ -521,8 +644,60 @@ export default defineComponent({
       };
     }
 
-    const maxGemCostDisplay = computed(() => formatEIValue(missionFilters.value.maxGemCost, { trim: true }));
     const onGemCostInput = costFieldHandler(setMaxGemCost);
+
+    // Whatever is actually capping a ship's price: the plan's figure for this visit while the
+    // checkbox is off, the typed one once it is on. Shown in the one field either way, rather than
+    // the plan's being restated in a panel of its own.
+    const gemCostFieldValue = computed(() =>
+      formatEIValue(effectiveMaxGemCost.value ?? missionFilters.value.maxGemCost, { trim: true })
+    );
+
+    // ---------------------------------------------------------------------
+    // The loaded ascension plan
+    // ---------------------------------------------------------------------
+
+    const planLoadError = ref('');
+
+    async function onPlanFilePicked(event: Event) {
+      const input = event.target as HTMLInputElement;
+      const file = input.files?.[0];
+      // Cleared so picking the same file twice in a row still fires a change event.
+      input.value = '';
+      if (!file) return;
+      planLoadError.value = '';
+      try {
+        const save = parsePlanSave(JSON.parse(await file.text()));
+        setLoadedPlan(file.name.replace(/\.json$/i, ''), sliceHumilityVisits(save));
+      } catch (err) {
+        planLoadError.value =
+          err instanceof PlanSaveError ? err.message : `Could not read that file: ${(err as Error).message}`;
+      }
+    }
+
+    // `✓ H2 of 3`: the tick is a recorded answer, and the count is what places a visit in its cycle
+    // now that no page lists them.
+    const visitOptions = computed(() => {
+      const plan = loadedPlan.value;
+      if (!plan) return [];
+      return plan.visits.map(visit => ({
+        visitId: visit.visitId,
+        text: `${plan.solved[visit.visitId] ? '✓ ' : ''}H${visit.visitIndex + 1} of ${plan.visits.length}`,
+      }));
+    });
+
+    function onVisitPicked(visitId: string) {
+      // Whatever is on screen seeds a visit with no targets of its own: loading the plan after
+      // picking targets is the expected order, and this is the page those targets are picked on.
+      setCurrentVisit(visitId === '' ? null : visitId, currentOptimizerArtifactIds.value);
+    }
+
+    function onExportPlan() {
+      const plan = loadedPlan.value;
+      if (!plan) return;
+      const solved = plan.visits.map(v => plan.solved[v.visitId]).filter(v => v !== undefined);
+      downloadJson('humility-plan.json', buildHumilityPlanFile(plan.label, solved));
+    }
 
     const maxGoldenEggCostDisplay = computed(() =>
       formatEIValue(missionFilters.value.maxGoldenEggCost, { trim: true })
@@ -537,16 +712,28 @@ export default defineComponent({
       maxTankLevel,
       previousCraftEntries,
       tankCapacityLabel,
-      canBudgetFromTankContents,
-      fuelFromTankContents,
-      tankContentEntries,
-      setFuelFromTankContents,
+      planSourceLabel,
+      sourceTankLevel,
+      sourceFTLLevel,
+      sourceZerogLevel,
+      canBudgetPerEgg,
+      perEggBudget,
+      perEggBudgetEntries,
+      writePerEggBudget,
       totalShips,
       shipsVisibleCount,
-      maxGemCostDisplay,
+      gemCostFieldValue,
       onGemCostInput,
       maxGoldenEggCostDisplay,
       onGoldenEggCostInput,
+      planVisit: activePlanVisit,
+      plan: loadedPlan,
+      planLoadError,
+      onPlanFilePicked,
+      visitOptions,
+      onVisitPicked,
+      solvedCount: solvedVisitCount,
+      onExportPlan,
       EFFORT_LEVELS,
       effortMeta,
       effortTrack,

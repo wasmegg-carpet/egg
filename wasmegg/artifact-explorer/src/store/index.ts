@@ -11,6 +11,7 @@ import {
   isOldShipsConfig,
   isShipsConfig,
   newShipsConfig,
+  parseDurationDays,
   perfectShipsConfig,
   setLocalStorage,
   shipLevelLaunchPointThresholds,
@@ -36,6 +37,8 @@ import {
   newOverrides,
   OverrideFlags,
 } from './schema';
+import { activePlanVisit, activeVisitSettings, waitTimeSecondsFor } from './plan';
+import { gemBudgetFor } from '@/lib/plan/read';
 export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
 export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
 
@@ -140,6 +143,11 @@ export const playerGoldenEggs = ref<number | null>(null);
 // Set by ArtifactMissionOptimizer; read by the settings UI.
 export const currentOptimizerArtifactIds = ref<string[]>([]);
 
+// What the tank selector is aimed at while no plan visit is active; a visit keeps its own targets.
+// Module state rather than a ref in Main.vue because `/tank/:ids` is read into it and then
+// replaced away, which remounts the view that read it.
+export const offPlanTankTargets = ref<string[]>([]);
+
 export const playerCraftingLevel = computed<number | null>(() => {
   const xp = playerTotalCraftingXp.value;
   if (xp == null) return null;
@@ -177,17 +185,34 @@ export const effectivePreviousCraftsOverride = computed<number | undefined>(() =
 });
 
 export const effectiveTankLevel = computed<number>(() => {
-  const player = playerTankLevel.value;
-  if (player == null) return fuelTankSizes.length - 1; // largest
-  return overrides.value.tankLevel ? extras.value.tankLevel : player;
+  // A plan visit's tank level beats the loaded save's: the plan simulates forward and the save
+  // only knows today. The manual override still beats both.
+  const source = activePlanVisit.value ? activePlanVisit.value.tankLevel : playerTankLevel.value;
+  if (source == null) return fuelTankSizes.length - 1; // largest
+  return overrides.value.tankLevel ? extras.value.tankLevel : source;
 });
 
 export const effectiveFuelTankCapacity = computed<number>(() => fuelTankSizes[effectiveTankLevel.value]);
 
 export const effectiveConfig = computed<ShipsConfig>(() => {
   const player = playerShipsConfig.value;
-  if (!player) return config.value;
+  const visit = activePlanVisit.value;
   const o = overrides.value;
+
+  // Epic research is the one thing a plan visit knows better than the save: the plan carries the
+  // player's levels and has no action that changes them, so its figure holds at every visit. Ship
+  // levels are not in the plan file at all and keep coming from the save.
+  const ftl = o.epicResearchFTLLevel
+    ? config.value.epicResearchFTLLevel
+    : (visit?.epicResearchFTLLevel ?? player?.epicResearchFTLLevel ?? config.value.epicResearchFTLLevel);
+  const zerog = o.epicResearchZerogLevel
+    ? config.value.epicResearchZerogLevel
+    : (visit?.epicResearchZerogLevel ?? player?.epicResearchZerogLevel ?? config.value.epicResearchZerogLevel);
+
+  if (!player) {
+    return { ...config.value, epicResearchFTLLevel: ftl, epicResearchZerogLevel: zerog };
+  }
+
   const shipLevels = { ...player.shipLevels };
   const shipVisibility = { ...player.shipVisibility };
   for (const s of spaceshipList) {
@@ -196,10 +221,8 @@ export const effectiveConfig = computed<ShipsConfig>(() => {
   }
   return {
     ...player,
-    epicResearchFTLLevel: o.epicResearchFTLLevel ? config.value.epicResearchFTLLevel : player.epicResearchFTLLevel,
-    epicResearchZerogLevel: o.epicResearchZerogLevel
-      ? config.value.epicResearchZerogLevel
-      : player.epicResearchZerogLevel,
+    epicResearchFTLLevel: ftl,
+    epicResearchZerogLevel: zerog,
     shipLevels,
     shipVisibility,
     showNodata: config.value.showNodata,
@@ -419,10 +442,24 @@ export function persistExtras(): void {
 export const missionFilters = ref<MissionFilters>(loadMissionFilters());
 
 // The per-egg budget the optimizer should use, or null to budget against tank capacity.
-// The single gate for the whole feature: the mode needs both the flag and a save with a
-// readable tank, so a flag persisted from an earlier session with no save loaded now
+// The gate for the whole feature: the mode needs a source of per-egg amounts, and the save-backed
+// one needs its flag too, so a flag persisted from an earlier session with no save loaded now
 // falls back on its own.
+//
+// A plan visit is the third source, and it carries its own flag rather than the persisted one: a
+// visit is solved either against the fuel the plan banks on arrival, or against a full tank, which
+// is the answer for a plan that has not scheduled its fuel yet and wants this app to say how much
+// to store. Null is what "full tank" means to the optimizer — the aggregate tank row, one pooled
+// capacity it splits across the eggs however the answer needs.
 export const effectiveFuelByEggCapacity = computed<Map<ei.Egg, number> | null>(() => {
+  const visit = activePlanVisit.value;
+  if (visit) {
+    if (activeVisitSettings.value?.fuelBudget !== 'banked') return null;
+    // Copied rather than returned: this Map is posted to the optimizer worker, and `loadedPlan` is a
+    // deep ref, so the visit's own Map is a reactive proxy — no [[MapData]], and structured clone
+    // rejects it. (`playerTankFuels` below is a shallowRef, which is why it needs no copy.)
+    return new Map(visit.fuelByEgg);
+  }
   if (!missionFilters.value.fuelFromTankContents) return null;
   return playerTankFuels.value;
 });
@@ -446,6 +483,20 @@ export function setMaxGemCost(cost: number): void {
 export function setMaxGoldenEggCostEnabled(enabled: boolean): void {
   missionFilters.value.maxGoldenEggCostEnabled = enabled;
 }
+
+export const effectiveWaitTimeSeconds = computed<number>(() => {
+  const visit = activePlanVisit.value;
+  return visit ? waitTimeSecondsFor(visit) : parseDurationDays(missionFilters.value.waitTimeDays);
+});
+
+// Undefined means no per-ship cap. A plan visit supplies one — what the plan can pay for at that
+// moment — where the standalone planner has none until the player sets it; either way the manual
+// cap wins once it is on, which is what keeps the control live on a plan visit rather than inert.
+export const effectiveMaxGemCost = computed<number | undefined>(() => {
+  if (missionFilters.value.maxGemCostEnabled) return missionFilters.value.maxGemCost;
+  const visit = activePlanVisit.value;
+  return visit ? gemBudgetFor(visit, effectiveWaitTimeSeconds.value) : undefined;
+});
 
 // Non-finite is dropped rather than clamped: `Math.max(0, NaN)` is NaN, and a NaN or Infinity capacity
 // reads downstream as "no cap" — the checkbox would stay on with nothing enforcing it.

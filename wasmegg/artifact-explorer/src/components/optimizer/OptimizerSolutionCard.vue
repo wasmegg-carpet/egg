@@ -1,5 +1,9 @@
 <template>
   <div class="space-y-1 text-sm">
+    <p v-if="overProvisioned" class="text-xs text-amber-700">
+      Assumes none of the earlier visits happened; expect this to over-provision.
+    </p>
+
     <div v-if="multi" class="text-lg font-semibold text-green-700">
       <span v-tippy="jointTooltip" class="cursor-help border-b border-dotted border-green-400/60">
         Joint chance of getting all {{ rows.length }} artifacts
@@ -115,6 +119,9 @@ export default defineComponent({
     goldenEggBalance: { type: Number as PropType<number | null>, default: null },
     targets: { type: Array as PropType<TargetView[]>, required: true },
     planCost: { type: Object as PropType<PlanCost>, required: true },
+    // Whether this answer is for a plan visit with earlier visits before it, whose drops and crafts
+    // it does not count.
+    overProvisioned: { type: Boolean, default: false },
   },
   setup(props) {
     // One row per target for any count. `targets` can be empty, in which case the solution's own top-level

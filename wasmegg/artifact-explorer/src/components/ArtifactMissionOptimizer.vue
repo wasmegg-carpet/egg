@@ -9,7 +9,7 @@
         :time-budget-invalid="!timeBudgetValid"
         @submit-player-id="submitPlayerId"
         @run-compute="runCompute"
-        @update:wait-time-days="setWaitTimeDays"
+        @update:wait-time-days="updateWaitTime"
       />
     </div>
 
@@ -27,6 +27,7 @@
               :golden-egg-balance="playerGoldenEggs"
               :targets="view.targets"
               :plan-cost="view.planCost"
+              :over-provisioned="overProvisioned"
             />
             <p
               v-if="computing && solutionViews.length === 0"
@@ -77,14 +78,7 @@
 <script lang="ts">
 import { computed, defineComponent, onUnmounted, PropType, ref, toRefs, watch, watchEffect } from 'vue';
 
-import {
-  getArtifactTierPropsFromId,
-  getSavedPlayerID,
-  iconURL,
-  parseDurationDays,
-  requestFirstContact,
-  savePlayerID,
-} from 'lib';
+import { getArtifactTierPropsFromId, getSavedPlayerID, iconURL, requestFirstContact, savePlayerID } from 'lib';
 
 import {
   autoCompute,
@@ -92,8 +86,10 @@ import {
   effectiveConfig,
   effectiveFuelByEggCapacity,
   effectiveFuelTankCapacity,
+  effectiveMaxGemCost,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
+  effectiveWaitTimeSeconds,
   EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
   playerGoldenEggs,
@@ -101,6 +97,9 @@ import {
   setPlayerData,
   setWaitTimeDays,
 } from '@/store';
+import { activePlanVisit, clearSolvedVisit, recordSolvedVisit, setVisitWaitTime, waitTimeInputFor } from '@/store/plan';
+import { gemBudgetFor } from '@/lib/plan/read';
+import { projectSolvedVisit } from '@/lib/plan/write';
 import {
   buildRecipeDag,
   computeBaseYield,
@@ -130,9 +129,18 @@ export default defineComponent({
   setup(props) {
     const { artifactIds } = toRefs(props);
 
-    // In the store so it survives this component unmounting when the selection empties.
-    const waitTimeDays = computed(() => missionFilters.value.waitTimeDays);
-    const maxWaitTimeSeconds = computed(() => parseDurationDays(waitTimeDays.value));
+    // In the store so it survives this component unmounting when the selection empties. A plan
+    // visit keeps its own, so that budgeting one visit does not silently rewrite the next.
+    const waitTimeDays = computed(() =>
+      activePlanVisit.value ? waitTimeInputFor(activePlanVisit.value) : missionFilters.value.waitTimeDays
+    );
+    const maxWaitTimeSeconds = effectiveWaitTimeSeconds;
+
+    function updateWaitTime(value: string) {
+      const visit = activePlanVisit.value;
+      if (visit) setVisitWaitTime(visit.visitId, value);
+      else setWaitTimeDays(value);
+    }
 
     const timeBudgetValid = computed(() => Number.isFinite(maxWaitTimeSeconds.value) && maxWaitTimeSeconds.value > 0);
 
@@ -197,7 +205,7 @@ export default defineComponent({
 
     const computeInputs = computed<OptimizerRequestInput | null>(() => {
       if (!timeBudgetValid.value) return null;
-      const maxGemCost = missionFilters.value.maxGemCostEnabled ? missionFilters.value.maxGemCost : undefined;
+      const maxGemCost = effectiveMaxGemCost.value;
       const craftBudget = missionFilters.value.maxGoldenEggCostEnabled
         ? { capacity: missionFilters.value.maxGoldenEggCost, unitPrices: craftUnitPrices.value }
         : undefined;
@@ -229,6 +237,11 @@ export default defineComponent({
         return;
       }
       const budget = maxWaitTimeSeconds.value;
+      // Which visit asked. The plan records whatever lands in `computedResults` against whatever
+      // visit is selected when it lands, so an answer that outlived its question has to be dropped
+      // rather than filed. `computeInputs` cannot stand in for this: it is only consulted when
+      // auto-compute is on, and two visits can pose identical inputs.
+      const visitAtRequest = activePlanVisit.value?.visitId ?? null;
       pendingCompute.value = false;
       computing.value = true;
       computeError.value = '';
@@ -236,6 +249,11 @@ export default defineComponent({
         const solutions = await optimizerClient().run(input);
         // null: a newer request owns the results and the spinner now.
         if (solutions === null) return;
+        if ((activePlanVisit.value?.visitId ?? null) !== visitAtRequest) {
+          computedResults.value = [];
+          computing.value = false;
+          return;
+        }
         // Inputs went invalid mid-flight; nothing supersedes the request, so
         // the stale plan has to be dropped here.
         if (!computeInputs.value) {
@@ -253,6 +271,33 @@ export default defineComponent({
         computing.value = false;
       }
     }
+
+    // Watched rather than recorded at each of `runCompute`'s exits: every path that clears the
+    // results has to reach the plan too, or a visit keeps an answer to a question that has since
+    // changed. Recorded as the *projection* that gets exported, never as the solution itself,
+    // which is full of `Map`s and stringifies to `{}`.
+    watch(computedResults, results => {
+      const visit = activePlanVisit.value;
+      if (!visit) return;
+      const solution = results[0];
+      if (!solution) {
+        clearSolvedVisit(visit.visitId);
+        return;
+      }
+      recordSolvedVisit(
+        projectSolvedVisit({
+          visit,
+          solution,
+          effort: missionFilters.value.effort,
+          gemBudget: gemBudgetFor(visit, effectiveWaitTimeSeconds.value),
+        })
+      );
+    });
+
+    // Every visit is solved against the inventory and craft counts of today, so a visit that is not
+    // the cycle's first is answered as though the ones before it never ran. Said on the answer
+    // rather than beside the plan controls: it is a caveat about this number.
+    const overProvisioned = computed(() => (activePlanVisit.value?.visitIndex ?? 0) > 0);
 
     const AUTO_COMPUTE_DEBOUNCE_MS = 250;
     let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -321,7 +366,7 @@ export default defineComponent({
 
     return {
       waitTimeDays,
-      setWaitTimeDays,
+      updateWaitTime,
       dimSolution,
       lastComputedMaxWaitTimeSeconds,
       timeBudgetValid,
@@ -335,6 +380,7 @@ export default defineComponent({
       playerGoldenEggs,
       inventoryTrees,
       solutionViews,
+      overProvisioned,
     };
   },
 });

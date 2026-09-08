@@ -1,0 +1,254 @@
+/**
+ * Reads `humility-plan.json`, the artifact explorer's answer for one or more Humility visits.
+ *
+ * The two apps share no runtime, so everything this file relies on is restated and validated
+ * here. Two asymmetries are deliberate and load-bearing:
+ *
+ * - **Ships and durations arrive as enum names.** This app's `DurationType` runs
+ *   SHORT = 1, LONG = 2, EPIC = 3; the protobuf the explorer uses runs SHORT = 0, LONG = 1,
+ *   EPIC = 2, TUTORIAL = 3. Our `EPIC` is its `TUTORIAL`. Raw integers across this seam would
+ *   build a plan that is silently wrong and that no type checker would catch.
+ * - **Targets arrive as numeric `ei.ArtifactSpec.Name`.** That enum comes from the shared
+ *   protobuf and this app keeps no copy of it, so there is nothing here to drift; the display
+ *   name is re-derived through lib.
+ *
+ * Fuel is the third asymmetry, and the one this file spends the most effort on. The explorer
+ * strips Humility from every mission's cost, because it is free on the Path of Virtue and so
+ * constrains nothing there. Our `VIRTUE_FUEL_REQUIREMENTS` includes it, `handleLaunch` writes it
+ * into `fuelConsumed`, and `replay.ts` deducts every entry from the tank. So the fuel figures are
+ * re-derived here from our own table rather than copied across, and the file's four numbers are
+ * kept as a tripwire: a mismatch means the two data tables have drifted apart and is worth
+ * saying out loud, not reconciling silently.
+ */
+
+import type { Action, VirtueEgg } from '@/types';
+import { VIRTUE_EGGS } from '@/types';
+import { Spaceship, DurationType } from '@/lib/missions';
+import { type Launch, launchEntries } from '@/lib/rockets/launches';
+import { scheduleMissions, type ScheduleResult } from '@/lib/rockets/scheduler';
+
+export const HUMILITY_PLAN_SCHEMA = 'eggverse.humility-plan';
+export const HUMILITY_PLAN_SCHEMA_VERSION = 1;
+
+export interface HumilityPlanLaunch {
+  ship: string;
+  duration: string;
+  targetAfxId: number;
+  count: number;
+}
+
+export interface HumilityPlanVisit {
+  visitId: string;
+  visitIndex: number;
+  label: string;
+  jointProbability: number;
+  launches: HumilityPlanLaunch[];
+  makespanSeconds: number;
+  fuelRequired: Partial<Record<VirtueEgg, number>>;
+  gemCost: number;
+  gemBudget: number;
+}
+
+export interface HumilityPlanFile {
+  schema: string;
+  schemaVersion: number;
+  source: string;
+  generatedAt: number;
+  planLabel: string;
+  visits: HumilityPlanVisit[];
+}
+
+export class HumilityPlanError extends Error {}
+
+/**
+ * The explorer's ship names are the protobuf's, and our `Spaceship` mirrors that enum exactly, so
+ * the name lookup is the mapping. A name we do not have is an error rather than a skip: dropping
+ * a ship would quietly shrink the plan.
+ */
+function shipFromName(name: unknown): Spaceship {
+  if (typeof name !== 'string') throw new HumilityPlanError(`Launch has no ship name.`);
+  const ship = (Spaceship as unknown as Record<string, number | undefined>)[name];
+  if (typeof ship !== 'number') throw new HumilityPlanError(`Unknown ship "${name}".`);
+  return ship as Spaceship;
+}
+
+/**
+ * Only the three durations this app plans. `TUTORIAL` exists in the protobuf and has no
+ * equivalent here; it is the exact value our `EPIC` collides with numerically, which is why this
+ * mapping is by name and why the missing case is rejected rather than defaulted.
+ */
+const DURATION_BY_NAME: Record<string, DurationType> = {
+  SHORT: DurationType.SHORT,
+  LONG: DurationType.LONG,
+  EPIC: DurationType.EPIC,
+};
+
+function durationFromName(name: unknown): DurationType {
+  if (typeof name !== 'string') throw new HumilityPlanError(`Launch has no duration name.`);
+  const duration = DURATION_BY_NAME[name];
+  if (duration === undefined) throw new HumilityPlanError(`Unsupported mission duration "${name}".`);
+  return duration;
+}
+
+export interface ResolvedLaunch extends Launch {
+  targetAfxId: number;
+}
+
+export function resolveLaunches(visit: HumilityPlanVisit): ResolvedLaunch[] {
+  if (!Array.isArray(visit.launches)) throw new HumilityPlanError(`Visit "${visit.label}" has no launches.`);
+  return visit.launches.map(launch => {
+    const count = Math.floor(Number(launch.count));
+    if (!Number.isFinite(count) || count <= 0) {
+      throw new HumilityPlanError(`Visit "${visit.label}" has a launch with a count of ${launch.count}.`);
+    }
+    const targetAfxId = Number(launch.targetAfxId);
+    if (!Number.isFinite(targetAfxId)) {
+      throw new HumilityPlanError(`Visit "${visit.label}" has a launch with no target id.`);
+    }
+    return { ship: shipFromName(launch.ship), duration: durationFromName(launch.duration), targetAfxId, count };
+  });
+}
+
+export interface FuelDrift {
+  egg: VirtueEgg;
+  ours: number;
+  theirs: number;
+}
+
+/**
+ * Compares our derived figures against the explorer's for the four eggs it reports. Relative,
+ * because these run to 1e14 and an absolute epsilon would be meaningless; 0.1% is far tighter
+ * than any real table disagreement and far looser than float noise.
+ */
+const FUEL_DRIFT_TOLERANCE = 1e-3;
+
+export function fuelDrift(visit: HumilityPlanVisit, ours: Record<VirtueEgg, number>): FuelDrift[] {
+  const drift: FuelDrift[] = [];
+  for (const egg of VIRTUE_EGGS) {
+    if (egg === 'humility') continue; // never in the file, by design
+    const theirs = visit.fuelRequired?.[egg];
+    if (theirs === undefined || !Number.isFinite(theirs)) continue;
+    const scale = Math.max(Math.abs(ours[egg]), Math.abs(theirs), 1);
+    if (Math.abs(ours[egg] - theirs) / scale > FUEL_DRIFT_TOLERANCE) {
+      drift.push({ egg, ours: ours[egg], theirs });
+    }
+  }
+  return drift;
+}
+
+/**
+ * Every Humility visit in a plan, in plan order. A visit is a maximal run of actions whose snapshot
+ * says Humility, keyed on the first of them — the same rule the artifact explorer slices by, so the
+ * id it writes into a solved visit is an id that appears here.
+ *
+ * The one place that rule is spelled. Deriving both the ids and the insertion point from the same
+ * walk is what makes "this id names a run that is still on Humility" structural rather than a check
+ * each caller has to remember: an id that no longer heads a Humility run simply is not in here.
+ */
+export interface HumilityVisitRun {
+  visitId: string;
+  /** Index of the run's last action; the launch goes after it. */
+  endIndex: number;
+}
+
+export function humilityVisitRuns(actions: readonly Action[]): HumilityVisitRun[] {
+  const runs: HumilityVisitRun[] = [];
+  actions.forEach((action, index) => {
+    if (action.endState?.currentEgg !== 'humility') return;
+    const current = runs[runs.length - 1];
+    if (current && current.endIndex === index - 1) current.endIndex = index;
+    else runs.push({ visitId: action.id, endIndex: index });
+  });
+  return runs;
+}
+
+export function humilityVisitIds(actions: readonly Action[]): string[] {
+  return humilityVisitRuns(actions).map(run => run.visitId);
+}
+
+/**
+ * Which of a file's visits this plan can still take, and the only check there is: does the visit
+ * still exist here. Resolved as a prefix — the walk stops at the first visit the plan has lost,
+ * and every later one is withheld even if its own id survived. A file's visits are a sequence of
+ * answers to one cycle; once the plan no longer contains one of them, the plan the rest were
+ * solved against is not this plan any more, and staging them would be staging into a shape that
+ * changed underneath.
+ *
+ * Nothing else is compared. Budgets, tank contents and timings all move as a plan is edited, and
+ * an answer that has merely gone slightly stale is still worth having; only a vanished visit makes
+ * one meaningless.
+ */
+export function stageableVisitIds(file: HumilityPlanFile, actions: readonly Action[]): Set<string> {
+  const inPlan = new Set(humilityVisitIds(actions));
+  const stageable = new Set<string>();
+  for (const visit of file.visits) {
+    if (!inPlan.has(visit.visitId)) break;
+    stageable.add(visit.visitId);
+  }
+  return stageable;
+}
+
+/**
+ * Where a visit's launch goes: the end of that visit's run of actions, not its start. The player's
+ * own actions inside the visit — fuel stored, research bought — come first, and the fuel and bank
+ * this app derives are read from the snapshot at the insertion point, so the later position is the
+ * more accurate one. Null when the plan no longer contains the visit — including when a shift
+ * retargeted to another egg leaves the id in place while the visit it named is gone.
+ */
+export function humilityVisitInsertIndex(actions: readonly Action[], visitId: string): number | null {
+  const run = humilityVisitRuns(actions).find(r => r.visitId === visitId);
+  return run ? run.endIndex + 1 : null;
+}
+
+export interface FuelShortfall {
+  egg: VirtueEgg;
+  amount: number;
+}
+
+/**
+ * What has to be stored before the launch, given what the tank already holds where the launch is
+ * going. Only the eggs that fall short: the tank is not topped up to the requirement, it is
+ * brought up to it.
+ */
+export function fuelShortfalls(
+  required: Record<VirtueEgg, number>,
+  inTank: Partial<Record<VirtueEgg, number>>
+): FuelShortfall[] {
+  const shortfalls: FuelShortfall[] = [];
+  for (const egg of VIRTUE_EGGS) {
+    const missing = required[egg] - (inTank[egg] ?? 0);
+    if (missing > 0) shortfalls.push({ egg, amount: missing });
+  }
+  return shortfalls;
+}
+
+/**
+ * How long the launch occupies the plan, scheduled by this app rather than copied from the file:
+ * the makespan depends on the FTL level, which lives in this plan's initial state and can have
+ * been edited since the file was written.
+ */
+export function launchSchedule(launches: readonly ResolvedLaunch[], ftlLevel: number): ScheduleResult {
+  return scheduleMissions(launchEntries(launches, ftlLevel));
+}
+
+export function parseHumilityPlan(json: unknown): HumilityPlanFile {
+  if (typeof json !== 'object' || json === null) {
+    throw new HumilityPlanError('Not a Humility plan: expected a JSON object.');
+  }
+  const file = json as HumilityPlanFile;
+  if (file.schema !== HUMILITY_PLAN_SCHEMA) {
+    throw new HumilityPlanError(
+      'That is not a Humility plan file. Export one from the artifact explorer’s mission optimizer.'
+    );
+  }
+  if (file.schemaVersion !== HUMILITY_PLAN_SCHEMA_VERSION) {
+    throw new HumilityPlanError(
+      `This file is schema version ${file.schemaVersion}; this planner reads version ` +
+        `${HUMILITY_PLAN_SCHEMA_VERSION}. Update one side or re-export from a matching build.`
+    );
+  }
+  if (!Array.isArray(file.visits) || file.visits.length === 0) {
+    throw new HumilityPlanError('That Humility plan has no solved visits in it.');
+  }
+  return file;
+}

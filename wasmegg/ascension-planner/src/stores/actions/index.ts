@@ -628,6 +628,46 @@ export const useActionsStore = defineStore('actions', {
       }
     },
 
+    /**
+     * Drops every action a previous write under this `sourceTag` left, without the dependent
+     * cascade `removeActions` applies: the caller is replacing them in place with equivalent ones,
+     * and tearing out whatever the player hung off them would delete their work.
+     */
+    async removeTaggedActions(sourceTag: string) {
+      const stale = new Set(this.actions.filter(a => a.sourceTag === sourceTag).map(a => a.id));
+      if (stale.size === 0) return;
+      const firstIndex = this.actions.findIndex(a => stale.has(a.id));
+      this.actions = this.actions.filter(a => !stale.has(a.id));
+      this.actions.forEach(a => {
+        a.dependents = a.dependents.filter(d => !stale.has(d));
+      });
+      await this.recalculateFrom(firstIndex);
+    },
+
+    /**
+     * Writes actions into the plan at a caller-chosen index. `insertAction` puts them wherever the
+     * player's editing cursor is; the Humility plan import knows which visit its actions belong to
+     * and has to reach that visit whether or not the player is standing in it.
+     */
+    async insertActionsAt(index: number, drafts: import('@/types').DraftAction[]) {
+      if (drafts.length === 0) return;
+      const insertIndex = Math.max(0, Math.min(index, this.actions.length));
+      // Placeholders only: recalculateFrom simulates the whole tail from here, which fills in
+      // every delta, duration and snapshot, and relinks dependencies for the plan as a whole.
+      const hydrated = drafts.map(
+        draft =>
+          ({
+            ...draft,
+            index: insertIndex,
+            dependents: [],
+            totalTimeSeconds: 0,
+            endState: createEmptySnapshot(),
+          }) as unknown as Action
+      );
+      this.actions.splice(insertIndex, 0, ...hydrated);
+      await this.recalculateFrom(insertIndex);
+    },
+
     startBatch() {
       if (this.batchMode) return;
       this.batchMode = true;
