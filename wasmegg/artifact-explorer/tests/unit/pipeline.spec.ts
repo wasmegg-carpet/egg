@@ -118,7 +118,7 @@ describe('optimize', () => {
     const dag = buildRecipeDag(config.desiredArtifactNodeIds, 30);
     const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, dag);
     const launchPeriod = 3600; // high effort: 1 launch / slot / hour
-    const sol = await optimize(config, perfectShipsConfig, dag, baseYield, launchPeriod);
+    const sol = await optimize(config, perfectShipsConfig, dag, baseYield, { launchPeriodSeconds: launchPeriod });
 
     // `runningTimeSeconds` is the "you will be done in" figure on the card, and
     // it is raw flight time rather than the floored time the solver packs with.
@@ -130,7 +130,7 @@ describe('optimize', () => {
     expect(sol.runningTimeSeconds).toBeLessThanOrEqual(sol.timeUnitsUsed);
 
     // with a zero launch period nothing is floored: raw flight = makespan
-    const rawSol = await optimize(config, perfectShipsConfig, dag, baseYield, 0);
+    const rawSol = await optimize(config, perfectShipsConfig, dag, baseYield);
     expect(rawSol.runningTimeSeconds).toBe(rawSol.timeUnitsUsed);
   });
 });

@@ -5,8 +5,8 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from 'lib';
 import { alphaToProb, compileJointInnerLp, JointInnerLp, refineJointCraftSplit } from './value-function';
 import { NUM_SLOTS, packWitness } from './packing';
+import { finiteQ, qOf } from './concave';
 import { loadHighs } from './solver/highs';
-import { Q_CERTAIN_PROXY } from './solver/milp';
 import { solveWith } from './solver/oa';
 import { fuelCostOnAxis, type FuelAxis, type PlanProblem } from './solver/types';
 
@@ -43,10 +43,7 @@ interface Assembly {
 function qByTarget(recipeDag: RecipeDAG, targets: string[]): Map<string, number> {
   const QByTarget = new Map<string, number>();
   for (const t of targets) {
-    const pCraft = recipeDag.get(t)?.legendaryCraftProbability ?? 0;
-    // Q = -log(1 - p) is +Infinity at certainty, which no LP matrix can carry. Same proxy the MILP steers by,
-    // so the two matrices agree on what a certain craft is worth; see SPEC.md section 4.
-    QByTarget.set(t, pCraft <= 0 ? 0 : pCraft >= 1 ? Q_CERTAIN_PROXY : -Math.log(1 - pCraft));
+    QByTarget.set(t, finiteQ(qOf(recipeDag.get(t)?.legendaryCraftProbability ?? 0)));
   }
   return QByTarget;
 }

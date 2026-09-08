@@ -2,9 +2,9 @@
 // `optimize` lives here rather than in `index.ts` to keep the solver and its Emscripten glue out of the main chunk.
 
 import { ei, MissionType, type ShipsConfig } from 'lib';
-import type { CraftBudget, DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from '@/lib/types';
+import type { DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from '@/lib/types';
 import { finalizeSolutions } from '@/lib';
-import { optimizeFull } from '@/lib/optimizer-core';
+import { optimizeFull, type OptimizeArgs } from '@/lib/optimizer-core';
 import { enumerateLaunchOptions } from '@/lib/phases';
 
 export function makeNode(id: string, isLeaf: boolean, children: [string, number][] = [], pCraft = 0): DAGNode {
@@ -80,15 +80,18 @@ export function makeOpt(
   };
 }
 
+// Everything but the menu is an override on `OptimizeArgs`, so that a spec names only what it is
+// actually varying.
+export interface OptimizeOverrides extends Partial<Omit<OptimizeArgs, 'options' | 'recipeDag' | 'baseYield'>> {
+  launchPeriodSeconds?: number;
+}
+
 export async function optimize(
   config: OptimizerConfig,
   playerConfig: ShipsConfig,
   dag: RecipeDAG,
   baseYield: Map<string, number>,
-  launchPeriodSeconds = 0,
-  maxGemCost?: number,
-  craftBudget?: CraftBudget,
-  fuelByEggCapacity?: Map<ei.Egg, number>
+  { launchPeriodSeconds = 0, ...over }: OptimizeOverrides = {}
 ): Promise<OptimizerSolution> {
   const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
   const solution = await optimizeFull({
@@ -96,11 +99,10 @@ export async function optimize(
     recipeDag: dag,
     desiredArtifactNodeIds,
     fuelCapacity: fuelTankCapacity,
-    fuelByEggCapacity,
     timeCapacityPerSlot: timeBudgetSeconds,
-    maximumCost: maxGemCost,
+    maximumCost: undefined,
     baseYield,
-    craftBudget,
+    ...over,
   });
   return finalizeSolutions([solution], dag)[0];
 }

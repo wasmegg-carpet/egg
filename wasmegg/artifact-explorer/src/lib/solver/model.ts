@@ -3,6 +3,7 @@
 
 import type { LaunchOption, RecipeDAG } from '../types';
 import { fuelAxesOf, fuelCostOnAxis, type FuelAxis, type PlanProblem } from './types';
+import { qOf } from '../concave';
 
 // Stand-ins for a bound no budget gives; see SPEC.md section 2. `MAX_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
@@ -248,10 +249,7 @@ export function buildModel(problem: PlanProblem): Model {
     const quantity = problem.baseYield.get(item) ?? 0;
     return Number.isFinite(quantity) && quantity >= 0 ? quantity : 0;
   });
-  const Qs = targets.map(t => {
-    const node = dag.get(t);
-    return node ? -Math.log(1 - node.legendaryCraftProbability) : 0;
-  });
+  const Qs = targets.map(t => qOf(dag.get(t)?.legendaryCraftProbability ?? 0));
   const targetCraftIdx = targets.map(t => craftIndex.get(t) ?? -1);
 
   // A negative or non-finite price is dropped: it would be a craft that *earns*
@@ -264,10 +262,9 @@ export function buildModel(problem: PlanProblem): Model {
   const capped = budget !== undefined && Number.isFinite(budget.capacity) && budget.capacity >= 0;
   const craftBudgetCapacity = capped && craftPrices.some(p => p > 0) ? budget!.capacity : Infinity;
 
-  // Normalized budgets: every fuel axis 1, per-slot time 1. A capacity <= 0 reads as
-  // "all costs on that axis are 0" — the NaN-input defense. `optimizer-core` has
-  // already dropped the options that would abuse it, so no surviving option charges
-  // anything to an axis the player has nothing on.
+  // Normalized budgets: every fuel axis 1, per-slot time 1. An axis the player has nothing on
+  // affords nothing: a positive cost against it is unaffordable at any count, so the option falls
+  // out on `cap < 1` below, exactly as `timeFraction` already handles a zero time budget.
   const axes = fuelAxesOf(problem);
   const timeCap = problem.timeCapacityPerSlot;
   const slots = problem.slots;
@@ -286,7 +283,7 @@ export function buildModel(problem: PlanProblem): Model {
     }
     const costs = axes.map(ax => fuelCostOnAxis(opt, ax));
     if (costs.some(c => !Number.isFinite(c) || c < 0)) return;
-    const fuelFractions = axes.map((ax, a) => (ax.capacity > 0 ? costs[a] / ax.capacity : 0));
+    const fuelFractions = axes.map((ax, a) => (ax.capacity > 0 ? costs[a] / ax.capacity : costs[a] > 0 ? Infinity : 0));
     const timeFraction = timeCap > 0 ? opt.actualTime / timeCap : Infinity;
     if (timeFraction > 1) return;
 

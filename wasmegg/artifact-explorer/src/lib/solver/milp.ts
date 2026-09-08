@@ -2,10 +2,8 @@
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
 import { MAX_PER_SLOT, type Model } from './model';
-import { logHit } from '../concave';
+import { finiteQ, logHit } from '../concave';
 import { INF, type MilpModel } from './types';
-
-export const Q_CERTAIN_PROXY = 1e4;
 
 // Uncapped on purpose — deliberately not `concave.gPrime`. See SPEC.md section 4.
 function slopeAt(s: number): number {
@@ -17,7 +15,6 @@ export interface Layout {
   groups: number;
   crafts: number;
   targets: number;
-  nBase: number;
   aBase: number;
   cBase: number;
   sBase: number;
@@ -33,8 +30,8 @@ export function layoutOf(model: Model, variant: Variant): Layout {
   const groups = model.groups.length;
   const crafts = model.craftables.length;
   const targets = model.targets.length;
-  const nBase = 0;
-  const aBase = nBase + groups * slots;
+  // The n block leads the column vector, so it needs no base of its own.
+  const aBase = groups * slots;
   const cBase = aBase + groups;
   const sBase = cBase + crafts;
   const zBase = sBase + targets;
@@ -43,7 +40,6 @@ export function layoutOf(model: Model, variant: Variant): Layout {
     groups,
     crafts,
     targets,
-    nBase,
     aBase,
     cBase,
     sBase,
@@ -53,11 +49,11 @@ export function layoutOf(model: Model, variant: Variant): Layout {
 }
 
 export function nCol(layout: Layout, group: number, slot: number): number {
-  return layout.nBase + group * layout.slots + slot;
+  return group * layout.slots + slot;
 }
 
 export function effectiveQs(model: Model): number[] {
-  return model.Qs.map(q => (Number.isFinite(q) ? q : Q_CERTAIN_PROXY));
+  return model.Qs.map(finiteQ);
 }
 
 // Kept 1000x clear of HiGHS's `small_matrix_value` (1e-9), which silently
@@ -257,9 +253,12 @@ export function scaleLps(model: Model, qs: readonly number[]): (t: number) => Mi
   const ones = new Array<number>(model.targets.length).fill(1);
   const core = buildCore(model, qs, ones, 'scale');
   const build = finisher(core);
+  // Locals for the same reason `finisher` takes them: the returned closure outlives the solve loop, and
+  // reading them off `core` would keep the whole sparse matrix reachable alongside `finisher`'s frozen copy.
+  const { columnCount, sBase } = core.layout;
   return t => {
-    const objective = new Float64Array(core.layout.columnCount);
-    objective[core.layout.sBase + t] = SCALE_LP_OBJECTIVE;
+    const objective = new Float64Array(columnCount);
+    objective[sBase + t] = SCALE_LP_OBJECTIVE;
     return build(objective);
   };
 }

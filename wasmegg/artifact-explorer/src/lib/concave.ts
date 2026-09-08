@@ -16,6 +16,21 @@ export function gPrime(s: number): number {
   return s <= 0 ? GPRIME_CAP : Math.min(1 / Math.expm1(s), GPRIME_CAP);
 }
 
+// Q = -log(1 - p), a target's score per unit of expected drop. Certainty is +Infinity, which no LP matrix
+// can carry, so every matrix substitutes the same proxy for it -- see SPEC.md section 4. Both live here,
+// with `logHit`, because the pipeline and the MILP writer have to agree to the bit on what a target is
+// worth; neither is the other's caller.
+export const Q_CERTAIN_PROXY = 1e4;
+
+export function qOf(craftProbability: number): number {
+  if (!(craftProbability > 0)) return 0;
+  return craftProbability >= 1 ? Infinity : -Math.log(1 - craftProbability);
+}
+
+export function finiteQ(q: number): number {
+  return Number.isFinite(q) ? q : Q_CERTAIN_PROXY;
+}
+
 const GOLDEN = (Math.sqrt(5) - 1) / 2;
 
 // argmax over [0, 1] of a unimodal (concave) f. Robust to f returning

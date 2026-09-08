@@ -94,7 +94,7 @@ describe('optimizeFull with a per-egg budget', () => {
       [ei.Egg.RESILIENCE, 0],
       [ei.Egg.KINDNESS, 0],
     ]);
-    const solution = await optimize(config, perfectShipsConfig, dag, new Map(), 0, undefined, undefined, empty);
+    const solution = await optimize(config, perfectShipsConfig, dag, new Map(), { fuelByEggCapacity: empty });
     expect(solution.fuelUsed).toBe(0);
     expect(solution.fuelByEgg.size).toBe(0);
     for (const choice of solution.choiceHistory) {
@@ -110,7 +110,7 @@ describe('optimizeFull with a per-egg budget', () => {
       [ei.Egg.RESILIENCE, 20e12],
       [ei.Egg.KINDNESS, 20e12],
     ]);
-    const solution = await optimize(config, perfectShipsConfig, dag, new Map(), 0, undefined, undefined, stock);
+    const solution = await optimize(config, perfectShipsConfig, dag, new Map(), { fuelByEggCapacity: stock });
     expect(solution.choiceHistory.length).toBeGreaterThan(0);
     for (const [egg, used] of solution.fuelByEgg) {
       expect(used).toBeLessThanOrEqual(stock.get(egg)! * (1 + 1e-9));
@@ -126,16 +126,9 @@ describe('optimizeFull with a per-egg budget', () => {
       [ei.Egg.KINDNESS, HUGE],
     ]);
     const capped = await optimize(config, perfectShipsConfig, dag, new Map());
-    const perEgg = await optimize(
-      { ...config, fuelTankCapacity: HUGE },
-      perfectShipsConfig,
-      dag,
-      new Map(),
-      0,
-      undefined,
-      undefined,
-      lavish
-    );
+    const perEgg = await optimize({ ...config, fuelTankCapacity: HUGE }, perfectShipsConfig, dag, new Map(), {
+      fuelByEggCapacity: lavish,
+    });
     // Strictly looser budget, so it can never do worse than the 500T tank.
     expect(perEgg.bestProbability).toBeGreaterThanOrEqual(capped.bestProbability - 1e-9);
   });
