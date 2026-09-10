@@ -31,10 +31,42 @@ function craftProbabilities(ids: string[], previousCraftsOverride?: number): Map
   return new Map(ids.map(id => [id, dag.get(id)!.legendaryCraftProbability]));
 }
 
+// The third path through buildRecipeDag's crafted-count decision: no save and no override.
+function craftProbabilitiesWithoutSave(ids: string[]): Map<string, number> {
+  const dag = buildRecipeDag(ids, 30);
+  return new Map(ids.map(id => [id, dag.get(id)!.legendaryCraftProbability]));
+}
+
 describe('buildRecipeDag with a save loaded', () => {
   it('gives each target its own crafted count', () => {
     const p = craftProbabilities([FEATHER, CHALICE]);
     expect(p.get(FEATHER)!).toBeGreaterThan(p.get(CHALICE)!);
+  });
+
+  // The three tests above and below are all relations between two probabilities, which hold just as well
+  // for a number a hundred times too large or a curve running the wrong way. These three pin values.
+
+  it('reports a probability and not the percentage craftChance returns', () => {
+    // 0.01 is the game's base legendary craft rate at zero previous crafts. Asserting it fixes the units
+    // — buildRecipeDag divides by 100 for exactly this reason — and the zero-craft baseline at once.
+    const fresh = craftProbabilities([FEATHER, CHALICE], 0);
+    expect(fresh.get(FEATHER)).toBe(0.01);
+    expect(fresh.get(CHALICE)).toBe(0.01);
+  });
+
+  it('reads an absent save as zero previous crafts, not one', () => {
+    // Every other case here hands buildRecipeDag a save or an override, so nothing says what it does with
+    // neither. One previous craft is 0.0100346, far enough from 0.01 for the equality to tell them apart.
+    expect(craftProbabilitiesWithoutSave([FEATHER, CHALICE])).toEqual(craftProbabilities([FEATHER, CHALICE], 0));
+  });
+
+  it('rises with the number of crafts already made', () => {
+    // Direction, rather than a transcribed curve: pinning craftChance's output at each count would restate
+    // the game config in the test and break on every balance change, and buys nothing the ordering doesn't.
+    const p = [0, 1, 20, 200].map(n => craftProbabilities([FEATHER], n).get(FEATHER)!);
+    expect(p).toEqual([...p].sort((a, b) => a - b));
+    expect(new Set(p).size).toBe(p.length);
+    expect(p.at(-1)!).toBeLessThanOrEqual(1);
   });
 
   it('is unaffected by the order the targets were selected in', () => {

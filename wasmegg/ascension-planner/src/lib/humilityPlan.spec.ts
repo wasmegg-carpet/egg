@@ -148,15 +148,14 @@ describe('finding the visits a file was solved for', () => {
 
   it('withholds every visit after one the plan has lost, not just that one', () => {
     const file = humilityPlan();
-    expect(stageableVisitIds(file, actions)).toEqual(new Set(['shift_a1b2c3d', 'shift_e5e5e5e']));
+    const stageable = (plan: Action[]) => stageableVisitIds(file, humilityVisitIds(plan));
+    expect(stageable(actions)).toEqual(new Set(['shift_a1b2c3d', 'shift_e5e5e5e']));
 
     // The second visit is still in the plan, but the answers were solved as a sequence and the
     // plan they were solved against no longer exists once the first one is gone.
-    const withoutFirst = actions.filter(a => a.id !== 'shift_a1b2c3d');
-    expect(stageableVisitIds(file, withoutFirst)).toEqual(new Set());
+    expect(stageable(actions.filter(a => a.id !== 'shift_a1b2c3d'))).toEqual(new Set());
 
-    const withoutSecond = actions.filter(a => a.id !== 'shift_e5e5e5e');
-    expect(stageableVisitIds(file, withoutSecond)).toEqual(new Set(['shift_a1b2c3d']));
+    expect(stageable(actions.filter(a => a.id !== 'shift_e5e5e5e'))).toEqual(new Set(['shift_a1b2c3d']));
   });
 });
 

@@ -106,7 +106,7 @@ const error = ref('');
 const planVisitIds = computed(() => humilityVisitIds(actionsStore.actions));
 
 const stageable = computed(() =>
-  planStore.file ? stageableVisitIds(planStore.file, actionsStore.actions) : new Set<string>()
+  planStore.file ? stageableVisitIds(planStore.file, planVisitIds.value) : new Set<string>()
 );
 
 function visitName(visit: HumilityPlanVisit): string {

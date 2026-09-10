@@ -178,8 +178,8 @@ export function humilityVisitIds(actions: readonly Action[]): string[] {
  * an answer that has merely gone slightly stale is still worth having; only a vanished visit makes
  * one meaningless.
  */
-export function stageableVisitIds(file: HumilityPlanFile, actions: readonly Action[]): Set<string> {
-  const inPlan = new Set(humilityVisitIds(actions));
+export function stageableVisitIds(file: HumilityPlanFile, planVisitIds: readonly string[]): Set<string> {
+  const inPlan = new Set(planVisitIds);
   const stageable = new Set<string>();
   for (const visit of file.visits) {
     if (!inPlan.has(visit.visitId)) break;

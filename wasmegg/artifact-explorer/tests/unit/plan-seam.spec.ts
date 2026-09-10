@@ -27,7 +27,7 @@ const ASCENSION_START = Date.UTC(2026, 2, 1, 12, 0, 0) / 1000;
 
 describe('reading a plan save', () => {
   it('rejects a file that is not a plan, and one from a version it cannot read', () => {
-    expect(() => parsePlanSave({ actions: [], initialState: {} })).toThrow(PlanSaveError);
+    expect(() => parsePlanSave({ actions: [], initialState: {} })).toThrow(/no `version`/);
     expect(() => parsePlanSave({ ...(fixture('ascension-plan.json') as object), version: 2 })).toThrow(/version 2/);
   });
 
@@ -128,6 +128,207 @@ describe('reading a plan save', () => {
     expect(visits).toHaveLength(2);
     expect(visits[0].arrivalTimestamp).toBeNull();
     expect(visits[0].fuelByEgg.get(ei.Egg.CURIOSITY)).toBe(4.5e14);
+  });
+});
+
+// Every branch below is a validator or a coercion, and neither is visible while the input is
+// well-formed: `parsePlanSave` is fed a file the user picked off their own disk, and the format is
+// hand-editable JSON. What the guards buy is the difference between a message the player can act
+// on and a budget of NaN carried silently into the optimizer, so the negative cases are where they
+// are worth anything at all. Malformed inputs are built from the good fixture so that each one
+// differs from a working plan in exactly the field under test.
+describe('reading a malformed plan save', () => {
+  interface RawPlan {
+    version: number;
+    virtueState: Record<string, unknown>;
+    initialState: Record<string, unknown>;
+    actions: {
+      id: string;
+      type: string;
+      totalTimeSeconds: number;
+      endState: Record<string, unknown>;
+    }[];
+  }
+  const raw = () => fixture('ascension-plan.json') as RawPlan;
+
+  it('rejects anything that is not a JSON object before reaching into it', () => {
+    for (const notAPlan of [null, undefined, 42, 'looks like a plan to me']) {
+      expect(() => parsePlanSave(notAPlan)).toThrow(PlanSaveError);
+    }
+    // Specifically a PlanSaveError and not the TypeError that peeling the envelope off a null
+    // would raise: the file picker shows this message to the player.
+    expect(() => parsePlanSave(null)).toThrow(/expected a JSON object/);
+  });
+
+  it('says which field is missing rather than reporting a version it never read', () => {
+    // Without the type check the `version !== SUPPORTED` comparison below still rejects both of
+    // these, but as "this plan file is version undefined", which sends the player looking for a
+    // matching planner build that does not exist.
+    expect(() => parsePlanSave({ ...raw(), version: undefined })).toThrow(/no `version`/);
+    expect(() => parsePlanSave({ ...raw(), version: '1' })).toThrow(/no `version`/);
+  });
+
+  it('rejects a save whose `actions` or `initialState` is the wrong shape', () => {
+    expect(() => parsePlanSave({ ...raw(), actions: undefined })).toThrow(/`actions`/);
+    expect(() => parsePlanSave({ ...raw(), actions: {} })).toThrow(/`actions`/);
+    expect(() => parsePlanSave({ ...raw(), initialState: null })).toThrow(/`initialState`/);
+    expect(() => parsePlanSave({ ...raw(), initialState: 'EIxxxxxxxxxx' })).toThrow(/`initialState`/);
+  });
+
+  it('turns every unusable number in a snapshot into zero instead of carrying NaN forward', () => {
+    const plan = raw();
+    const damaged = {
+      ...plan,
+      actions: plan.actions.map(action =>
+        action.id === 'shift_a1b2c3d'
+          ? {
+              ...action,
+              totalTimeSeconds: -3600,
+              endState: {
+                ...action.endState,
+                tankLevel: undefined,
+                bankValue: null,
+                onlineEarnings: 'a lot',
+                offlineEarnings: Number.NaN,
+                // A negative amount, a non-numeric one, and an egg key that is simply absent. The
+                // readable one is half a unit rather than a full tank: the guard is `> 0`, and every
+                // plausible tank figure is also `> 1`, so a full tank cannot tell those two apart.
+                fuelTankAmounts: { curiosity: -1, integrity: 'none', resilience: 0.5 },
+              },
+            }
+          : action
+      ),
+    };
+    const [first] = sliceHumilityVisits(parsePlanSave(damaged));
+
+    expect(first.tankLevel).toBe(0);
+    expect(first.bankValue).toBe(0);
+    expect(first.fuelByEgg.get(ei.Egg.CURIOSITY)).toBe(0);
+    expect(first.fuelByEgg.get(ei.Egg.INTEGRITY)).toBe(0);
+    expect(first.fuelByEgg.get(ei.Egg.KINDNESS)).toBe(0);
+    expect(first.fuelByEgg.get(ei.Egg.RESILIENCE)).toBe(0.5);
+    // Both of the arriving snapshot's rates are unreadable, so the visit is priced off the later
+    // action in its own run — the same fallback the one-chicken trough uses, reached differently.
+    expect(first.earningsPerSecond).toBe(5e33);
+    // A negative duration is not time the plan spends anywhere; it must not run the clock
+    // backwards for every action after it either.
+    expect(first.arrivalTimestamp).toBe(ASCENSION_START);
+  });
+
+  it('needs every part of the ascension clock, not just the date', () => {
+    // The three fields are read in one condition, so dropping any one of them has to reach the same
+    // undated visit. Losing only the time is the case that separates them: a save that still carries a
+    // date gets as far as the formatter, where an undefined time is a TypeError out of a file picker
+    // rather than a visit the player can still plan.
+    for (const missing of ['ascensionDate', 'ascensionTime', 'ascensionTimezone'] as const) {
+      const plan = raw();
+      const virtueState = { ...plan.virtueState };
+      delete virtueState[missing];
+      const [visit] = sliceHumilityVisits(parsePlanSave({ ...plan, virtueState }));
+      expect(visit.arrivalTimestamp).toBeNull();
+      expect(visit.tankLevel).toBeGreaterThan(0);
+    }
+  });
+
+  it('counts a sub-second action as time rather than rounding it away', () => {
+    // `secondsOf` gates on `> 0`, and the difference between that and `>= 1` is invisible on a
+    // fixture whose durations are all hours.
+    const plan = raw();
+    const brief = {
+      ...plan,
+      actions: plan.actions.map(action =>
+        action.id === 'wait_b1b1b1b' ? { ...action, totalTimeSeconds: 0.25 } : action
+      ),
+    };
+    const [first] = sliceHumilityVisits(parsePlanSave(brief));
+    expect(first.plannedDurationSeconds).toBe(0.25);
+  });
+
+  it('reads a plan whose very first action is already on Humility', () => {
+    // The visit then has no action before it to take a rate from. `earningsRateOf(undefined)` is
+    // the only caller that can be handed nothing, and reaching into it throws rather than
+    // returning a rate of zero.
+    const plan = raw();
+    const arrival = plan.actions.find(a => a.id === 'shift_a1b2c3d')!;
+    const [first] = sliceHumilityVisits(parsePlanSave({ ...plan, actions: [arrival, ...plan.actions.slice(2)] }));
+
+    expect(first.visitId).toBe('shift_a1b2c3d');
+    expect(first.earningsPerSecond).toBe(5e33);
+  });
+
+  it('takes the better of the two earnings rates, and zero when neither can be read', () => {
+    const plan = raw();
+    // Offline beating online is a farm the plan leaves running unattended. The fixture's online
+    // rate always wins, so a reader that consulted only `onlineEarnings` matches it exactly.
+    const offlineWins = {
+      ...plan,
+      actions: plan.actions.map(action =>
+        action.id === 'wait_b1b1b1b'
+          ? { ...action, endState: { ...action.endState, onlineEarnings: 1e30, offlineEarnings: 8e33 } }
+          : action
+      ),
+    };
+    expect(sliceHumilityVisits(parsePlanSave(offlineWins))[0].earningsPerSecond).toBe(8e33);
+
+    // Nothing readable in the run and no action before it either, since the plan opens on
+    // Humility. The rate is zero — not a stand-in constant, which would price this visit's ships
+    // at whatever a second of it happens to be worth.
+    const blind = {
+      ...plan,
+      actions: plan.actions.slice(1).map(action => ({
+        ...action,
+        endState: { ...action.endState, onlineEarnings: undefined, offlineEarnings: 'lots' },
+      })),
+    };
+    const [first] = sliceHumilityVisits(parsePlanSave(blind));
+    expect(first.earningsPerSecond).toBe(0);
+    expect(gemBudgetFor(first, 86400)).toBe(first.bankValue);
+  });
+
+  it('reads absent epic research as level zero', () => {
+    // AP omits the whole map on a save with no epic research bought, and a default of anything
+    // else silently lengthens every mission the optimizer prices.
+    const plan = raw();
+    const [first] = sliceHumilityVisits(parsePlanSave({ ...plan, initialState: {} }));
+    expect(first.epicResearchFTLLevel).toBe(0);
+    expect(first.epicResearchZerogLevel).toBe(0);
+  });
+
+  it('prices a visit at its bank alone when the duration it is given is unusable', () => {
+    const [first] = sliceHumilityVisits(planSave());
+    expect(gemBudgetFor(first, -86400)).toBe(first.bankValue);
+    expect(gemBudgetFor(first, Number.NaN)).toBe(first.bankValue);
+    // ...but a fraction of a second is still earning time.
+    expect(gemBudgetFor(first, 0.5)).toBe(first.bankValue + first.earningsPerSecond * 0.5);
+  });
+
+  it('resolves the ascension clock through its IANA zone rather than as UTC', () => {
+    // The one calculation on this side of the seam that has to agree with the planner's own.
+    // 2026-03-01 00:30 in New York is 05:30 UTC: a winter date, so the offset is a whole -5 hours
+    // and not the -4 that reading it after the March changeover would give. The time of day is
+    // neither noon — where a 12-hour clock reads the same as a 24-hour one, which is why the
+    // fixture's own 12:00 cannot see this — nor midnight, where they differ by the full 12.
+    const plan = raw();
+    const zoned = {
+      ...plan,
+      virtueState: {
+        ...plan.virtueState,
+        ascensionDate: '2026-03-01',
+        ascensionTime: '00:30',
+        ascensionTimezone: 'America/New_York',
+      },
+    };
+    const [first] = sliceHumilityVisits(parsePlanSave(zoned));
+    expect(first.arrivalTimestamp).toBe(Date.UTC(2026, 2, 1, 5, 30, 0) / 1000 + 3600);
+  });
+
+  it('leaves a visit undated when the ascension clock cannot be read', () => {
+    const plan = raw();
+    const undated = { ...plan, virtueState: { ...plan.virtueState, ascensionDate: 'sometime in March' } };
+    const [first] = sliceHumilityVisits(parsePlanSave(undated));
+    expect(first.arrivalTimestamp).toBeNull();
+    // Undated, not unplanable: everything else the visit needs is still there.
+    expect(first.tankLevel).toBe(6);
   });
 });
 

@@ -3,6 +3,7 @@ import { markRaw } from 'vue';
 import {
   Action,
   CalculationsSnapshot,
+  DraftAction,
   UndoValidation,
   VirtueEgg,
   ToggleSalePayload,
@@ -35,6 +36,21 @@ import { ActionsState } from './types';
 import { createDefaultStartAction, calculateActionResult } from './simulation';
 import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from './dependency';
 import { exportPlanLogic, importPlanLogic, exportPlanData } from './io';
+
+/**
+ * A draft as it first lands in the plan: positioned, with every derived field left blank.
+ * `recalculateFrom` fills in the deltas, duration, snapshot and dependency links immediately
+ * after, which is the only place those are knowable.
+ */
+function hydrateDraft(draft: DraftAction, index: number): Action {
+  return {
+    ...draft,
+    index,
+    dependents: [],
+    totalTimeSeconds: 0,
+    endState: createEmptySnapshot(),
+  } as unknown as Action;
+}
 
 export const useActionsStore = defineStore('actions', {
   state: (): ActionsState => {
@@ -258,7 +274,7 @@ export const useActionsStore = defineStore('actions', {
       return collectDependentActions(this.actions, actionId);
     },
 
-    pushAction(action: import('@/types').DraftAction) {
+    pushAction(action: DraftAction) {
       // Logic for redundant actions
       if (action.type === 'toggle_sale' || action.type === 'toggle_earnings_boost') {
         const lastAction = this.actions[this.actions.length - 1];
@@ -412,13 +428,20 @@ export const useActionsStore = defineStore('actions', {
         new Set(ids),
         this.initialSnapshot.researchLevels
       );
-      const fullIds = new Set(fullToRemove.map(a => a.id));
-      const minIndex = Math.min(...this.actions.map((a, i) => fullIds.has(a.id) ? i : Infinity));
-      this.actions = this.actions.filter(a => !fullIds.has(a.id));
+      await this.dropActions(new Set(fullToRemove.map(a => a.id)));
+    },
+
+    /**
+     * Removes exactly these actions and no others, then resimulates from the gap they leave.
+     * Callers that want the dependent cascade compute it first; `removeActions` is that caller.
+     */
+    async dropActions(ids: Set<string>) {
+      const firstIndex = this.actions.findIndex(a => ids.has(a.id));
+      this.actions = this.actions.filter(a => !ids.has(a.id));
       this.actions.forEach(a => {
-        a.dependents = a.dependents.filter(d => !fullIds.has(d));
+        a.dependents = a.dependents.filter(d => !ids.has(d));
       });
-      await this.recalculateFrom(minIndex === Infinity ? 0 : minIndex);
+      await this.recalculateFrom(firstIndex === -1 ? 0 : firstIndex);
     },
 
     async clearAll(resetCallback?: () => void, skipRecalculate = false) {
@@ -583,7 +606,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     async insertAction(
-      action: import('@/types').DraftAction,
+      action: DraftAction,
       _replayCallback?: (action: Action, previousSnapshot: CalculationsSnapshot) => CalculationsSnapshot
     ) {
       const insertIndex = this.editingInsertIndex;
@@ -595,13 +618,7 @@ export const useActionsStore = defineStore('actions', {
       // Duplicate logic for sequential toggles/updates...
       // (omitted for brevity in this first pass, but I should probably include it)
 
-      const fullAction: Action = {
-        ...action,
-        index: insertIndex,
-        dependents: [],
-        totalTimeSeconds: 0,
-        endState: createEmptySnapshot(),
-      } as unknown as Action;
+      const fullAction = hydrateDraft(action, insertIndex);
 
       for (const depId of action.dependsOn) {
         const depAction = this.actions.find(a => a.id === depId);
@@ -636,12 +653,7 @@ export const useActionsStore = defineStore('actions', {
     async removeTaggedActions(sourceTag: string) {
       const stale = new Set(this.actions.filter(a => a.sourceTag === sourceTag).map(a => a.id));
       if (stale.size === 0) return;
-      const firstIndex = this.actions.findIndex(a => stale.has(a.id));
-      this.actions = this.actions.filter(a => !stale.has(a.id));
-      this.actions.forEach(a => {
-        a.dependents = a.dependents.filter(d => !stale.has(d));
-      });
-      await this.recalculateFrom(firstIndex);
+      await this.dropActions(stale);
     },
 
     /**
@@ -649,21 +661,10 @@ export const useActionsStore = defineStore('actions', {
      * player's editing cursor is; the Humility plan import knows which visit its actions belong to
      * and has to reach that visit whether or not the player is standing in it.
      */
-    async insertActionsAt(index: number, drafts: import('@/types').DraftAction[]) {
+    async insertActionsAt(index: number, drafts: DraftAction[]) {
       if (drafts.length === 0) return;
       const insertIndex = Math.max(0, Math.min(index, this.actions.length));
-      // Placeholders only: recalculateFrom simulates the whole tail from here, which fills in
-      // every delta, duration and snapshot, and relinks dependencies for the plan as a whole.
-      const hydrated = drafts.map(
-        draft =>
-          ({
-            ...draft,
-            index: insertIndex,
-            dependents: [],
-            totalTimeSeconds: 0,
-            endState: createEmptySnapshot(),
-          }) as unknown as Action
-      );
+      const hydrated = drafts.map(draft => hydrateDraft(draft, insertIndex));
       this.actions.splice(insertIndex, 0, ...hydrated);
       await this.recalculateFrom(insertIndex);
     },

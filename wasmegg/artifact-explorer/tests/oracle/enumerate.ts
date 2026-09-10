@@ -3,21 +3,11 @@
 // The packing check is re-derived here, independent of the production packer.
 
 import {
-  evaluateAllocation,
-  evaluateAllocationFloat,
   evaluateAllocationJoint,
   evaluateAllocationJointFloat,
   OracleInstance,
   OracleJointTargetResult,
 } from './evaluate';
-
-export interface BruteForceResult {
-  bestScore: number;
-  bestProbability: number;
-  bestAllocation: number[];
-  feasibleCount: number; // all feasible integer vectors
-  evaluatedCount: number; // maximal vectors actually run through the LP
-}
 
 const NUM_SLOTS = 3;
 const EPS = 1e-9;
@@ -158,122 +148,22 @@ export function countFeasible(inst: OracleInstance, cap: number): number | null 
   return walk(0, inst.fuelCapacity) ? count : null;
 }
 
-// Candidates are ranked with the float evaluator; everything within
-// RANKING_SLOP of the float best is re-evaluated exactly, so a float near-tie
-// cannot cost the true optimum.
-const RANKING_SLOP = 1e-7;
-const MAX_FINALISTS = 8;
-
-export function bruteForceBest(inst: OracleInstance): BruteForceResult {
-  const n = inst.options.length;
-  // With a zero-cost option no allocation is ever maximal and the result would
-  // silently collapse to bestProbability = 0; fail loudly instead.
-  for (const opt of inst.options) {
-    if (opt.actualFuel <= 0 && opt.actualTime <= 0) {
-      throw new Error('option with zero fuel and time cost admits unbounded launches; instance is ill-posed');
-    }
-  }
-
-  const { durations, durIdxByOption } = durationModel(inst);
-  const durCounts = new Array<number>(durations.length).fill(0);
-  const S = inst.timeCapacityPerSlot;
-
-  const allocation = new Array<number>(n).fill(0);
-  let feasibleCount = 0;
-  let evaluatedCount = 0;
-  let bestFloat = -Infinity;
-  let finalists: number[][] = [];
-
-  // No option can be added without busting fuel or breaking the 3-slot packing.
-  const isMaximal = (fuelLeft: number): boolean => {
-    for (let i = 0; i < n; i++) {
-      const opt = inst.options[i];
-      if (opt.actualTime <= 0) continue; // consistent with maxByPacking
-
-      if (opt.actualFuel > fuelLeft + EPS) continue;
-      const dj = durIdxByOption[i];
-      durCounts[dj] += 1;
-      const canAdd = packableInto3Bins(durCounts, durations, S);
-      durCounts[dj] -= 1;
-      if (canAdd) return false;
-    }
-    return true;
-  };
-
-  const walk = (i: number, fuelLeft: number) => {
-    if (i === n) {
-      feasibleCount++;
-      if (!isMaximal(fuelLeft)) {
-        return;
-      }
-      const score = evaluateAllocationFloat(inst, allocation);
-      evaluatedCount++;
-      if (score > bestFloat + RANKING_SLOP) {
-        bestFloat = score;
-        finalists = [allocation.slice()];
-      } else if (score > bestFloat - RANKING_SLOP) {
-        bestFloat = Math.max(bestFloat, score);
-        if (finalists.length < MAX_FINALISTS) {
-          finalists.push(allocation.slice());
-        }
-      }
-      return;
-    }
-    const opt = inst.options[i];
-    const dj = durIdxByOption[i];
-    const base = durCounts[dj];
-    const maxK = Math.min(
-      opt.actualFuel > 0 ? Math.floor(fuelLeft / opt.actualFuel) : Infinity,
-      maxByPacking(opt.actualTime, S)
-    );
-    for (let k = 0; k <= maxK; k++) {
-      durCounts[dj] = base + k;
-      if (k > 0 && !packableInto3Bins(durCounts, durations, S)) {
-        break;
-      }
-      allocation[i] = k;
-      walk(i + 1, fuelLeft - k * opt.actualFuel);
-    }
-    durCounts[dj] = base;
-    allocation[i] = 0;
-  };
-
-  walk(0, inst.fuelCapacity);
-
-  const best: BruteForceResult = {
-    bestScore: -Infinity,
-    bestProbability: 0,
-    bestAllocation: new Array<number>(n).fill(0),
-    feasibleCount,
-    evaluatedCount,
-  };
-  for (const candidate of finalists) {
-    const exact = evaluateAllocation(inst, candidate);
-    if (exact.score > best.bestScore) {
-      best.bestScore = exact.score;
-      best.bestProbability = exact.probability;
-      best.bestAllocation = candidate;
-    }
-  }
-  return best;
-}
-
 export interface BruteForceJointResult {
   bestJointProbability: number;
   bestAllocation: number[];
   bestPerTarget: OracleJointTargetResult[];
-  feasibleCount: number;
-  evaluatedCount: number;
+  feasibleCount: number; // all feasible integer vectors
+  evaluatedCount: number; // maximal vectors actually run through the LP
 }
 
-// RANKING_SLOP's counterpart for the joint objective.
-const RANKING_SLOP_JOINT = 1e-6;
+// Candidates are ranked with the float evaluator; everything within
+// RANKING_SLOP_JOINT of the float best is re-evaluated exactly, so a float
+// near-tie cannot cost the true optimum.
+export const RANKING_SLOP_JOINT = 1e-6;
 const MAX_FINALISTS_JOINT = 8;
 
 // Ranks maximal allocations by the JOINT probability, the objective the solver
-// maximizes at every target count. bruteForceBest below runs the same
-// enumeration against the union-style score; the duplication is deliberate, so
-// the two ranking objectives cannot cross-contaminate each other's tuning.
+// maximizes at every target count.
 export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult {
   const n = inst.options.length;
   for (const opt of inst.options) {
@@ -290,7 +180,17 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
   let feasibleCount = 0;
   let evaluatedCount = 0;
   let bestFloat = -Infinity;
-  let finalists: number[][] = [];
+  // The float ranking's own winner, tracked on its own and never routed through `finalists`.
+  // MAX_FINALISTS_JOINT is a cost bound on how many near-ties get the expensive exact treatment, but as a
+  // cap on a count it used to evict by arrival order: RANKING_SLOP_JOINT is absolute, so on an instance
+  // whose joint probabilities all sit below it every candidate looks like a tie, the first eight seen filled
+  // the list and the winner was thrown away. That is not hypothetical — random-multi/8 returned 5.3e-9
+  // against a true optimum of 5.8e-7 and called it best. Nothing the cap or the slop does can reach these
+  // two variables now, so the tie set can only ever add candidates to consider, never remove the winner.
+  let bestFloatAllocation: number[] | null = null;
+  // Scores travel with the finalists so a new best can evict the entries that are no longer near-ties of it,
+  // rather than leaving a full list of some earlier score's ties in the way.
+  let finalists: { allocation: number[]; score: number }[] = [];
 
   const isMaximal = (fuelLeft: number): boolean => {
     for (let i = 0; i < n; i++) {
@@ -314,14 +214,13 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
       }
       const jointProbability = evaluateAllocationJointFloat(inst, allocation);
       evaluatedCount++;
-      if (jointProbability > bestFloat + RANKING_SLOP_JOINT) {
+      if (jointProbability > bestFloat) {
         bestFloat = jointProbability;
-        finalists = [allocation.slice()];
-      } else if (jointProbability > bestFloat - RANKING_SLOP_JOINT) {
-        bestFloat = Math.max(bestFloat, jointProbability);
-        if (finalists.length < MAX_FINALISTS_JOINT) {
-          finalists.push(allocation.slice());
-        }
+        bestFloatAllocation = allocation.slice();
+        finalists = finalists.filter(f => f.score > bestFloat - RANKING_SLOP_JOINT);
+      }
+      if (jointProbability > bestFloat - RANKING_SLOP_JOINT && finalists.length < MAX_FINALISTS_JOINT) {
+        finalists.push({ allocation: allocation.slice(), score: jointProbability });
       }
       return;
     }
@@ -353,7 +252,8 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
     feasibleCount,
     evaluatedCount,
   };
-  for (const candidate of finalists) {
+  const ranked = finalists.map(f => f.allocation);
+  for (const candidate of bestFloatAllocation === null ? ranked : [bestFloatAllocation, ...ranked]) {
     const exact = evaluateAllocationJoint(inst, candidate);
     if (exact.jointProbability > best.bestJointProbability) {
       best.bestJointProbability = exact.jointProbability;
