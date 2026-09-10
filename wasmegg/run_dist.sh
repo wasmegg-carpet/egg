@@ -14,8 +14,8 @@ port=${1:-8888}
 
 cd "$here"
 
-# `set -e` already aborts on a failed build, so there is nothing to check afterwards.
-if [[ ! -d $here/dist ]]; then
+# dist has stuff committed so need to test for build assets
+if [[ ! -s $here/dist/_home/index.html ]]; then
     make fastbuild -j2
 fi
 

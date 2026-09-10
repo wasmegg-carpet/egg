@@ -1,29 +1,11 @@
-/**
- * Reads `humility-plan.json`, the artifact explorer's answer for one or more Humility visits.
- *
- * The two apps share no runtime, so everything this file relies on is restated and validated
- * here. Two asymmetries are deliberate and load-bearing:
- *
- * - **Ships and durations arrive as enum names.** This app's `DurationType` runs
- *   SHORT = 1, LONG = 2, EPIC = 3; the protobuf the explorer uses runs SHORT = 0, LONG = 1,
- *   EPIC = 2, TUTORIAL = 3. Our `EPIC` is its `TUTORIAL`. Raw integers across this seam would
- *   build a plan that is silently wrong and that no type checker would catch.
- * - **Targets arrive as numeric `ei.ArtifactSpec.Name`.** That enum comes from the shared
- *   protobuf and this app keeps no copy of it, so there is nothing here to drift; the display
- *   name is re-derived through lib.
- *
- * Fuel is the third asymmetry, and the one this file spends the most effort on. The explorer
- * strips Humility from every mission's cost, because it is free on the Path of Virtue and so
- * constrains nothing there. Our `VIRTUE_FUEL_REQUIREMENTS` includes it, `handleLaunch` writes it
- * into `fuelConsumed`, and `replay.ts` deducts every entry from the tank. So the fuel figures are
- * re-derived here from our own table rather than copied across, and the file's four numbers are
- * kept as a tripwire: a mismatch means the two data tables have drifted apart and is worth
- * saying out loud, not reconciling silently.
- */
+// Reads the artifact explorer’s Humility plans. Ships and durations cross as enum names;
+// target ids use the shared protobuf enum. Fuel is derived from this app’s tables.
+
+import { ei } from 'lib';
 
 import type { Action, VirtueEgg } from '@/types';
 import { VIRTUE_EGGS } from '@/types';
-import { Spaceship, DurationType } from '@/lib/missions';
+import { Spaceship, DurationType, VIRTUE_FUEL_REQUIREMENTS } from '@/lib/missions';
 import { type Launch, launchEntries } from '@/lib/rockets/launches';
 import { scheduleMissions, type ScheduleResult } from '@/lib/rockets/scheduler';
 
@@ -86,7 +68,7 @@ const DURATION_BY_NAME: Record<string, DurationType> = {
 function durationFromName(name: unknown): DurationType {
   if (typeof name !== 'string') throw new HumilityPlanError(`Launch has no duration name.`);
   const duration = DURATION_BY_NAME[name];
-  if (duration === undefined) throw new HumilityPlanError(`Unsupported mission duration "${name}".`);
+  if (typeof duration !== 'number') throw new HumilityPlanError(`Unsupported mission duration "${name}".`);
   return duration;
 }
 
@@ -97,15 +79,25 @@ export interface ResolvedLaunch extends Launch {
 export function resolveLaunches(visit: HumilityPlanVisit): ResolvedLaunch[] {
   if (!Array.isArray(visit.launches)) throw new HumilityPlanError(`Visit "${visit.label}" has no launches.`);
   return visit.launches.map(launch => {
-    const count = Math.floor(Number(launch.count));
-    if (!Number.isFinite(count) || count <= 0) {
+    if (!isRecord(launch)) throw new HumilityPlanError(`Visit "${visit.label}" has an invalid launch.`);
+    const count = launch.count;
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count <= 0) {
       throw new HumilityPlanError(`Visit "${visit.label}" has a launch with a count of ${launch.count}.`);
     }
-    const targetAfxId = Number(launch.targetAfxId);
-    if (!Number.isFinite(targetAfxId)) {
-      throw new HumilityPlanError(`Visit "${visit.label}" has a launch with no target id.`);
+    const targetAfxId = launch.targetAfxId;
+    if (
+      typeof targetAfxId !== 'number' ||
+      !Number.isInteger(targetAfxId) ||
+      ei.ArtifactSpec.Name[targetAfxId] === undefined
+    ) {
+      throw new HumilityPlanError(`Visit "${visit.label}" has a launch with an invalid target id.`);
     }
-    return { ship: shipFromName(launch.ship), duration: durationFromName(launch.duration), targetAfxId, count };
+    const ship = shipFromName(launch.ship);
+    const duration = durationFromName(launch.duration);
+    if (!Array.isArray(VIRTUE_FUEL_REQUIREMENTS[ship]?.[duration])) {
+      throw new HumilityPlanError(`Unsupported mission ${launch.ship} / ${launch.duration}.`);
+    }
+    return { ship, duration, targetAfxId, count };
   });
 }
 
@@ -231,11 +223,27 @@ export function launchSchedule(launches: readonly ResolvedLaunch[], ftlLevel: nu
   return scheduleMissions(launchEntries(launches, ftlLevel));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requireNumber(value: unknown, field: string, maximum = Infinity): asserts value is number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > maximum) {
+    throw new HumilityPlanError(`Invalid ${field}: expected a finite number between 0 and ${maximum}.`);
+  }
+}
+
+function requireString(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new HumilityPlanError(`Invalid ${field}: expected a nonempty string.`);
+  }
+}
+
 export function parseHumilityPlan(json: unknown): HumilityPlanFile {
-  if (typeof json !== 'object' || json === null) {
+  if (!isRecord(json)) {
     throw new HumilityPlanError('Not a Humility plan: expected a JSON object.');
   }
-  const file = json as HumilityPlanFile;
+  const file = json;
   if (file.schema !== HUMILITY_PLAN_SCHEMA) {
     throw new HumilityPlanError(
       'That is not a Humility plan file. Export one from the artifact explorer’s mission optimizer.'
@@ -250,5 +258,30 @@ export function parseHumilityPlan(json: unknown): HumilityPlanFile {
   if (!Array.isArray(file.visits) || file.visits.length === 0) {
     throw new HumilityPlanError('That Humility plan has no solved visits in it.');
   }
-  return file;
+  if (file.source !== 'artifact-explorer') throw new HumilityPlanError('Unknown Humility plan source.');
+  requireString(file.planLabel, 'plan label');
+  requireNumber(file.generatedAt, 'generation timestamp');
+  const ids = new Set<string>();
+  const indices = new Set<number>();
+  for (const visit of file.visits) {
+    if (!isRecord(visit)) throw new HumilityPlanError('Invalid Humility visit.');
+    requireString(visit.visitId, 'visit id');
+    requireString(visit.label, 'visit label');
+    requireNumber(visit.visitIndex, 'visit index', Number.MAX_SAFE_INTEGER);
+    if (!Number.isInteger(visit.visitIndex)) throw new HumilityPlanError('Visit index must be an integer.');
+    if (ids.has(visit.visitId) || indices.has(visit.visitIndex)) {
+      throw new HumilityPlanError('Duplicate Humility visit id or index.');
+    }
+    ids.add(visit.visitId);
+    indices.add(visit.visitIndex);
+    requireNumber(visit.jointProbability, 'joint probability', 1);
+    for (const field of ['makespanSeconds', 'gemCost', 'gemBudget']) requireNumber(visit[field], field);
+    if (!isRecord(visit.fuelRequired)) throw new HumilityPlanError('Visit has no fuel requirements.');
+    for (const [egg, amount] of Object.entries(visit.fuelRequired)) {
+      if (!VIRTUE_EGGS.includes(egg as VirtueEgg)) throw new HumilityPlanError(`Unknown fuel egg "${egg}".`);
+      requireNumber(amount, `${egg} fuel`);
+    }
+    resolveLaunches(visit as unknown as HumilityPlanVisit);
+  }
+  return file as unknown as HumilityPlanFile;
 }

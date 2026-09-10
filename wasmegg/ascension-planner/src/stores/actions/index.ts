@@ -645,28 +645,15 @@ export const useActionsStore = defineStore('actions', {
       }
     },
 
-    /**
-     * Drops every action a previous write under this `sourceTag` left, without the dependent
-     * cascade `removeActions` applies: the caller is replacing them in place with equivalent ones,
-     * and tearing out whatever the player hung off them would delete their work.
-     */
-    async removeTaggedActions(sourceTag: string) {
-      const stale = new Set(this.actions.filter(a => a.sourceTag === sourceTag).map(a => a.id));
-      if (stale.size === 0) return;
-      await this.dropActions(stale);
-    },
-
-    /**
-     * Writes actions into the plan at a caller-chosen index. `insertAction` puts them wherever the
-     * player's editing cursor is; the Humility plan import knows which visit its actions belong to
-     * and has to reach that visit whether or not the player is standing in it.
-     */
-    async insertActionsAt(index: number, drafts: DraftAction[]) {
-      if (drafts.length === 0) return;
-      const insertIndex = Math.max(0, Math.min(index, this.actions.length));
-      const hydrated = drafts.map(draft => hydrateDraft(draft, insertIndex));
-      this.actions.splice(insertIndex, 0, ...hydrated);
-      await this.recalculateFrom(insertIndex);
+    /** Publish an already simulated and validated timeline in one update. */
+    replaceSimulatedActions(actions: Action[], initialSnapshot?: CalculationsSnapshot) {
+      if (initialSnapshot) this._initialSnapshot = markRaw(initialSnapshot);
+      this.actions = actions.map(action => ({ ...action, endState: markRaw(action.endState) }));
+      if (this.editingGroupId && !this.actions.some(action => action.id === this.editingGroupId)) {
+        this.editingGroupId = null;
+      }
+      this.relinkDependencies();
+      syncStoresToSnapshot(this.effectiveSnapshot);
     },
 
     startBatch() {

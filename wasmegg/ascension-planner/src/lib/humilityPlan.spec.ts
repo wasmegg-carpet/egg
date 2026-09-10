@@ -39,6 +39,63 @@ describe('parsing a humility plan', () => {
     expect(() => parseHumilityPlan({ ...file, schemaVersion: 2 })).toThrow(/version 2/);
     expect(() => parseHumilityPlan({ ...file, visits: [] })).toThrow(/no solved visits/);
   });
+  it.each([null, [], { visitId: 'v1' }])('rejects a malformed visit before it reaches the panel: %j', visit => {
+    expect(() => parseHumilityPlan({ ...humilityPlan(), visits: [visit] })).toThrow(HumilityPlanError);
+  });
+
+  it.each([
+    ['visitId', ''],
+    ['label', null],
+    ['visitIndex', 0.5],
+    ['visitIndex', -1],
+    ['jointProbability', 1.1],
+    ['jointProbability', -0.1],
+    ['makespanSeconds', Infinity],
+    ['makespanSeconds', '12'],
+    ['gemCost', NaN],
+    ['gemBudget', -1],
+    ['fuelRequired', []],
+    ['fuelRequired', { curiosity: -1 }],
+    ['fuelRequired', { bogus: 1 }],
+    ['launches', null],
+    ['launches', [null]],
+  ])('validates %s before accepting the file', (field, value) => {
+    const file = humilityPlan();
+    (file.visits[0] as unknown as Record<string, unknown>)[field] = value;
+    expect(() => parseHumilityPlan(file)).toThrow(HumilityPlanError);
+  });
+
+  it.each([
+    { count: '2' },
+    { count: true },
+    { count: 1.5 },
+    { targetAfxId: null },
+    { targetAfxId: '25' },
+    { targetAfxId: 99999 },
+    { targetAfxId: 0.5 },
+    { duration: 'toString' },
+    { duration: 'TUTORIAL' },
+    { ship: 'missing' },
+  ])('validates each launch while loading: %j', fields => {
+    const file = humilityPlan();
+    Object.assign(file.visits[0].launches[0], fields);
+    expect(() => parseHumilityPlan(file)).toThrow(HumilityPlanError);
+  });
+
+  it('rejects duplicate visit ids and indices', () => {
+    const file = humilityPlan();
+    file.visits[1].visitId = file.visits[0].visitId;
+    expect(() => parseHumilityPlan(file)).toThrow(/Duplicate/);
+    file.visits[1].visitId = 'different';
+    file.visits[1].visitIndex = file.visits[0].visitIndex;
+    expect(() => parseHumilityPlan(file)).toThrow(/Duplicate/);
+  });
+
+  it('accepts an empty launch list for a solution satisfied by existing inventory', () => {
+    const file = humilityPlan();
+    file.visits[0].launches = [];
+    expect(parseHumilityPlan(file).visits[0].launches).toEqual([]);
+  });
 });
 
 describe('mapping the wire format onto this app’s enums', () => {
@@ -74,7 +131,7 @@ describe('mapping the wire format onto this app’s enums', () => {
 
   it('rejects a count that would launch nothing or a fraction of a ship', () => {
     const [visit] = humilityPlan().visits;
-    for (const count of [0, -1, Number.NaN]) {
+    for (const count of [0, -1, 1.9, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
       const bad = { ...visit, launches: [{ ...visit.launches[0], count }] };
       expect(() => resolveLaunches(bad)).toThrow(HumilityPlanError);
     }
