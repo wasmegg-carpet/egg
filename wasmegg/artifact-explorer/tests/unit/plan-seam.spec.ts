@@ -567,6 +567,24 @@ describe('pointing the optimizer at a visit', () => {
       expect(plan.solvedVisitCount.value).toBe(0);
     }
   });
+
+  it('keeps it when the time budget is re-spelled rather than changed', async () => {
+    const plan = await planStore();
+    // The plan spends 86400s here, and the field normalizes on blur, so `1d` is written back over
+    // it with no edit at all. Nothing would recompute after a retraction here — the seconds the
+    // solver reads never moved — so the export would just lose the visit.
+    const visit = plan.loadedPlan.value!.visits[0];
+    plan.recordSolvedVisit(solvedAt(visit.visitId));
+
+    for (const spelling of ['1d', '24h', '1']) {
+      plan.setVisitWaitTime(visit.visitId, spelling);
+      expect(plan.waitTimeSecondsFor(visit)).toBe(86400);
+      expect(plan.solvedVisitCount.value).toBe(1);
+    }
+
+    plan.setVisitWaitTime(visit.visitId, '2d');
+    expect(plan.solvedVisitCount.value).toBe(0);
+  });
 });
 
 describe('the budgets the optimizer worker is handed', () => {

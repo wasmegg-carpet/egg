@@ -13,6 +13,8 @@ import { computed, ref } from 'vue';
 
 import { ei, formatDuration, getLocalStorage, parseDurationDays, setLocalStorage } from 'lib';
 
+import { parseBudgetInput } from '@/store/budget-input';
+
 import type { HumilityVisit } from '@/lib/plan/read';
 import type { HumilityPlanVisit } from '@/lib/plan/schema';
 
@@ -27,6 +29,7 @@ const PLAN_STORE_VERSION = 1;
 // across the eggs however the answer needs — for a plan that has not scheduled its fuel yet, which
 // is what makes the exported `fuelRequired` a statement of what it still has to go store.
 export type VisitFuelBudget = 'banked' | 'full-tank';
+export type GemCostMode = 'plan' | 'custom' | 'unlimited';
 
 export interface VisitSettings {
   // Artifact node ids the optimizer should aim at for this visit.
@@ -35,6 +38,8 @@ export interface VisitSettings {
   // scheduled this visit's missions yet reports zero, so the page takes a typed value instead.
   waitTimeOverride: string | null;
   fuelBudget: VisitFuelBudget;
+  gemCostMode: GemCostMode;
+  gemCostInput: string;
 }
 
 export interface LoadedPlan {
@@ -54,6 +59,8 @@ function newVisitSettings(): VisitSettings {
     waitTimeOverride: null,
     // The plan's own numbers, until the player says otherwise.
     fuelBudget: 'banked',
+    gemCostMode: 'plan',
+    gemCostInput: '0',
   };
 }
 
@@ -73,16 +80,23 @@ export function setLoadedPlan(label: string, visits: HumilityVisit[]): void {
   persistPlan();
 }
 
+// Unloading discards the cycle's recorded answers with it: they are keyed to this plan's visits,
+// and keeping them for the next file would attach one plan's budgets to another's.
+export function clearLoadedPlan(): void {
+  loadedPlan.value = null;
+  persistPlan();
+}
+
 // Selecting a visit repoints the one target selector on the page at that visit's saved targets. A
-// visit that has none yet takes whatever is already selected: loading the plan after picking
-// targets is the expected order, and dropping them would empty the page the plan lives on.
+// newly opened visit starts with the current targets. An explicitly emptied visit stays empty.
 export function setCurrentVisit(visitId: string | null, seedTargets: readonly string[] = []): void {
   const plan = loadedPlan.value;
   if (!plan) return;
   plan.currentVisitId = visitId;
-  if (visitId !== null && seedTargets.length > 0) {
+  if (visitId !== null) {
+    const isNew = !plan.settings[visitId];
     const settings = mutableSettingsFor(visitId);
-    if (settings && settings.targetIds.length === 0) settings.targetIds = [...seedTargets];
+    if (settings && isNew) settings.targetIds = [...seedTargets];
   }
   persistPlan();
 }
@@ -115,9 +129,13 @@ export const activeVisitSettings = computed<VisitSettings | null>(() => {
 
 // Seconds a visit is solved against: what the player typed for it, or what the plan already
 // spends on Humility there.
+function waitTimeSecondsOf(settings: VisitSettings, plannedDurationSeconds: number): number {
+  const override = settings.waitTimeOverride;
+  return override === null ? plannedDurationSeconds : parseDurationDays(override);
+}
+
 export function waitTimeSecondsFor(visit: HumilityVisit): number {
-  const override = settingsFor(visit.visitId).waitTimeOverride;
-  return override === null ? visit.plannedDurationSeconds : parseDurationDays(override);
+  return waitTimeSecondsOf(settingsFor(visit.visitId), visit.plannedDurationSeconds);
 }
 
 export function waitTimeInputFor(visit: HumilityVisit): string {
@@ -127,31 +145,77 @@ export function waitTimeInputFor(visit: HumilityVisit): string {
 
 // Every per-visit input goes through here, and every one of them retracts the recorded answer:
 // it was an answer to the question these inputs pose, and nothing else would ever withdraw it.
-function editVisit(visitId: string, edit: (settings: VisitSettings) => void): void {
+//
+// `asks` is what the question actually is, for an input that carries more than it: the time budget
+// arrives as raw text, and "11" and "11d" are two spellings of the same eleven days — one of which
+// the field writes back on its own when it normalizes on blur. Retracting on the text would throw
+// away an answer that still answers the question, and nothing would recompute it: the budget the
+// solver reads never moved, so no solve is queued to record one again.
+function editVisit(
+  visitId: string,
+  edit: (settings: VisitSettings) => void,
+  asks?: (settings: VisitSettings) => number | string
+): void {
   const plan = loadedPlan.value;
   const settings = mutableSettingsFor(visitId);
   if (!plan || !settings) return;
+  const before = asks?.(settings);
   edit(settings);
-  delete plan.solved[visitId];
+  // `!==`, not `Object.is`: an unparseable duration is NaN on both sides, and an answer to a
+  // question that can no longer be posed has to go.
+  if (asks === undefined || before !== asks(settings)) delete plan.solved[visitId];
   persistPlan();
 }
 
 export function setVisitTargets(visitId: string, targetIds: readonly string[]): void {
-  editVisit(visitId, s => {
-    s.targetIds = [...targetIds];
-  });
+  editVisit(
+    visitId,
+    s => {
+      s.targetIds = [...targetIds];
+    },
+    s => JSON.stringify(s.targetIds)
+  );
 }
 
-export function setVisitWaitTime(visitId: string, value: string): void {
-  editVisit(visitId, s => {
-    s.waitTimeOverride = value;
-  });
+export function setVisitWaitTime(visitId: string, value: string | null): void {
+  const planned = loadedPlan.value?.visits.find(v => v.visitId === visitId)?.plannedDurationSeconds ?? NaN;
+  editVisit(
+    visitId,
+    s => {
+      s.waitTimeOverride = value;
+    },
+    s => waitTimeSecondsOf(s, planned)
+  );
 }
 
 export function setVisitFuelBudget(visitId: string, budget: VisitFuelBudget): void {
-  editVisit(visitId, s => {
-    s.fuelBudget = budget;
-  });
+  editVisit(
+    visitId,
+    s => {
+      s.fuelBudget = budget;
+    },
+    s => s.fuelBudget
+  );
+}
+
+export function setVisitGemCostMode(visitId: string, mode: GemCostMode): void {
+  editVisit(
+    visitId,
+    s => {
+      s.gemCostMode = mode;
+    },
+    s => s.gemCostMode
+  );
+}
+
+export function setVisitGemCostInput(visitId: string, value: string): void {
+  editVisit(
+    visitId,
+    s => {
+      s.gemCostInput = value;
+    },
+    s => parseBudgetInput(s.gemCostInput)
+  );
 }
 
 export function recordSolvedVisit(visit: HumilityPlanVisit): void {

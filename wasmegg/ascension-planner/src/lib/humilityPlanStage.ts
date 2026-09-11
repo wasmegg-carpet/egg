@@ -72,8 +72,12 @@ export function stageHumilityVisit(
   let previous = actions[launchIndex - 1].endState;
   const launches = resolveLaunches(visit);
   const required = fuelForLaunches(launches);
-  // Check before expanding counts into individual scheduling entries.
-  validateTank(required, previous.tankLevel);
+  // Check before expanding counts into individual scheduling entries. Humility is left out of the
+  // requirement: the farm is on Humility for the whole visit, so that fuel comes off production and
+  // never has to fit in the tank alongside the rest — the same exemption the mission grid's budget
+  // makes (`isOverBudget` in `stores/rockets.ts`). Counting it here rejected plans whose four
+  // stored fuels fit.
+  validateTank({ ...required, humility: 0 }, previous.tankLevel);
 
   let initialEgg: VirtueEgg | undefined;
   if (arrivalIndex === 0 && actions[0].type === 'start_ascension') {
@@ -115,11 +119,11 @@ export function stageHumilityVisit(
     insertions.set(index, [...(insertions.get(index) ?? []), ...additions]);
   }
   const newPhases: Action[] = [];
-  for (const { egg, amount } of fuelShortfalls(required, previous.fuelTankAmounts)) {
-    if (egg === 'humility') {
-      insert(launchIndex, [action('store_fuel', { egg, amount, timeSeconds: 0 })]);
-      continue;
-    }
+  // Only the four eggs that have to be tanked. A store is how fuel for an egg the farm is not
+  // producing at launch time gets into the tank, so each one is placed in that egg's own visit;
+  // Humility needs none, because the farm is producing Humility right up to the launch.
+  for (const { egg } of fuelShortfalls(required, previous.fuelTankAmounts)) {
+    if (egg === 'humility') continue;
     let eggIndex = arrivalIndex - 1;
     while (eggIndex >= 0 && actions[eggIndex].endState.currentEgg !== egg) eggIndex--;
     if (eggIndex >= 0) {
@@ -132,8 +136,17 @@ export function stageHumilityVisit(
         }),
       ]);
     } else {
+      // Opening a phase by hand is shift, wait for the habs the shift emptied, then work, so a
+      // staged phase opens the same way. The payload is re-derived against the post-shift state on
+      // every simulate, so these are seeds.
       newPhases.push(
         action('shift', { fromEgg: previous.currentEgg, toEgg: egg, newShiftCount: 0 }),
+        action('wait_for_full_habs', {
+          habCapacity: previous.habCapacity,
+          ihr: previous.offlineIHR,
+          currentPopulation: 1,
+          totalTimeSeconds: 0,
+        }),
         action('store_fuel', {
           egg,
           amount: fuelToStore(actions, egg, required[egg], arrivalIndex, launchIndex),

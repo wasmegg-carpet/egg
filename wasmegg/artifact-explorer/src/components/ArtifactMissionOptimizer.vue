@@ -3,12 +3,10 @@
     <div class="lg:sticky lg:top-4 self-start">
       <optimizer-sidebar
         :player-id="playerId"
-        :pending-compute="pendingCompute"
-        :computing="computing"
+        :export-blocked="computing || !inputsValid || !!computeError"
         :wait-time-days="waitTimeDays"
         :time-budget-invalid="!timeBudgetValid"
         @submit-player-id="submitPlayerId"
-        @run-compute="runCompute"
         @update:wait-time-days="updateWaitTime"
       />
     </div>
@@ -18,16 +16,21 @@
         <h3 class="text-base font-semibold text-gray-700 mb-3">Best Ship Set</h3>
         <div class="relative">
           <div :class="dimSolution ? 'opacity-40 pointer-events-none transition-opacity' : ''">
+            <!-- Read off the snapshot, not the live store: these caption the answer, and the
+                 player can load another save while the solve that produced it is still running.
+                 `visitIndex > 0` is the over-provisioning caveat: every visit is solved against
+                 the inventory and craft counts of today, so a visit that is not the cycle's first
+                 is answered as though the ones before it never ran. -->
             <optimizer-solution-card
               v-for="(view, i) in solutionViews"
               :key="'solution-' + i"
               :solution="view.solution"
-              :max-wait-time-seconds="lastComputedMaxWaitTimeSeconds"
-              :has-inventory="!!playerInventory"
-              :golden-egg-balance="playerGoldenEggs"
+              :max-wait-time-seconds="snapshot?.time ?? 0"
+              :has-inventory="!!snapshot?.inventory"
+              :golden-egg-balance="snapshot?.goldenEggs ?? null"
               :targets="view.targets"
               :plan-cost="view.planCost"
-              :over-provisioned="overProvisioned"
+              :over-provisioned="(snapshot?.visitIndex ?? 0) > 0"
             />
             <p
               v-if="computing && solutionViews.length === 0"
@@ -43,9 +46,9 @@
             <p v-else-if="computeError" class="text-sm text-red-600">Could not compute a plan: {{ computeError }}</p>
             <p v-else-if="solutionViews.length === 0" class="text-sm text-gray-400">
               {{
-                timeBudgetValid
+                inputsValid
                   ? 'No ship set found for the current settings.'
-                  : 'Enter a time budget (e.g. 30, 12d12h, 10h5m) to compute a plan.'
+                  : 'Correct the budget flagged in the sidebar to compute a plan.'
               }}
             </p>
           </div>
@@ -76,17 +79,19 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, onUnmounted, PropType, ref, toRefs, watch, watchEffect } from 'vue';
+import { computed, defineComponent, onUnmounted, PropType, ref, shallowRef, toRefs, watch } from 'vue';
 
 import { getArtifactTierPropsFromId, getSavedPlayerID, iconURL, requestFirstContact, savePlayerID } from 'lib';
 
 import {
-  autoCompute,
   currentOptimizerArtifactIds,
   effectiveConfig,
   effectiveFuelByEggCapacity,
   effectiveFuelTankCapacity,
   effectiveMaxGemCost,
+  effectiveCraftingBudget,
+  costBudgetsValid,
+  gemCostMode,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
   effectiveWaitTimeSeconds,
@@ -97,7 +102,14 @@ import {
   setPlayerData,
   setWaitTimeDays,
 } from '@/store';
-import { activePlanVisit, clearSolvedVisit, recordSolvedVisit, setVisitWaitTime, waitTimeInputFor } from '@/store/plan';
+import {
+  activePlanVisit,
+  loadedPlan,
+  clearSolvedVisit,
+  recordSolvedVisit,
+  setVisitWaitTime,
+  waitTimeInputFor,
+} from '@/store/plan';
 import { gemBudgetFor } from '@/lib/plan/read';
 import { projectSolvedVisit } from '@/lib/plan/write';
 import {
@@ -170,13 +182,42 @@ export default defineComponent({
       if (data.backup) setPlayerData(data.backup);
     };
 
-    const pendingCompute = ref(false);
     const computing = ref(false);
     const computeError = ref('');
     const computedResults = ref<OptimizerSolution[]>([]);
-    // what the displayed plan was computed against, not the live input
-    const lastComputedMaxWaitTimeSeconds = ref(0);
-
+    const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value);
+    const inventoryRevision = ref(0);
+    watch(playerInventory, () => inventoryRevision.value++, { flush: 'sync' });
+    // The save and the visit the displayed answer was computed against, which the player can
+    // change while it runs. Reading these live would caption one solve's answer with another's
+    // inventory.
+    const snapshot = shallowRef<{
+      time: number;
+      inventory: typeof playerInventory.value;
+      goldenEggs: number | null;
+      visitIndex: number;
+    } | null>(null);
+    // Compare the meaning of inputs, not their object identity or normalized spelling.
+    // Launch enumeration is a deterministic function of config, targets, and effort.
+    const questionKey = computed(() =>
+      JSON.stringify({
+        priceMode: gemCostMode.value,
+        visit: activePlanVisit.value?.visitId,
+        targets: artifactIds.value,
+        config: effectiveConfig.value,
+        crafting: effectiveCraftingLevel.value,
+        previousCrafts: effectivePreviousCraftsOverride.value,
+        inventory: inventoryRevision.value,
+        time: maxWaitTimeSeconds.value,
+        fuel: effectiveFuelByEggCapacity.value
+          ? [...effectiveFuelByEggCapacity.value]
+          : effectiveFuelTankCapacity.value,
+        price: effectiveMaxGemCost.value,
+        craftBudget: effectiveCraftingBudget.value,
+        effort: missionFilters.value.effort,
+        valid: inputsValid.value,
+      })
+    );
     const recipeDag = computed<ReturnType<typeof buildRecipeDag>>(() =>
       buildRecipeDag(
         artifactIds.value,
@@ -204,11 +245,12 @@ export default defineComponent({
     const craftUnitPrices = computed(() => computeCraftUnitPrices(recipeDag.value, playerInventory.value));
 
     const computeInputs = computed<OptimizerRequestInput | null>(() => {
-      if (!timeBudgetValid.value) return null;
+      if (!inputsValid.value) return null;
       const maxGemCost = effectiveMaxGemCost.value;
-      const craftBudget = missionFilters.value.maxGoldenEggCostEnabled
-        ? { capacity: missionFilters.value.maxGoldenEggCost, unitPrices: craftUnitPrices.value }
-        : undefined;
+      const craftBudget =
+        effectiveCraftingBudget.value !== undefined
+          ? { capacity: effectiveCraftingBudget.value, unitPrices: craftUnitPrices.value }
+          : undefined;
       return {
         options: launchMenu.value,
         recipeDag: recipeDag.value,
@@ -227,101 +269,80 @@ export default defineComponent({
     let client: OptimizerClient | null = null;
     const optimizerClient = () => (client ??= createOptimizerClient());
 
+    let generation = 0;
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
     async function runCompute() {
+      clearTimeout(debounceTimer);
+      const requestGeneration = ++generation;
       const input = computeInputs.value;
       if (!input) {
-        computedResults.value = [];
-        pendingCompute.value = false;
         computing.value = false;
-        computeError.value = '';
         return;
       }
-      const budget = maxWaitTimeSeconds.value;
-      // Which visit asked. The plan records whatever lands in `computedResults` against whatever
-      // visit is selected when it lands, so an answer that outlived its question has to be dropped
-      // rather than filed. `computeInputs` cannot stand in for this: it is only consulted when
-      // auto-compute is on, and two visits can pose identical inputs.
-      const visitAtRequest = activePlanVisit.value?.visitId ?? null;
-      pendingCompute.value = false;
+      const visit = activePlanVisit.value;
+      const plan = loadedPlan.value;
+      const key = questionKey.value;
+      const requestedSnapshot = {
+        time: input.timeCapacityPerSlot,
+        inventory: playerInventory.value,
+        goldenEggs: playerGoldenEggs.value,
+        visitIndex: visit?.visitIndex ?? 0,
+      };
+      const effort = missionFilters.value.effort;
+      const gemBudget = visit ? gemBudgetFor(visit, input.timeCapacityPerSlot) : 0;
       computing.value = true;
       computeError.value = '';
       try {
         const solutions = await optimizerClient().run(input);
-        // null: a newer request owns the results and the spinner now.
-        if (solutions === null) return;
-        if ((activePlanVisit.value?.visitId ?? null) !== visitAtRequest) {
-          computedResults.value = [];
+        if (
+          requestGeneration !== generation ||
+          plan !== loadedPlan.value ||
+          key !== questionKey.value ||
+          !inputsValid.value
+        )
+          return;
+        if (solutions === null) {
           computing.value = false;
           return;
         }
-        // Inputs went invalid mid-flight; nothing supersedes the request, so
-        // the stale plan has to be dropped here.
-        if (!computeInputs.value) {
-          computedResults.value = [];
-          computing.value = false;
-          return;
-        }
-        if (autoCompute.value && computeInputs.value !== input) return;
-        lastComputedMaxWaitTimeSeconds.value = budget;
+        snapshot.value = requestedSnapshot;
         computedResults.value = finalizeSolutions(solutions, input.recipeDag);
-        computing.value = false;
+        // Record at the matching request's completion, never via a watcher of live UI state.
+        if (visit) {
+          const solution = computedResults.value[0];
+          if (solution) recordSolvedVisit(projectSolvedVisit({ visit, solution, effort, gemBudget }));
+          else clearSolvedVisit(visit.visitId);
+        }
       } catch (err) {
+        if (requestGeneration !== generation) return;
         computeError.value = err instanceof Error ? err.message : String(err);
         computedResults.value = [];
-        computing.value = false;
+        snapshot.value = null;
+        if (visit) clearSolvedVisit(visit.visitId);
+      } finally {
+        if (requestGeneration === generation) computing.value = false;
       }
     }
 
-    // Watched rather than recorded at each of `runCompute`'s exits: every path that clears the
-    // results has to reach the plan too, or a visit keeps an answer to a question that has since
-    // changed. Recorded as the *projection* that gets exported, never as the solution itself,
-    // which is full of `Map`s and stringifies to `{}`.
-    watch(computedResults, results => {
-      const visit = activePlanVisit.value;
-      if (!visit) return;
-      const solution = results[0];
-      if (!solution) {
-        clearSolvedVisit(visit.visitId);
-        return;
-      }
-      recordSolvedVisit(
-        projectSolvedVisit({
-          visit,
-          solution,
-          effort: missionFilters.value.effort,
-          gemBudget: gemBudgetFor(visit, effectiveWaitTimeSeconds.value),
-        })
-      );
-    });
-
-    // Every visit is solved against the inventory and craft counts of today, so a visit that is not
-    // the cycle's first is answered as though the ones before it never ran. Said on the answer
-    // rather than beside the plan controls: it is a caveat about this number.
-    const overProvisioned = computed(() => (activePlanVisit.value?.visitIndex ?? 0) > 0);
-
-    const AUTO_COMPUTE_DEBOUNCE_MS = 250;
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-
-    // Reading computeInputs.value HERE is what registers the dependency; if
-    // only the debounced callback read it the effect would track autoCompute
-    // alone.
-    watchEffect(() => {
-      const input = computeInputs.value;
-      // Every exit must cancel the queued solve first, or a timer armed by the
-      // previous run still fires.
-      clearTimeout(debounceTimer);
-      if (!autoCompute.value) {
-        pendingCompute.value = true;
-        return;
-      }
-      if (!input) {
-        computedResults.value = [];
-        return;
-      }
-      debounceTimer = setTimeout(runCompute, AUTO_COMPUTE_DEBOUNCE_MS);
-    });
+    watch(
+      [questionKey, () => loadedPlan.value],
+      () => {
+        ++generation; // Retire even a running request before the debounced replacement starts.
+        clearTimeout(debounceTimer);
+        computeError.value = '';
+        computing.value = inputsValid.value;
+        if (computing.value) debounceTimer = setTimeout(runCompute, 250);
+        // An answer to a question that can no longer be posed is not left on screen.
+        else {
+          computedResults.value = [];
+          snapshot.value = null;
+        }
+      },
+      { immediate: true, flush: 'sync' }
+    );
 
     onUnmounted(() => {
+      ++generation;
       clearTimeout(debounceTimer);
       client?.terminate();
     });
@@ -353,12 +374,12 @@ export default defineComponent({
             perTarget,
             pCraft: legendaryCraftProbabilityOf(solution, nodeId),
             lambda: lambdaFromDropProbability(perTarget.dropProbability),
-            craftChainTree: computeCraftChainTree(solution, nodeId, playerInventory.value),
+            craftChainTree: computeCraftChainTree(solution, nodeId, snapshot.value?.inventory ?? null),
             missionLegendarySources: computeMissionLegendaryRows(solution, nodeId),
             dropDataIsSparse: legendaryDataIsSparse(nodeId),
           };
         });
-        return { solution, targets, planCost: computePlanCraftingCost(solution, playerInventory.value) };
+        return { solution, targets, planCost: computePlanCraftingCost(solution, snapshot.value?.inventory ?? null) };
       })
     );
 
@@ -368,19 +389,16 @@ export default defineComponent({
       waitTimeDays,
       updateWaitTime,
       dimSolution,
-      lastComputedMaxWaitTimeSeconds,
+      snapshot,
+      inputsValid,
       timeBudgetValid,
-      pendingCompute,
       computing,
       computeError,
       playerId,
-      runCompute,
       submitPlayerId,
       playerInventory,
-      playerGoldenEggs,
       inventoryTrees,
       solutionViews,
-      overProvisioned,
     };
   },
 });

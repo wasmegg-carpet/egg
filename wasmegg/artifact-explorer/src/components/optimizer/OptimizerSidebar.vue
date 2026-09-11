@@ -44,11 +44,19 @@
 
           <button
             type="button"
-            :disabled="solvedCount === 0"
+            :disabled="solvedCount === 0 || exportBlocked"
             class="w-full flex items-center justify-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             @click="onExportPlan"
           >
             Export {{ solvedCount }} solved visit{{ solvedCount === 1 ? '' : 's' }}
+          </button>
+
+          <button
+            type="button"
+            class="w-full flex items-center justify-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm rounded-md text-gray-600 bg-white hover:bg-gray-100"
+            @click="onUnloadPlan"
+          >
+            Unload plan
           </button>
         </template>
 
@@ -139,32 +147,41 @@
         </div>
 
         <div>
-          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-              :checked="missionFilters.maxGemCostEnabled"
-              @change="setMaxGemCostEnabled(($event.target as HTMLInputElement).checked)"
-            />
-            Maximum purchase cost
-          </label>
-          <div class="mt-1 flex items-center gap-2">
+          <label for="gemCostMode" class="block text-sm text-gray-600">Maximum purchase cost</label>
+          <select
+            id="gemCostMode"
+            :value="gemCostMode"
+            class="mt-1 block w-full pl-3 pr-8 py-1.5 sm:text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            @change="onGemModeChange"
+          >
+            <option v-if="planVisit" value="plan">From plan</option>
+            <option value="custom">Override</option>
+            <option value="unlimited">Unlimited</option>
+          </select>
+          <div v-if="gemCostMode !== 'unlimited'" class="mt-1 flex items-center gap-2">
             <input
               type="text"
-              :disabled="!missionFilters.maxGemCostEnabled"
+              aria-label="Maximum purchase cost in gems"
+              :disabled="gemCostMode !== 'custom'"
               :value="gemCostFieldValue"
               placeholder="e.g. 10S"
               class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
-              @input="onGemCostInput($event)"
+              @input="setGemCostInput(($event.target as HTMLInputElement).value)"
+              @blur="normalizeGemCost"
             />
             <span class="text-xs text-gray-500">gems</span>
           </div>
-          <p v-if="missionFilters.maxGemCostEnabled" class="mt-1 text-xs text-gray-400">
+          <!-- An unparseable draft is not silently swapped for the last good number: it stops the
+               solve and says so, rather than answering a question nobody asked. -->
+          <p v-if="gemCostInvalid" class="mt-1 text-xs text-red-500">
+            Enter a non-negative amount (e.g. 10S). Nothing is computed until this is corrected.
+          </p>
+          <p v-else-if="gemCostMode === 'custom'" class="mt-1 text-xs text-gray-400">
             Only schedule ships costing at most this many gems (e.g. 10S = 10 septillion)
           </p>
-          <p v-else-if="planVisit" class="mt-1 text-xs text-gray-400">
-            From plan: the bank on arrival plus what the visit earns, capping one ship rather than the whole visit. Turn
-            this on to set your own.
+          <p v-else-if="gemCostMode === 'plan'" class="mt-1 text-xs text-gray-400">
+            From plan: the bank on arrival plus what the visit earns, capping one ship rather than the whole visit. Pick
+            "Set my own" to override it.
           </p>
         </div>
 
@@ -183,10 +200,11 @@
               type="text"
               aria-label="Maximum crafting cost in golden eggs"
               :disabled="!missionFilters.maxGoldenEggCostEnabled"
-              :value="maxGoldenEggCostDisplay"
+              :value="craftingCostInput"
               placeholder="e.g. 25M"
               class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300 disabled:bg-gray-50 disabled:text-gray-400"
-              @input="onGoldenEggCostInput($event)"
+              @input="setCraftingCostInput(($event.target as HTMLInputElement).value)"
+              @blur="normalizeCraftingCost"
             />
             <!-- The unit lives in the input's aria-label; the icon repeats it visually. -->
             <base-icon
@@ -196,7 +214,10 @@
               aria-hidden="true"
             />
           </div>
-          <p v-if="missionFilters.maxGoldenEggCostEnabled" class="mt-1 text-xs text-gray-400">
+          <p v-if="craftingCostInvalid" class="mt-1 text-xs text-red-500">
+            Enter a non-negative amount (e.g. 25M). Nothing is computed until this is corrected.
+          </p>
+          <p v-else-if="missionFilters.maxGoldenEggCostEnabled" class="mt-1 text-xs text-gray-400">
             Cap the golden eggs the plan's crafts may cost, at your own crafting prices
           </p>
           <p v-else-if="playerGoldenEggs !== null" class="mt-1 text-xs text-gray-400">
@@ -331,38 +352,7 @@
       </button>
     </section>
 
-    <section>
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Compute</h3>
-      <label class="flex items-center gap-2 text-sm mb-2 select-none text-gray-600 cursor-pointer">
-        <input
-          type="checkbox"
-          class="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-          :checked="autoCompute"
-          @change="setAutoCompute(($event.target as HTMLInputElement).checked)"
-        />
-        Recompute automatically
-      </label>
-      <button
-        v-if="!autoCompute"
-        type="button"
-        :disabled="computing"
-        class="w-full flex items-center justify-center px-3 py-2 border shadow-sm text-sm font-medium rounded-md focus:outline-none"
-        :class="
-          computing
-            ? 'border-gray-300 text-gray-400 bg-gray-100 cursor-not-allowed'
-            : pendingCompute
-              ? 'border-transparent text-white bg-indigo-600 hover:bg-indigo-700'
-              : 'border-gray-300 text-gray-600 bg-gray-100 hover:bg-gray-200'
-        "
-        @click="$emit('runCompute')"
-      >
-        {{ computing ? 'Computing…' : pendingCompute ? 'Recompute — results out of date' : 'Compute' }}
-      </button>
-      <p v-else-if="computing" role="status" class="text-xs text-gray-500">Computing…</p>
-      <div class="mt-3">
-        <loot-data-credit />
-      </div>
-    </section>
+    <loot-data-credit />
   </div>
 </template>
 
@@ -379,7 +369,6 @@ import {
   getArtifactTierPropsFromId,
   isDurationNormalizable,
   parseDurationDays,
-  parseValueWithUnit,
   spaceshipList,
 } from 'lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
@@ -389,10 +378,17 @@ import LootDataCredit from '@/components/LootDataCredit.vue';
 import OptimizerSettingRow from './OptimizerSettingRow.vue';
 
 import {
-  autoCompute,
   config,
   currentOptimizerArtifactIds,
   effectiveMaxGemCost,
+  gemCostMode,
+  gemCostInput,
+  gemCostInvalid,
+  craftingCostInput,
+  craftingCostInvalid,
+  setGemCostMode,
+  setGemCostInput,
+  setCraftingCostInput,
   effectiveConfig,
   effectiveFuelByEggCapacity,
   EFFORT_LEVELS,
@@ -408,15 +404,11 @@ import {
   playerShipsConfig,
   playerTankFuels,
   playerTankLevel,
-  setAutoCompute,
   setCraftingLevel,
   setEffort,
   setEpicResearchFTLLevel,
   setEpicResearchZerogLevel,
   setFuelFromTankContents,
-  setMaxGemCost,
-  setMaxGemCostEnabled,
-  setMaxGoldenEggCost,
   setMaxGoldenEggCostEnabled,
   setOverrideCraftingLevel,
   setOverrideFTL,
@@ -428,6 +420,9 @@ import {
 } from '@/store';
 import {
   activePlanVisit,
+  activeVisitSettings,
+  clearLoadedPlan,
+  type GemCostMode,
   loadedPlan,
   setCurrentVisit,
   setLoadedPlan,
@@ -435,6 +430,7 @@ import {
   solvedVisitCount,
 } from '@/store/plan';
 import { parsePlanSave, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import { normalizeBudgetInput } from '@/store/budget-input';
 import { buildHumilityPlanFile } from '@/lib/plan/write';
 
 function downloadJson(filename: string, body: unknown): void {
@@ -473,14 +469,12 @@ export default defineComponent({
   components: { BaseIcon, BaseInput, PlayerIdForm, LootDataCredit, OptimizerSettingRow },
   props: {
     playerId: { type: String, default: '' },
-    pendingCompute: { type: Boolean, required: true },
-    computing: { type: Boolean, required: true },
+    exportBlocked: { type: Boolean, default: false },
     waitTimeDays: { type: String, required: true },
     timeBudgetInvalid: { type: Boolean, default: false },
   },
   emits: {
     submitPlayerId: (_id: string) => true,
-    runCompute: () => true,
     'update:waitTimeDays': (_days: string) => true,
   },
   setup(props, { emit }) {
@@ -515,7 +509,8 @@ export default defineComponent({
       }
       const normalized = formatDuration(parseDurationDays(waitTimeDraft.value), true);
       waitTimeDraft.value = normalized;
-      emit('update:waitTimeDays', normalized);
+      if (!activePlanVisit.value || activeVisitSettings.value?.waitTimeOverride !== null)
+        emit('update:waitTimeDays', normalized);
     }
 
     const maxTankLevel = fuelTankSizes.length - 1;
@@ -634,23 +629,13 @@ export default defineComponent({
       e.preventDefault();
     }
 
-    function costFieldHandler(set: (value: number) => void) {
-      return (event: Event) => {
-        const raw = (event.target as HTMLInputElement).value.trim();
-        if (!raw) return;
-        const n = parseValueWithUnit(raw, false);
-        if (n === null || !Number.isFinite(n) || n < 0) return;
-        set(n);
-      };
-    }
-
-    const onGemCostInput = costFieldHandler(setMaxGemCost);
-
-    // Whatever is actually capping a ship's price: the plan's figure for this visit while the
-    // checkbox is off, the typed one once it is on. Shown in the one field either way, rather than
-    // the plan's being restated in a panel of its own.
+    const onGemModeChange = (event: Event) => setGemCostMode((event.target as HTMLSelectElement).value as GemCostMode);
+    const normalizeGemCost = () => setGemCostInput(normalizeBudgetInput(gemCostInput.value));
+    const normalizeCraftingCost = () => setCraftingCostInput(normalizeBudgetInput(craftingCostInput.value));
     const gemCostFieldValue = computed(() =>
-      formatEIValue(effectiveMaxGemCost.value ?? missionFilters.value.maxGemCost, { trim: true })
+      gemCostMode.value === 'custom'
+        ? gemCostInput.value
+        : formatEIValue(effectiveMaxGemCost.value ?? 0, { trim: true })
     );
 
     // ---------------------------------------------------------------------
@@ -692,17 +677,24 @@ export default defineComponent({
       setCurrentVisit(visitId === '' ? null : visitId, currentOptimizerArtifactIds.value);
     }
 
+    // Solved visits go with the plan, so an unexported cycle asks first. Nothing else here is
+    // recoverable by re-picking the file.
+    function onUnloadPlan() {
+      if (
+        solvedVisitCount.value > 0 &&
+        !window.confirm('Unload the plan? Solved visits you have not exported are discarded.')
+      )
+        return;
+      planLoadError.value = '';
+      clearLoadedPlan();
+    }
+
     function onExportPlan() {
       const plan = loadedPlan.value;
-      if (!plan) return;
+      if (!plan || props.exportBlocked) return;
       const solved = plan.visits.map(v => plan.solved[v.visitId]).filter(v => v !== undefined);
       downloadJson('humility-plan.json', buildHumilityPlanFile(plan.label, solved));
     }
-
-    const maxGoldenEggCostDisplay = computed(() =>
-      formatEIValue(missionFilters.value.maxGoldenEggCost, { trim: true })
-    );
-    const onGoldenEggCostInput = costFieldHandler(setMaxGoldenEggCost);
 
     return {
       waitTimeDraft,
@@ -723,9 +715,16 @@ export default defineComponent({
       totalShips,
       shipsVisibleCount,
       gemCostFieldValue,
-      onGemCostInput,
-      maxGoldenEggCostDisplay,
-      onGoldenEggCostInput,
+      gemCostMode,
+      gemCostInvalid,
+      craftingCostInput,
+      craftingCostInvalid,
+      setGemCostMode,
+      setGemCostInput,
+      setCraftingCostInput,
+      onGemModeChange,
+      normalizeGemCost,
+      normalizeCraftingCost,
       planVisit: activePlanVisit,
       plan: loadedPlan,
       planLoadError,
@@ -734,6 +733,7 @@ export default defineComponent({
       onVisitPicked,
       solvedCount: solvedVisitCount,
       onExportPlan,
+      onUnloadPlan,
       EFFORT_LEVELS,
       effortMeta,
       effortTrack,
@@ -747,13 +747,11 @@ export default defineComponent({
       extras,
       overrides,
       missionFilters,
-      autoCompute,
       playerCraftingLevel,
       playerGoldenEggs,
       playerPreviousCrafts,
       playerTankLevel,
       playerShipsConfig,
-      setAutoCompute,
       setCraftingLevel,
       setPreviousCraftCount,
       setTankLevel,
@@ -764,7 +762,6 @@ export default defineComponent({
       setOverrideTankLevel,
       setOverrideFTL,
       setOverrideZerog,
-      setMaxGemCostEnabled,
       setMaxGoldenEggCostEnabled,
       openPlayerOverridesModal,
     };

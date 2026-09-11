@@ -30,7 +30,6 @@ import { computed, defineComponent, PropType, toRefs } from 'vue';
 import { iconURL } from 'lib';
 import { getArtifactTierPropsFromId as id2artifact } from 'lib/artifacts/data';
 import { cmpArtifactTiers, serializeTankIds } from '@/lib';
-import BaseInfo from 'ui/components/BaseInfo.vue';
 import ArtifactName from '@/components/ArtifactName.vue';
 import ArtifactMissionOptimizer from '@/components/ArtifactMissionOptimizer.vue';
 import Share from '@/components/Share.vue';
@@ -63,7 +62,6 @@ function recursiveIngredientsOf(artifact: ReturnType<typeof id2artifact>) {
 
 export default defineComponent({
   components: {
-    BaseInfo,
     ArtifactName,
     ArtifactMissionOptimizer,
     Share,

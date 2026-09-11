@@ -25,7 +25,7 @@
 
     <template v-if="craftChainTree">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
-        Craft chain<template v-if="craftChainCost > 0.5"> — {{ formatGoldenEggs(craftChainCost) }} GE</template>
+        Craft chain<template v-if="craftChainCost > 0.5"> — <scaled-value :value="craftChainCost" /> GE</template>
       </div>
       <div class="flex items-baseline gap-1 text-xs py-0.5 font-medium text-gray-700 pl-1">
         Target: α = {{ expectedCrafts.toFixed(2) }} craftable
@@ -56,7 +56,7 @@
                 >
               </span>
               <span v-if="node.metrics.goldenEggCost > 0.5" class="whitespace-nowrap text-yellow-600">
-                {{ formatGoldenEggs(node.metrics.goldenEggCost) }} GE
+                <scaled-value :value="node.metrics.goldenEggCost" /> GE
               </span>
             </span>
           </template>
@@ -88,12 +88,13 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from '@/lib';
-import { formatGoldenEggs, sumCraftChainCost } from '@/lib';
+import { sumCraftChainCost } from '@/lib';
 import MissionName from '@/components/MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
+import ScaledValue from './ScaledValue.vue';
 
 export default defineComponent({
-  components: { MissionName, OptimizerRecipeTreeRow },
+  components: { MissionName, OptimizerRecipeTreeRow, ScaledValue },
   props: {
     heading: { type: String, default: '' },
     bestProbability: { type: Number, required: true },
@@ -111,7 +112,7 @@ export default defineComponent({
     const formatCount = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
     // This target's share of the plan's bill, not the plan total.
     const craftChainCost = computed(() => sumCraftChainCost(props.craftChainTree));
-    return { formatCount, craftChainCost, formatGoldenEggs };
+    return { formatCount, craftChainCost };
   },
 });
 </script>

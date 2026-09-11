@@ -37,7 +37,15 @@ import {
   newOverrides,
   OverrideFlags,
 } from './schema';
-import { activePlanVisit, activeVisitSettings, waitTimeSecondsFor } from './plan';
+import {
+  activePlanVisit,
+  activeVisitSettings,
+  setVisitGemCostMode,
+  setVisitGemCostInput,
+  waitTimeSecondsFor,
+  type GemCostMode,
+} from './plan';
+import { formatBudgetValue, parseBudgetInput } from '@/store/budget-input';
 import { gemBudgetFor } from '@/lib/plan/read';
 export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
 export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
@@ -188,7 +196,7 @@ export const effectiveTankLevel = computed<number>(() => {
   // A plan visit's tank level beats the loaded save's: the plan simulates forward and the save
   // only knows today. The manual override still beats both.
   const source = activePlanVisit.value ? activePlanVisit.value.tankLevel : playerTankLevel.value;
-  if (source == null) return fuelTankSizes.length - 1; // largest
+  if (source == null) return extras.value.tankLevel;
   return overrides.value.tankLevel ? extras.value.tankLevel : source;
 });
 
@@ -473,11 +481,17 @@ export function setEffort(level: EffortLevel): void {
 }
 
 export function setMaxGemCostEnabled(enabled: boolean): void {
-  missionFilters.value.maxGemCostEnabled = enabled;
+  if (activePlanVisit.value) setVisitGemCostMode(activePlanVisit.value.visitId, enabled ? 'custom' : 'plan');
+  else missionFilters.value.maxGemCostEnabled = enabled;
 }
 
 export function setMaxGemCost(cost: number): void {
-  missionFilters.value.maxGemCost = Math.max(0, cost);
+  if (!Number.isFinite(cost)) return;
+  if (activePlanVisit.value) setVisitGemCostInput(activePlanVisit.value.visitId, String(Math.max(0, cost)));
+  else {
+    standaloneGemDraft.value = null;
+    missionFilters.value.maxGemCost = Math.max(0, cost);
+  }
 }
 
 export function setMaxGoldenEggCostEnabled(enabled: boolean): void {
@@ -489,19 +503,66 @@ export const effectiveWaitTimeSeconds = computed<number>(() => {
   return visit ? waitTimeSecondsFor(visit) : parseDurationDays(missionFilters.value.waitTimeDays);
 });
 
-// Undefined means no per-ship cap. A plan visit supplies one — what the plan can pay for at that
-// moment — where the standalone planner has none until the player sets it; either way the manual
-// cap wins once it is on, which is what keeps the control live on a plan visit rather than inert.
-export const effectiveMaxGemCost = computed<number | undefined>(() => {
-  if (missionFilters.value.maxGemCostEnabled) return missionFilters.value.maxGemCost;
+// Drafts live outside numeric persisted filters so invalid text cannot silently reuse a cap.
+const standaloneGemDraft = ref<string | null>(null);
+const craftingDraft = ref<string | null>(null);
+export const gemCostMode = computed<GemCostMode>(
+  () => activeVisitSettings.value?.gemCostMode ?? (missionFilters.value.maxGemCostEnabled ? 'custom' : 'unlimited')
+);
+const gemDraft = computed(() =>
+  activePlanVisit.value ? (activeVisitSettings.value?.gemCostInput ?? null) : standaloneGemDraft.value
+);
+export const gemCostInput = computed(() => gemDraft.value ?? formatBudgetValue(missionFilters.value.maxGemCost));
+export const craftingCostInput = computed(
+  () => craftingDraft.value ?? formatBudgetValue(missionFilters.value.maxGoldenEggCost)
+);
+
+export function setGemCostMode(mode: GemCostMode): void {
   const visit = activePlanVisit.value;
-  return visit ? gemBudgetFor(visit, effectiveWaitTimeSeconds.value) : undefined;
+  if (visit) {
+    if (mode === 'custom' && gemCostMode.value === 'plan') {
+      setVisitGemCostInput(visit.visitId, formatBudgetValue(effectiveMaxGemCost.value ?? 0));
+    }
+    setVisitGemCostMode(visit.visitId, mode);
+  } else missionFilters.value.maxGemCostEnabled = mode === 'custom';
+}
+export function setGemCostInput(raw: string): void {
+  if (activePlanVisit.value) setVisitGemCostInput(activePlanVisit.value.visitId, raw);
+  else {
+    const value = parseBudgetInput(raw);
+    if (Number.isFinite(value)) missionFilters.value.maxGemCost = value;
+    standaloneGemDraft.value = raw;
+  }
+}
+export function setCraftingCostInput(raw: string): void {
+  const value = parseBudgetInput(raw);
+  if (Number.isFinite(value)) missionFilters.value.maxGoldenEggCost = value;
+  craftingDraft.value = raw;
+}
+// A field shows four significant figures; a cap nobody has typed over is still enforced to the digit.
+export const effectiveMaxGemCost = computed<number | undefined>(() => {
+  if (gemCostMode.value === 'custom')
+    return gemDraft.value === null ? missionFilters.value.maxGemCost : parseBudgetInput(gemDraft.value);
+  const visit = activePlanVisit.value;
+  return visit && gemCostMode.value === 'plan' ? gemBudgetFor(visit, effectiveWaitTimeSeconds.value) : undefined;
 });
+export const effectiveCraftingBudget = computed<number | undefined>(() => {
+  if (!missionFilters.value.maxGoldenEggCostEnabled) return undefined;
+  return craftingDraft.value === null ? missionFilters.value.maxGoldenEggCost : parseBudgetInput(craftingDraft.value);
+});
+export const gemCostInvalid = computed(
+  () => gemCostMode.value === 'custom' && !Number.isFinite(effectiveMaxGemCost.value)
+);
+export const craftingCostInvalid = computed(
+  () => missionFilters.value.maxGoldenEggCostEnabled && !Number.isFinite(effectiveCraftingBudget.value)
+);
+export const costBudgetsValid = computed(() => !gemCostInvalid.value && !craftingCostInvalid.value);
 
 // Non-finite is dropped rather than clamped: `Math.max(0, NaN)` is NaN, and a NaN or Infinity capacity
 // reads downstream as "no cap" — the checkbox would stay on with nothing enforcing it.
 export function setMaxGoldenEggCost(cost: number): void {
   if (!Number.isFinite(cost)) return;
+  craftingDraft.value = null;
   missionFilters.value.maxGoldenEggCost = Math.max(0, cost);
 }
 
@@ -534,22 +595,4 @@ export function loadMissionFilters(): MissionFilters {
 
 export function persistMissionFilters(): void {
   setLocalStorage(MISSION_FILTERS_LOCALSTORAGE_KEY, JSON.stringify(missionFilters.value));
-}
-
-export const AUTO_COMPUTE_LOCALSTORAGE_KEY = 'auto_compute';
-
-export const autoCompute = ref<boolean>(loadAutoCompute());
-
-export function setAutoCompute(b: boolean): void {
-  autoCompute.value = b;
-}
-
-function loadAutoCompute(): boolean {
-  const str = getLocalStorage(AUTO_COMPUTE_LOCALSTORAGE_KEY);
-  if (str === 'false') return false;
-  return true;
-}
-
-export function persistAutoCompute(): void {
-  setLocalStorage(AUTO_COMPUTE_LOCALSTORAGE_KEY, String(autoCompute.value));
 }

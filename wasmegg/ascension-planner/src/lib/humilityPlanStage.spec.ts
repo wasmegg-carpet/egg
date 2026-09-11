@@ -76,10 +76,17 @@ describe('staging a Humility visit', () => {
     const result = stage(original, visit('ATREGGIES', 1));
     verifyFuelEggs(result);
     const arrival = result.findIndex(a => a.id === 'humility');
-    expect(result.slice(arrival - 4, arrival).map(a => a.type)).toEqual(['shift', 'store_fuel', 'shift', 'store_fuel']);
+    expect(result.slice(arrival - 6, arrival).map(a => a.type)).toEqual([
+      'shift',
+      'wait_for_full_habs',
+      'store_fuel',
+      'shift',
+      'wait_for_full_habs',
+      'store_fuel',
+    ]);
     expect(
       result
-        .slice(arrival - 4, arrival)
+        .slice(arrival - 6, arrival)
         .filter(a => a.type === 'shift')
         .map(a => a.payload.toEgg)
     ).toEqual(['resilience', 'kindness']);
@@ -90,6 +97,22 @@ describe('staging a Humility visit', () => {
       if (a.type === 'shift')
         expect(a.cost).toBe(shiftCost(result[i - 1].endState.soulEggs, result[i - 1].endState.shiftCount));
     });
+  });
+
+  it('opens each new egg phase with a wait for full habs, so its fuel is stored on a full farm', () => {
+    const v = { ...visit('ATREGGIES', 1), visitId: 'start' };
+    const actions = plan(['humility']);
+    actions[0].id = 'start';
+    const result = stage(actions, v);
+    const opened = result.filter(a => a.type === 'shift' && a.sourceTag === humilitySourceTag('start'));
+    expect(opened.length).toBeGreaterThan(0);
+    for (const opening of opened) {
+      const index = result.indexOf(opening);
+      expect(result.slice(index + 1, index + 3).map(a => a.type)).toEqual(['wait_for_full_habs', 'store_fuel']);
+      const beforeStore = result[index + 1].endState;
+      expect(beforeStore.population / beforeStore.habCapacity).toBeCloseTo(1);
+    }
+    verifyFuelEggs(result);
   });
 
   it('preserves unrelated actions and is idempotent when restaged', () => {
@@ -116,8 +139,16 @@ describe('staging a Humility visit', () => {
     expect(result[launchIndex - 1].endState.fuelTankAmounts.integrity).toBe(amount);
   });
 
-  it('rejects the 495T non-Humility plan whose total fuel would require 720T', () => {
-    expect(() => stage(plan(), visit('ATREGGIES', 3))).toThrow(/overflow/);
+  it('accepts the 495T non-Humility plan whose fuel totals 720T with Humility counted', () => {
+    const result = stage(plan(), visit('ATREGGIES', 3));
+    verifyFuelEggs(result);
+    expect(result.some(a => a.type === 'launch_missions')).toBe(true);
+  });
+
+  it('leaves Humility to the farm instead of storing it before the launch', () => {
+    const result = stage(plan(), visit('BCR'));
+    const stored = result.filter(a => a.type === 'store_fuel').map(a => a.payload.egg);
+    expect(stored).toEqual(['integrity']);
   });
 
   it('rejects overflow caused by unrelated banked fuel, before altering a previous staging', async () => {

@@ -51,11 +51,11 @@
       </div>
     </div>
 
-    <div class="text-gray-600 pt-1">Fuel used: {{ formatEIValue(solution.fuelUsed, { trim: true }) }} Eggs</div>
+    <div class="text-gray-600 pt-1">Fuel used: <scaled-value :value="solution.fuelUsed" /> Eggs</div>
 
     <ul>
       <li v-for="[egg, qty] of solution.fuelByEgg.entries()" :key="'egg-' + egg" class="text-gray-600">
-        {{ formatEIValue(qty, { trim: true }) }}
+        <scaled-value :value="qty" />
         <base-icon :icon-rel-path="eggIconPath(egg)" :size="64" class="inline-block -ml-0.5 h-4 w-4"></base-icon>
       </li>
     </ul>
@@ -66,7 +66,7 @@
         :class="unaffordable ? 'border-red-400/60' : 'border-gray-400/60'"
         >Crafting cost</span
       >
-      : {{ formatGoldenEggs(planCost.total) }}
+      : <scaled-value :value="planCost.total" />
       <base-icon icon-rel-path="egginc-extras/icon_golden_egg.png" :size="64" class="inline-block -ml-0.5 h-4 w-4" />
       <span v-if="unaffordable" class="font-medium">— more than you have</span>
     </div>
@@ -102,14 +102,14 @@ import { computed, defineComponent, PropType } from 'vue';
 
 import { eggIconPath, formatDuration, formatEIValue } from 'lib';
 import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
-import { formatGoldenEggs } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';
 import OptimizerProbabilityBreakdown from './OptimizerProbabilityBreakdown.vue';
+import ScaledValue from './ScaledValue.vue';
 
 export default defineComponent({
-  components: { BaseIcon, OptimizerChoiceList, OptimizerExpectedDrops, OptimizerProbabilityBreakdown },
+  components: { BaseIcon, OptimizerChoiceList, OptimizerExpectedDrops, OptimizerProbabilityBreakdown, ScaledValue },
   props: {
     solution: { type: Object as PropType<OptimizerSolution>, required: true },
     maxWaitTimeSeconds: { type: Number, required: true },
@@ -162,15 +162,16 @@ export default defineComponent({
       'Golden eggs needed to perform every craft in this plan, at your own crafting prices (the price of an item drops the more times you have crafted it). Crafts come out of the LP relaxation, so counts — and therefore the bill — are fractional.';
     const idleTooltip =
       'Budget time with no ships in flight — gaps between launches (per your effort setting) plus unused budget at the end. Ships in flight + idle = your max wait time.';
+    const oom = (value: number) => formatEIValue(value, { trim: true });
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
     );
     const unaffordableTooltip = computed(() =>
       props.goldenEggBalance === null
         ? ''
-        : `This plan's crafts cost ${formatGoldenEggs(props.planCost.total)} golden eggs, ` +
-          `${formatGoldenEggs(props.planCost.total - props.goldenEggBalance)} more than your balance of ` +
-          `${formatGoldenEggs(props.goldenEggBalance)}. Cap it under Constraints to make the planner ` +
+        : `This plan's crafts cost ${oom(props.planCost.total)} golden eggs, ` +
+          `${oom(props.planCost.total - props.goldenEggBalance)} more than your balance of ` +
+          `${oom(props.goldenEggBalance)}. Cap it under Constraints to make the planner ` +
           `stay inside what you can spend.`
     );
     const idleTimeSeconds = computed(() =>
@@ -179,8 +180,6 @@ export default defineComponent({
     return {
       eggIconPath,
       formatDuration,
-      formatEIValue,
-      formatGoldenEggs,
       craftingCostTooltip,
       sparseTooltip,
       chanceTooltip,

@@ -22,12 +22,10 @@ import EiafxConfigTable from '@/components/EiafxConfigTable.vue';
 import ConfigModal from '@/components/ConfigModal.vue';
 import PlayerOverridesModal from '@/components/PlayerOverridesModal.vue';
 import {
-  autoCompute,
   config,
   extras,
   missionFilters,
   overrides,
-  persistAutoCompute,
   persistConfig,
   persistExtras,
   persistMissionFilters,
@@ -70,7 +68,6 @@ export default defineComponent({
       },
       { deep: true }
     );
-    watch(autoCompute, () => persistAutoCompute());
   },
 });
 </script>

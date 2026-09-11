@@ -10,6 +10,7 @@ export default defineComponent({
     level: { type: Number, required: true },
     max: { type: Number, required: true },
     interactive: { type: Boolean, default: false },
+    label: { type: String, default: 'Ship' },
   },
   emits: ['set'],
   setup(props, { emit }) {
@@ -24,7 +25,7 @@ export default defineComponent({
               'h-3 w-3 text-gray-400 relative top-px mr-0.5 select-none',
               props.interactive ? 'cursor-pointer' : 'cursor-default opacity-50',
             ],
-            onClick: () => props.interactive && emit('set', 0),
+            'aria-hidden': 'true',
           },
           [
             h('path', {
@@ -46,7 +47,7 @@ export default defineComponent({
                 'h-3.5 w-3.5 text-yellow-400 select-none',
                 props.interactive ? 'cursor-pointer' : 'cursor-default',
               ],
-              onClick: () => props.interactive && emit('set', i),
+              'aria-hidden': 'true',
             },
             [
               filled
@@ -62,7 +63,26 @@ export default defineComponent({
           )
         );
       }
-      return h('div', { class: 'flex items-center space-x-0.5' }, stars);
+      return h(
+        'div',
+        { class: 'flex flex-wrap items-center', role: 'group', 'aria-label': `${props.label}: ${props.level} stars` },
+        props.interactive
+          ? stars.map((star, level) =>
+              h(
+                'button',
+                {
+                  type: 'button',
+                  'aria-label': `${props.label}: set ${level} stars`,
+                  'aria-pressed': props.level === level,
+                  class:
+                    'inline-flex items-center justify-center h-6 w-6 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:bg-gray-100',
+                  onClick: () => emit('set', level),
+                },
+                [star]
+              )
+            )
+          : stars
+      );
     };
   },
 });
