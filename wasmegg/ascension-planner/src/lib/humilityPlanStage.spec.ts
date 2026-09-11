@@ -53,10 +53,34 @@ function stage(actions = plan(), v = visit(), base = baseState()) {
   return stageHumilityVisit(actions, v, base, getSimulationContext()).actions;
 }
 
+// Two Humility visits with a fuel egg's only phase ahead of the first of them, so the second
+// visit's fuel has to be stored across the first visit's launch.
+function twoVisitPlan(): Action[] {
+  return [
+    createSimAction('start_ascension', { initialEgg: 'curiosity' }),
+    shift('kindness', 'k1'),
+    shift('humility', 'h1'),
+    shift('curiosity', 'c2'),
+    shift('humility', 'h2'),
+    createSimAction('modify_bank', { mode: 'set', amount: 1e60, previousValue: 0, delta: 1e60 }),
+  ];
+}
+
+function storedAmounts(actions: Action[], tag: string, egg: VirtueEgg): number[] {
+  return actions
+    .filter(a => a.type === 'store_fuel')
+    .filter(a => a.sourceTag === tag && a.payload.egg === egg)
+    .map(a => a.payload.amount);
+}
+
+function totalFuel(amounts: Record<VirtueEgg, number>): number {
+  return Object.values(amounts).reduce((a, b) => a + b, 0);
+}
+
 function verifyFuelEggs(actions: Action[]) {
   actions.forEach((action, i) => {
     if (action.type === 'store_fuel') expect(action.payload.egg).toBe(actions[i - 1].endState.currentEgg);
-    expect(Object.values(action.endState.fuelTankAmounts).reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(500e12);
+    expect(totalFuel(action.endState.fuelTankAmounts)).toBeLessThanOrEqual(500e12);
   });
 }
 
@@ -163,12 +187,46 @@ describe('staging a Humility visit', () => {
     expect(JSON.stringify(actions.actions)).toBe(before);
   });
 
-  it('checks intermediate fuel storage, not only the tank immediately before launch', () => {
+  it('caps a store by the tank space it has to pass through, not only the space at the launch', () => {
     const base = baseState();
     base.fuelTankAmounts.integrity = 499e12;
     const actions = plan(['curiosity', 'integrity', 'humility']);
     actions.splice(2, 0, createSimAction('remove_fuel', { egg: 'integrity', amount: 499e12 }));
-    expect(() => stage(actions, visit('ATREGGIES', 1), base)).toThrow(/overflow/);
+    const result = stage(actions, visit('ATREGGIES', 1), base);
+    verifyFuelEggs(result);
+    // The tank is full to 1T while the banked Integrity is still in it, so that is all the
+    // Curiosity phase can take; the rest waits for a phase of its own.
+    expect(storedAmounts(result, humilitySourceTag('humility'), 'curiosity')).toEqual([1e12, 49e12]);
+  });
+
+  it('splits fuel for a later visit around an earlier launch instead of overflowing it', () => {
+    const tag = humilitySourceTag('h2');
+    const first = stage(twoVisitPlan(), { ...visit('ATREGGIES', 2), visitId: 'h1' });
+    const second = stage(first, { ...visit('ATREGGIES', 3), visitId: 'h2', visitIndex: 1 });
+    verifyFuelEggs(second);
+    expect(second.filter(a => a.type === 'launch_missions')).toHaveLength(2);
+    // The first visit holds 330T in the tank until its launch. The second visit's Resilience claims
+    // the 170T left over, and its Kindness takes the 50T still free after that; the rest of the
+    // Kindness waits for a phase of its own, after the first launch has emptied its share.
+    expect(storedAmounts(second, tag, 'resilience')).toEqual([120e12]);
+    expect(storedAmounts(second, tag, 'kindness')).toEqual([50e12, 175e12]);
+    const firstLaunch = second.findIndex(a => a.type === 'launch_missions');
+    expect(totalFuel(second[firstLaunch - 1].endState.fuelTankAmounts)).toBe(500e12);
+    const launchIndex = second.findIndex(a => a.type === 'launch_missions' && a.sourceTag === tag);
+    const tank = second[launchIndex - 1].endState.fuelTankAmounts;
+    const required = fuelForLaunches(resolveLaunches(visit('ATREGGIES', 3)));
+    for (const egg of ['curiosity', 'kindness', 'resilience'] as VirtueEgg[]) expect(tank[egg]).toBe(required[egg]);
+  });
+
+  it('rejects the plan when the split still cannot fit, leaving the plan untouched', async () => {
+    const actions = useActionsStore();
+    const base = baseState();
+    base.fuelTankAmounts.integrity = 100e12;
+    actions._initialSnapshot = { ...createEmptySnapshot(), ...base };
+    actions.actions = stage(twoVisitPlan(), { ...visit('ATREGGIES', 1), visitId: 'h1' }, base);
+    const before = JSON.stringify(actions.actions);
+    await expect(useHumilityPlanStore().stage({ ...visit('ATREGGIES', 3), visitId: 'h2' })).rejects.toThrow(/overflow/);
+    expect(JSON.stringify(actions.actions)).toBe(before);
   });
 
   it('adds a wait after the launch to fill the exported window', () => {

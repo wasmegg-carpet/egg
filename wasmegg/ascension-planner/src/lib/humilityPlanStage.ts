@@ -52,6 +52,26 @@ function fuelToStore(
   return Math.max(0, needed - (actions[insertIndex - 1].endState.fuelTankAmounts[egg] ?? 0));
 }
 
+/**
+ * How much more fuel the tank will take at each step, as a budget successive stores draw down.
+ * Fuel stored before an earlier Humility launch shares the tank with the fuel that launch has not
+ * spent yet, so what a store can take is the least free space over the whole stretch its fuel
+ * sits through, and each egg sees what the eggs before it left.
+ */
+function tankSpace(actions: readonly Action[]) {
+  const free = actions.map(({ endState }) => {
+    const stored = Object.values(endState.fuelTankAmounts).reduce((sum, amount) => sum + amount, 0);
+    return (TANK_CAPACITIES[endState.tankLevel] ?? 0) - stored;
+  });
+  return function claim(from: number, until: number, wanted: number): number {
+    let amount = wanted;
+    for (let i = from; i < until; i++) amount = Math.min(amount, free[i]);
+    if (!(amount > 0)) return 0;
+    for (let i = from; i < until; i++) free[i] -= amount;
+    return amount;
+  };
+}
+
 /** Build and validate a replacement without mutating the live plan. */
 export function stageHumilityVisit(
   original: Action[],
@@ -118,42 +138,61 @@ export function stageHumilityVisit(
   function insert(index: number, additions: Action[]): void {
     insertions.set(index, [...(insertions.get(index) ?? []), ...additions]);
   }
-  const newPhases: Action[] = [];
+  /** Weaves the pending insertions, indexed against `source`, into it, and takes them. */
+  function weave(source: Action[]): Action[] {
+    const candidate: Action[] = [];
+    for (let i = 0; i <= source.length; i++) {
+      candidate.push(...(insertions.get(i) ?? []));
+      if (i < source.length) candidate.push(source[i]);
+    }
+    insertions.clear();
+    return candidate;
+  }
+
   // Only the four eggs that have to be tanked. A store is how fuel for an egg the farm is not
   // producing at launch time gets into the tank, so each one is placed in that egg's own visit;
   // Humility needs none, because the farm is producing Humility right up to the launch.
+  const claim = tankSpace(actions);
   for (const { egg } of fuelShortfalls(required, previous.fuelTankAmounts)) {
     if (egg === 'humility') continue;
     let eggIndex = arrivalIndex - 1;
     while (eggIndex >= 0 && actions[eggIndex].endState.currentEgg !== egg) eggIndex--;
-    if (eggIndex >= 0) {
-      const insertIndex = eggIndex + 1;
-      insert(insertIndex, [
-        action('store_fuel', {
-          egg,
-          amount: fuelToStore(actions, egg, required[egg], insertIndex, launchIndex),
-          timeSeconds: 0,
-        }),
-      ]);
-    } else {
-      // Opening a phase by hand is shift, wait for the habs the shift emptied, then work, so a
-      // staged phase opens the same way. The payload is re-derived against the post-shift state on
-      // every simulate, so these are seeds.
-      newPhases.push(
-        action('shift', { fromEgg: previous.currentEgg, toEgg: egg, newShiftCount: 0 }),
-        action('wait_for_full_habs', {
-          habCapacity: previous.habCapacity,
-          ihr: previous.offlineIHR,
-          currentPopulation: 1,
-          totalTimeSeconds: 0,
-        }),
-        action('store_fuel', {
-          egg,
-          amount: fuelToStore(actions, egg, required[egg], arrivalIndex, launchIndex),
-          timeSeconds: 0,
-        })
-      );
-    }
+    if (eggIndex < 0) continue;
+    // That search reaches back across earlier Humility launches, which hold their own fuel in the
+    // tank until they go, so this visit takes only what fits the whole way from there. Storing the
+    // full amount is what would overflow the earlier launch; the rest is picked up below.
+    const insertIndex = eggIndex + 1;
+    const wanted = fuelToStore(actions, egg, required[egg], insertIndex, launchIndex);
+    const amount = claim(insertIndex - 1, arrivalIndex, wanted);
+    if (amount > 0) insert(insertIndex, [action('store_fuel', { egg, amount, timeSeconds: 0 })]);
+  }
+  const filled = insertions.size > 0 ? simulate(weave(actions), context, base) : actions;
+  arrivalIndex = filled.findIndex(step => step.id === visit.visitId);
+  launchIndex = humilityVisitInsertIndex(filled, visit.visitId)!;
+  previous = filled[launchIndex - 1].endState;
+
+  // Whatever the plan's own visits to an egg could not hold — including all of it, for an egg the
+  // plan never visits — is stored in a phase of its own just before this visit. Opening a phase by
+  // hand is shift, wait for the habs the shift emptied, then work, so a staged phase opens the same
+  // way. The payload is re-derived against the post-shift state on every simulate, so these are
+  // seeds.
+  const newPhases: Action[] = [];
+  for (const { egg } of fuelShortfalls(required, previous.fuelTankAmounts)) {
+    if (egg === 'humility') continue;
+    newPhases.push(
+      action('shift', { fromEgg: previous.currentEgg, toEgg: egg, newShiftCount: 0 }),
+      action('wait_for_full_habs', {
+        habCapacity: previous.habCapacity,
+        ihr: previous.offlineIHR,
+        currentPopulation: 1,
+        totalTimeSeconds: 0,
+      }),
+      action('store_fuel', {
+        egg,
+        amount: fuelToStore(filled, egg, required[egg], arrivalIndex, launchIndex),
+        timeSeconds: 0,
+      })
+    );
   }
   insert(arrivalIndex, newPhases);
 
@@ -171,12 +210,7 @@ export function stageHumilityVisit(
   );
   insert(launchIndex, [launch]);
 
-  const candidate: Action[] = [];
-  for (let i = 0; i <= actions.length; i++) {
-    candidate.push(...(insertions.get(i) ?? []));
-    if (i < actions.length) candidate.push(actions[i]);
-  }
-  const result = simulate(candidate, context, base);
+  const result = simulate(weave(filled), context, base);
   for (const step of result) validateTank(step.endState.fuelTankAmounts, step.endState.tankLevel);
   const launchedIndex = result.findIndex(step => step.id === launch.id);
   const launched = result[launchedIndex];
