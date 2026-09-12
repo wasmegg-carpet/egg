@@ -209,9 +209,6 @@
             />
             <span>
               Only use fuel in tank
-              <span class="block text-xs text-gray-500">
-                Budget against what you have stocked right now, egg by egg, instead of a full tank.
-              </span>
             </span>
           </label>
           <ul v-if="fuelFromTankContents" class="mt-2 pl-6 space-y-0.5">

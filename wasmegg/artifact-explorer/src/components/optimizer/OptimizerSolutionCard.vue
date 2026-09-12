@@ -144,17 +144,17 @@ export default defineComponent({
     );
     const multi = computed(() => rows.value.length > 1);
     const sparseTooltip =
-      'Drop data is sparse: no mission has 5+ recorded legendary observations of this artifact, so the displayed rate may be off by several multiples.';
+      'Drop data is sparse: no mission has 5+ recorded legendary observations of this artifact. The displayed rate may be off by several multiples.';
     const chanceTooltip =
-      'Probability of at least one legendary of this artifact from this ship set, via crafting or a direct drop.';
+      'Probability of at least one legendary copy of this artifact from this ship set, via crafting or a direct drop.';
     const jointTooltip = 'The probability of ending up with at least one legendary of every selected artifact.';
     const craftTooltip =
-      'Probability of crafting at least one legendary from the gathered ingredients (plus anything already in your inventory).';
+      'Probability of crafting at least one legendary from the gathered ingredients and everything already in inventory.';
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
     const craftingCostTooltip =
-      'Golden eggs needed to perform every craft in this plan, at your own crafting prices (the price of an item drops the more times you have crafted it). Crafts come out of the LP relaxation, so counts — and therefore the bill — are fractional.';
+      'Golden eggs needed to perform every craft in this plan at the current price to craft';
     const idleTooltip =
-      'Budget time with no ships in flight — gaps between launches (per your effort setting) plus unused budget at the end. Ships in flight + idle = your max wait time.';
+      'Budget time with no ships in flight — gaps between launches due to effort setting plus unused budget at the end. Ships in flight + idle = your max wait time.';
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
     );
