@@ -5,7 +5,7 @@ import { ei } from 'lib';
 
 import type { Action, VirtueEgg } from '@/types';
 import { VIRTUE_EGGS } from '@/types';
-import { Spaceship, DurationType, VIRTUE_FUEL_REQUIREMENTS } from '@/lib/missions';
+import { Spaceship, DurationType, VIRTUE_FUEL_REQUIREMENTS, missionName } from '@/lib/missions';
 import { type Launch, launchEntries } from '@/lib/rockets/launches';
 import { scheduleMissions, type ScheduleResult } from '@/lib/rockets/scheduler';
 
@@ -47,11 +47,16 @@ export class HumilityPlanError extends Error {}
  * the name lookup is the mapping. A name we do not have is an error rather than a skip: dropping
  * a ship would quietly shrink the plan.
  */
+function shipByName(name: string): Spaceship | undefined {
+  const ship = (Spaceship as unknown as Record<string, number | undefined>)[name];
+  return typeof ship === 'number' ? (ship as Spaceship) : undefined;
+}
+
 function shipFromName(name: unknown): Spaceship {
   if (typeof name !== 'string') throw new HumilityPlanError(`Launch has no ship name.`);
-  const ship = (Spaceship as unknown as Record<string, number | undefined>)[name];
-  if (typeof ship !== 'number') throw new HumilityPlanError(`Unknown ship "${name}".`);
-  return ship as Spaceship;
+  const ship = shipByName(name);
+  if (ship === undefined) throw new HumilityPlanError(`Unknown ship "${name}".`);
+  return ship;
 }
 
 /**
@@ -70,6 +75,18 @@ function durationFromName(name: unknown): DurationType {
   const duration = DURATION_BY_NAME[name];
   if (typeof duration !== 'number') throw new HumilityPlanError(`Unsupported mission duration "${name}".`);
   return duration;
+}
+
+/**
+ * How a launch reads in the mission grid. Listing the file's enum names instead ("EPIC ATREGGIES")
+ * left the reader matching them against the grid by eye. An unmappable name is shown as it came:
+ * this renders the file before staging validates it, and staging is what rejects such a name.
+ */
+export function launchLabel(launch: HumilityPlanLaunch): string {
+  const ship = shipByName(launch.ship);
+  const duration = DURATION_BY_NAME[launch.duration];
+  if (ship === undefined || duration === undefined) return `${launch.duration} ${launch.ship}`;
+  return missionName(ship, duration);
 }
 
 export interface ResolvedLaunch extends Launch {

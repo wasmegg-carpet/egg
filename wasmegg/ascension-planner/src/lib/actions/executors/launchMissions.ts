@@ -9,7 +9,7 @@ import { getTargetName } from 'lib';
 
 import type { ActionExecutor } from '../executor';
 import type { LaunchMissionEntry, LaunchMissionsPayload } from '@/types';
-import { SHIP_INFO, DURATION_NAMES, type Spaceship, type DurationType } from '@/lib/missions';
+import { missionName, type Spaceship, type DurationType } from '@/lib/missions';
 import { formatDuration } from '@/lib/format';
 
 // Only an imported plan aims a launch at anything; one built by hand in the mission grid carries no
@@ -33,9 +33,7 @@ export const launchMissionsExecutor: ActionExecutor<'launch_missions'> = {
   getEffectDescription(payload: LaunchMissionsPayload): string {
     const parts: string[] = [];
     for (const m of payload.missions) {
-      const shipName = SHIP_INFO[m.ship as Spaceship]?.displayName ?? 'Unknown';
-      const durName = DURATION_NAMES[m.duration as DurationType] ?? 'Unknown';
-      parts.push(`${m.count}× ${durName} ${shipName}${targetLabel(m)}`);
+      parts.push(`${m.count}× ${missionName(m.ship as Spaceship, m.duration as DurationType)}${targetLabel(m)}`);
     }
     const summary = parts.join(', ');
     const timeStr = payload.totalTimeSeconds === 0 ? '0s (Pre-shift)' : formatDuration(payload.totalTimeSeconds);

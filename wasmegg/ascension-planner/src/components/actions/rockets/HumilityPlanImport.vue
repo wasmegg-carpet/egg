@@ -49,7 +49,7 @@
 
         <ul class="mt-1 space-y-0.5">
           <li v-for="(launch, i) in visit.launches" :key="i" class="text-[11px] text-gray-600">
-            {{ launch.count }}× {{ launch.duration }} {{ launch.ship }}
+            {{ launch.count }}× {{ launchLabel(launch) }}
             <span class="text-gray-400">→ {{ getTargetName(launch.targetAfxId) }}</span>
           </li>
         </ul>
@@ -94,7 +94,13 @@ import { getTargetName } from 'lib';
 
 import { useActionsStore } from '@/stores/actions';
 import { useHumilityPlanStore } from '@/stores/humilityPlan';
-import { humilityVisitIds, stageableVisitIds, HumilityPlanError, type HumilityPlanVisit } from '@/lib/humilityPlan';
+import {
+  humilityVisitIds,
+  launchLabel,
+  stageableVisitIds,
+  HumilityPlanError,
+  type HumilityPlanVisit,
+} from '@/lib/humilityPlan';
 import { formatDuration, formatNumber } from '@/lib/format';
 
 const planStore = useHumilityPlanStore();

@@ -9,6 +9,7 @@ import {
   fuelShortfalls,
   humilityVisitIds,
   humilityVisitInsertIndex,
+  launchLabel,
   launchSchedule,
   stageableVisitIds,
   fuelDrift,
@@ -18,7 +19,7 @@ import {
   type HumilityPlanFile,
 } from './humilityPlan';
 import { fuelForLaunches, launchCost } from './rockets/launches';
-import { DurationType, SHIP_INFO, Spaceship, VIRTUE_FUEL_REQUIREMENTS } from './missions';
+import { DURATION_NAMES, DurationType, SHIP_INFO, Spaceship, VIRTUE_FUEL_REQUIREMENTS } from './missions';
 import { VIRTUE_EGGS } from '@/types';
 import type { Action } from '@/types';
 
@@ -127,6 +128,17 @@ describe('mapping the wire format onto this app’s enums', () => {
     const [visit] = humilityPlan().visits;
     const bogus = { ...visit, launches: [{ ...visit.launches[0], ship: 'CHICKEN_TWELVE' }] };
     expect(() => resolveLaunches(bogus)).toThrow(/CHICKEN_TWELVE/);
+  });
+
+  it('lists a launch under the names the mission grid uses', () => {
+    const [visit] = humilityPlan().visits;
+    expect(visit.launches.map(launchLabel)).toEqual([
+      `${DURATION_NAMES[DurationType.LONG]} ${SHIP_INFO[Spaceship.HENERPRISE].displayName}`,
+      `${DURATION_NAMES[DurationType.EPIC]} ${SHIP_INFO[Spaceship.ATREGGIES].displayName}`,
+    ]);
+    // The list renders before staging validates it, so a name we cannot map shows as it came
+    // rather than taking the row down.
+    expect(launchLabel({ ...visit.launches[0], ship: 'CHICKEN_TWELVE' })).toBe('LONG CHICKEN_TWELVE');
   });
 
   it('rejects a count that would launch nothing or a fraction of a ship', () => {
