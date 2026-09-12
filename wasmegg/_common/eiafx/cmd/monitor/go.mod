@@ -10,7 +10,7 @@ require (
 	github.com/fanaticscripter/EggContractor v0.0.0-20230901162103-3445bf9dd81a
 	github.com/google/go-cmp v0.7.0
 	github.com/sirupsen/logrus v1.9.4
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.10
 	google.golang.org/protobuf v1.36.11
 )
 
