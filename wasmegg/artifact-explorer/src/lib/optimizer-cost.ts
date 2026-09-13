@@ -3,7 +3,6 @@
 
 import type { CraftingPriceParams, Inventory } from 'lib';
 import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
-import { ts } from '@/utils';
 import type { CraftChainMetrics, RecipeTreeNode } from './optimizer-tree';
 import type { OptimizerSolution, RecipeDAG } from './types';
 
@@ -47,12 +46,6 @@ export function computeCraftUnitPrices(
     prices.set(nodeId, fractionalCraftCost(params, previousCraftsOf(playerInventory, nodeId), 1));
   }
   return prices;
-}
-
-// Golden eggs are whole in game; fractional crafts are the only reason these
-// aren't integers, and a rounded number is what a player can act on.
-export function formatGoldenEggs(cost: number): string {
-  return ts(Math.round(cost));
 }
 
 // A node can occur many times in the rendered tree (duplicates carry the same

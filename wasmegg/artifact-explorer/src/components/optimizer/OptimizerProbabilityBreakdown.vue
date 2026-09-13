@@ -6,26 +6,26 @@
 
     <div class="mt-2 text-xs bg-gray-50 rounded p-2 space-y-0.5">
       <div class="font-medium text-gray-700">
-        P(legendary) = {{ (bestProbability * 100).toFixed(2) }}%
+        P(legendary) = {{ formatProbability(bestProbability) }}
         <span class="text-gray-400 font-normal ml-1">= 1 − (1 − P(craft)) × (1 − P(drop))</span>
       </div>
       <div class="pl-3">
-        <span class="text-green-700 font-medium">P(craft) = {{ (craftProbability * 100).toFixed(2) }}%</span>
+        <span class="text-green-700 font-medium">P(craft) = {{ formatProbability(craftProbability) }}</span>
         <span class="text-gray-400 ml-1">via 1 − (1 − p)^α</span>
       </div>
       <div class="pl-6 text-gray-500">
-        α = {{ expectedCrafts.toFixed(2) }} craftable × {{ (pCraft * 100).toFixed(2) }}% per craft
+        α = {{ expectedCrafts.toFixed(2) }} craftable × {{ formatProbability(pCraft) }} per craft
       </div>
       <div class="pl-3">
-        <span class="text-blue-700 font-medium">P(drop) = {{ (dropProbability * 100).toFixed(2) }}%</span>
+        <span class="text-blue-700 font-medium">P(drop) = {{ formatProbability(dropProbability) }}</span>
         <span class="text-gray-400 ml-1">via 1 − e^(−λ)</span>
       </div>
-      <div class="pl-6 text-gray-500">λ = {{ lambda.toFixed(3) }} expected direct legendary drops</div>
+      <div class="pl-6 text-gray-500">λ = {{ formatExpectedCount(lambda) }} expected direct legendary drops</div>
     </div>
 
     <template v-if="craftChainTree">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
-        Craft chain<template v-if="craftChainCost > 0.5"> — {{ formatGoldenEggs(craftChainCost) }} GE</template>
+        Craft chain<template v-if="craftChainCost > 0.5"> — <scaled-value :value="craftChainCost" /> GE</template>
       </div>
       <div class="flex items-baseline gap-1 text-xs py-0.5 font-medium text-gray-700 pl-1">
         Target: α = {{ expectedCrafts.toFixed(2) }} craftable
@@ -56,7 +56,7 @@
                 >
               </span>
               <span v-if="node.metrics.goldenEggCost > 0.5" class="whitespace-nowrap text-yellow-600">
-                {{ formatGoldenEggs(node.metrics.goldenEggCost) }} GE
+                <scaled-value :value="node.metrics.goldenEggCost" /> GE
               </span>
             </span>
           </template>
@@ -66,7 +66,7 @@
 
     <template v-if="missionLegendarySources.length > 0">
       <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3 mb-1">
-        Direct legendary sources (λ = {{ lambda.toFixed(3) }})
+        Direct legendary sources (λ = {{ formatExpectedCount(lambda) }})
       </div>
       <div
         v-for="(contrib, ci) in missionLegendarySources"
@@ -78,7 +78,7 @@
           {{ contrib.numShipsLaunched }}×
           <mission-name :mission="contrib.ship" :target="contrib.targetAfxId" :no-link="true" class="inline-block" />
         </span>
-        <span class="font-mono text-blue-700">+{{ contrib.legendaryDrops.toFixed(4) }}</span>
+        <span class="font-mono text-blue-700">+{{ formatExpectedCount(contrib.legendaryDrops) }}</span>
       </div>
     </template>
   </details>
@@ -87,13 +87,15 @@
 <script lang="ts">
 import { computed, defineComponent, PropType } from 'vue';
 
+import { formatExpectedCount, formatProbability } from 'lib';
 import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from '@/lib';
-import { formatGoldenEggs, sumCraftChainCost } from '@/lib';
+import { sumCraftChainCost } from '@/lib';
 import MissionName from '@/components/MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
+import ScaledValue from './ScaledValue.vue';
 
 export default defineComponent({
-  components: { MissionName, OptimizerRecipeTreeRow },
+  components: { MissionName, OptimizerRecipeTreeRow, ScaledValue },
   props: {
     heading: { type: String, default: '' },
     bestProbability: { type: Number, required: true },
@@ -111,7 +113,7 @@ export default defineComponent({
     const formatCount = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
     // This target's share of the plan's bill, not the plan total.
     const craftChainCost = computed(() => sumCraftChainCost(props.craftChainTree));
-    return { formatCount, craftChainCost, formatGoldenEggs };
+    return { formatCount, craftChainCost, formatExpectedCount, formatProbability };
   },
 });
 </script>
