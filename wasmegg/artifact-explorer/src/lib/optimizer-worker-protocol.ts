@@ -2,7 +2,8 @@
 // prototypes: `ship` is a MissionType whose entire API is getters, so it is narrowed on the way out and rebuilt on the way in.
 
 import { ei, MissionType } from 'lib';
-import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG } from './types';
+import type { OptimizeArgs } from './optimizer-core';
+import type { LaunchOption, LaunchSolution, OptimizerSolution } from './types';
 
 export interface WireShip {
   shipType: ei.MissionInfo.Spaceship;
@@ -13,18 +14,16 @@ export type WireLaunchOption = Omit<LaunchOption, 'ship'> & { ship: WireShip };
 export type WireLaunchSolution = Omit<LaunchSolution, 'ship'> & { ship: WireShip };
 export type WireSolution = Omit<OptimizerSolution, 'choiceHistory'> & { choiceHistory: WireLaunchSolution[] };
 
+// The solve's own arguments, with only `options` narrowed: everything else in `OptimizeArgs` is plain
+// data (numbers, arrays and Maps) that structured clone carries intact, so it needs no
+// narrow/reconstruct pair the way `ship` does.
+export type WireOptimizeArgs = Omit<OptimizeArgs, 'options'> & { options: WireLaunchOption[] };
+
+// The id is the protocol's own, so it sits beside the arguments rather than among them — the worker
+// then forwards `args` whole, and a new solver argument needs no edit here.
 export interface OptimizerRequest {
   id: number;
-  options: WireLaunchOption[];
-  recipeDag: RecipeDAG;
-  desiredArtifactNodeIds: string[];
-  fuelCapacity: number;
-  timeCapacityPerSlot: number;
-  maximumCost: number | undefined;
-  baseYield: Map<string, number>;
-  // Plain data (a number and a Map), so structured clone carries it intact —
-  // no narrow/reconstruct pair needed, unlike `ship`.
-  craftBudget?: CraftBudget;
+  args: WireOptimizeArgs;
 }
 
 export type OptimizerResponse =

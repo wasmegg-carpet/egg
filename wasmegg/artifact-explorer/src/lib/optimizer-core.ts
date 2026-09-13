@@ -5,10 +5,10 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from 'lib';
 import { alphaToProb, compileJointInnerLp, JointInnerLp, refineJointCraftSplit } from './value-function';
 import { NUM_SLOTS, packWitness } from './packing';
+import { finiteQ, qOf } from './concave';
 import { loadHighs } from './solver/highs';
-import { Q_CERTAIN_PROXY } from './solver/milp';
 import { solveWith } from './solver/oa';
-import type { PlanProblem } from './solver/types';
+import { fuelCostOnAxis, type FuelAxis, type PlanProblem } from './solver/types';
 
 // Anything under this is zero: durations, fuel, score differences.
 const ZERO_TOL = 1e-9;
@@ -18,6 +18,10 @@ export interface OptimizeArgs {
   recipeDag: RecipeDAG;
   desiredArtifactNodeIds: string[];
   fuelCapacity: number;
+  // Per-egg budgets from the player's tank. When present these replace `fuelCapacity`:
+  // the plan is limited by the fuel actually stocked, egg by egg, rather than by how
+  // much the tank could hold.
+  fuelByEggCapacity?: Map<ei.Egg, number>;
   timeCapacityPerSlot: number;
   maximumCost: number | undefined;
   baseYield: Map<string, number>;
@@ -39,10 +43,7 @@ interface Assembly {
 function qByTarget(recipeDag: RecipeDAG, targets: string[]): Map<string, number> {
   const QByTarget = new Map<string, number>();
   for (const t of targets) {
-    const pCraft = recipeDag.get(t)?.legendaryCraftProbability ?? 0;
-    // Q = -log(1 - p) is +Infinity at certainty, which no LP matrix can carry. Same proxy the MILP steers by,
-    // so the two matrices agree on what a certain craft is worth; see SPEC.md section 4.
-    QByTarget.set(t, pCraft <= 0 ? 0 : pCraft >= 1 ? Q_CERTAIN_PROXY : -Math.log(1 - pCraft));
+    QByTarget.set(t, finiteQ(qOf(recipeDag.get(t)?.legendaryCraftProbability ?? 0)));
   }
   return QByTarget;
 }
@@ -97,6 +98,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     recipeDag,
     desiredArtifactNodeIds,
     fuelCapacity: rawR,
+    fuelByEggCapacity,
     timeCapacityPerSlot: rawS,
     maximumCost,
     baseYield,
@@ -116,14 +118,25 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   const R = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
   const S = Number.isFinite(rawS) && rawS > 0 ? rawS : 0;
 
+  // A per-egg budget replaces the tank entirely: the egg amounts already sum to no more
+  // than the tank holds, so an aggregate row on top of them would be redundant.
+  const axes: FuelAxis[] =
+    fuelByEggCapacity === undefined
+      ? [{ egg: null, capacity: R }]
+      : [...fuelByEggCapacity].map(([egg, capacity]) => ({
+          egg,
+          capacity: Number.isFinite(capacity) && capacity > 0 ? capacity : 0,
+        }));
+
   // Dropped before indices are assigned, so an allocation index means the same thing here and inside the solver.
-  // Fuel is bounded from above only — a zero-fuel mission is legitimate — and `actualFuel <= R` is what still
-  // holds a NaN fuel budget to the zero-fuel missions.
+  // Fuel is bounded from above only — a zero-fuel mission is legitimate — and the per-axis bound is what still
+  // holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
+  // from reading as free downstream, where a zero capacity means "ignore this axis".
   const feasibleOptions = options.filter(
     o =>
       ZERO_TOL < o.actualTime &&
       o.actualTime <= S &&
-      o.actualFuel <= R &&
+      axes.every(ax => fuelCostOnAxis(o, ax) <= ax.capacity) &&
       (maximumCost === undefined || o.cost <= maximumCost)
   );
 
@@ -143,6 +156,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     dag: recipeDag,
     targets: desiredArtifactNodeIds,
     fuelCapacity: R,
+    fuelAxes: axes,
     timeCapacityPerSlot: S,
     slots: NUM_SLOTS,
     baseYield,

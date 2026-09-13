@@ -36,12 +36,15 @@ const FUEL_TOL = 1e-9;
 // works to, and never above it — see `certifies` below.
 const SLOT_TOL = 1e-9;
 
-function fuelOf(model: Model, counts: readonly number[]): number {
-  let total = 0;
-  for (let g = 0; g < counts.length; g++) {
-    if (counts[g] > 0) total += counts[g] * model.groups[g].fuelFraction;
+function fuelExceeded(model: Model, counts: readonly number[]): boolean {
+  for (let a = 0; a < model.fuelAxes.length; a++) {
+    let total = 0;
+    for (let g = 0; g < counts.length; g++) {
+      if (counts[g] > 0) total += counts[g] * model.groups[g].fuelFractions[a];
+    }
+    if (total > 1 + FUEL_TOL) return true;
   }
-  return total;
+  return false;
 }
 
 function slotLoads(model: Model, layout: Layout, columnValues: Float64Array): number[] {
@@ -57,7 +60,7 @@ function slotLoads(model: Model, layout: Layout, columnValues: Float64Array): nu
 }
 
 function certifies(model: Model, layout: Layout, columnValues: Float64Array, counts: readonly number[]): boolean {
-  if (fuelOf(model, counts) > 1 + FUEL_TOL) return false;
+  if (fuelExceeded(model, counts)) return false;
   const capacity = model.timeCapacitySeconds;
   for (const load of slotLoads(model, layout, columnValues)) {
     if (load > capacity + SLOT_TOL) return false;

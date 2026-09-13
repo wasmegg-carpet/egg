@@ -6,18 +6,12 @@ import {
   type OptimizerRequest,
   type OptimizerResponse,
 } from './optimizer-worker-protocol';
-import type { CraftBudget, LaunchOption, OptimizerSolution, RecipeDAG } from './types';
+import type { OptimizeArgs } from './optimizer-core';
+import type { OptimizerSolution } from './types';
 
-export interface OptimizerRequestInput {
-  options: LaunchOption[];
-  recipeDag: RecipeDAG;
-  desiredArtifactNodeIds: string[];
-  fuelCapacity: number;
-  timeCapacityPerSlot: number;
-  maximumCost: number | undefined;
-  baseYield: Map<string, number>;
-  craftBudget?: CraftBudget;
-}
+// Exactly what the solve takes: the client only adds an id and narrows `ship` for structured clone, so
+// a new solver argument reaches the worker without being spelled out again here.
+export type OptimizerRequestInput = OptimizeArgs;
 
 export interface OptimizerClient {
   // Resolves with null if a newer request superseded this one, or if the
@@ -73,7 +67,7 @@ export function createOptimizerClient(): OptimizerClient {
       const w = (worker ??= spawn());
       const id = nextId++;
       latestId = id;
-      const request: OptimizerRequest = { ...input, id, options: optionsToWire(input.options) };
+      const request: OptimizerRequest = { id, args: { ...input, options: optionsToWire(input.options) } };
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
         w.postMessage(request);

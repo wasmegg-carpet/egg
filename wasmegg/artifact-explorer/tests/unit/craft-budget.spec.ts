@@ -74,9 +74,8 @@ describe('optimize', () => {
     expect(uncappedCost).toBeGreaterThan(0);
 
     const capacity = uncappedCost / 4;
-    const capped = await optimize(config, perfectShipsConfig, cubes, baseYield, 0, undefined, {
-      capacity,
-      unitPrices,
+    const capped = await optimize(config, perfectShipsConfig, cubes, baseYield, {
+      craftBudget: { capacity, unitPrices },
     });
 
     // The bill can land *on* the cap rather than under it, and the two sides reach the same number by
@@ -102,14 +101,13 @@ describe('optimizeFull rejects a craft budget it could not enforce', () => {
 
   it.each([-1, NaN, Infinity, -Infinity])('throws on capacity %p', async capacity => {
     await expect(
-      optimize(config2, perfectShipsConfig, cubes2, baseYield2, 0, undefined, { capacity, unitPrices: prices2 })
+      optimize(config2, perfectShipsConfig, cubes2, baseYield2, { craftBudget: { capacity, unitPrices: prices2 } })
     ).rejects.toThrow(/finite and non-negative/);
   });
 
   it('accepts a capacity of zero, which is a cap and not an absent one', async () => {
-    const plan = await optimize(config2, perfectShipsConfig, cubes2, baseYield2, 0, undefined, {
-      capacity: 0,
-      unitPrices: prices2,
+    const plan = await optimize(config2, perfectShipsConfig, cubes2, baseYield2, {
+      craftBudget: { capacity: 0, unitPrices: prices2 },
     });
     expect(computePlanCraftingCost(plan, null).total).toBe(0);
   }, 60_000);

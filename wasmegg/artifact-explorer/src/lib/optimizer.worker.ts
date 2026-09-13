@@ -38,16 +38,7 @@ ctx.onmessage = async (e: MessageEvent<OptimizerRequest>) => {
       ctx.postMessage({ id: req.id, ok: true, solutions: [] } satisfies OptimizerResponse);
       return;
     }
-    const solution = await optimizeFull({
-      options: optionsFromWire(req.options),
-      recipeDag: req.recipeDag,
-      desiredArtifactNodeIds: req.desiredArtifactNodeIds,
-      fuelCapacity: req.fuelCapacity,
-      timeCapacityPerSlot: req.timeCapacityPerSlot,
-      baseYield: req.baseYield,
-      craftBudget: req.craftBudget,
-      maximumCost: req.maximumCost,
-    });
+    const solution = await optimizeFull({ ...req.args, options: optionsFromWire(req.args.options) });
     response = { id: req.id, ok: true, solutions: solutionsToWire([solution]) };
   } catch (err) {
     // Without this a failed solve never resolves and the UI spins forever.
