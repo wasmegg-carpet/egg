@@ -25,6 +25,8 @@ export interface BaseAction {
   totalTimeSeconds: number;
   dependsOn: string[];
   dependents: string[];
+  /** Import source used to replace a visit's actions on re-import. */
+  sourceTag?: string;
 }
 
 /**
