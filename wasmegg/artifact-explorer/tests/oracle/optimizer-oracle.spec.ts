@@ -1,14 +1,20 @@
 import { describe, expect, test } from 'vitest';
 
 import { optimizeFull } from '@/lib/optimizer-core';
-import type { OptimizerSolution } from '@/lib/types';
+import type { OptimizerSolution, RecipeDAG } from '@/lib/types';
 import { makeNode, makeOpt } from '../unit/spec-helpers';
-import { bruteForceBestJoint } from './enumerate';
+import { bruteForceBestJoint, RANKING_SLOP_JOINT } from './enumerate';
 import { evaluateAllocation, evaluateAllocationJoint, OracleInstance, targetQ } from './evaluate';
 import { FAMILIES, Family, generateInstance } from './generate';
 
 const GAP_TOL = Number(process.env.ORACLE_GAP_TOL ?? 1e-3);
 const SMOKE_GAP_TOL = Math.max(GAP_TOL, 0.05);
+// The bar in the other direction, and deliberately not GAP_TOL. GAP_TOL is slack bought for the solver,
+// which is allowed to be a heuristic; the enumeration is exhaustive over maximal allocations and scores the
+// plan's own allocation with the same exact evaluator, so it has no comparable licence to lose. The one way
+// the plan can legitimately come out ahead is the float pre-ranking mis-ordering a genuine near-tie, and
+// that band is RANKING_SLOP_JOINT wide. Sharing the constant keeps the two from drifting apart.
+const REVERSE_GAP_TOL = RANKING_SLOP_JOINT;
 const DEEP = process.env.RUN_ORACLE === '1';
 const BUDGET_MS = Number(process.env.ORACLE_TIME_BUDGET_MS ?? 25 * 60_000);
 const SEED_BASE = Number(process.env.ORACLE_SEED_BASE ?? 1000);
@@ -16,7 +22,7 @@ const SEED_BASE = Number(process.env.ORACLE_SEED_BASE ?? 1000);
 interface InstanceFailure {
   family: string;
   seed: number;
-  kind: 'reconstruction' | 'optimality' | 'harness';
+  kind: 'reconstruction' | 'optimality' | 'oracle' | 'harness';
   detail: string;
 }
 
@@ -105,7 +111,21 @@ async function checkInstance(inst: OracleInstance, gapTol = GAP_TOL): Promise<In
 
   const planEval = evaluateAllocationJoint(inst, allocation);
   const oracle = bruteForceBestJoint(inst);
-  const gap = Math.max(0, oracle.bestJointProbability - planEval.jointProbability);
+  const signedGap = oracle.bestJointProbability - planEval.jointProbability;
+  // Clamping to zero here and asserting only the positive side is what let the enumerator regress unseen:
+  // an oracle that returns nothing at all reports a gap of zero on every instance and the campaign stays
+  // green. A plan that beats the exhaustive enumeration is a statement about the oracle, not the solver, so
+  // it gets its own failure kind.
+  if (-signedGap > REVERSE_GAP_TOL) {
+    fail(
+      'oracle',
+      `plan [${allocation}] jointP=${planEval.jointProbability.toFixed(12)} beats the exhaustive best ` +
+        `[${oracle.bestAllocation}] jointP=${oracle.bestJointProbability.toFixed(12)} by ` +
+        `${(-signedGap).toExponential(3)} (${oracle.evaluatedCount} of ${oracle.feasibleCount} allocations ` +
+        `were maximal and evaluated)`
+    );
+  }
+  const gap = Math.max(0, signedGap);
   if (gap > gapTol) {
     const solverView = await solverPricesAllocation(inst, oracle.bestAllocation);
     const confirmed = solverView - planEval.jointProbability > GAP_TOL / 2;
@@ -384,6 +404,93 @@ describe('oracle calibration', () => {
     };
     assertNoFailures([await checkInstance(inst)]);
     expect((await runOptimizer(inst)).perTarget).toHaveLength(3);
+  });
+});
+
+// Everything above rests on the enumeration actually enumerating. Nothing else in the suite reads
+// `feasibleCount` or `evaluatedCount`, so a `bruteForceBestJoint` that walked no further than the first leaf
+// would return `bestJointProbability: 0` everywhere, hand every instance a gap of zero, and pass. These
+// instances are sized so both counts follow from the constraints rather than from a recorded number.
+describe('the enumeration behind the oracle', () => {
+  const NUM_SLOTS = 3;
+  // One craft per unit of 'a', so an allocation's value is just how much 'a' it buys.
+  const oneForOne = (pCraft: number): RecipeDAG =>
+    new Map([makeNode('a', true), makeNode('t', false, [['a', 1]], pCraft)].map(n => [n.id, n]));
+
+  test('counts every feasible allocation and evaluates only the maximal ones', () => {
+    const inst: OracleInstance = {
+      label: 'enum-fuel',
+      seed: 0,
+      options: [makeOpt(2, 1, [['a', 1]]), makeOpt(1, 1, [['a', 1]])],
+      dag: oneForOne(0.5),
+      targets: ['t'],
+      fuelCapacity: 4,
+      // Three slots of two time units hold six one-unit missions and fuel pays for at most four, so packing
+      // never binds: the feasible set is exactly the lattice under the fuel line.
+      timeCapacityPerSlot: 2,
+      baseYield: new Map(),
+    };
+    const feasible: number[][] = [];
+    for (let a = 0; 2 * a <= inst.fuelCapacity; a++) {
+      for (let b = 0; 2 * a + b <= inst.fuelCapacity; b++) {
+        feasible.push([a, b]);
+      }
+    }
+    const cheapestFuel = Math.min(...inst.options.map(o => o.actualFuel));
+    const maximal = feasible.filter(([a, b]) => inst.fuelCapacity - (2 * a + b) < cheapestFuel);
+
+    const res = bruteForceBestJoint(inst);
+    expect(res.feasibleCount).toBe(feasible.length);
+    expect(res.evaluatedCount).toBe(maximal.length);
+    // Both options yield one 'a', so spending the fuel on the cheap one buys the most crafts.
+    expect(res.bestAllocation).toEqual([0, 4]);
+    expect(res.bestJointProbability).toBeCloseTo(1 - Math.exp(-4 * targetQ(inst, 't')), 12);
+  });
+
+  test('is stopped by the three-slot packing check, not by fuel', () => {
+    const inst: OracleInstance = {
+      label: 'enum-packing',
+      seed: 0,
+      // Two 3-unit missions never share a 4-unit slot, so the three slots hold three launches. Fuel would
+      // pay for ten; if the enumeration ignored packing it would find them.
+      options: [makeOpt(1, 3, [['a', 1]])],
+      dag: oneForOne(0.5),
+      targets: ['t'],
+      fuelCapacity: 10,
+      timeCapacityPerSlot: 4,
+      baseYield: new Map(),
+    };
+    const res = bruteForceBestJoint(inst);
+    expect(res.feasibleCount).toBe(NUM_SLOTS + 1); // 0..3 launches
+    expect(res.evaluatedCount).toBe(1); // only the full three
+    expect(res.bestAllocation).toEqual([NUM_SLOTS]);
+    expect(res.bestJointProbability).toBeCloseTo(1 - Math.exp(-NUM_SLOTS * targetQ(inst, 't')), 12);
+  });
+
+  test('returns the ranking winner when every candidate is inside the absolute near-tie band', () => {
+    const fuel = 12;
+    const inst: OracleInstance = {
+      label: 'enum-nearties',
+      seed: 0,
+      // Identical cost, and only the first option yields anything, so the enumeration walks from the worst
+      // maximal allocation to the best and the winner is the very last one it sees.
+      options: [makeOpt(1, 1, [['a', 1]]), makeOpt(1, 1, [])],
+      // A craft probability this small puts every candidate's joint probability below RANKING_SLOP_JOINT,
+      // which makes the whole field one near-tie. A finalist list bounded by arrival order then keeps the
+      // eight worst and discards the winner.
+      dag: oneForOne(1e-8),
+      targets: ['t'],
+      fuelCapacity: fuel,
+      timeCapacityPerSlot: 4,
+      baseYield: new Map(),
+    };
+    const res = bruteForceBestJoint(inst);
+    // Every (x, y) with x + y <= fuel is feasible; the maximal ones are those that spend all of it.
+    expect(res.feasibleCount).toBe(((fuel + 1) * (fuel + 2)) / 2);
+    expect(res.evaluatedCount).toBe(fuel + 1);
+    expect(res.bestJointProbability).toBeLessThan(RANKING_SLOP_JOINT);
+    expect(res.bestAllocation).toEqual([fuel, 0]);
+    expect(res.bestJointProbability).toBeCloseTo(1 - Math.exp(-fuel * targetQ(inst, 't')), 15);
   });
 });
 

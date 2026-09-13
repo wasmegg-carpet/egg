@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag, computeBaseYield } from '@/lib';
-import { optimize } from './spec-helpers';
+import { CUBE_RUN, optimize } from './spec-helpers';
 import { enumerateLaunchOptions } from '@/lib/phases';
 
 const Name = ei.ArtifactSpec.Name;
@@ -90,12 +90,7 @@ describe('enumerateLaunchOptions', () => {
 });
 
 describe('optimize', () => {
-  const config = {
-    desiredArtifactNodeIds: ['puzzle-cube-4'],
-    includeNotEnoughData: false,
-    fuelTankCapacity: 2_000_000_000,
-    timeBudgetSeconds: 3 * 24 * 3600,
-  };
+  const config = CUBE_RUN;
 
   it('returns a plan the page can render', async () => {
     const dag = buildRecipeDag(config.desiredArtifactNodeIds, 30);
