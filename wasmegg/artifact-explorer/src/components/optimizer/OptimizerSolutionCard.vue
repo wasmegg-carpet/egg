@@ -1,5 +1,9 @@
 <template>
   <div class="space-y-1 text-sm">
+    <p v-if="overProvisioned" class="text-xs text-amber-700">
+      Ignores earlier visits' drops and crafts; may over-provision.
+    </p>
+
     <div v-if="multi" class="text-lg font-semibold text-green-700">
       <span v-tippy="jointTooltip" class="cursor-help border-b border-dotted border-green-400/60">
         Joint chance of getting all {{ rows.length }} artifacts
@@ -37,11 +41,11 @@
       </div>
     </div>
 
-    <div class="text-gray-600 pt-1">Fuel used: {{ formatEIValue(solution.fuelUsed, { trim: true }) }} Eggs</div>
+    <div class="text-gray-600 pt-1">Fuel used: <scaled-value :value="solution.fuelUsed" /> Eggs</div>
 
     <ul>
       <li v-for="[egg, qty] of solution.fuelByEgg.entries()" :key="'egg-' + egg" class="text-gray-600">
-        {{ formatEIValue(qty, { trim: true }) }}
+        <scaled-value :value="qty" />
         <base-icon :icon-rel-path="eggIconPath(egg)" :size="64" class="inline-block -ml-0.5 h-4 w-4"></base-icon>
       </li>
     </ul>
@@ -52,7 +56,7 @@
         :class="unaffordable ? 'border-red-400/60' : 'border-gray-400/60'"
         >Crafting cost</span
       >
-      : {{ formatGoldenEggs(planCost.total) }}
+      : <scaled-value :value="planCost.total" />
       <base-icon icon-rel-path="egginc-extras/icon_golden_egg.png" :size="64" class="inline-block -ml-0.5 h-4 w-4" />
       <span v-if="unaffordable" class="font-medium">— more than you have</span>
     </div>
@@ -87,15 +91,16 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { eggIconPath, formatDuration, formatEIValue } from 'lib';
-import { formatGoldenEggs, formatProbabilityForDisplay } from '@/lib';
+import { formatProbabilityForDisplay } from '@/lib';
 import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';
 import OptimizerProbabilityBreakdown from './OptimizerProbabilityBreakdown.vue';
+import ScaledValue from './ScaledValue.vue';
 
 export default defineComponent({
-  components: { BaseIcon, OptimizerChoiceList, OptimizerExpectedDrops, OptimizerProbabilityBreakdown },
+  components: { BaseIcon, OptimizerChoiceList, OptimizerExpectedDrops, OptimizerProbabilityBreakdown, ScaledValue },
   props: {
     solution: { type: Object as PropType<OptimizerSolution>, required: true },
     maxWaitTimeSeconds: { type: Number, required: true },
@@ -105,6 +110,7 @@ export default defineComponent({
     goldenEggBalance: { type: Number as PropType<number | null>, default: null },
     targets: { type: Array as PropType<TargetView[]>, required: true },
     planCost: { type: Object as PropType<PlanCost>, required: true },
+    overProvisioned: { type: Boolean, default: false },
   },
   setup(props) {
     // One row per target for any count. `targets` can be empty, in which case the solution's own top-level
@@ -143,15 +149,16 @@ export default defineComponent({
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
     const craftingCostTooltip = 'Total golden eggs for all crafts at your current prices.';
     const idleTooltip = 'Time with no ships in flight, including launch gaps and unused budget.';
+    const oom = (value: number) => formatEIValue(value, { trim: true });
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
     );
     const unaffordableTooltip = computed(() =>
       props.goldenEggBalance === null
         ? ''
-        : `This plan's crafts cost ${formatGoldenEggs(props.planCost.total)} golden eggs, ` +
-          `${formatGoldenEggs(props.planCost.total - props.goldenEggBalance)} more than your balance of ` +
-          `${formatGoldenEggs(props.goldenEggBalance)}. Cap it under Constraints to make the planner ` +
+        : `This plan's crafts cost ${oom(props.planCost.total)} golden eggs, ` +
+          `${oom(props.planCost.total - props.goldenEggBalance)} more than your balance of ` +
+          `${oom(props.goldenEggBalance)}. Cap it under Constraints to make the planner ` +
           `stay inside what you can spend.`
     );
     const idleTimeSeconds = computed(() =>
@@ -160,8 +167,6 @@ export default defineComponent({
     return {
       eggIconPath,
       formatDuration,
-      formatEIValue,
-      formatGoldenEggs,
       formatProbabilityForDisplay,
       craftingCostTooltip,
       sparseTooltip,
