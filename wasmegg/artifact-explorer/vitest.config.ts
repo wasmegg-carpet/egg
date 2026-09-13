@@ -14,6 +14,11 @@ const ARENA_SWEEP = 'tests/arena/invariants.spec.ts';
 
 export default defineConfig({
   plugins: [vue()],
+  // `data/loot.json` is 82MB. Vite's default JSON handling turns it into an ES module with one named export
+  // per key, which means parsing and re-emitting the whole thing as JavaScript source — ~24s per worker, paid
+  // on every run. `stringify` emits a single `JSON.parse('…')` instead, which the engine parses far faster.
+  // `namedExports: false` is what makes that legal: the dataset is only ever imported as a default.
+  json: { stringify: true, namedExports: false },
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,

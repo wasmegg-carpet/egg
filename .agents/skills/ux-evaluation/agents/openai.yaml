@@ -1,0 +1,5 @@
+interface:
+  display_name: "UX Evaluation"
+  short_description: "Evaluate user journeys through source-blind UI exploration"
+policy:
+  allow_implicit_invocation: false

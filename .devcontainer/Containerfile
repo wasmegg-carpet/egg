@@ -1,5 +1,8 @@
 FROM docker.io/redhat/ubi9:9.7
 
+# Chromium ships its own binary but links against these system libraries; the
+# list is what `ldd` on Playwright's chromium build reports as missing on a bare
+# UBI9. Playwright's own `install-deps` only knows apt, so this stays manual.
 RUN yum install -y \
         unzip \
         make \
@@ -8,21 +11,70 @@ RUN yum install -y \
         golang \
         libatomic \
         gpg \
-        &&  \
+        jq \
+        procps-ng \
+        file \
+        alsa-lib \
+        at-spi2-atk \
+        at-spi2-core \
+        atk \
+        cairo \
+        cups-libs \
+        libX11 \
+        libXcomposite \
+        libXdamage \
+        libXext \
+        libXfixes \
+        libXrandr \
+        libdrm \
+        libxcb \
+        libxkbcommon \
+        libxshmfence \
+        mesa-libgbm \
+        nspr \
+        nss \
+        pango \
+        && \
+    yum clean all && \
     useradd dev && \
     mkdir /opt/node && \
     mkdir /opt/protoc && \
     mkdir /opt/ets && \
+    mkdir /opt/gh && \
+    mkdir /opt/.claude && \
+    mkdir /opt/pnpm && \
+    mkdir /opt/netlify-headers-expander && \
+    mkdir /opt/playwright-browsers && \
     chown -R dev:dev /opt/
 
 USER dev
 
+ENV CLAUDE_CONFIG_DIR=/opt/.claude
+
+ENV PNPM_HOME=/opt/pnpm
+
+ENV PATH=$PATH:/opt/protoc/bin:/opt/ets:/opt/node/node-v24.13.1-linux-x64/bin:$HOME/bin:/opt/netlify-headers-expander:/opt/gh/bin:$HOME/go/bin:$PNPM_HOME
+
+# netlify-cli is left unpinned to match .github/workflows/build-wasmegg.yml, so
+# what `run_dist.sh` serves locally is what CI deploys.
 RUN curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.xz | tar xJ -C /opt/node && \
      cd /opt/protoc && \
     curl -fsSL https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protoc-33.5-linux-x86_64.zip -o protoc.zip && \
     unzip protoc.zip && rm protoc.zip && \
     go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest && \
     curl -fsSL https://get.pnpm.io/install.sh | ENV="$HOME/.bashrc" SHELL="$(which bash)" bash - && \
-    curl -fsSL https://github.com/zmwangx/ets/releases/download/v0.2.2/ets_0.2.2_linux_amd64.tar.gz | tar zx -C /opt/ets
+    source /home/dev/.bashrc && \
+    pnpm add --global netlify-cli && \
+    curl -fsSL https://github.com/zmwangx/ets/releases/download/v0.2.2/ets_0.2.2_linux_amd64.tar.gz | tar zx -C /opt/ets && \
+    curl -fsSL https://github.com/zmwangx/netlify-headers-expander/releases/download/v1.0.0/netlify-headers-expander_1.0.0_linux_amd64.tar.gz | tar zx -C /opt/netlify-headers-expander && \
+    curl -fsSL https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz | tar xz -C /opt/gh --strip-components=1 && \
+    curl -fsSL https://claude.ai/install.sh | bash
 
-ENV PATH=$PATH:/opt/protoc/bin:/opt/ets:/opt/node/node-v24.13.1-linux-x64/bin
+# Playwright lives in the image rather than in the repo so that a fresh worktree
+# needs no browser download. Browsers are keyed to the Playwright version, so a
+# repo-level @playwright/test must match PLAYWRIGHT_VERSION to reuse them.
+ARG PLAYWRIGHT_VERSION=1.62.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN npm install -g playwright@${PLAYWRIGHT_VERSION} && \
+    playwright install chromium && \
+    rm -rf "$HOME/.npm"
