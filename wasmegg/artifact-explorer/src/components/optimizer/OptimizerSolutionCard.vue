@@ -149,10 +149,8 @@ export default defineComponent({
     const craftTooltip =
       'Probability of crafting at least one legendary from the gathered ingredients and everything already in inventory.';
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
-    const craftingCostTooltip =
-      'Golden eggs needed to perform every craft in this plan, at your current price to craft each one.';
-    const idleTooltip =
-      'Budget time with no ships in flight: gaps between launches from the effort setting, plus unused budget at the end. Ships in flight and idle add up to your max wait time.';
+    const craftingCostTooltip = 'Total golden eggs for all crafts at your current prices.';
+    const idleTooltip = 'Time with no ships in flight, including launch gaps and unused budget.';
     const oom = (value: number) => formatEIValue(value, { trim: true });
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
