@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { simplexMax } from '@/lib/solver/simplex';
+// Exact BigInt rationals, so the truth an arm is judged against never turns on the float
+// arithmetic under test. `tests/arena/independence.spec.ts` keeps the arena's candidates away
+// from `src/lib` and `tests/unit`; the oracle is on neither side of that fence and shares no
+// code with `simplexMax`.
+import { Frac } from '../oracle/rational';
+import { simplexMaximizeFull } from '../oracle/simplex';
 
 const PREC = 9;
 
@@ -12,6 +18,7 @@ interface Instance {
   b: number[];
   c: number[];
   spread: number; // max_i r_i / min_i r_i over row magnitudes r_i = max_j |A[i][j]|
+  rhsRatio: number; // max_i b_i / r_i — within one row, which is what equilibration divides by
 }
 
 function rowMagnitudes(A: number[][]): number[] {
@@ -107,6 +114,16 @@ function bruteForceOptimum(inst: Instance): number {
   return best;
 }
 
+// Vertex enumeration in floats cannot arbitrate an instance whose vertices sit at 1e18: the
+// slack test there is only accurate to a few thousand. The exact solver has no such limit.
+function exactOptimum(inst: Instance): number {
+  return simplexMaximizeFull(
+    inst.A.map(row => row.map(Frac.fromNumber)),
+    inst.b.map(Frac.fromNumber),
+    inst.c.map(Frac.fromNumber)
+  ).objective.toNumber();
+}
+
 // same shape as tests/unit/lp.spec.ts and tests/oracle/generate.ts:29
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -119,7 +136,7 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-type Arm = 'well-scaled' | 'badly-scaled' | 'badly-scaled objective' | 'degenerate';
+type Arm = 'well-scaled' | 'badly-scaled' | 'badly-scaled objective' | 'degenerate' | 'rhs-dominant';
 
 // Positive row 0 and c >= 0 ensure feasibility at x = 0 and boundedness.
 // Sparse mixed-sign rows model craft conservation; `decades` controls scale spread.
@@ -150,9 +167,13 @@ function makeInstance(rng: () => number, arm: Arm): Instance {
     A.push(row);
   }
 
+  // Independent of the row's own scale on this arm: a budget of 1e18 against unit prices is
+  // a legitimate instance, and it is the ratio b_i / max_j |A[i][j]| — not any spread across
+  // rows — that row equilibration has to survive.
+  const rhsDecades = arm === 'rhs-dominant' ? 18 : 0;
   const b: number[] = [];
   for (let i = 0; i < m; i++) {
-    const scale = Math.pow(10, mag[i]);
+    const scale = Math.pow(10, mag[i] + rng() * rhsDecades);
     // A zero RHS makes x = 0 an optimal-or-not vertex with many rows active at
     // once, which is where the ratio test ties and the degenerate pivots come
     // from. The conservation rows in the real problem are frequently zero.
@@ -170,7 +191,8 @@ function makeInstance(rng: () => number, arm: Arm): Instance {
   const mags = rowMagnitudes(A);
   const lo = Math.min(...mags);
   const hi = Math.max(...mags);
-  return { A, b, c, spread: lo > 0 ? hi / lo : Infinity };
+  const rhsRatio = Math.max(...b.map((bi, i) => (mags[i] > 0 ? bi / mags[i] : 0)));
+  return { A, b, c, spread: lo > 0 ? hi / lo : Infinity, rhsRatio };
 }
 
 interface Disagreement {
@@ -219,7 +241,7 @@ function check(arm: Arm, seed: number, inst: Instance, out: Disagreement[]): boo
     out.push({ arm, seed, kind: 'objective-mismatch', rel: objErr, detail: `c·x=${cx} reported=${res.objective}` });
   }
 
-  const truth = bruteForceOptimum(inst);
+  const truth = arm === 'rhs-dominant' ? exactOptimum(inst) : bruteForceOptimum(inst);
   const scale = objectiveScale(inst);
   const short = (truth - res.objective) / scale;
   if (short > REL) {
@@ -250,6 +272,7 @@ describe('simplexMax on hand-checked LPs', () => {
     const r = simplexMax([[1]], [5], [1]);
     expect(r.objective).toBeCloseTo(5, PREC);
     expect(r.primal[0]).toBeCloseTo(5, PREC);
+    expect(r.status).toBe('optimal');
   });
 
   it('finds a vertex that needs multiple pivots', () => {
@@ -415,28 +438,129 @@ describe('simplexMax degenerate scales', () => {
   });
 });
 
-describe('simplexMax against an enumerated vertex optimum (randomized)', () => {
+describe('simplexMax when the right-hand side dwarfs the coefficients', () => {
+  it('keeps a constraint whose rhs is a billion times its coefficients', () => {
+    // max x + y s.t. x + y <= 1e9. Equilibrating the row by max(|A|, |b|) divided it by 1e9,
+    // which put both coefficients under the pivot floor; the ratio test then found no
+    // candidate row and the constraint was gone, taking the optimum to 0 with it.
+    const r = simplexMax([[1, 1]], [1e9], [1, 1]);
+    expect(r.objective).toBeCloseTo(1e9, PREC);
+    expect(r.status).toBe('optimal');
+  });
+
+  it('prices a column whose own coefficient is 1e-9 of the row it lives in', () => {
+    // max x s.t. 1e-9x + y <= 1, x + y <= 1e9. The second row is the binding one and its
+    // rhs dominates it, so the same scaling defect zeroed the whole entering column.
+    const r = simplexMax(
+      [
+        [1e-9, 1],
+        [1, 1],
+      ],
+      [1, 1e9],
+      [1, 0]
+    );
+    expect(r.objective).toBeCloseTo(1e9, PREC);
+    expect(r.status).toBe('optimal');
+  });
+
+  it('reports a basis it could not prove optimal rather than calling it the answer', () => {
+    // max x s.t. 1e-9x + y <= 1, -x + y <= 1. Only the first row bounds x, at 1e9, but its
+    // 1e-9 sits under a pivot floor set by the second row's -1, so no row can leave. The
+    // point returned is feasible and its objective is a lower bound; `status` is the only
+    // thing that says so, and without it a caller reads 0 as the optimum.
+    const r = simplexMax(
+      [
+        [1e-9, 1],
+        [-1, 1],
+      ],
+      [1, 1],
+      [1, 0]
+    );
+    expect(r.status).toBe('stalled');
+    expect(r.objective).toBe(0);
+    expect(r.primal).toEqual([0, 0]);
+  });
+});
+
+describe('simplexMax ratio-test ties', () => {
+  // Rows 0 and 1 both bind x at 4; row 2 misses by 1e-6, outside any tie band. Which of the
+  // tied pair leaves the basis is not readable from the return value — both are valid ratio
+  // tests and reach the same vertex — so what is pinned here is what the choice must not
+  // cost: the lowest basis index wins, which on this instance means pivoting on an element a
+  // thousand times smaller than the alternative, and the answer must still be exact.
+  const A = [
+    [1e-3, 1],
+    [1, 1],
+    [1, 0],
+  ];
+  const b = [4e-3, 4, 4 + 1e-6];
+  const c = [3, 2];
+
+  it('stays exact when the tie is split onto the smaller pivot', () => {
+    const r = simplexMax(A, b, c);
+    expect(r.objective).toBeCloseTo(12, PREC);
+    expect(r.primal[0]).toBeCloseTo(4, PREC);
+    expect(r.primal[1]).toBeCloseTo(0, PREC);
+  });
+
+  it('gives the same answer whichever order the tied rows arrive in', () => {
+    // The minimum ratio is taken over every row before any row is chosen, so "tied with the
+    // minimum" is a property of a row. Chained pairwise epsilon comparisons are not
+    // transitive, and the row they settle on depends on the order the rows were visited.
+    const order = [2, 1, 0];
+    const r = simplexMax(
+      order.map(i => A[i]),
+      order.map(i => b[i]),
+      c
+    );
+    expect(r.objective).toBeCloseTo(12, PREC);
+    expect(r.primal[0]).toBeCloseTo(4, PREC);
+  });
+});
+
+describe('simplexMax input validation', () => {
+  // The slack basis is only feasible because b >= 0; without the check a negative entry
+  // returns a point outside the polytope, and a NaN returns x = 0 with no complaint.
+  it('rejects a negative right-hand side', () => {
+    expect(() => simplexMax([[1, 1]], [-1], [1, 1])).toThrow(/b\[0\] must be >= 0/);
+  });
+
+  it('rejects NaN in b, A and c', () => {
+    expect(() => simplexMax([[1, 1]], [NaN], [1, 1])).toThrow(/b\[0\] must be >= 0/);
+    expect(() => simplexMax([[1, NaN]], [1], [1, 1])).toThrow(/A\[0\]\[1\] is NaN/);
+    expect(() => simplexMax([[1, 1]], [1], [1, NaN])).toThrow(/c\[1\] is NaN/);
+  });
+});
+
+describe('simplexMax against an independent optimum (randomized)', () => {
   it.each<[Arm, number, number]>([
     ['well-scaled', 0x51e6ce7, 2000],
     ['badly-scaled', 0x9cae1ed, 2000],
     ['badly-scaled objective', 0x0b1ec71e, 2000],
     ['degenerate', 0xde6e7a7e, 2000],
-  ])('agrees with the vertex optimum on %s instances', (arm, seed, n) => {
+    ['rhs-dominant', 0x6b5d0117, 2000],
+  ])('agrees with the independent optimum on %s instances', (arm, seed, n) => {
     const rng = mulberry32(seed);
     const out: Disagreement[] = [];
     let nontrivial = 0;
     let maxSpread = 0;
+    let maxRhsRatio = 0;
     for (let k = 0; k < n; k++) {
       const inst = makeInstance(rng, arm);
       maxSpread = Math.max(maxSpread, Number.isFinite(inst.spread) ? inst.spread : 0);
+      maxRhsRatio = Math.max(maxRhsRatio, inst.rhsRatio);
       if (check(arm, k, inst, out)) nontrivial++;
     }
     console.log(
-      `[simplex ${arm}] ${nontrivial}/${n} with a nonzero optimum, max row spread ${maxSpread.toExponential(2)}`
+      `[simplex ${arm}] ${nontrivial}/${n} with a nonzero optimum, max row spread ` +
+        `${maxSpread.toExponential(2)}, max b/row ratio ${maxRhsRatio.toExponential(2)}`
     );
     // An arm whose optima are all zero would pass on feasibility alone.
     expect(nontrivial).toBeGreaterThanOrEqual(n / 4);
     if (arm === 'badly-scaled') expect(maxSpread).toBeGreaterThan(1e12);
+    if (arm === 'rhs-dominant') expect(maxRhsRatio).toBeGreaterThan(1e12);
+    // The first line is the readable failure: up to eight disagreements printed in full.
+    // The second is the assertion that actually bounds their number.
     expect(out.slice(0, 8)).toEqual([]);
     expect(out.length).toBe(0);
   });

@@ -4,7 +4,7 @@
       <span v-tippy="jointTooltip" class="cursor-help border-b border-dotted border-green-400/60">
         Joint chance of getting all {{ rows.length }} artifacts
       </span>
-      : {{ (solution.jointProbability * 100).toFixed(2) }}%
+      : {{ formatProbabilityForDisplay(solution.jointProbability) }}
     </div>
 
     <div
@@ -20,27 +20,17 @@
         <span v-tippy="chanceTooltip" class="cursor-help border-b border-dotted border-green-400/60">
           Chance of a legendary
         </span>
-        : {{ (row.perTarget.bestProbability * 100).toFixed(2) }}%<sup
-          v-if="row.dropDataIsSparse"
-          v-tippy="sparseTooltip"
-          class="text-gray-500 cursor-help ml-0.5"
-          >?</sup
-        >
+        : {{ formatProbabilityForDisplay(row.perTarget.bestProbability)
+        }}<sup v-if="row.dropDataIsSparse" v-tippy="sparseTooltip" class="text-gray-500 cursor-help ml-0.5">?</sup>
       </div>
       <div class="text-sm text-green-700" :class="multi ? 'pl-6' : 'pl-3'">
-        <span v-tippy="craftTooltip" class="cursor-help border-b border-dotted border-green-400/60">…via crafting</span>
-        : {{ (row.perTarget.craftProbability * 100).toFixed(2) }}%
+        <span v-tippy="craftTooltip" class="cursor-help border-b border-dotted border-green-400/60">Crafting</span>
+        : {{ formatProbabilityForDisplay(row.perTarget.craftProbability) }}
       </div>
       <div class="text-sm text-green-700" :class="multi ? 'pl-6' : 'pl-3'">
-        <span v-tippy="dropTooltip" class="cursor-help border-b border-dotted border-green-400/60"
-          >…via direct drops</span
-        >
-        : {{ (row.perTarget.dropProbability * 100).toFixed(2) }}%<sup
-          v-if="row.dropDataIsSparse"
-          v-tippy="sparseTooltip"
-          class="text-gray-500 cursor-help ml-0.5"
-          >?</sup
-        >
+        <span v-tippy="dropTooltip" class="cursor-help border-b border-dotted border-green-400/60">Direct drops</span>
+        : {{ formatProbabilityForDisplay(row.perTarget.dropProbability)
+        }}<sup v-if="row.dropDataIsSparse" v-tippy="sparseTooltip" class="text-gray-500 cursor-help ml-0.5">?</sup>
       </div>
       <div class="text-gray-600" :class="multi ? 'pl-3' : ''">
         Expected crafts: {{ row.perTarget.expectedCrafts.toFixed(1) }}
@@ -97,8 +87,8 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { eggIconPath, formatDuration, formatEIValue } from 'lib';
+import { formatGoldenEggs, formatProbabilityForDisplay } from '@/lib';
 import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
-import { formatGoldenEggs } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';
@@ -151,10 +141,8 @@ export default defineComponent({
     const craftTooltip =
       'Probability of crafting at least one legendary from the gathered ingredients and everything already in inventory.';
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
-    const craftingCostTooltip =
-      'Golden eggs needed to perform every craft in this plan at the current price to craft';
-    const idleTooltip =
-      'Budget time with no ships in flight — gaps between launches due to effort setting plus unused budget at the end. Ships in flight + idle = your max wait time.';
+    const craftingCostTooltip = 'Total golden eggs for all crafts at your current prices.';
+    const idleTooltip = 'Time with no ships in flight, including launch gaps and unused budget.';
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
     );
@@ -174,6 +162,7 @@ export default defineComponent({
       formatDuration,
       formatEIValue,
       formatGoldenEggs,
+      formatProbabilityForDisplay,
       craftingCostTooltip,
       sparseTooltip,
       chanceTooltip,

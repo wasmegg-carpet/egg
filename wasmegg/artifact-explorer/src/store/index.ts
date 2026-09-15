@@ -237,9 +237,9 @@ function computeShipLevelFromPoints(shipType: Spaceship, points: number): number
 }
 
 // `virtue.afx.tankFuels` is positional, and the virtue eggs sit at indices 20-24 as
-// [Curiosity, Integrity, Humility, Resilience, Kindness]. Humility is absent here on
-// purpose: `phases.ts` strips it from every mission's fuel cost (it is free on the Path
-// of Virtue), so a budget for it would constrain nothing.
+// [Curiosity, Integrity, Humility, Resilience, Kindness]. Humility is absent here because
+// `makeLaunchOption` in problem-inputs.ts strips it from every mission's cost, so a budget for
+// it would constrain nothing.
 const VIRTUE_TANK_FUEL_INDICES: ReadonlyArray<readonly [ei.Egg, number]> = [
   [ei.Egg.CURIOSITY, 20],
   [ei.Egg.INTEGRITY, 21],

@@ -2,13 +2,13 @@
 // filtered and duplicate-merged option groups.
 
 import type { LaunchOption, RecipeDAG } from '../types';
-import { fuelAxesOf, fuelCostOnAxis, type FuelAxis, type PlanProblem } from './types';
-import { qOf } from '../concave';
+import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
+import { qOf } from '../objective';
 
-// Stand-ins for a bound no budget gives; see SPEC.md section 2. `MAX_PER_SLOT` is `milp.ts`'s column
+// Stand-ins for a bound no budget gives; see SPEC.md section 2. `UNBOUNDED_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
-const GROUP_CAP = 1e9;
-export const MAX_PER_SLOT = 1e6;
+const UNBOUNDED_GROUP = 1e9;
+export const UNBOUNDED_PER_SLOT = 1e6;
 
 export interface Group {
   // Normalized: a fraction of each fuel budget, and of one slot's horizon. One
@@ -23,8 +23,8 @@ export interface Group {
 }
 
 export interface Model {
-  // Sorted by node id, NOT the order the caller listed them; `requestedOrder` maps back.
-  targets: string[];
+  // Sorted by node id; `requestedOrder` maps back to the caller's order.
+  sortedTargets: string[];
   requestedOrder: number[];
   craftables: string[];
   items: string[];
@@ -123,7 +123,7 @@ function craftUpperBounds(
     if (!node || node.children.length === 0) continue;
     let bound = Infinity;
     for (const child of node.children) {
-      if (!(child.quantity > 0)) continue;
+      if (!(child.qty > 0)) continue;
       const itemIdx = itemIndex.get(child.nodeId);
       if (itemIdx === undefined) {
         bound = Infinity;
@@ -132,7 +132,7 @@ function craftUpperBounds(
       let supply = dropped[itemIdx];
       const producer = craftIndex.get(child.nodeId);
       if (producer !== undefined) supply += caps[producer];
-      const limit = supply / child.quantity;
+      const limit = supply / child.qty;
       if (limit < bound) bound = limit;
     }
     caps[idx] = Number.isFinite(bound) && bound >= 0 ? bound : Infinity;
@@ -140,12 +140,21 @@ function craftUpperBounds(
   return caps;
 }
 
+// Largest whole number of launches that fits: the count `n` with `n * unitCost <= capacity`. Computed
+// from the two quantities rather than from their ratio's reciprocal, which `Math.floor` then drops a
+// launch off — a 1-second mission in a 93-second slot gives `1/(1/93) = 93.00000000000001` one way and
+// `92.99999999999999` the other. The multiplication is the same arithmetic the row itself is checked in.
+export function maxLaunches(capacity: number, unitCost: number): number {
+  const n = Math.floor(capacity / unitCost);
+  return (n + 1) * unitCost <= capacity ? n + 1 : n;
+}
+
 // Whether the rows alone bound this group's columns. They do not when a zero fraction leaves `perSlotCap`
 // or `cap` on a stand-in, and a group taking another's launches on is the one thing that can walk a column
-// into such a cap. A positive duration whose slot-row bound is under `MAX_PER_SLOT` settles it: every other
+// into such a cap. A positive duration whose slot-row bound is under `UNBOUNDED_PER_SLOT` settles it: every other
 // term in either minimum is then that bound or smaller.
-function boundsFollowFromRows(grp: Group): boolean {
-  return grp.timeFraction > 0 && Math.floor(1 / grp.timeFraction) <= MAX_PER_SLOT;
+function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number): boolean {
+  return grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT;
 }
 
 // `taker` dominates `given` when every launch of `given` could have been flown as a `taker` in the same
@@ -173,24 +182,29 @@ function dominates(taker: Group, given: Group): boolean {
 }
 
 // Requiring strictness makes `dominates` a strict partial order, so every dropped group has a dominator
-// that itself survives, and testing each group against the whole menu — dropped ones included — leaves the
+// that itself survives, and testing each group against the whole menu, dropped ones included, leaves the
 // survivors a function of the group set rather than of the order it was walked in.
-function pruneDominated(groups: readonly Group[]): Group[] {
+function pruneDominated(groups: readonly Group[], timeCapacitySeconds: number): Group[] {
   return groups.filter(
-    given => !groups.some(taker => taker !== given && boundsFollowFromRows(taker) && dominates(taker, given))
+    given =>
+      !groups.some(
+        taker => taker !== given && boundsFollowFromRows(taker, timeCapacitySeconds) && dominates(taker, given)
+      )
   );
 }
 
-export function buildModel(problem: PlanProblem): Model {
+export function buildModel(raw: PlanProblem): Model {
+  // The same boundary `optimizeFull` enters through, and idempotent, so entering it twice costs a copy
+  // and nothing else. Everything below may assume budgets are finite and target ids unique.
+  const problem = normalizeProblem(raw);
   const dag: RecipeDAG = problem.dag;
 
   // Sorted so the model is a function of the target *set*: the closure below visits targets in order, so
   // permuting the caller's list permutes every row and column and a node-limited search then diverges.
+  // `requestedOrder` is a bijection back onto the caller's list, which the deduplication above is what
+  // makes possible.
   const requested = [...problem.targets];
-  const requestedOrder = requested
-    .map((_, i) => i)
-    // Ties broken by original position, so duplicate ids stay a bijection.
-    .sort((a, b) => (requested[a] < requested[b] ? -1 : requested[a] > requested[b] ? 1 : a - b));
+  const requestedOrder = requested.map((_, i) => i).sort((a, b) => (requested[a] < requested[b] ? -1 : 1));
   const targets = requestedOrder.map(i => requested[i]);
 
   const orderIds: string[] = [];
@@ -227,7 +241,7 @@ export function buildModel(problem: PlanProblem): Model {
   for (const id of craftables) {
     const j = craftIndex.get(id)!;
     for (const child of dag.get(id)!.children) {
-      consRows[itemIndex.get(child.nodeId)!][j] += child.quantity;
+      consRows[itemIndex.get(child.nodeId)!][j] += child.qty;
     }
   }
   for (const [item, i] of itemIndex) {
@@ -238,7 +252,7 @@ export function buildModel(problem: PlanProblem): Model {
   const craftChildren = craftables.map(id =>
     dag
       .get(id)!
-      .children.filter(child => child.quantity > 0)
+      .children.filter(child => child.qty > 0)
       .map(child => ({
         itemIdx: itemIndex.get(child.nodeId)!,
         childCraft: craftIndex.get(child.nodeId) ?? -1,
@@ -246,7 +260,7 @@ export function buildModel(problem: PlanProblem): Model {
   );
 
   const baseInventoryByItem = items.map(item => {
-    const quantity = problem.baseYield.get(item) ?? 0;
+    const quantity = problem.ownedStock.get(item) ?? 0;
     return Number.isFinite(quantity) && quantity >= 0 ? quantity : 0;
   });
   const Qs = targets.map(t => qOf(dag.get(t)?.legendaryCraftProbability ?? 0));
@@ -265,7 +279,7 @@ export function buildModel(problem: PlanProblem): Model {
   // Normalized budgets: every fuel axis 1, per-slot time 1. An axis the player has nothing on
   // affords nothing: a positive cost against it is unaffordable at any count, so the option falls
   // out on `cap < 1` below, exactly as `timeFraction` already handles a zero time budget.
-  const axes = fuelAxesOf(problem);
+  const axes = problem.fuelAxes;
   const timeCap = problem.timeCapacityPerSlot;
   const slots = problem.slots;
 
@@ -309,9 +323,9 @@ export function buildModel(problem: PlanProblem): Model {
     // The tightest axis binds; an option needing more of one egg than the player has
     // gets a fraction above 1 and falls out on `cap < 1`.
     const cap = Math.min(
-      ...fuelFractions.map(f => (f > 0 ? Math.floor(1 / f) : GROUP_CAP)),
-      timeFraction > 0 ? Math.floor(slots / timeFraction) : GROUP_CAP,
-      GROUP_CAP
+      ...costs.map((cost, a) => (cost > 0 ? maxLaunches(axes[a].capacity, cost) : UNBOUNDED_GROUP)),
+      opt.actualTime > 0 ? maxLaunches(slots * timeCap, opt.actualTime) : UNBOUNDED_GROUP,
+      UNBOUNDED_GROUP
     );
     if (cap < 1) return;
 
@@ -354,10 +368,10 @@ export function buildModel(problem: PlanProblem): Model {
 
   // Dropped before `craftUpperBounds`, which counts every group at its cap: fewer groups only tightens a
   // bound that stays an over-statement of what the remaining ones can supply.
-  const kept = pruneDominated(groups);
+  const kept = pruneDominated(groups, timeCap);
 
   return {
-    targets,
+    sortedTargets: targets,
     requestedOrder,
     craftables,
     items,

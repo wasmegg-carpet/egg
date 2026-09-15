@@ -103,7 +103,7 @@ import {
 } from '@/store';
 import {
   buildRecipeDag,
-  computeBaseYield,
+  computeOwnedStock,
   computeCraftChainTree,
   computeInventoryTree,
   computeCraftUnitPrices,
@@ -116,7 +116,7 @@ import {
   type OptimizerSolution,
   type TargetView,
 } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from '@/lib/optimizer-client';
 import OptimizerSidebar from './optimizer/OptimizerSidebar.vue';
 import OptimizerInventoryPanel from './optimizer/OptimizerInventoryPanel.vue';
@@ -178,12 +178,12 @@ export default defineComponent({
       )
     );
 
-    const playerBaseYield = computed<ReturnType<typeof computeBaseYield>>(() =>
-      computeBaseYield(playerInventory.value, artifactIds.value, recipeDag.value)
+    const playerOwnedStock = computed<ReturnType<typeof computeOwnedStock>>(() =>
+      computeOwnedStock(playerInventory.value, artifactIds.value, recipeDag.value)
     );
 
     // Launch-option enumeration stays on the main thread: it is the only step needing the loot dataset, which this bundle already loads.
-    // Kept off `computeInputs` so that editing a budget — which cannot change the menu — does not re-enumerate it.
+    // Kept off `computeInputs` so that editing a budget, which cannot change the menu, does not re-enumerate it.
     const launchMenu = computed(() =>
       enumerateLaunchOptions(
         effectiveConfig.value,
@@ -192,7 +192,7 @@ export default defineComponent({
       )
     );
 
-    // Likewise: the prices are a function of the tree and the inventory, not of the cap they are compared against.
+    // The prices are likewise a function of the tree and the inventory, not of the cap they are compared against.
     const craftUnitPrices = computed(() => computeCraftUnitPrices(recipeDag.value, playerInventory.value));
 
     const computeInputs = computed<OptimizerRequestInput | null>(() => {
@@ -208,7 +208,7 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
-        baseYield: playerBaseYield.value,
+        ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
         craftBudget,
       };
