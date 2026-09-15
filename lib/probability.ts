@@ -1,9 +1,9 @@
 // Display rules for the mission optimizer's probabilities and expected counts.
 //
-// These quantities span a dozen decades — a joint probability is a product over targets, and the
-// solver works in nats precisely because its scores reach 1e-13 — so a fixed decimal count either
+// These quantities span a dozen decades. A joint probability is a product over targets, and the
+// solver works in nats precisely because its scores reach 1e-13. So a fixed decimal count either
 // rounds the small end to zero or claims precision at the large end that nothing behind it
-// supports: drop rates come from sparse observations that can be off by multiples, and the
+// supports. Drop rates come from sparse observations that can be off by multiples, and the
 // envelope the search optimizes over is only good to ~4.5e-2 nats. One decimal, everywhere,
 // including on the mantissa once the value is small enough to need one.
 
@@ -28,8 +28,8 @@ function scientific(x: number): string {
 }
 
 // Rounding may carry a value into the band above; where it does, the band above spells it. Left to
-// its own band, 0.0996 renders as "0.10" and 0.00997 as "10.0×10⁻³" — each the neighbouring band's
-// answer, spelled wrong.
+// its own band, 0.0996 renders as "0.10" and 0.00997 as "10.0×10⁻³". Each is the neighbouring
+// band's answer written in the wrong notation.
 function formatMagnitude(x: number): string {
   if (x >= 0.1) {
     return String(Math.round(x * 10) / 10);
@@ -42,7 +42,8 @@ function formatMagnitude(x: number): string {
 }
 
 /**
- * A probability in [0, 1] as a percentage, to one decimal — of the mantissa below 0.01%.
+ * A probability in [0, 1] as a percentage, to one decimal. Below 0.01% the decimal is on the
+ * mantissa.
  *
  * 0 and 1 are reported exactly, because the optimizer means them exactly: an unreachable target
  * scores -Infinity and a prob-1 craft scores +Infinity. Anything merely close to certain is
@@ -57,7 +58,7 @@ export function formatProbability(p: number): string {
   return `${formatMagnitude(p * 100)}%`;
 }
 
-/** An expected count — λ, expected drops — on the same scale rules as `formatProbability`. */
+/** An expected count, such as λ or expected drops, on the same scale rules as `formatProbability`. */
 export function formatExpectedCount(x: number): string {
   if (!Number.isFinite(x)) return 'NaN';
   if (x < 0) return `-${formatExpectedCount(-x)}`;
