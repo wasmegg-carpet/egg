@@ -1,8 +1,4 @@
-// `cmpArtifactTiers` and `cmpArtifacts` both run at import time, to build `artifactTiers` and
-// `artifacts`. Anything that imports this module therefore executes every line of both comparators
-// before a single test runs, which makes the coverage report say they are covered while nothing has
-// ever looked at the order that came out. Every branch in them can be inverted, or made to return
-// zero, without another spec in the suite noticing.
+// Comparators run at import time; assert their ordering, not just execution coverage.
 
 import { describe, expect, it } from 'vitest';
 import { ei } from 'lib';

@@ -180,13 +180,8 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
   let feasibleCount = 0;
   let evaluatedCount = 0;
   let bestFloat = -Infinity;
-  // The float ranking's own winner, tracked on its own and never routed through `finalists`.
-  // MAX_FINALISTS_JOINT is a cost bound on how many near-ties get the expensive exact treatment, but as a
-  // cap on a count it used to evict by arrival order: RANKING_SLOP_JOINT is absolute, so on an instance
-  // whose joint probabilities all sit below it every candidate looks like a tie, the first eight seen filled
-  // the list and the winner was thrown away. That is not hypothetical: random-multi/8 returned 5.3e-9
-  // against a true optimum of 5.8e-7 and called it best. Nothing the cap or the slop does can reach these
-  // two variables now, so the tie set can only ever add candidates to consider, never remove the winner.
+  // Keep the float winner outside the capped near-tie set so arrival order cannot evict it.
+  // Regression: random-multi/8 previously returned 5.3e-9 instead of 5.8e-7.
   let bestFloatAllocation: number[] | null = null;
   // Scores travel with the finalists so a new best can evict the entries that are no longer near-ties of it,
   // rather than leaving a full list of some earlier score's ties in the way.

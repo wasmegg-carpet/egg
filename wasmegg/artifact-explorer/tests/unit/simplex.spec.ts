@@ -3,18 +3,9 @@ import { simplexMax } from '@/lib/solver/simplex';
 
 const PREC = 9;
 
-// ---------------------------------------------------------------------------
-// Independent optimum, by vertex enumeration.
-//
-// simplexMax returns a primal and an objective and no dual, so there is no
-// certificate to check the way tests/unit/lp.spec.ts checks solveLp's. Instead
-// the optimum is recomputed from the definition: max c·x over Ax <= b, x >= 0
-// with c >= 0 and a strictly positive budget row is bounded and attained at a
-// vertex, and every vertex is the unique solution of n linearly independent
-// active constraints drawn from the m rows plus the n nonnegativity bounds. For
-// n <= 5 that is at most C(10, 5) = 252 tiny linear systems, which is affordable
-// per instance and shares no code with the solver under test.
-// ---------------------------------------------------------------------------
+// Verify the optimum independently by enumerating vertices: solve every set of
+// n active constraints from Ax <= b and x >= 0. These bounded instances have n <= 5,
+// requiring at most C(10, 5) = 252 small systems. No solver code is shared.
 
 interface Instance {
   A: number[][];
@@ -50,12 +41,8 @@ function solveSquare(M: number[][], rhs: number[]): number[] | null {
   return a.map((row, i) => row[n] / row[i]);
 }
 
-// The LP's own objective scale, from the budget row alone: every unit of x_j is
-// paid for out of row 0, so c·x = sum_j (c_j / A_0j) * A_0j x_j <= b_0 * max_j
-// (c_j / A_0j). Optimality is measured against this rather than against the
-// optimum itself, because a polytope that pins x at 1e-17 has an optimum made
-// entirely of rounding dust and calling a 1e-16 shortfall there "100% short"
-// says nothing about the solver.
+// Bound objective scale by b_0 * max_j(c_j / A_0j), using the positive budget row.
+// Relative error against a near-zero optimum would amplify rounding noise.
 function objectiveScale(inst: Instance): number {
   let ratio = 0;
   for (let j = 0; j < inst.c.length; j++) {
@@ -134,11 +121,8 @@ function mulberry32(seed: number): () => number {
 
 type Arm = 'well-scaled' | 'badly-scaled' | 'badly-scaled objective' | 'degenerate';
 
-// Row 0 is the strictly positive budget row and c >= 0, which together make
-// every instance feasible at x = 0 and bounded. The other rows are mixed-sign
-// and sparse like the craft-conservation rows the evaluator actually builds.
-// `decades` is the whole point of the badly-scaled arm: it is the row spread
-// the equilibration in simplexMax exists to absorb.
+// Positive row 0 and c >= 0 ensure feasibility at x = 0 and boundedness.
+// Sparse mixed-sign rows model craft conservation; `decades` controls scale spread.
 function makeInstance(rng: () => number, arm: Arm): Instance {
   const n = 2 + Math.floor(rng() * 4); // 2..5 vars
   const m = 2 + Math.floor(rng() * 4); // 2..5 rows
@@ -311,10 +295,8 @@ describe('simplexMax on hand-checked LPs', () => {
   });
 
   it('holds the optimum across a 1e14 row spread', () => {
-    // 2e14 x + 1e14 y <= 6e14 is 2x + y <= 6 in disguise; with x + y <= 4 the
-    // vertices are (0,0), (3,0), (2,2), (0,4) and 3x+2y peaks at (2,2) = 10.
-    // Against an absolute pivot tolerance on the raw tableau the first row's
-    // entries swamp the second and the solve stops early.
+    // Scaled 2x + y <= 6 with x + y <= 4: 3x + 2y peaks at (2, 2), value 10.
+    // Raw tableau entries would swamp the second row's pivot tolerance.
     const r = simplexMax(
       [
         [2e14, 1e14],
@@ -363,10 +345,7 @@ describe('simplexMax on hand-checked LPs', () => {
   });
 });
 
-// The guards on `cScale` and on the per-row `s`. Both exist so that a scale of
-// zero or infinity never reaches a division: without them the tableau fills
-// with NaN, every reduced cost compares false, and the solve returns x = 0 with
-// a NaN objective rather than failing.
+// Zero and infinite scales must not produce NaN tableau entries or objectives.
 describe('simplexMax degenerate scales', () => {
   it('accepts an all-zero objective', () => {
     const r = simplexMax(
@@ -423,10 +402,7 @@ describe('simplexMax degenerate scales', () => {
   });
 
   it('keeps rows independent when one is 1e300 times the other', () => {
-    // x + y <= 4 written twice, once multiplied through by 1e300. Both rows
-    // say the same thing, so the optimum is 4 either way; without row
-    // equilibration the scaled row's slack column is 1 against entries of
-    // 1e300 and the pivot on it is indistinguishable from zero.
+    // Duplicate x + y <= 4 at scale 1e300. Equilibration must preserve the optimum 4.
     const r = simplexMax(
       [
         [1e300, 1e300],

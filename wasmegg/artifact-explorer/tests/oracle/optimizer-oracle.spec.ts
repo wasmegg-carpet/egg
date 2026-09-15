@@ -9,11 +9,8 @@ import { FAMILIES, Family, generateInstance } from './generate';
 
 const GAP_TOL = Number(process.env.ORACLE_GAP_TOL ?? 1e-3);
 const SMOKE_GAP_TOL = Math.max(GAP_TOL, 0.05);
-// The bar in the other direction, and deliberately not GAP_TOL. GAP_TOL is slack bought for the solver,
-// which is allowed to be a heuristic; the enumeration is exhaustive over maximal allocations and scores the
-// plan's own allocation with the same exact evaluator, so it has no comparable licence to lose. The one way
-// the plan can legitimately come out ahead is the float pre-ranking mis-ordering a genuine near-tie, and
-// that band is RANKING_SLOP_JOINT wide. Sharing the constant keeps the two from drifting apart.
+// The oracle may lose only within float pre-ranking tolerance, not the solver
+// heuristic's GAP_TOL. Share the ranking constant with the enumerator.
 const REVERSE_GAP_TOL = RANKING_SLOP_JOINT;
 const DEEP = process.env.RUN_ORACLE === '1';
 const BUDGET_MS = Number(process.env.ORACLE_TIME_BUDGET_MS ?? 25 * 60_000);
@@ -112,10 +109,7 @@ async function checkInstance(inst: OracleInstance, gapTol = GAP_TOL): Promise<In
   const planEval = evaluateAllocationJoint(inst, allocation);
   const oracle = bruteForceBestJoint(inst);
   const signedGap = oracle.bestJointProbability - planEval.jointProbability;
-  // Clamping to zero here and asserting only the positive side is what let the enumerator regress unseen:
-  // an oracle that returns nothing at all reports a gap of zero on every instance and the campaign stays
-  // green. A plan that beats the exhaustive enumeration is a statement about the oracle, not the solver, so
-  // it gets its own failure kind.
+  // A negative gap beyond tolerance indicates an oracle regression. Do not clamp it away.
   if (-signedGap > REVERSE_GAP_TOL) {
     fail(
       'oracle',
@@ -407,10 +401,7 @@ describe('oracle calibration', () => {
   });
 });
 
-// Everything above rests on the enumeration actually enumerating. Nothing else in the suite reads
-// `feasibleCount` or `evaluatedCount`, so a `bruteForceBestJoint` that walked no further than the first leaf
-// would return `bestJointProbability: 0` everywhere, hand every instance a gap of zero, and pass. These
-// instances are sized so both counts follow from the constraints rather than from a recorded number.
+// Assert enumeration counts derived from constraints to catch incomplete searches.
 describe('the enumeration behind the oracle', () => {
   const NUM_SLOTS = 3;
   // One craft per unit of 'a', so an allocation's value is just how much 'a' it buys.
