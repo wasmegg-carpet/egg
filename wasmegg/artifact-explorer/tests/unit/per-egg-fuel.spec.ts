@@ -84,7 +84,7 @@ describe('optimizeFull with a per-egg budget', () => {
   };
 
   // Humility is free everywhere in this tool (`phases.ts` strips it), so an empty tank
-  // does not ground the player: it leaves exactly the ships that burn humility alone —
+  // does not ground the player. It leaves exactly the ships that burn humility alone, which are
   // Chicken One, Nine and Heavy. Anything needing a budgeted egg is gone.
   it('an empty tank leaves only the missions that burn nothing budgeted', async () => {
     const dag = buildRecipeDag([TARGET], 30);

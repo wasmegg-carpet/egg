@@ -26,7 +26,7 @@ export interface PlanProblem {
   readonly targets: readonly string[];
   readonly fuelCapacity: number;
   // Per-egg budgets, replacing `fuelCapacity` when supplied. Absent means the single
-  // aggregate axis `[{ egg: null, capacity: fuelCapacity }]` — one tank, any mix.
+  // aggregate axis `[{ egg: null, capacity: fuelCapacity }]`, one tank holding any mix.
   readonly fuelAxes?: readonly FuelAxis[];
   // Seconds. Note the asymmetry with `fuelCapacity` above, which is for the whole plan.
   readonly timeCapacityPerSlot: number;

@@ -232,7 +232,7 @@ export default defineComponent({
     );
 
     // Launch-option enumeration stays on the main thread: it is the only step needing the loot dataset, which this bundle already loads.
-    // Kept off `computeInputs` so that editing a budget — which cannot change the menu — does not re-enumerate it.
+    // Kept off `computeInputs` so that editing a budget, which cannot change the menu, does not re-enumerate it.
     const launchMenu = computed(() =>
       enumerateLaunchOptions(
         effectiveConfig.value,
@@ -241,7 +241,7 @@ export default defineComponent({
       )
     );
 
-    // Likewise: the prices are a function of the tree and the inventory, not of the cap they are compared against.
+    // The prices are likewise a function of the tree and the inventory, not of the cap they are compared against.
     const craftUnitPrices = computed(() => computeCraftUnitPrices(recipeDag.value, playerInventory.value));
 
     const computeInputs = computed<OptimizerRequestInput | null>(() => {

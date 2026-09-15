@@ -129,8 +129,8 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
         }));
 
   // Dropped before indices are assigned, so an allocation index means the same thing here and inside the solver.
-  // Fuel is bounded from above only — a zero-fuel mission is legitimate — and the per-axis bound is what still
-  // holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
+  // Fuel is bounded from above only, since a zero-fuel mission is legitimate, and the per-axis bound is what
+  // still holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
   // from reading as free downstream, where a zero capacity means "ignore this axis".
   const feasibleOptions = options.filter(
     o =>

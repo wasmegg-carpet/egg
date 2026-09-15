@@ -173,7 +173,7 @@ function dominates(taker: Group, given: Group): boolean {
 }
 
 // Requiring strictness makes `dominates` a strict partial order, so every dropped group has a dominator
-// that itself survives, and testing each group against the whole menu — dropped ones included — leaves the
+// that itself survives, and testing each group against the whole menu, dropped ones included, leaves the
 // survivors a function of the group set rather than of the order it was walked in.
 function pruneDominated(groups: readonly Group[]): Group[] {
   return groups.filter(

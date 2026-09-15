@@ -38,7 +38,7 @@ already flew in*. The fuel row and every slot load only fall; item supply and ev
 `s_t` only rise, so the conservation rows gain slack and the tangent cuts on `z_t`
 relax. Crafts can be held where they were, so the price row is untouched and the
 objective does not fall. The one row that can break is `order_k`, and it is a
-symmetry break over slots the remaining rows leave interchangeable — re-sorting the
+symmetry break over slots the remaining rows leave interchangeable. Re-sorting the
 slots by load restores it and moves nothing else. So the pruned model's optimum is at
 least the full model's, and being a restriction it is also no more.
 
@@ -48,7 +48,7 @@ do not. `boundsFollowFromRows` refuses a dominator whose per-slot bound is the
 group's launches is exactly what can push a column past a cap no row implied.
 
 The relation is strict on at least one axis, so it is a strict partial order and
-every dropped group has a dominator that itself survives — testing against the whole
+every dropped group has a dominator that itself survives. Testing against the whole
 menu rather than against the survivors is what makes the result independent of the
 order groups are walked in. It reads only a group's own numbers, and group order is
 already a function of the target set and the option set rather than of menu order, so

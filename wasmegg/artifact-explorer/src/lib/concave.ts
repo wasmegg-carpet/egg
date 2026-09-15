@@ -17,7 +17,7 @@ export function gPrime(s: number): number {
 }
 
 // Q = -log(1 - p), a target's score per unit of expected drop. Certainty is +Infinity, which no LP matrix
-// can carry, so every matrix substitutes the same proxy for it -- see SPEC.md section 4. Both live here,
+// can carry, so every matrix substitutes the same proxy for it; see SPEC.md section 4. Both live here,
 // with `logHit`, because the pipeline and the MILP writer have to agree to the bit on what a target is
 // worth; neither is the other's caller.
 export const Q_CERTAIN_PROXY = 1e4;
