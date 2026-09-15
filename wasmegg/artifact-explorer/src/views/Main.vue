@@ -3,9 +3,7 @@
   <mission-selector :key="route.path" v-model="selectedMissionId" class="my-4" />
   <artifact-selector :key="route.path" v-model="selectedArtifactId" class="my-4" />
   <tank-artifact-selector v-model="selectedTankArtifactIds" class="my-4" />
-  <p class="my-4 text-sm text-gray-500">
-    To plan a Humility cycle, pick your targets and then load your ascension plan.
-  </p>
+  <p class="my-4 text-sm text-gray-500">For a Humility cycle, select targets and load an ascension plan.</p>
   <router-view name="mission" />
   <div class="my-4 text-xs text-red-900">
     <p class="font-medium">Artifact notes:</p>
@@ -88,11 +86,7 @@ export default defineComponent({
       }
     });
 
-    // The one target selector on the page. It reads and writes the active plan visit's targets
-    // whenever a visit is selected, so that picking a visit repoints it and editing it writes
-    // back; with no visit it is the page's own selection. Nothing here navigates: the ids stopped
-    // living in the URL, and a selection change that pushed a route would put the optimizer's
-    // budgets one step behind the address bar.
+    // Edit the active visit's targets, or the standalone selection. Changes do not navigate.
     const selectedTankArtifactIds = computed<string[]>({
       get: () => activeVisitSettings.value?.targetIds ?? offPlanTankTargets.value,
       set: ids => {
@@ -102,9 +96,7 @@ export default defineComponent({
       },
     });
 
-    // `/tank/:ids` is a deserializer, not a page: it hands the ids to whatever the selector is
-    // currently pointed at and then leaves, so old links land on the same page every other route
-    // does. Immediate, because the link is read once on arrival and never again.
+    // Import targets from legacy links on arrival, then return to the home route.
     watch(
       tankPlannerArtifactId,
       current => {

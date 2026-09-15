@@ -131,12 +131,7 @@ describe('reading a plan save', () => {
   });
 });
 
-// Every branch below is a validator or a coercion, and neither is visible while the input is
-// well-formed: `parsePlanSave` is fed a file the user picked off their own disk, and the format is
-// hand-editable JSON. What the guards buy is the difference between a message the player can act
-// on and a budget of NaN carried silently into the optimizer, so the negative cases are where they
-// are worth anything at all. Malformed inputs are built from the good fixture so that each one
-// differs from a working plan in exactly the field under test.
+// Vary one field of the valid fixture per case to test malformed-input handling.
 describe('reading a malformed plan save', () => {
   interface RawPlan {
     version: number;
@@ -216,10 +211,7 @@ describe('reading a malformed plan save', () => {
   });
 
   it('needs every part of the ascension clock, not just the date', () => {
-    // The three fields are read in one condition, so dropping any one of them has to reach the same
-    // undated visit. Losing only the time is the case that separates them: a save that still carries a
-    // date gets as far as the formatter, where an undefined time is a TypeError out of a file picker
-    // rather than a visit the player can still plan.
+    // Each missing start field must produce an undated visit, including time alone.
     for (const missing of ['ascensionDate', 'ascensionTime', 'ascensionTimezone'] as const) {
       const plan = raw();
       const virtueState = { ...plan.virtueState };
@@ -303,11 +295,7 @@ describe('reading a malformed plan save', () => {
   });
 
   it('resolves the ascension clock through its IANA zone rather than as UTC', () => {
-    // The one calculation on this side of the seam that has to agree with the planner's own.
-    // 2026-03-01 00:30 in New York is 05:30 UTC: a winter date, so the offset is a whole -5 hours
-    // and not the -4 that reading it after the March changeover would give. The time of day is
-    // neither noon nor midnight. At noon a 12-hour clock reads the same as a 24-hour one, which is
-    // why the fixture's own 12:00 cannot see this; at midnight the two differ by the full 12.
+    // New York winter offset is UTC-5. Use 00:30 to distinguish 12- and 24-hour parsing.
     const plan = raw();
     const zoned = {
       ...plan,

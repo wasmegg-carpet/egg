@@ -16,11 +16,6 @@
         <h3 class="text-base font-semibold text-gray-700 mb-3">Best Ship Set</h3>
         <div class="relative">
           <div :class="dimSolution ? 'opacity-40 pointer-events-none transition-opacity' : ''">
-            <!-- Read off the snapshot, not the live store: these caption the answer, and the
-                 player can load another save while the solve that produced it is still running.
-                 `visitIndex > 0` is the over-provisioning caveat: every visit is solved against
-                 the inventory and craft counts of today, so a visit that is not the cycle's first
-                 is answered as though the ones before it never ran. -->
             <optimizer-solution-card
               v-for="(view, i) in solutionViews"
               :key="'solution-' + i"
@@ -48,7 +43,7 @@
               {{
                 inputsValid
                   ? 'No ship set found for the current settings.'
-                  : 'Correct the budget flagged in the sidebar to compute a plan.'
+                  : 'Correct the invalid budget in the sidebar.'
               }}
             </p>
           </div>
@@ -141,8 +136,7 @@ export default defineComponent({
   setup(props) {
     const { artifactIds } = toRefs(props);
 
-    // In the store so it survives this component unmounting when the selection empties. A plan
-    // visit keeps its own, so that budgeting one visit does not silently rewrite the next.
+    // Preserve budgets across unmounts and keep plan visits independent.
     const waitTimeDays = computed(() =>
       activePlanVisit.value ? waitTimeInputFor(activePlanVisit.value) : missionFilters.value.waitTimeDays
     );
@@ -188,9 +182,7 @@ export default defineComponent({
     const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value);
     const inventoryRevision = ref(0);
     watch(playerInventory, () => inventoryRevision.value++, { flush: 'sync' });
-    // The save and the visit the displayed answer was computed against, which the player can
-    // change while it runs. Reading these live would caption one solve's answer with another's
-    // inventory.
+    // Capture result metadata before inputs can change during a solve.
     const snapshot = shallowRef<{
       time: number;
       inventory: typeof playerInventory.value;
@@ -332,7 +324,6 @@ export default defineComponent({
         computeError.value = '';
         computing.value = inputsValid.value;
         if (computing.value) debounceTimer = setTimeout(runCompute, 250);
-        // An answer to a question that can no longer be posed is not left on screen.
         else {
           computedResults.value = [];
           snapshot.value = null;

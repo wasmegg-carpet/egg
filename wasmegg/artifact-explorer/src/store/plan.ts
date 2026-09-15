@@ -1,13 +1,5 @@
-// State for planning an ascension cycle's Humility visits from a loaded ascension-planner save.
-//
-// Two things live here that the rest of the store does not have to know about: the plan itself,
-// which persists across reloads because re-picking the file every time would make a multi-visit
-// cycle unusable, and the visit currently selected on it, which is what lets the optimizer's
-// existing `effective*` refs read that visit's budgets instead of the loaded save's. The selection
-// persists with the plan: coming back to the tab mid-cycle should land where the work stopped.
-//
-// Solved visits are kept as the *projection* that gets exported, never as an `OptimizerSolution`:
-// that type is full of `Map`s, which `JSON.stringify` renders as `{}`.
+// Persist the loaded plan, selected visit and per-visit settings across reloads.
+// Store solved visits in export format; OptimizerSolution contains non-JSON Maps.
 
 import { computed, ref } from 'vue';
 
@@ -24,11 +16,8 @@ const PLAN_LOCALSTORAGE_KEY = 'humility_plan';
 // one file re-pick away, and a half-understood blob would solve against budgets nobody can see.
 const PLAN_STORE_VERSION = 1;
 
-// What the optimizer is allowed to burn at a visit. `banked` is the per-egg amount the plan says
-// is in the tank on arrival. `full-tank` is the tank's whole capacity as one pooled budget, split
-// across the eggs however the answer needs. That is the budget for a plan that has not scheduled
-// its fuel yet, which is what makes the exported `fuelRequired` a statement of what it still has
-// to go store.
+// banked uses per-egg fuel on arrival; full-tank uses pooled tank capacity
+// to plan fuel that has not yet been stored.
 export type VisitFuelBudget = 'banked' | 'full-tank';
 export type GemCostMode = 'plan' | 'custom' | 'unlimited';
 
@@ -102,10 +91,8 @@ export function setCurrentVisit(visitId: string | null, seedTargets: readonly st
   persistPlan();
 }
 
-// A visit the player has not touched has no entry, and reading one must not create it: this is
-// called from `activeVisitSettings` and from `waitTimeSecondsFor`, both read inside computeds, and
-// a write into `loadedPlan` there would mutate a dependency mid-evaluation. One shared frozen
-// default stands in, so a read is a read and its identity is stable across evaluations.
+// Computed readers must not mutate loadedPlan. Use a stable frozen default
+// for visits without saved settings.
 const DEFAULT_VISIT_SETTINGS: VisitSettings = Object.freeze({
   ...newVisitSettings(),
   targetIds: Object.freeze([]) as readonly string[] as string[],
@@ -144,14 +131,9 @@ export function waitTimeInputFor(visit: HumilityVisit): string {
   return settings.waitTimeOverride ?? formatDurationInput(visit.plannedDurationSeconds);
 }
 
-// Every per-visit input goes through here, and every one of them retracts the recorded answer:
-// it was an answer to the question these inputs pose, and nothing else would ever withdraw it.
-//
-// `asks` is what the question actually is, for an input that carries more than it: the time budget
-// arrives as raw text, and "11" and "11d" are two spellings of the same eleven days, one of which
-// the field writes back on its own when it normalizes on blur. Retracting on the text would throw
-// away an answer that still answers the question, and nothing would recompute it: the budget the
-// solver reads never moved, so no solve is queued to record one again.
+// Invalidate a solved visit only when its effective inputs change.
+// `asks` normalizes equivalent input text (e.g. "11" and "11d") so blur
+// normalization does not discard a result without triggering a new solve.
 function editVisit(
   visitId: string,
   edit: (settings: VisitSettings) => void,

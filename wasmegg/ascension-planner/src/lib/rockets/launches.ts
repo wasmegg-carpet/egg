@@ -1,10 +1,4 @@
-/**
- * The fuel, gems and scheduling entries a set of launches implies, over the one shape both
- * producers of launches already have: the mission grid's queue and an imported Humility plan.
- *
- * It lives here rather than in either of them because both were computing it, identically, from
- * the same tables in `@/lib/missions`.
- */
+/** Shared launch costs and scheduling for the mission grid and imported plans. */
 
 import type { VirtueEgg } from '@/types';
 import {

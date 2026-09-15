@@ -1,9 +1,5 @@
-// Projects a solved visit into `humility-plan.json`, the file the ascension-planner reads back.
-//
-// A projection, not a serialization: `OptimizerSolution` carries `fuelByEgg`, `supplyVector`,
-// `craftPrimal` and the recipe DAG as `Map`s, which `JSON.stringify` renders as `{}`. Narrowing
-// by hand is right regardless, because AP has no use for a recipe DAG, and what does cross the
-// seam is then a list this file can be read against.
+// Project solved visits into humility-plan.json. OptimizerSolution contains Maps
+// that JSON.stringify would lose; export only the fields the planner needs.
 
 import { ei, getArtifactTierPropsFromId } from 'lib';
 

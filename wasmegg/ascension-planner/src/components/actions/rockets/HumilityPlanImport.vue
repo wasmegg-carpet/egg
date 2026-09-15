@@ -4,7 +4,7 @@
       <div>
         <span class="text-xs font-bold uppercase tracking-wider text-indigo-700">From the artifact explorer</span>
         <p v-if="!planStore.file" class="text-[11px] text-gray-500 mt-0.5">
-          Load a <code>humility-plan.json</code> to write a solved visit into this plan.
+          Import solved visits from <code>humility-plan.json</code>.
         </p>
         <p v-else class="text-[11px] text-gray-500 mt-0.5">
           {{ planStore.file.planLabel }} — {{ planStore.file.visits.length }} solved visit{{
@@ -55,8 +55,8 @@
         </ul>
 
         <p v-if="visit.gemCost > visit.gemBudget" class="mt-1 text-[11px] text-amber-700">
-          Costs {{ formatNumber(visit.gemCost, 2) }} gems against a budget of {{ formatNumber(visit.gemBudget, 2) }}.
-          The explorer caps what one ship may cost, not what the whole visit may spend.
+          Total: {{ formatNumber(visit.gemCost, 2) }} gems; plan budget: {{ formatNumber(visit.gemBudget, 2) }}.
+          Purchase limits apply per ship.
         </p>
 
         <div class="mt-2 flex items-center gap-2">
@@ -76,9 +76,7 @@
     </ul>
 
     <div v-if="planStore.drift.length > 0" class="rounded-md border border-red-300 bg-red-50 p-2">
-      <p class="text-[11px] font-bold text-red-700">
-        Fuel tables disagree with the artifact explorer. The tank is charged this planner's figures.
-      </p>
+      <p class="text-[11px] font-bold text-red-700">Fuel amounts differ. Using this planner's values.</p>
       <ul class="mt-1 space-y-0.5">
         <li v-for="d in planStore.drift" :key="d.egg" class="text-[11px] text-red-700">
           {{ d.egg }}: here {{ formatNumber(d.ours, 2) }}, in the file {{ formatNumber(d.theirs, 2) }}
@@ -107,8 +105,7 @@ const planStore = useHumilityPlanStore();
 const actionsStore = useActionsStore();
 const error = ref('');
 
-// Numbered against this plan rather than against the file, so the rows read the way the plan
-// does: a file solved for three visits and imported into a plan with four still says "of 4".
+// Use the current plan's visit count.
 const planVisitIds = computed(() => humilityVisitIds(actionsStore.actions));
 
 const stageable = computed(() =>
@@ -119,8 +116,6 @@ function visitName(visit: HumilityPlanVisit): string {
   return `H${visit.visitIndex + 1} of ${planVisitIds.value.length}`;
 }
 
-// Built once per plan change rather than per lookup: the row reads its reason twice, to decide
-// whether to show it and then to show it.
 const unavailableReasons = computed(() => {
   const inPlan = new Set(planVisitIds.value);
   const reasons = new Map<string, string>();

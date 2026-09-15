@@ -1,8 +1,4 @@
-// `sourceTag` is what makes staging a visit twice replace the first attempt instead of stacking a
-// second copy on it. It is one optional string on `BaseAction`, and every path a plan takes copies
-// actions rather than rebuilding them. But "rather than rebuilding them" is the kind of claim that
-// stops being true quietly, and the failure it would cause, a duplicated launch months into a
-// plan, is not one the player would attribute to this. So the paths are exercised.
+// Preserve sourceTag through save/load paths so restaging replaces prior imports.
 
 // The actions store reads localStorage as it is constructed, and the test environment is node.
 const noopStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };

@@ -42,11 +42,7 @@ export interface HumilityPlanFile {
 
 export class HumilityPlanError extends Error {}
 
-/**
- * The explorer's ship names are the protobuf's, and our `Spaceship` mirrors that enum exactly, so
- * the name lookup is the mapping. A name we do not have is an error rather than a skip: dropping
- * a ship would quietly shrink the plan.
- */
+/** Look up protobuf ship names. */
 function shipByName(name: string): Spaceship | undefined {
   const ship = (Spaceship as unknown as Record<string, number | undefined>)[name];
   return typeof ship === 'number' ? (ship as Spaceship) : undefined;
@@ -59,11 +55,7 @@ function shipFromName(name: unknown): Spaceship {
   return ship;
 }
 
-/**
- * Only the three durations this app plans. `TUTORIAL` exists in the protobuf and has no
- * equivalent here; it is the exact value our `EPIC` collides with numerically, which is why this
- * mapping is by name and why the missing case is rejected rather than defaulted.
- */
+/** Map durations by name: our EPIC = 3 collides with protobuf TUTORIAL. */
 const DURATION_BY_NAME: Record<string, DurationType> = {
   SHORT: DurationType.SHORT,
   LONG: DurationType.LONG,
@@ -77,11 +69,7 @@ function durationFromName(name: unknown): DurationType {
   return duration;
 }
 
-/**
- * How a launch reads in the mission grid. Listing the file's enum names instead ("EPIC ATREGGIES")
- * left the reader matching them against the grid by eye. An unmappable name is shown as it came:
- * this renders the file before staging validates it, and staging is what rejects such a name.
- */
+/** Use mission-grid labels; show unknown names until staging validates them. */
 export function launchLabel(launch: HumilityPlanLaunch): string {
   const ship = shipByName(launch.ship);
   const duration = DURATION_BY_NAME[launch.duration];
@@ -124,11 +112,7 @@ export interface FuelDrift {
   theirs: number;
 }
 
-/**
- * Compares our derived figures against the explorer's for the four eggs it reports. Relative,
- * because these run to 1e14 and an absolute epsilon would be meaningless; 0.1% is far tighter
- * than any real table disagreement and far looser than float noise.
- */
+/** Compare the four exported fuel amounts with a 0.1% relative tolerance. */
 const FUEL_DRIFT_TOLERANCE = 1e-3;
 
 export function fuelDrift(visit: HumilityPlanVisit, ours: Record<VirtueEgg, number>): FuelDrift[] {
@@ -146,14 +130,8 @@ export function fuelDrift(visit: HumilityPlanVisit, ours: Record<VirtueEgg, numb
 }
 
 /**
- * Every Humility visit in a plan, in plan order. A visit is a maximal run of actions whose snapshot
- * says Humility, keyed on the first of them. That is the same rule the artifact explorer slices
- * by, so the id it writes into a solved visit is an id that appears here.
- *
- * This is the one place that rule is spelled out. Deriving both the ids and the insertion point
- * from the same walk is what makes "this id names a run that is still on Humility" structural
- * rather than a check each caller has to remember: an id that no longer heads a Humility run is
- * simply not in here.
+ * Find consecutive Humility action runs, keyed by their first action, as in the explorer.
+ * Derive visit IDs and insertion points together so both refer to the same runs.
  */
 export interface HumilityVisitRun {
   visitId: string;
@@ -177,16 +155,8 @@ export function humilityVisitIds(actions: readonly Action[]): string[] {
 }
 
 /**
- * Which of a file's visits this plan can still take, and the only check there is: does the visit
- * still exist here. Resolved as a prefix, so the walk stops at the first visit the plan has lost
- * and every later one is withheld even if its own id survived. A file's visits are a sequence of
- * answers to one cycle; once the plan no longer contains one of them, the plan the rest were
- * solved against is not this plan any more, and staging them would be staging into a shape that
- * changed underneath.
- *
- * Nothing else is compared. Budgets, tank contents and timings all move as a plan is edited, and
- * an answer that has merely gone slightly stale is still worth having; only a vanished visit makes
- * one meaningless.
+ * Accept the prefix of exported visits still present in the plan. Stop at the first
+ * missing visit, even if later IDs survive. Budgets and timings are not checked.
  */
 export function stageableVisitIds(file: HumilityPlanFile, planVisitIds: readonly string[]): Set<string> {
   const inPlan = new Set(planVisitIds);
@@ -198,13 +168,7 @@ export function stageableVisitIds(file: HumilityPlanFile, planVisitIds: readonly
   return stageable;
 }
 
-/**
- * Where a visit's launch goes: the end of that visit's run of actions, not its start. The player's
- * own actions inside the visit, such as fuel stored and research bought, come first, and the fuel
- * and bank this app derives are read from the snapshot at the insertion point, so the later
- * position is the more accurate one. Null when the plan no longer contains the visit, including
- * when a shift retargeted to another egg leaves the id in place while the visit it named is gone.
- */
+/** Insert after the visit's actions so their fuel and research apply; null if missing. */
 export function humilityVisitInsertIndex(actions: readonly Action[], visitId: string): number | null {
   const run = humilityVisitRuns(actions).find(r => r.visitId === visitId);
   return run ? run.endIndex + 1 : null;
@@ -215,11 +179,7 @@ export interface FuelShortfall {
   amount: number;
 }
 
-/**
- * What has to be stored before the launch, given what the tank already holds where the launch is
- * going. Only the eggs that fall short, and only by the amount they fall short: the tank is
- * brought up to the requirement, not filled.
- */
+/** Fuel shortfalls at the insertion point. */
 export function fuelShortfalls(
   required: Record<VirtueEgg, number>,
   inTank: Partial<Record<VirtueEgg, number>>
@@ -232,11 +192,7 @@ export function fuelShortfalls(
   return shortfalls;
 }
 
-/**
- * How long the launch occupies the plan, scheduled by this app rather than copied from the file:
- * the makespan depends on the FTL level, which lives in this plan's initial state and can have
- * been edited since the file was written.
- */
+/** Recompute makespan using the plan's current FTL level. */
 export function launchSchedule(launches: readonly ResolvedLaunch[], ftlLevel: number): ScheduleResult {
   return scheduleMissions(launchEntries(launches, ftlLevel));
 }

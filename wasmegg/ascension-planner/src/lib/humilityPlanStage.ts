@@ -52,12 +52,8 @@ function fuelToStore(
   return Math.max(0, needed - (actions[insertIndex - 1].endState.fuelTankAmounts[egg] ?? 0));
 }
 
-/**
- * How much more fuel the tank will take at each step, as a budget successive stores draw down.
- * Fuel stored before an earlier Humility launch shares the tank with the fuel that launch has not
- * spent yet, so what a store can take is the least free space over the whole stretch its fuel
- * sits through, and each egg sees what the eggs before it left.
- */
+/** Fuel storage is limited by the minimum free tank space until launch,
+ * after accounting for earlier stores. */
 function tankSpace(actions: readonly Action[]) {
   const free = actions.map(({ endState }) => {
     const stored = Object.values(endState.fuelTankAmounts).reduce((sum, amount) => sum + amount, 0);
@@ -92,11 +88,8 @@ export function stageHumilityVisit(
   let previous = actions[launchIndex - 1].endState;
   const launches = resolveLaunches(visit);
   const required = fuelForLaunches(launches);
-  // Check before expanding counts into individual scheduling entries. Humility is left out of the
-  // requirement: the farm is on Humility for the whole visit, so that fuel comes off production and
-  // never has to fit in the tank alongside the rest. The mission grid's budget makes the same
-  // exemption (`isOverBudget` in `stores/rockets.ts`). Counting it here rejected plans whose four
-  // stored fuels fit.
+  // Check capacity before expanding launches. Humility is produced on the farm
+  // and needs no tank space, matching stores/rockets.ts isOverBudget.
   validateTank({ ...required, humility: 0 }, previous.tankLevel);
 
   let initialEgg: VirtueEgg | undefined;
@@ -171,11 +164,8 @@ export function stageHumilityVisit(
   launchIndex = humilityVisitInsertIndex(filled, visit.visitId)!;
   previous = filled[launchIndex - 1].endState;
 
-  // Whatever the plan's own visits to an egg could not hold, which is all of it for an egg the
-  // plan never visits, is stored in a phase of its own just before this visit. Opening a phase by
-  // hand is shift, wait for the habs the shift emptied, then work, so a staged phase opens the same
-  // way. The payload is re-derived against the post-shift state on every simulate, so these are
-  // seeds.
+  // Store remaining fuel in new egg visits: shift, refill habs, then store.
+  // Simulation recalculates these seed payloads against the post-shift state.
   const newPhases: Action[] = [];
   for (const { egg } of fuelShortfalls(required, previous.fuelTankAmounts)) {
     if (egg === 'humility') continue;

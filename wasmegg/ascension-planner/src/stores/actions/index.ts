@@ -37,11 +37,7 @@ import { createDefaultStartAction, calculateActionResult } from './simulation';
 import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from './dependency';
 import { exportPlanLogic, importPlanLogic, exportPlanData } from './io';
 
-/**
- * A draft as it first lands in the plan: positioned, with every derived field left blank.
- * `recalculateFrom` fills in the deltas, duration, snapshot and dependency links immediately
- * after, which is the only place those are knowable.
- */
+/** Position a draft; recalculateFrom fills derived fields afterward. */
 function hydrateDraft(draft: DraftAction, index: number): Action {
   return {
     ...draft,
@@ -187,7 +183,7 @@ export const useActionsStore = defineStore('actions', {
       };
 
       const currentSummary = JSON.stringify(summarize(this.actions));
-      
+
       let savedActions: Action[] = [];
       try {
         savedActions = JSON.parse(this.lastSavedActionsJson);
@@ -501,7 +497,7 @@ export const useActionsStore = defineStore('actions', {
         a.index = idx;
         a.dependents = [];
       });
-      
+
       for (let i = 1; i < keptActions.length; i++) {
         keptActions[i].dependsOn = [keptActions[i - 1].id];
         keptActions[i - 1].dependents.push(keptActions[i].id);
@@ -734,7 +730,7 @@ export const useActionsStore = defineStore('actions', {
         return true;
       }
       const data = importPlanLogic(jsonString);
-      
+
       // NEW: Skip recalculation if the plan already contains calculated result data (endState).
       // Since the user is in a long session, we trust the cached calculations in the library.
       const isPreCalculated = data.actions &&

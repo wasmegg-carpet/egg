@@ -1,7 +1,4 @@
-// The Humility plan import writes its launches straight into the plan as actions, so the queue
-// below is only ever the mission grid's. What this covers is the one thing about it that is not
-// obvious from reading it: the fuel budget and the launch both charge Humility, while the
-// over-budget check does not.
+// The mission grid deducts Humility on launch but excludes it from the tank limit.
 
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';

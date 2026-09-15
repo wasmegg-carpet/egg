@@ -1,14 +1,6 @@
-// The seam between the ascension-planner (AP) and this app. Two file formats meet here: AP's
-// plan save, which this app reads and never writes, and `humility-plan.json`, which this app
-// writes and AP reads. No runtime is shared across it, so every shape either side relies on is
-// restated here and validated on the way in.
-//
-// Ships and durations cross as enum *names*. AP keeps its own `DurationType`
-// (SHORT = 1, LONG = 2, EPIC = 3) while the protobuf this app uses numbers them from zero, so
-// AP's `EPIC` is the protobuf's `TUTORIAL`. Raw integers would produce a plan that is silently
-// wrong and no type checker would catch it. Targets go the other way and cross as the numeric
-// `ei.ArtifactSpec.Name`, which comes from the shared protobuf and has no AP-side copy to drift
-// from; AP re-derives the display name through lib.
+// File formats exchanged with ascension-planner (AP); no shared runtime.
+// Ships and durations use enum names because AP and protobuf duration numbers differ
+// (AP EPIC = 3, protobuf EPIC = 2). Targets use the shared numeric ei.ArtifactSpec.Name.
 
 import { ei } from 'lib';
 

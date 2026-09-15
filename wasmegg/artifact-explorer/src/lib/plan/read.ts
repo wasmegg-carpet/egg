@@ -1,13 +1,5 @@
-// Reads an ascension-planner plan save and slices out its Humility visits.
-//
-// AP's export is not changed for this: a visit is a maximal run of actions whose snapshot says
-// the player is on Humility, and every plan-side budget the optimizer needs is on that run's
-// snapshots. AP owns everything time-varying because it simulates forward; this app only ever sees
-// "now", which is why the budgets have to arrive rather than be derived here.
-//
-// The run's *first* snapshot carries all of them but one: arriving is a `shift`, and a shift is
-// the one action whose snapshot describes a farm that exists for no part of the visit. See
-// `earningsRateOf`.
+// Read Humility visits and their budgets from ascension-planner snapshots.
+// Earnings use the visit and pre-arrival snapshots; see earningsRateOf.
 
 import { ei } from 'lib';
 
@@ -56,11 +48,8 @@ function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null;
 }
 
-// AP's library writes an envelope around the save. It is `{version, type, name, data}` for one
-// plan and `{version, type, plans: [{name, data}]}` for the whole library, and AP's own importer
-// reads the bare save too. All three shapes reach this file picker, so the envelope is peeled
-// here and everything below only ever sees the save. The version checked is always the inner one: the
-// envelope carries a version of its own that numbers a different thing.
+// Accept bare saves or single-plan envelopes; reject libraries.
+// Validate the inner save version, independent of the envelope version.
 function unwrapPlanEnvelope(json: Record<string, unknown>): Record<string, unknown> {
   if (json.type === 'plan') {
     if (!isRecord(json.data)) throw new PlanSaveError('Plan export has no `data`.');
@@ -143,16 +132,8 @@ function secondsOf(action: PlanSaveAction): number {
   return Number.isFinite(t) && t > 0 ? t : 0;
 }
 
-// `shift` sets population to 1 (`ascension-planner/src/engine/apply/actions.ts`), so the snapshot
-// on the action that enters Humility is the farm with a single chicken in it. That rate is nine
-// orders of magnitude under what the visit is actually flown at, and the farm holds it for no part
-// of the visit. What is wanted is the rate the farm returns to once the habs refill, so it is
-// taken as the best seen across the visit's own actions and the one action before arrival. A later
-// action in the run witnesses that rate directly. When the plan has scheduled nothing on Humility
-// yet, which is the case a player comes here for, there is no such action, and the only witness
-// left is the pre-shift farm, same capacity and same artifacts with its population not yet zeroed.
-//
-// The one-chicken rate can never win a maximum, which is what makes one action of slack enough here.
+// Shifting resets population to one. Estimate refilled-farm earnings from the maximum
+// across the visit and the pre-shift snapshot, including visits with no missions yet.
 function earningsRateOf(action: PlanSaveAction | undefined): number {
   const state = action?.endState;
   if (!state) return 0;
@@ -220,13 +201,8 @@ export function sliceHumilityVisits(save: PlanSave): HumilityVisit[] {
   return visits;
 }
 
-// What one ship may cost at this visit is what the plan says is in the bank on arrival, which is
-// nothing because shifting zeroes it, plus what the farm earns over however long the visit is
-// budgeted to run. The duration is a parameter because the plan's own figure is zero for a visit
-// whose missions have not been scheduled yet, which is the case a player comes here to fill in.
-//
-// This is a per-ship filter, not a spend limit. The optimizer drops options that cost more than
-// it, but nothing bounds the plan's total, so the total is reported and warned on instead.
+// Per-ship price limit: arrival bank plus earnings over the chosen duration.
+// This does not cap total spending.
 export function gemBudgetFor(visit: HumilityVisit, durationSeconds: number): number {
   const seconds = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
   return visit.bankValue + visit.earningsPerSecond * seconds;

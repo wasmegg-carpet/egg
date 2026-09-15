@@ -60,9 +60,7 @@
           </button>
         </template>
 
-        <p v-else class="text-xs text-gray-400">
-          Solve a cycle's Humility visits against the budgets the plan says you will have at each of them.
-        </p>
+        <p v-else class="text-xs text-gray-400">Plan Humility missions using each visit's budgets.</p>
       </div>
     </section>
 
@@ -84,13 +82,9 @@
           <p v-if="timeBudgetInvalid" class="mt-1 text-xs text-red-500">
             Enter a positive duration (e.g. 30, 12d12h, 10h5m)
           </p>
-          <!-- Not chained off the error above: a visit with nothing scheduled reports zero, which
-               empties this field and so is exactly the case the error fires on. Saying only
-               "enter a positive duration" there leaves the player with no idea why the plan gave
-               them nothing to start from. -->
+          <!-- Keep the plan hint visible when an unscheduled visit has a zero duration. -->
           <p v-if="planVisit" class="mt-1 text-xs text-gray-400">
-            From plan: how long this visit stays on Humility. The plan reports zero until the visit has missions
-            scheduled, so type one over it.
+            Time on Humility. Enter a duration if the plan has no missions scheduled.
           </p>
           <p v-else-if="!timeBudgetInvalid" class="mt-1 text-xs text-gray-400">
             Maximum time you're willing to spend launching missions
@@ -171,17 +165,12 @@
             />
             <span class="text-xs text-gray-500">gems</span>
           </div>
-          <!-- An unparseable draft is not silently swapped for the last good number: it stops the
-               solve and says so, rather than answering a question nobody asked. -->
-          <p v-if="gemCostInvalid" class="mt-1 text-xs text-red-500">
-            Enter a non-negative amount (e.g. 10S). Nothing is computed until this is corrected.
-          </p>
+          <p v-if="gemCostInvalid" class="mt-1 text-xs text-red-500">Enter a non-negative amount (e.g. 10S).</p>
           <p v-else-if="gemCostMode === 'custom'" class="mt-1 text-xs text-gray-400">
             Only schedule ships costing at most this many gems (e.g. 10S = 10 septillion)
           </p>
           <p v-else-if="gemCostMode === 'plan'" class="mt-1 text-xs text-gray-400">
-            From plan: the bank on arrival plus what the visit earns, capping one ship rather than the whole visit. Pick
-            "Set my own" to override it.
+            Per ship: bank on arrival + visit earnings. Select "Override" to change.
           </p>
         </div>
 
@@ -214,9 +203,7 @@
               aria-hidden="true"
             />
           </div>
-          <p v-if="craftingCostInvalid" class="mt-1 text-xs text-red-500">
-            Enter a non-negative amount (e.g. 25M). Nothing is computed until this is corrected.
-          </p>
+          <p v-if="craftingCostInvalid" class="mt-1 text-xs text-red-500">Enter a non-negative amount (e.g. 25M).</p>
           <p v-else-if="missionFilters.maxGoldenEggCostEnabled" class="mt-1 text-xs text-gray-400">
             Cap the golden eggs the plan's crafts may cost, at your own crafting prices
           </p>
@@ -291,9 +278,7 @@
               @change="writePerEggBudget(($event.target as HTMLInputElement).checked)"
             />
             <span>
-              {{ planVisit ?
-              'Only use fuel in tank': 'Use fuel banked in plan.'
-              }}
+              {{ planVisit ? 'Only use fuel in tank' : 'Use fuel banked in plan.' }}
             </span>
           </label>
           <ul v-if="perEggBudget" class="mt-2 pl-6 space-y-0.5">
