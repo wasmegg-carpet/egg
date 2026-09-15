@@ -1,11 +1,5 @@
-// Display rules for the mission optimizer's probabilities and expected counts.
-//
-// These quantities span a dozen decades. A joint probability is a product over targets, and the
-// solver works in nats precisely because its scores reach 1e-13. So a fixed decimal count either
-// rounds the small end to zero or claims precision at the large end that nothing behind it
-// supports. Drop rates come from sparse observations that can be off by multiples, and the
-// envelope the search optimizes over is only good to ~4.5e-2 nats. One decimal, everywhere,
-// including on the mantissa once the value is small enough to need one.
+// Format probabilities and expected counts without rounding small values to zero.
+// Limit precision to reflect uncertainty in observed drop rates.
 
 const SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
 
@@ -19,7 +13,7 @@ function superscript(n: number): string {
 function scientific(x: number): string {
   let exponent = Math.floor(Math.log10(x));
   let mantissa = Math.round((x / 10 ** exponent) * 10) / 10;
-  // Rounding 9.97 up lands on 10.0, which is the next decade written the long way.
+  // Carry a rounded mantissa of 10 into the next exponent.
   if (mantissa >= 10) {
     mantissa /= 10;
     exponent++;
@@ -27,9 +21,7 @@ function scientific(x: number): string {
   return `${mantissa.toFixed(1)}×10${superscript(exponent)}`;
 }
 
-// Rounding may carry a value into the band above; where it does, the band above spells it. Left to
-// its own band, 0.0996 renders as "0.10" and 0.00997 as "10.0×10⁻³". Each is the neighbouring
-// band's answer written in the wrong notation.
+// Choose notation after rounding at band boundaries (e.g. 0.0996 becomes 0.1).
 function formatMagnitude(x: number): string {
   if (x >= 0.1) {
     return String(Math.round(x * 10) / 10);
@@ -42,12 +34,8 @@ function formatMagnitude(x: number): string {
 }
 
 /**
- * A probability in [0, 1] as a percentage, to one decimal. Below 0.01% the decimal is on the
- * mantissa.
- *
- * 0 and 1 are reported exactly, because the optimizer means them exactly: an unreachable target
- * scores -Infinity and a prob-1 craft scores +Infinity. Anything merely close to certain is
- * reported as `>99.9%` rather than rounded up to a `100%` the solver never claimed.
+ * Format a probability as a percentage; use scientific notation below 0.01%.
+ * Preserve exact 0 and 1, and display near-certainty as >99.9%.
  */
 export function formatProbability(p: number): string {
   if (!Number.isFinite(p)) return 'NaN';

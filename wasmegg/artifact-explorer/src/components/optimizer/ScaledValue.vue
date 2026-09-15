@@ -8,8 +8,7 @@ import { computed, defineComponent } from 'vue';
 
 import { formatEIValue } from 'lib';
 
-// A number in the game's own units, with the full figure on hover. The hover shows every digit,
-// decimals and all, so the reader can see what the four significant figures left out.
+// Game units with the full value, rounded to two decimal places, on hover.
 export default defineComponent({
   props: {
     value: { type: Number, required: true },
