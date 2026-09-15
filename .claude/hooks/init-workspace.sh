@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SessionStart hook. Fresh worktrees have no node_modules and no generated
-# protobuf bindings, so anything an agent tries first — type-check, dev server,
-# a grep through lib/proto — fails in a way that looks like a code problem.
+# protobuf bindings, so anything an agent tries first, such as a type-check, the
+# dev server, or a grep through lib/proto, fails in a way that looks like a code
+# problem.
 # Both steps are no-ops once satisfied, so this stays cheap on later sessions.
 set -euo pipefail
 
