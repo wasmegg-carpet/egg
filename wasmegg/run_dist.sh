@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# Serve dist/ the way Netlify serves it in production, applying netlify.toml,
-# dist/_redirects and dist/_headers. A plain static server drops the /_home
-# rewrite, the proto-explorer SPA fallback and the /api/* auxbrain proxy, so
-# most of the site 404s under one.
-#
-# Caveat: netlify dev forces cache-control: max-age=0, so the immutable asset
-# caching netlify-headers-expander writes into dist/_headers is not testable
-# here; use `netlify deploy --alias <name>` for that.
+# Serve dist/ with Netlify redirects, headers and API proxying.
+# netlify dev forces max-age=0; test asset caching with netlify deploy --alias <name>.
 set -euo pipefail
 
 here=$(realpath $(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd))

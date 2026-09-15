@@ -1,8 +1,6 @@
 FROM docker.io/redhat/ubi9:9.7
 
-# Chromium ships its own binary but links against these system libraries; the
-# list is what `ldd` on Playwright's chromium build reports as missing on a bare
-# UBI9. Playwright's own `install-deps` only knows apt, so this stays manual.
+# Chromium system dependencies; Playwright's install-deps does not support UBI9.
 RUN yum install -y \
         unzip \
         make \
@@ -55,8 +53,7 @@ ENV PNPM_HOME=/opt/pnpm
 
 ENV PATH=$PATH:/opt/protoc/bin:/opt/ets:/opt/node/node-v24.13.1-linux-x64/bin:$HOME/bin:/opt/netlify-headers-expander:/opt/gh/bin:$HOME/go/bin:$PNPM_HOME
 
-# netlify-cli is left unpinned to match .github/workflows/build-wasmegg.yml, so
-# what `run_dist.sh` serves locally is what CI deploys.
+# Keep netlify-cli unpinned to match .github/workflows/build-wasmegg.yml.
 RUN curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.xz | tar xJ -C /opt/node && \
      cd /opt/protoc && \
     curl -fsSL https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protoc-33.5-linux-x86_64.zip -o protoc.zip && \
@@ -70,9 +67,8 @@ RUN curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.xz |
     curl -fsSL https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz | tar xz -C /opt/gh --strip-components=1 && \
     curl -fsSL https://claude.ai/install.sh | bash
 
-# Playwright lives in the image rather than in the repo so that a fresh worktree
-# needs no browser download. Browsers are keyed to the Playwright version, so a
-# repo-level @playwright/test must match PLAYWRIGHT_VERSION to reuse them.
+# Preinstall browsers for fresh worktrees. A repo-level @playwright/test must
+# match PLAYWRIGHT_VERSION to reuse them.
 ARG PLAYWRIGHT_VERSION=1.62.1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 RUN npm install -g playwright@${PLAYWRIGHT_VERSION} && \
