@@ -48,7 +48,7 @@ describe('buildRecipeDag with a save loaded', () => {
 
   it('reports a probability and not the percentage craftChance returns', () => {
     // 0.01 is the game's base legendary craft rate at zero previous crafts. Asserting it fixes the units
-    // — buildRecipeDag divides by 100 for exactly this reason — and the zero-craft baseline at once.
+    // and the zero-craft baseline at once; `buildRecipeDag` divides by 100 for exactly this reason.
     const fresh = craftProbabilities([FEATHER, CHALICE], 0);
     expect(fresh.get(FEATHER)).toBe(0.01);
     expect(fresh.get(CHALICE)).toBe(0.01);

@@ -184,7 +184,7 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
   // MAX_FINALISTS_JOINT is a cost bound on how many near-ties get the expensive exact treatment, but as a
   // cap on a count it used to evict by arrival order: RANKING_SLOP_JOINT is absolute, so on an instance
   // whose joint probabilities all sit below it every candidate looks like a tie, the first eight seen filled
-  // the list and the winner was thrown away. That is not hypothetical — random-multi/8 returned 5.3e-9
+  // the list and the winner was thrown away. That is not hypothetical: random-multi/8 returned 5.3e-9
   // against a true optimum of 5.8e-7 and called it best. Nothing the cap or the slop does can reach these
   // two variables now, so the tie set can only ever add candidates to consider, never remove the winner.
   let bestFloatAllocation: number[] | null = null;
