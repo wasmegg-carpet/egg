@@ -521,9 +521,9 @@ export default defineComponent({
         }))
     );
 
-    // A plan visit's figures beat the save's wherever it has one — it simulates a moment the save
-    // knows nothing about — and the manual override still beats both. The rows say which of the two
-    // they are showing rather than both claiming to come from the save.
+    // A plan visit's figures beat the save's wherever it has one, because the visit simulates a
+    // moment the save knows nothing about, and the manual override still beats both. The rows say
+    // which of the two they are showing rather than both claiming to come from the save.
     const planSourceLabel = computed(() => (activePlanVisit.value ? 'from plan' : 'save'));
 
     const sourceTankLevel = computed(() => activePlanVisit.value?.tankLevel ?? playerTankLevel.value);

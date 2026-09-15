@@ -1,6 +1,6 @@
 /**
- * The arithmetic a set of launches implies — fuel, gems, scheduling entries — over the one shape
- * both producers of launches already have: the mission grid's queue and an imported Humility plan.
+ * The fuel, gems and scheduling entries a set of launches implies, over the one shape both
+ * producers of launches already have: the mission grid's queue and an imported Humility plan.
  *
  * It lives here rather than in either of them because both were computing it, identically, from
  * the same tables in `@/lib/missions`.
@@ -23,7 +23,7 @@ export interface Launch {
   count: number;
 }
 
-/** All five figures, including Humility — which is free on the Path of Virtue but still deducted. */
+/** All five figures, including Humility, which is free on the Path of Virtue but still deducted. */
 export function fuelForLaunches(launches: readonly Launch[]): Record<VirtueEgg, number> {
   const costs: Record<VirtueEgg, number> = {
     curiosity: 0,

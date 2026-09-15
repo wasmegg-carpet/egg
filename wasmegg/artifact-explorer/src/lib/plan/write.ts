@@ -2,8 +2,8 @@
 //
 // A projection, not a serialization: `OptimizerSolution` carries `fuelByEgg`, `supplyVector`,
 // `craftPrimal` and the recipe DAG as `Map`s, which `JSON.stringify` renders as `{}`. Narrowing
-// by hand is right regardless — AP has no use for a recipe DAG, and what does cross the seam is
-// then a list this file can be read against.
+// by hand is right regardless, because AP has no use for a recipe DAG, and what does cross the
+// seam is then a list this file can be read against.
 
 import { ei, getArtifactTierPropsFromId } from 'lib';
 
@@ -62,8 +62,8 @@ function fuelRequiredOf(solution: OptimizerSolution): Partial<Record<VirtueEgg, 
   const fuel: Partial<Record<VirtueEgg, number>> = {};
   for (const [egg, amount] of solution.fuelByEgg) {
     const name = EGG_NAME_BY_ID.get(egg);
-    // Humility never appears — `phases.ts` strips it from every option — and this is where that
-    // stays true. AP re-derives all five figures from its own table and treats these as a
+    // Humility never appears, because `phases.ts` strips it from every option, and this is where
+    // that stays true. AP re-derives all five figures from its own table and treats these as a
     // cross-check, so an unexpected key here would be a claim rather than a correction.
     if (name === undefined) continue;
     fuel[name] = (fuel[name] ?? 0) + amount;

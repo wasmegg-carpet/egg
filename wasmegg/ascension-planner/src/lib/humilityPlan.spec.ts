@@ -1,6 +1,6 @@
 // The planner half of the artifact-explorer seam. Reads the same two fixtures the explorer's
-// `tests/unit/plan-seam.spec.ts` reads, from the explorer's tree — one copy, two readers, so the
-// schema has an executable definition rather than two prose ones. See the README beside them.
+// `tests/unit/plan-seam.spec.ts` reads, from the explorer's tree. One copy with two readers gives
+// the schema an executable definition rather than two prose ones. See the README beside them.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -99,7 +99,7 @@ describe('parsing a humility plan', () => {
   });
 });
 
-describe('mapping the wire format onto this app’s enums', () => {
+describe("mapping the wire format onto this app's enums", () => {
   it('reads ships and durations by name, not by number', () => {
     const [visit] = humilityPlan().visits;
     const launches = resolveLaunches(visit);
@@ -109,7 +109,7 @@ describe('mapping the wire format onto this app’s enums', () => {
     ]);
   });
 
-  it('does not silently read the protobuf’s EPIC as this app’s', () => {
+  it("does not silently read the protobuf's EPIC as this app's", () => {
     // The collision this seam exists to avoid: the protobuf numbers EPIC 2 and TUTORIAL 3, this
     // app numbers EPIC 3. A file carrying the integer 3 would mean two different missions.
     expect(DurationType.EPIC).toBe(3);
@@ -151,7 +151,7 @@ describe('mapping the wire format onto this app’s enums', () => {
 });
 
 describe('fuel', () => {
-  it('adds back the Humility the explorer strips, from this app’s own table', () => {
+  it("adds back the Humility the explorer strips, from this app's own table", () => {
     const [visit] = humilityPlan().visits;
     const ours = fuelForLaunches(resolveLaunches(visit));
 
@@ -253,7 +253,7 @@ describe('what staging a visit costs', () => {
     expect(launchSchedule(launches, 60).totalSeconds).toBeLessThan(noFtl.totalSeconds);
   });
 
-  it('prices the launch from this app’s ship prices', () => {
+  it("prices the launch from this app's ship prices", () => {
     const [visit] = humilityPlan().visits;
     const launches = resolveLaunches(visit);
     expect(launchCost(launches)).toBe(launches.reduce((cost, l) => cost + SHIP_INFO[l.ship].price * l.count, 0));

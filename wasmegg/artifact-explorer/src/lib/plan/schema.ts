@@ -95,15 +95,15 @@ export interface HumilityPlanVisit {
   label: string;
 
   targets: HumilityPlanTarget[];
-  // THIS VISIT ONLY. Not cycle-wide: one legendary of a target satisfies the whole cycle, so the
-  // product over visits would overstate the result.
+  // For this visit only, not for the cycle: one legendary of a target satisfies the whole cycle,
+  // so the product over visits would overstate the result.
   jointProbability: number;
 
   launches: HumilityPlanLaunch[];
 
   makespanSeconds: number;
   rawMakespanSeconds: number;
-  // No humility key — the importer re-derives all five figures from AP's own table and treats
+  // No humility key. The importer re-derives all five figures from AP's own table and treats
   // these four as a cross-check.
   fuelRequired: Partial<Record<VirtueEgg, number>>;
   gemCost: number;

@@ -457,15 +457,15 @@ export const missionFilters = ref<MissionFilters>(loadMissionFilters());
 // A plan visit is the third source, and it carries its own flag rather than the persisted one: a
 // visit is solved either against the fuel the plan banks on arrival, or against a full tank, which
 // is the answer for a plan that has not scheduled its fuel yet and wants this app to say how much
-// to store. Null is what "full tank" means to the optimizer — the aggregate tank row, one pooled
+// to store. Null is what "full tank" means to the optimizer: the aggregate tank row, one pooled
 // capacity it splits across the eggs however the answer needs.
 export const effectiveFuelByEggCapacity = computed<Map<ei.Egg, number> | null>(() => {
   const visit = activePlanVisit.value;
   if (visit) {
     if (activeVisitSettings.value?.fuelBudget !== 'banked') return null;
     // Copied rather than returned: this Map is posted to the optimizer worker, and `loadedPlan` is a
-    // deep ref, so the visit's own Map is a reactive proxy — no [[MapData]], and structured clone
-    // rejects it. (`playerTankFuels` below is a shallowRef, which is why it needs no copy.)
+    // deep ref, so the visit's own Map is a reactive proxy, which has no [[MapData]] for structured
+    // clone to read. (`playerTankFuels` below is a shallowRef, which is why it needs no copy.)
     return new Map(visit.fuelByEgg);
   }
   if (!missionFilters.value.fuelFromTankContents) return null;

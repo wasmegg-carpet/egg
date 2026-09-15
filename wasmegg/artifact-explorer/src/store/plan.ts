@@ -26,8 +26,9 @@ const PLAN_STORE_VERSION = 1;
 
 // What the optimizer is allowed to burn at a visit. `banked` is the per-egg amount the plan says
 // is in the tank on arrival. `full-tank` is the tank's whole capacity as one pooled budget, split
-// across the eggs however the answer needs — for a plan that has not scheduled its fuel yet, which
-// is what makes the exported `fuelRequired` a statement of what it still has to go store.
+// across the eggs however the answer needs. That is the budget for a plan that has not scheduled
+// its fuel yet, which is what makes the exported `fuelRequired` a statement of what it still has
+// to go store.
 export type VisitFuelBudget = 'banked' | 'full-tank';
 export type GemCostMode = 'plan' | 'custom' | 'unlimited';
 
@@ -147,7 +148,7 @@ export function waitTimeInputFor(visit: HumilityVisit): string {
 // it was an answer to the question these inputs pose, and nothing else would ever withdraw it.
 //
 // `asks` is what the question actually is, for an input that carries more than it: the time budget
-// arrives as raw text, and "11" and "11d" are two spellings of the same eleven days — one of which
+// arrives as raw text, and "11" and "11d" are two spellings of the same eleven days, one of which
 // the field writes back on its own when it normalizes on blur. Retracting on the text would throw
 // away an answer that still answers the question, and nothing would recompute it: the budget the
 // solver reads never moved, so no solve is queued to record one again.

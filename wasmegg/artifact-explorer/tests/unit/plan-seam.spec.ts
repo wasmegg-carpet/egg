@@ -47,13 +47,13 @@ describe('reading a plan save', () => {
 
     // Visit 1's run continues past the shift, so a later action in it witnesses the real rate.
     expect(first.earningsPerSecond).toBe(5e33);
-    // Visit 2's run is the shift alone — the plan has scheduled nothing on Humility yet, the case
-    // this page exists for — so the rate comes off the action before arrival instead.
+    // Visit 2's run is the shift alone, because the plan has scheduled nothing on Humility yet,
+    // which is the case this page exists for, so the rate comes off the action before arrival.
     expect(second.plannedDurationSeconds).toBe(0);
     expect(second.earningsPerSecond).toBe(7e33);
   });
 
-  it('reads the plan through the envelope the planner’s library exports it in', () => {
+  it("reads the plan through the envelope the planner's library exports it in", () => {
     const bare = fixture('ascension-plan.json') as object;
     const wrapped = { version: 1, type: 'plan', name: 'my-cycle', timestamp: 0, data: bare };
 
@@ -75,7 +75,7 @@ describe('reading a plan save', () => {
     expect(visits.map(v => v.visitIndex)).toEqual([0, 1]);
   });
 
-  it('reads each visit’s budgets off the boundary action, not off the plan’s end', () => {
+  it("reads each visit's budgets off the boundary action, not off the plan's end", () => {
     const [first, second] = sliceHumilityVisits(planSave());
 
     // The tank grows between the two visits, which is the whole reason the read is per visit:
@@ -208,7 +208,7 @@ describe('reading a malformed plan save', () => {
     expect(first.fuelByEgg.get(ei.Egg.KINDNESS)).toBe(0);
     expect(first.fuelByEgg.get(ei.Egg.RESILIENCE)).toBe(0.5);
     // Both of the arriving snapshot's rates are unreadable, so the visit is priced off the later
-    // action in its own run — the same fallback the one-chicken trough uses, reached differently.
+    // action in its own run, the same fallback the one-chicken rate uses, reached differently.
     expect(first.earningsPerSecond).toBe(5e33);
     // A negative duration is not time the plan spends anywhere; it must not run the clock
     // backwards for every action after it either.
@@ -271,8 +271,8 @@ describe('reading a malformed plan save', () => {
     expect(sliceHumilityVisits(parsePlanSave(offlineWins))[0].earningsPerSecond).toBe(8e33);
 
     // Nothing readable in the run and no action before it either, since the plan opens on
-    // Humility. The rate is zero — not a stand-in constant, which would price this visit's ships
-    // at whatever a second of it happens to be worth.
+    // Humility. The rate is zero, not a stand-in constant, which would price this visit's ships at
+    // whatever a second of it happens to be worth.
     const blind = {
       ...plan,
       actions: plan.actions.slice(1).map(action => ({
@@ -306,8 +306,8 @@ describe('reading a malformed plan save', () => {
     // The one calculation on this side of the seam that has to agree with the planner's own.
     // 2026-03-01 00:30 in New York is 05:30 UTC: a winter date, so the offset is a whole -5 hours
     // and not the -4 that reading it after the March changeover would give. The time of day is
-    // neither noon — where a 12-hour clock reads the same as a 24-hour one, which is why the
-    // fixture's own 12:00 cannot see this — nor midnight, where they differ by the full 12.
+    // neither noon nor midnight. At noon a 12-hour clock reads the same as a 24-hour one, which is
+    // why the fixture's own 12:00 cannot see this; at midnight the two differ by the full 12.
     const plan = raw();
     const zoned = {
       ...plan,
@@ -551,7 +551,7 @@ describe('pointing the optimizer at a visit', () => {
     expect(plan.settingsFor(first.visitId).targetIds).toEqual(['ship-in-a-bottle-4']);
   });
 
-  it('retracts a visit’s answer on any change to what the answer was to', async () => {
+  it("retracts a visit's answer on any change to what the answer was to", async () => {
     const plan = await planStore();
     const visit = plan.loadedPlan.value!.visits[0];
     const edits: (() => void)[] = [
@@ -571,8 +571,8 @@ describe('pointing the optimizer at a visit', () => {
   it('keeps it when the time budget is re-spelled rather than changed', async () => {
     const plan = await planStore();
     // The plan spends 86400s here, and the field normalizes on blur, so `1d` is written back over
-    // it with no edit at all. Nothing would recompute after a retraction here — the seconds the
-    // solver reads never moved — so the export would just lose the visit.
+    // it with no edit at all. Nothing would recompute after a retraction here, because the seconds
+    // the solver reads never moved, so the export would just lose the visit.
     const visit = plan.loadedPlan.value!.visits[0];
     plan.recordSolvedVisit(solvedAt(visit.visitId));
 
@@ -593,7 +593,7 @@ describe('the budgets the optimizer worker is handed', () => {
     const budget = store.effectiveFuelByEggCapacity.value;
 
     // `loadedPlan` is a deep ref, so the visit's `fuelByEgg` comes back out of it as a reactive
-    // proxy, and a proxied Map has no [[MapData]] for structured clone to read — `postMessage`
+    // proxy, and a proxied Map has no [[MapData]] for structured clone to read, so `postMessage`
     // would throw `DataCloneError` for every solve on a plan visit.
     expect(() => structuredClone({ fuelByEggCapacity: budget })).not.toThrow();
     expect(budget!.get(ei.Egg.CURIOSITY)).toBe(4.5e14);
@@ -605,7 +605,7 @@ describe('the budgets the optimizer worker is handed', () => {
     const visit = plan.activePlanVisit.value!;
 
     plan.setVisitFuelBudget(visit.visitId, 'full-tank');
-    // Null is the aggregate tank row: one pooled capacity, which is the whole point — the solver
+    // Null is the aggregate tank row: one pooled capacity, which is the whole point. The solver
     // picks the split, and that split is what the plan then has to go store.
     expect(store.effectiveFuelByEggCapacity.value).toBeNull();
     expect(store.effectiveFuelTankCapacity.value).toBe(fuelTankSizes[visit.tankLevel]);
@@ -614,7 +614,7 @@ describe('the budgets the optimizer worker is handed', () => {
     expect(store.effectiveFuelByEggCapacity.value!.get(ei.Egg.CURIOSITY)).toBe(4.5e14);
   });
 
-  it('take the plan’s figures over the save’s, and the typed ones over the plan’s', async () => {
+  it("take the plan's figures over the save's, and the typed ones over the plan's", async () => {
     const store = await storeWithVisit(0);
     const plan = await import('@/store/plan');
     const visit = plan.activePlanVisit.value!;
@@ -629,7 +629,7 @@ describe('the budgets the optimizer worker is handed', () => {
     expect(store.effectiveMaxGemCost.value).toBe(1234);
     store.setMaxGemCostEnabled(false);
 
-    // Off the plan, the same refs go back to the loaded save's — here, to no save at all.
+    // Off the plan, the same refs go back to the loaded save's, which here is no save at all.
     plan.setCurrentVisit(null);
     expect(store.effectiveMaxGemCost.value).toBeUndefined();
     expect(store.effectiveTankLevel.value).toBe(fuelTankSizes.length - 1);

@@ -1,5 +1,5 @@
-// Reads the artifact explorer’s Humility plans. Ships and durations cross as enum names;
-// target ids use the shared protobuf enum. Fuel is derived from this app’s tables.
+// Reads the artifact explorer's Humility plans. Ships and durations cross as enum names;
+// target ids use the shared protobuf enum. Fuel is derived from this app's tables.
 
 import { ei } from 'lib';
 
@@ -147,12 +147,13 @@ export function fuelDrift(visit: HumilityPlanVisit, ours: Record<VirtueEgg, numb
 
 /**
  * Every Humility visit in a plan, in plan order. A visit is a maximal run of actions whose snapshot
- * says Humility, keyed on the first of them — the same rule the artifact explorer slices by, so the
- * id it writes into a solved visit is an id that appears here.
+ * says Humility, keyed on the first of them. That is the same rule the artifact explorer slices
+ * by, so the id it writes into a solved visit is an id that appears here.
  *
- * The one place that rule is spelled. Deriving both the ids and the insertion point from the same
- * walk is what makes "this id names a run that is still on Humility" structural rather than a check
- * each caller has to remember: an id that no longer heads a Humility run simply is not in here.
+ * This is the one place that rule is spelled out. Deriving both the ids and the insertion point
+ * from the same walk is what makes "this id names a run that is still on Humility" structural
+ * rather than a check each caller has to remember: an id that no longer heads a Humility run is
+ * simply not in here.
  */
 export interface HumilityVisitRun {
   visitId: string;
@@ -177,7 +178,7 @@ export function humilityVisitIds(actions: readonly Action[]): string[] {
 
 /**
  * Which of a file's visits this plan can still take, and the only check there is: does the visit
- * still exist here. Resolved as a prefix — the walk stops at the first visit the plan has lost,
+ * still exist here. Resolved as a prefix, so the walk stops at the first visit the plan has lost
  * and every later one is withheld even if its own id survived. A file's visits are a sequence of
  * answers to one cycle; once the plan no longer contains one of them, the plan the rest were
  * solved against is not this plan any more, and staging them would be staging into a shape that
@@ -199,10 +200,10 @@ export function stageableVisitIds(file: HumilityPlanFile, planVisitIds: readonly
 
 /**
  * Where a visit's launch goes: the end of that visit's run of actions, not its start. The player's
- * own actions inside the visit — fuel stored, research bought — come first, and the fuel and bank
- * this app derives are read from the snapshot at the insertion point, so the later position is the
- * more accurate one. Null when the plan no longer contains the visit — including when a shift
- * retargeted to another egg leaves the id in place while the visit it named is gone.
+ * own actions inside the visit, such as fuel stored and research bought, come first, and the fuel
+ * and bank this app derives are read from the snapshot at the insertion point, so the later
+ * position is the more accurate one. Null when the plan no longer contains the visit, including
+ * when a shift retargeted to another egg leaves the id in place while the visit it named is gone.
  */
 export function humilityVisitInsertIndex(actions: readonly Action[], visitId: string): number | null {
   const run = humilityVisitRuns(actions).find(r => r.visitId === visitId);
@@ -216,8 +217,8 @@ export interface FuelShortfall {
 
 /**
  * What has to be stored before the launch, given what the tank already holds where the launch is
- * going. Only the eggs that fall short: the tank is not topped up to the requirement, it is
- * brought up to it.
+ * going. Only the eggs that fall short, and only by the amount they fall short: the tank is
+ * brought up to the requirement, not filled.
  */
 export function fuelShortfalls(
   required: Record<VirtueEgg, number>,
@@ -263,7 +264,7 @@ export function parseHumilityPlan(json: unknown): HumilityPlanFile {
   const file = json;
   if (file.schema !== HUMILITY_PLAN_SCHEMA) {
     throw new HumilityPlanError(
-      'That is not a Humility plan file. Export one from the artifact explorer’s mission optimizer.'
+      "That is not a Humility plan file. Export one from the artifact explorer's mission optimizer."
     );
   }
   if (file.schemaVersion !== HUMILITY_PLAN_SCHEMA_VERSION) {

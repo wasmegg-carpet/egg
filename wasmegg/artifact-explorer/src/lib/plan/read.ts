@@ -32,8 +32,8 @@ export interface HumilityVisit {
   // start, in which case the visit is still planable, just undated.
   arrivalTimestamp: number | null;
   // Time the plan spends on Humility after arriving. Zero is normal and means the plan has
-  // nothing scheduled there yet, which is exactly when a player comes here — the visit page
-  // takes a manual budget in that case.
+  // nothing scheduled there yet, which is exactly when a player comes here. The visit page takes
+  // a manual budget in that case.
   plannedDurationSeconds: number;
 
   // Per-egg fuel banked in the tank on arrival, Humility excluded.
@@ -42,7 +42,7 @@ export interface HumilityVisit {
   // What the plan holds the moment it lands on Humility, which is nothing: shifting zeroes the
   // bank. Everything the visit has to spend is therefore earned during it.
   bankValue: number;
-  // The rate the farm runs at on Humility, not the rate at the instant of arrival — see
+  // The rate the farm runs at on Humility, not the rate at the instant of arrival. See
   // `earningsRateOf`.
   earningsPerSecond: number;
 
@@ -56,10 +56,10 @@ function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null;
 }
 
-// AP's library writes an envelope around the save — `{version, type, name, data}` for one plan,
-// `{version, type, plans: [{name, data}]}` for the whole library — and its own importer reads the
-// bare save too. All three shapes reach this file picker, so the envelope is peeled here and
-// everything below only ever sees the save. The version checked is always the inner one: the
+// AP's library writes an envelope around the save. It is `{version, type, name, data}` for one
+// plan and `{version, type, plans: [{name, data}]}` for the whole library, and AP's own importer
+// reads the bare save too. All three shapes reach this file picker, so the envelope is peeled
+// here and everything below only ever sees the save. The version checked is always the inner one: the
 // envelope carries a version of its own that numbers a different thing.
 function unwrapPlanEnvelope(json: Record<string, unknown>): Record<string, unknown> {
   if (json.type === 'plan') {
@@ -76,7 +76,7 @@ function unwrapPlanEnvelope(json: Record<string, unknown>): Record<string, unkno
 }
 
 // Validated rather than cast: the file is picked by the user and a missing `endState` further in
-// would surface as a budget of NaN rather than as a message they can act on.
+// would show up as a budget of NaN rather than as a message they can act on.
 export function parsePlanSave(json: unknown): PlanSave {
   if (!isRecord(json)) throw new PlanSaveError('Not a plan file: expected a JSON object.');
   const save = unwrapPlanEnvelope(json);
@@ -144,15 +144,15 @@ function secondsOf(action: PlanSaveAction): number {
 }
 
 // `shift` sets population to 1 (`ascension-planner/src/engine/apply/actions.ts`), so the snapshot
-// on the action that enters Humility is the farm with a single chicken in it — a rate nine orders
-// of magnitude under what the visit is actually flown at, and one it holds for no part of the
-// visit. What is wanted is the rate the farm returns to once the habs refill, so it is taken as
-// the best seen across the visit's own actions and the one action before arrival: a later action
-// in the run witnesses that rate directly, and when the plan has scheduled nothing on Humility yet
-// — the case a player comes here for — there is no such action, leaving the pre-shift farm, same
-// capacity and same artifacts with its population not yet zeroed, as the only witness to it.
+// on the action that enters Humility is the farm with a single chicken in it. That rate is nine
+// orders of magnitude under what the visit is actually flown at, and the farm holds it for no part
+// of the visit. What is wanted is the rate the farm returns to once the habs refill, so it is
+// taken as the best seen across the visit's own actions and the one action before arrival. A later
+// action in the run witnesses that rate directly. When the plan has scheduled nothing on Humility
+// yet, which is the case a player comes here for, there is no such action, and the only witness
+// left is the pre-shift farm, same capacity and same artifacts with its population not yet zeroed.
 //
-// The trough can never win a maximum, which is what makes one action of slack enough here.
+// The one-chicken rate can never win a maximum, which is what makes one action of slack enough here.
 function earningsRateOf(action: PlanSaveAction | undefined): number {
   const state = action?.endState;
   if (!state) return 0;
@@ -220,13 +220,13 @@ export function sliceHumilityVisits(save: PlanSave): HumilityVisit[] {
   return visits;
 }
 
-// What one ship may cost at this visit: what the plan says is in the bank on arrival — nothing,
-// since shifting zeroes it — plus what the farm earns over however long the visit is budgeted to
-// run. The duration is a parameter because the plan's own figure is zero for a visit whose
-// missions have not been scheduled yet, which is the case a player comes here to fill in.
+// What one ship may cost at this visit is what the plan says is in the bank on arrival, which is
+// nothing because shifting zeroes it, plus what the farm earns over however long the visit is
+// budgeted to run. The duration is a parameter because the plan's own figure is zero for a visit
+// whose missions have not been scheduled yet, which is the case a player comes here to fill in.
 //
-// This is a per-ship filter, not a spend limit: the optimizer drops options costing more than it
-// but nothing bounds the plan's total, so the total is reported and warned on instead.
+// This is a per-ship filter, not a spend limit. The optimizer drops options that cost more than
+// it, but nothing bounds the plan's total, so the total is reported and warned on instead.
 export function gemBudgetFor(visit: HumilityVisit, durationSeconds: number): number {
   const seconds = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
   return visit.bankValue + visit.earningsPerSecond * seconds;

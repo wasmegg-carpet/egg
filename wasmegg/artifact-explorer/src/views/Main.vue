@@ -3,7 +3,9 @@
   <mission-selector :key="route.path" v-model="selectedMissionId" class="my-4" />
   <artifact-selector :key="route.path" v-model="selectedArtifactId" class="my-4" />
   <tank-artifact-selector v-model="selectedTankArtifactIds" class="my-4" />
-  <p class="my-4 text-sm text-gray-500">Planning a Humility cycle? Pick your targets, then load your ascension plan.</p>
+  <p class="my-4 text-sm text-gray-500">
+    To plan a Humility cycle, pick your targets and then load your ascension plan.
+  </p>
   <router-view name="mission" />
   <div class="my-4 text-xs text-red-900">
     <p class="font-medium">Artifact notes:</p>

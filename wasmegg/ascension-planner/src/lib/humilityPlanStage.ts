@@ -94,8 +94,8 @@ export function stageHumilityVisit(
   const required = fuelForLaunches(launches);
   // Check before expanding counts into individual scheduling entries. Humility is left out of the
   // requirement: the farm is on Humility for the whole visit, so that fuel comes off production and
-  // never has to fit in the tank alongside the rest — the same exemption the mission grid's budget
-  // makes (`isOverBudget` in `stores/rockets.ts`). Counting it here rejected plans whose four
+  // never has to fit in the tank alongside the rest. The mission grid's budget makes the same
+  // exemption (`isOverBudget` in `stores/rockets.ts`). Counting it here rejected plans whose four
   // stored fuels fit.
   validateTank({ ...required, humility: 0 }, previous.tankLevel);
 
@@ -171,8 +171,8 @@ export function stageHumilityVisit(
   launchIndex = humilityVisitInsertIndex(filled, visit.visitId)!;
   previous = filled[launchIndex - 1].endState;
 
-  // Whatever the plan's own visits to an egg could not hold — including all of it, for an egg the
-  // plan never visits — is stored in a phase of its own just before this visit. Opening a phase by
+  // Whatever the plan's own visits to an egg could not hold, which is all of it for an egg the
+  // plan never visits, is stored in a phase of its own just before this visit. Opening a phase by
   // hand is shift, wait for the habs the shift emptied, then work, so a staged phase opens the same
   // way. The payload is re-derived against the post-shift state on every simulate, so these are
   // seeds.

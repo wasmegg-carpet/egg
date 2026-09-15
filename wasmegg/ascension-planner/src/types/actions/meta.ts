@@ -28,8 +28,8 @@ export interface BaseAction {
   /**
    * What put this action here, when it was not built by hand. Written by the Humility plan import,
    * and read only by it: re-importing a visit replaces the actions its previous import left rather
-   * than duplicating them. The actions themselves are ordinary — individually editable, removed by
-   * deleting them like any other.
+   * than duplicating them. The actions themselves are ordinary: individually editable, and removed
+   * by deleting them like any other.
    */
   sourceTag?: string;
 }
