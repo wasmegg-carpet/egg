@@ -5,9 +5,9 @@ import {
   computePlanCraftingCost,
   craftCostOf,
   craftingPriceParamsOf,
-  fractionalCraftCost,
+  linearCraftCost,
   previousCraftsOf,
-  sumCraftChainCost,
+  craftChainCost,
 } from '@/lib/optimizer-cost';
 import { computeCraftChainTree } from '@/lib/optimizer-tree';
 import { lt1, lt2, lt3, lt4, makeNode, makeSolution, totemDag } from './spec-helpers';
@@ -54,50 +54,50 @@ describe('previousCraftsOf', () => {
   });
 });
 
-describe('fractionalCraftCost', () => {
+describe('linearCraftCost', () => {
   const params = paramsOf(lt3);
 
   it('charges every craft at the player’s next craft price', () => {
     for (const n of [1, 2, 5, 20]) {
-      expect(fractionalCraftCost(params, 0, n)).toBe(n * singleCraftCost(params, 0));
+      expect(linearCraftCost(params, 0, n)).toBe(n * singleCraftCost(params, 0));
     }
   });
 
   it('over-states multiCraftCost past the first craft, never under-states it', () => {
-    expect(fractionalCraftCost(params, 0, 1)).toBe(multiCraftCost(params, 0, 1));
+    expect(linearCraftCost(params, 0, 1)).toBe(multiCraftCost(params, 0, 1));
     for (const n of [2, 5, 20]) {
-      expect(fractionalCraftCost(params, 0, n)).toBeGreaterThan(multiCraftCost(params, 0, n));
+      expect(linearCraftCost(params, 0, n)).toBeGreaterThan(multiCraftCost(params, 0, n));
     }
   });
 
   it('honours the starting craft index, so a veteran pays less', () => {
-    expect(fractionalCraftCost(params, 30, 4)).toBe(4 * singleCraftCost(params, 30));
-    expect(fractionalCraftCost(params, 30, 4)).toBeLessThan(fractionalCraftCost(params, 0, 4));
+    expect(linearCraftCost(params, 30, 4)).toBe(4 * singleCraftCost(params, 30));
+    expect(linearCraftCost(params, 30, 4)).toBeLessThan(linearCraftCost(params, 0, 4));
   });
 
   it('is proportional in crafts, so a fraction costs a fraction', () => {
-    expect(fractionalCraftCost(params, 0, 3.4)).toBeCloseTo(3.4 * singleCraftCost(params, 0), 9);
+    expect(linearCraftCost(params, 0, 3.4)).toBeCloseTo(3.4 * singleCraftCost(params, 0), 9);
     // additive, hence no whole-craft boundary to price around
-    expect(fractionalCraftCost(params, 0, 1.4) + fractionalCraftCost(params, 0, 2)).toBeCloseTo(
-      fractionalCraftCost(params, 0, 3.4),
+    expect(linearCraftCost(params, 0, 1.4) + linearCraftCost(params, 0, 2)).toBeCloseTo(
+      linearCraftCost(params, 0, 3.4),
       9
     );
   });
 
   it('is monotone, with no jump at a whole craft count', () => {
-    const justBelow = fractionalCraftCost(params, 0, 2.999);
-    const at = fractionalCraftCost(params, 0, 3);
-    const justAbove = fractionalCraftCost(params, 0, 3.001);
+    const justBelow = linearCraftCost(params, 0, 2.999);
+    const at = linearCraftCost(params, 0, 3);
+    const justAbove = linearCraftCost(params, 0, 3.001);
     expect(justBelow).toBeLessThanOrEqual(at);
     expect(at).toBeLessThanOrEqual(justAbove);
     expect(justAbove - justBelow).toBeLessThan(singleCraftCost(params, 3));
   });
 
   it('is 0 for non-positive or non-finite counts', () => {
-    expect(fractionalCraftCost(params, 0, 0)).toBe(0);
-    expect(fractionalCraftCost(params, 0, -2)).toBe(0);
-    expect(fractionalCraftCost(params, 0, NaN)).toBe(0);
-    expect(fractionalCraftCost(params, 0, Infinity)).toBe(0);
+    expect(linearCraftCost(params, 0, 0)).toBe(0);
+    expect(linearCraftCost(params, 0, -2)).toBe(0);
+    expect(linearCraftCost(params, 0, NaN)).toBe(0);
+    expect(linearCraftCost(params, 0, Infinity)).toBe(0);
   });
 });
 
@@ -163,9 +163,9 @@ describe('computePlanCraftingCost', () => {
   });
 });
 
-describe('sumCraftChainCost', () => {
+describe('craftChainCost', () => {
   it('is 0 for a missing tree', () => {
-    expect(sumCraftChainCost(null)).toBe(0);
+    expect(craftChainCost(null)).toBe(0);
   });
 
   it('counts a node shared by two branches once', () => {
@@ -182,7 +182,7 @@ describe('sumCraftChainCost', () => {
     });
     const tree = computeCraftChainTree(solution, lt4, null)!;
 
-    expect(sumCraftChainCost(tree)).toBeCloseTo(
+    expect(craftChainCost(tree)).toBeCloseTo(
       singleCraftCost(paramsOf(lt4), 0) + 2 * singleCraftCost(paramsOf(lt3), 0) + singleCraftCost(paramsOf(lt2), 0),
       9
     );
@@ -209,8 +209,8 @@ describe('sumCraftChainCost', () => {
       ],
     });
 
-    const lt3Cost = sumCraftChainCost(computeCraftChainTree(solution, lt3, null));
-    const lt4Cost = sumCraftChainCost(computeCraftChainTree(solution, lt4, null));
+    const lt3Cost = craftChainCost(computeCraftChainTree(solution, lt3, null));
+    const lt4Cost = craftChainCost(computeCraftChainTree(solution, lt4, null));
     expect(lt3Cost).toBeCloseTo(craftCostOf(lt3, 1, null) + craftCostOf(lt2, 4, null) / 2, 9);
     expect(lt4Cost).toBeCloseTo(craftCostOf(lt4, 1, null) + craftCostOf(lt2, 4, null) / 2, 9);
 

@@ -58,9 +58,9 @@ function fuelRequiredOf(solution: OptimizerSolution): Partial<Record<VirtueEgg, 
   const fuel: Partial<Record<VirtueEgg, number>> = {};
   for (const [egg, amount] of solution.fuelByEgg) {
     const name = EGG_NAME_BY_ID.get(egg);
-    // Humility never appears, because `phases.ts` strips it from every option, and this is where
-    // that stays true. AP re-derives all five figures from its own table and treats these as a
-    // cross-check, so an unexpected key here would be a claim rather than a correction.
+    // Humility never appears here, per `makeLaunchOption` in problem-inputs.ts. AP re-derives all five
+    // figures from its own table and treats these as a cross-check, so an unexpected key here would be
+    // a claim rather than a correction.
     if (name === undefined) continue;
     fuel[name] = (fuel[name] ?? 0) + amount;
   }

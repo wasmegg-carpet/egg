@@ -5,5 +5,9 @@
 - `humility-plan.json`: artifact explorer output, read by
   `wasmegg/ascension-planner/src/lib/humilityPlan.ts`.
 
-Both apps test these shared fixtures in `tests/unit/plan-seam.spec.ts` and
-`wasmegg/ascension-planner/src/lib/humilityPlan.spec.ts`.
+Both apps assert against these same two files: `tests/unit/plan-seam.spec.ts`
+here, and `wasmegg/ascension-planner/src/lib/humilityPlan.spec.ts` on the
+other side. Neither file is generated. A schema change on either side needs
+the writer (`src/lib/plan/write.ts` for `humility-plan.json`; the ascension
+planner's save export for `ascension-plan.json`) and this checked-in JSON
+updated by hand together, or the matching spec fails on the mismatch.

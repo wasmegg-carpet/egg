@@ -28,7 +28,7 @@ export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
     children: artifactIngredients.map(
       (ingredient: Ingredient): DAGChildRef => ({
         nodeId: ingredient.id,
-        quantity: ingredient.count,
+        qty: ingredient.count,
       })
     ),
     legendaryCraftProbability: 0, // buildRecipeDag fills this in for the root
@@ -125,6 +125,9 @@ function makeLaunchOption(
   const id = `${mission.missionTypeId}::${target}`;
   const fuelUse = mission.virtueFuels;
 
+  // Humility fuel is free on the Path of Virtue, so it is stripped from every mission's cost here
+  // rather than budgeted like the other four eggs. This is the one place that stripping happens, and
+  // everything downstream relies on Humility never appearing in a LaunchOption's fuel fields.
   const nonHumilityFuelUse = fuelUse.filter(x => x.egg !== ei.Egg.HUMILITY);
 
   const rawTime = mission.boostedDurationSeconds(playerConfig);

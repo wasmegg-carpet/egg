@@ -40,11 +40,7 @@
             </p>
             <p v-else-if="computeError" class="text-sm text-red-600">Could not compute a plan: {{ computeError }}</p>
             <p v-else-if="solutionViews.length === 0" class="text-sm text-gray-400">
-              {{
-                inputsValid
-                  ? 'No ship set found for the current settings.'
-                  : 'Correct the invalid budget in the sidebar.'
-              }}
+              {{ inputsValid ? 'No ship set found for the current settings.' : invalidBudgetMessage }}
             </p>
           </div>
           <div v-if="dimSolution" role="status" class="absolute inset-0 flex items-start justify-center pt-8">
@@ -86,6 +82,8 @@ import {
   effectiveMaxGemCost,
   effectiveCraftingBudget,
   costBudgetsValid,
+  craftingCostInvalid,
+  gemCostInvalid,
   gemCostMode,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
@@ -109,7 +107,7 @@ import { gemBudgetFor } from '@/lib/plan/read';
 import { projectSolvedVisit } from '@/lib/plan/write';
 import {
   buildRecipeDag,
-  computeBaseYield,
+  computeOwnedStock,
   computeCraftChainTree,
   computeInventoryTree,
   computeCraftUnitPrices,
@@ -122,7 +120,7 @@ import {
   type OptimizerSolution,
   type TargetView,
 } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from '@/lib/optimizer-client';
 import OptimizerSidebar from './optimizer/OptimizerSidebar.vue';
 import OptimizerInventoryPanel from './optimizer/OptimizerInventoryPanel.vue';
@@ -180,6 +178,20 @@ export default defineComponent({
     const computeError = ref('');
     const computedResults = ref<OptimizerSolution[]>([]);
     const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value);
+    // Names the field that's blocking a solve, and — for a plan visit whose time budget is empty
+    // because the plan hasn't scheduled its missions yet — says why, rather than pointing at "the
+    // budget" in general.
+    const invalidBudgetMessage = computed(() => {
+      if (!timeBudgetValid.value) {
+        if (activePlanVisit.value && maxWaitTimeSeconds.value === 0) {
+          return "This visit's time budget is empty because the plan hasn't scheduled any Humility missions for it yet. Enter a time budget in the sidebar to solve it anyway.";
+        }
+        return 'Enter a valid time budget in the sidebar — a positive duration such as 30, 12d12h, or 10h5m.';
+      }
+      if (gemCostInvalid.value) return 'Enter a valid maximum purchase cost in the sidebar (e.g. 10S).';
+      if (craftingCostInvalid.value) return 'Enter a valid maximum crafting cost in the sidebar (e.g. 25M).';
+      return 'Correct the invalid budget in the sidebar.';
+    });
     const inventoryRevision = ref(0);
     watch(playerInventory, () => inventoryRevision.value++, { flush: 'sync' });
     // Capture result metadata before inputs can change during a solve.
@@ -219,8 +231,8 @@ export default defineComponent({
       )
     );
 
-    const playerBaseYield = computed<ReturnType<typeof computeBaseYield>>(() =>
-      computeBaseYield(playerInventory.value, artifactIds.value, recipeDag.value)
+    const playerOwnedStock = computed<ReturnType<typeof computeOwnedStock>>(() =>
+      computeOwnedStock(playerInventory.value, artifactIds.value, recipeDag.value)
     );
 
     // Launch-option enumeration stays on the main thread: it is the only step needing the loot dataset, which this bundle already loads.
@@ -250,7 +262,7 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
-        baseYield: playerBaseYield.value,
+        ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
         craftBudget,
       };
@@ -383,6 +395,7 @@ export default defineComponent({
       snapshot,
       inputsValid,
       timeBudgetValid,
+      invalidBudgetMessage,
       computing,
       computeError,
       playerId,

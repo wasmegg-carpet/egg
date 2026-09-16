@@ -4,9 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import { ei, getArtifactTierPropsFromId, Inventory, multiCraftCost, perfectShipsConfig, singleCraftCost } from 'lib';
 
-import { buildRecipeDag, computeBaseYield, computePlanCraftingCost, computeCraftUnitPrices } from '@/lib';
+import { buildRecipeDag, computeOwnedStock, computePlanCraftingCost, computeCraftUnitPrices } from '@/lib';
 import { loadHighs } from '@/lib/solver/highs';
-import { DEFAULT_TUNING, solveWith } from '@/lib/solver/oa';
+import { DEFAULT_TUNING, solveWith } from '@/lib/solver/solve';
 import type { PlanProblem } from '@/lib/solver/types';
 import type { RecipeDAG } from '@/lib/types';
 import { CUBE_RUN, makeNode, makeOpt, optimize } from './spec-helpers';
@@ -60,16 +60,16 @@ describe('computeCraftUnitPrices', () => {
 describe('optimize', () => {
   const config = CUBE_RUN;
   const cubes = buildRecipeDag(config.desiredArtifactNodeIds, 30);
-  const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, cubes);
+  const ownedStock = computeOwnedStock(null, config.desiredArtifactNodeIds, cubes);
   const unitPrices = computeCraftUnitPrices(cubes, null);
 
   it('brings the priced plan under a cap that the uncapped plan blows', async () => {
-    const uncapped = await optimize(config, perfectShipsConfig, cubes, baseYield);
+    const uncapped = await optimize(config, perfectShipsConfig, cubes, ownedStock);
     const uncappedCost = computePlanCraftingCost(uncapped, null).total;
     expect(uncappedCost).toBeGreaterThan(0);
 
     const capacity = uncappedCost / 4;
-    const capped = await optimize(config, perfectShipsConfig, cubes, baseYield, {
+    const capped = await optimize(config, perfectShipsConfig, cubes, ownedStock, {
       craftBudget: { capacity, unitPrices },
     });
 
@@ -80,12 +80,12 @@ describe('optimize', () => {
   }, 60_000);
 });
 
-// `model.ts` and `value-function.ts` both drop a budget they cannot turn into a row, so an invalid
+// `model.ts` and `objective.ts` both drop a budget they cannot turn into a row, so an invalid
 // capacity would otherwise read as *no* cap. The store's own schema guard rejects these before they
 // reach the app path; this covers every other caller of `optimizeFull`.
 describe('optimizeFull rejects a craft budget it could not enforce', () => {
   const cubes2 = buildRecipeDag(['puzzle-cube-4'], 30);
-  const baseYield2 = computeBaseYield(null, ['puzzle-cube-4'], cubes2);
+  const ownedStock2 = computeOwnedStock(null, ['puzzle-cube-4'], cubes2);
   const prices2 = computeCraftUnitPrices(cubes2, null);
   const config2 = {
     desiredArtifactNodeIds: ['puzzle-cube-4'],
@@ -96,12 +96,12 @@ describe('optimizeFull rejects a craft budget it could not enforce', () => {
 
   it.each([-1, NaN, Infinity, -Infinity])('throws on capacity %p', async capacity => {
     await expect(
-      optimize(config2, perfectShipsConfig, cubes2, baseYield2, { craftBudget: { capacity, unitPrices: prices2 } })
+      optimize(config2, perfectShipsConfig, cubes2, ownedStock2, { craftBudget: { capacity, unitPrices: prices2 } })
     ).rejects.toThrow(/finite and non-negative/);
   });
 
   it('accepts a capacity of zero, which is a cap and not an absent one', async () => {
-    const plan = await optimize(config2, perfectShipsConfig, cubes2, baseYield2, {
+    const plan = await optimize(config2, perfectShipsConfig, cubes2, ownedStock2, {
       craftBudget: { capacity: 0, unitPrices: prices2 },
     });
     expect(computePlanCraftingCost(plan, null).total).toBe(0);
@@ -125,7 +125,7 @@ describe('the judge scores against the craft budget', () => {
       fuelCapacity: 60,
       timeCapacityPerSlot: 1000,
       slots: 3,
-      baseYield: new Map(),
+      ownedStock: new Map(),
       craftBudget,
     };
   }

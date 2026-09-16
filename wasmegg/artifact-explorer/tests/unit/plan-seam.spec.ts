@@ -8,10 +8,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { ei } from 'lib';
 import { fuelTankSizes, MissionType } from 'lib/missions';
 
-import { gemBudgetFor, parsePlanSave, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import {
+  gemBudgetFor,
+  localTimestampInTimezone,
+  parsePlanSave,
+  PlanSaveError,
+  sliceHumilityVisits,
+} from '@/lib/plan/read';
 import { buildHumilityPlanFile, projectSolvedVisit } from '@/lib/plan/write';
 import { HUMILITY_PLAN_SCHEMA, type HumilityPlanFile } from '@/lib/plan/schema';
 import type { LaunchSolution, OptimizerSolution, SlotSummary } from '@/lib/types';
+import { getLocalTimestampInTimezone } from '../../../ascension-planner/src/lib/events';
 
 const FIXTURES = new URL('../fixtures/', import.meta.url).pathname;
 
@@ -170,44 +177,47 @@ describe('reading a malformed plan save', () => {
     expect(() => parsePlanSave({ ...raw(), initialState: 'EIxxxxxxxxxx' })).toThrow(/`initialState`/);
   });
 
-  it('turns every unusable number in a snapshot into zero instead of carrying NaN forward', () => {
+  // AP always writes these fields as concrete non-negative numbers (see `requireNumber` in
+  // `read.ts`), so a missing or unreadable one is a corrupt save, not a state the plan can
+  // legitimately be in. Each case below damages exactly one field of the fixture's real boundary
+  // action, in a different way a hand-edited or truncated file could break it.
+  function withDamagedAction(patch: { totalTimeSeconds?: unknown; endState?: Record<string, unknown> }): unknown {
     const plan = raw();
-    const damaged = {
+    return {
       ...plan,
       actions: plan.actions.map(action =>
         action.id === 'shift_a1b2c3d'
-          ? {
-              ...action,
-              totalTimeSeconds: -3600,
-              endState: {
-                ...action.endState,
-                tankLevel: undefined,
-                bankValue: null,
-                onlineEarnings: 'a lot',
-                offlineEarnings: Number.NaN,
-                // A negative amount, a non-numeric one, and an egg key that is simply absent. The
-                // readable one is half a unit rather than a full tank: the guard is `> 0`, and every
-                // plausible tank figure is also `> 1`, so a full tank cannot tell those two apart.
-                fuelTankAmounts: { curiosity: -1, integrity: 'none', resilience: 0.5 },
-              },
-            }
+          ? { ...action, ...patch, endState: { ...action.endState, ...patch.endState } }
           : action
       ),
     };
-    const [first] = sliceHumilityVisits(parsePlanSave(damaged));
+  }
 
-    expect(first.tankLevel).toBe(0);
-    expect(first.bankValue).toBe(0);
-    expect(first.fuelByEgg.get(ei.Egg.CURIOSITY)).toBe(0);
-    expect(first.fuelByEgg.get(ei.Egg.INTEGRITY)).toBe(0);
-    expect(first.fuelByEgg.get(ei.Egg.KINDNESS)).toBe(0);
-    expect(first.fuelByEgg.get(ei.Egg.RESILIENCE)).toBe(0.5);
-    // Both of the arriving snapshot's rates are unreadable, so the visit is priced off the later
-    // action in its own run, the same fallback the one-chicken rate uses, reached differently.
-    expect(first.earningsPerSecond).toBe(5e33);
-    // A negative duration is not time the plan spends anywhere; it must not run the clock
-    // backwards for every action after it either.
-    expect(first.arrivalTimestamp).toBe(ASCENSION_START);
+  it('rejects a save with an unreadable tankLevel instead of reading it as zero', () => {
+    const damaged = withDamagedAction({ endState: { tankLevel: undefined } });
+    expect(() => sliceHumilityVisits(parsePlanSave(damaged))).toThrow(/"shift_a1b2c3d".*tankLevel/);
+  });
+
+  it('rejects a save with an unreadable bankValue instead of reading it as zero', () => {
+    const damaged = withDamagedAction({ endState: { bankValue: null } });
+    expect(() => sliceHumilityVisits(parsePlanSave(damaged))).toThrow(/"shift_a1b2c3d".*bankValue/);
+  });
+
+  it('rejects a save with an unreadable onlineEarnings instead of reading it as zero', () => {
+    const damaged = withDamagedAction({ endState: { onlineEarnings: 'a lot' } });
+    expect(() => sliceHumilityVisits(parsePlanSave(damaged))).toThrow(/"shift_a1b2c3d".*onlineEarnings/);
+  });
+
+  it('rejects a save with an unreadable fuelTankAmounts entry instead of reading it as zero', () => {
+    const damaged = withDamagedAction({ endState: { fuelTankAmounts: { curiosity: -1 } } });
+    expect(() => sliceHumilityVisits(parsePlanSave(damaged))).toThrow(/"shift_a1b2c3d".*fuelTankAmounts\.curiosity/);
+  });
+
+  it('rejects a save with a negative totalTimeSeconds instead of reading it as zero', () => {
+    // A negative duration is not time the plan spends anywhere, and letting it through would run
+    // the clock backwards for every action after it.
+    const damaged = withDamagedAction({ totalTimeSeconds: -3600 });
+    expect(() => sliceHumilityVisits(parsePlanSave(damaged))).toThrow(/"shift_a1b2c3d".*totalTimeSeconds/);
   });
 
   it('needs every part of the ascension clock, not just the date', () => {
@@ -248,7 +258,7 @@ describe('reading a malformed plan save', () => {
     expect(first.earningsPerSecond).toBe(5e33);
   });
 
-  it('takes the better of the two earnings rates, and zero when neither can be read', () => {
+  it('takes the better of the two earnings rates', () => {
     const plan = raw();
     // Offline beating online is a farm the plan leaves running unattended. The fixture's online
     // rate always wins, so a reader that consulted only `onlineEarnings` matches it exactly.
@@ -261,10 +271,13 @@ describe('reading a malformed plan save', () => {
       ),
     };
     expect(sliceHumilityVisits(parsePlanSave(offlineWins))[0].earningsPerSecond).toBe(8e33);
+  });
 
-    // Nothing readable in the run and no action before it either, since the plan opens on
-    // Humility. The rate is zero, not a stand-in constant, which would price this visit's ships at
-    // whatever a second of it happens to be worth.
+  it('rejects a boundary action with no readable earnings rate rather than pricing its ships at zero', () => {
+    // The plan opens on Humility, so there is no action before this one to fall back to (see "reads
+    // a plan whose very first action is already on Humility"); its own rate has to be readable, or
+    // gemBudgetFor would price every ship this visit launches at nothing.
+    const plan = raw();
     const blind = {
       ...plan,
       actions: plan.actions.slice(1).map(action => ({
@@ -272,9 +285,7 @@ describe('reading a malformed plan save', () => {
         endState: { ...action.endState, onlineEarnings: undefined, offlineEarnings: 'lots' },
       })),
     };
-    const [first] = sliceHumilityVisits(parsePlanSave(blind));
-    expect(first.earningsPerSecond).toBe(0);
-    expect(gemBudgetFor(first, 86400)).toBe(first.bankValue);
+    expect(() => sliceHumilityVisits(parsePlanSave(blind))).toThrow(/onlineEarnings/);
   });
 
   it('reads absent epic research as level zero', () => {
@@ -318,6 +329,24 @@ describe('reading a malformed plan save', () => {
     // Undated, not unplanable: everything else the visit needs is still there.
     expect(first.tankLevel).toBe(6);
   });
+
+  it("agrees with AP's own wall-clock-to-timestamp calculation, including across a DST transition", () => {
+    // AP writes the ascension start as a wall clock plus an IANA zone; this function is restated
+    // rather than imported (see its own comment), so this is the check that the restatement still
+    // says the same thing as `wasmegg/ascension-planner/src/lib/events.ts`.
+    const grid: [date: string, time: string, zone: string][] = [
+      ['2026-03-01', '12:00', 'UTC'],
+      ['2026-03-08', '01:30', 'America/New_York'], // just before the US spring-forward
+      ['2026-03-08', '03:30', 'America/New_York'], // just after it
+      ['2026-11-01', '01:30', 'America/New_York'], // the US fall-back's repeated hour
+      ['2026-03-29', '00:30', 'Europe/London'], // UK spring-forward
+      ['2026-01-15', '09:00', 'Australia/Sydney'], // southern-hemisphere DST active
+      ['2026-06-15', '09:00', 'Australia/Sydney'], // southern-hemisphere DST inactive
+    ];
+    for (const [date, time, zone] of grid) {
+      expect(localTimestampInTimezone(date, time, zone)).toBe(getLocalTimestampInTimezone(date, time, zone));
+    }
+  });
 });
 
 // A hand-built stand-in for what the solver returns. Only the fields the projection reads are
@@ -356,8 +385,8 @@ function solutionOf(runs: LaunchSolution[], overrides: Partial<OptimizerSolution
     slots,
     choiceHistory: runs,
     expectedDrops: [],
-    finalYieldVector: new Map(),
-    baseYield: new Map(),
+    supplyByItem: new Map(),
+    ownedStock: new Map(),
     recipeDag: new Map(),
     craftPrimal: new Map(),
     perTarget: [],
@@ -468,7 +497,7 @@ describe('writing a humility plan', () => {
       effort: 'medium',
       gemBudget: 0,
       solution: solutionOf([launch(Spaceship.ATREGGIES, DurationType.EPIC, SHIP_IN_A_BOTTLE, 1)], {
-        // A Humility entry can only get here if `phases.ts` stops stripping it. If that ever
+        // A Humility entry can only get here if `problem-inputs.ts` stops stripping it. If that ever
         // happens the planner would double-count, so it is dropped rather than passed on.
         fuelByEgg: new Map([
           [ei.Egg.HUMILITY, 7.5e13],

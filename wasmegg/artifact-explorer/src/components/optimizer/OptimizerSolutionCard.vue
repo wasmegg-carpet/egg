@@ -8,7 +8,7 @@
       <span v-tippy="jointTooltip" class="cursor-help border-b border-dotted border-green-400/60">
         Joint chance of getting all {{ rows.length }} artifacts
       </span>
-      : {{ formatProbability(solution.jointProbability) }}
+      : {{ formatProbabilityForDisplay(solution.jointProbability) }}
     </div>
 
     <div
@@ -24,18 +24,16 @@
         <span v-tippy="chanceTooltip" class="cursor-help border-b border-dotted border-green-400/60">
           Chance of a legendary
         </span>
-        : {{ formatProbability(row.perTarget.bestProbability)
+        : {{ formatProbabilityForDisplay(row.perTarget.bestProbability)
         }}<sup v-if="row.dropDataIsSparse" v-tippy="sparseTooltip" class="text-gray-500 cursor-help ml-0.5">?</sup>
       </div>
       <div class="text-sm text-green-700" :class="multi ? 'pl-6' : 'pl-3'">
-        <span v-tippy="craftTooltip" class="cursor-help border-b border-dotted border-green-400/60">…via crafting</span>
-        : {{ formatProbability(row.perTarget.craftProbability) }}
+        <span v-tippy="craftTooltip" class="cursor-help border-b border-dotted border-green-400/60">Crafting</span>
+        : {{ formatProbabilityForDisplay(row.perTarget.craftProbability) }}
       </div>
       <div class="text-sm text-green-700" :class="multi ? 'pl-6' : 'pl-3'">
-        <span v-tippy="dropTooltip" class="cursor-help border-b border-dotted border-green-400/60"
-          >…via direct drops</span
-        >
-        : {{ formatProbability(row.perTarget.dropProbability)
+        <span v-tippy="dropTooltip" class="cursor-help border-b border-dotted border-green-400/60">Direct drops</span>
+        : {{ formatProbabilityForDisplay(row.perTarget.dropProbability)
         }}<sup v-if="row.dropDataIsSparse" v-tippy="sparseTooltip" class="text-gray-500 cursor-help ml-0.5">?</sup>
       </div>
       <div class="text-gray-600" :class="multi ? 'pl-3' : ''">
@@ -92,7 +90,8 @@
 <script lang="ts">
 import { computed, defineComponent, PropType } from 'vue';
 
-import { eggIconPath, formatDuration, formatEIValue, formatProbability } from 'lib';
+import { eggIconPath, formatDuration, formatEIValue } from 'lib';
+import { formatProbabilityForDisplay } from '@/lib';
 import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
@@ -111,7 +110,6 @@ export default defineComponent({
     goldenEggBalance: { type: Number as PropType<number | null>, default: null },
     targets: { type: Array as PropType<TargetView[]>, required: true },
     planCost: { type: Object as PropType<PlanCost>, required: true },
-    // Earlier visits' drops and crafts are excluded.
     overProvisioned: { type: Boolean, default: false },
   },
   setup(props) {
@@ -169,7 +167,7 @@ export default defineComponent({
     return {
       eggIconPath,
       formatDuration,
-      formatProbability,
+      formatProbabilityForDisplay,
       craftingCostTooltip,
       sparseTooltip,
       chanceTooltip,

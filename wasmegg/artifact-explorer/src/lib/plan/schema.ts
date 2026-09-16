@@ -12,8 +12,8 @@ export const SUPPORTED_PLAN_SAVE_VERSION = 1;
 
 export type VirtueEgg = 'curiosity' | 'integrity' | 'humility' | 'resilience' | 'kindness';
 
-// Humility is absent on purpose: `phases.ts` strips it from every mission's fuel cost, so a
-// budget for it would constrain nothing. AP puts it back from its own table on import.
+// No humility key: `makeLaunchOption` in problem-inputs.ts strips it from every mission's cost.
+// AP re-derives it from its own table on import.
 export const NON_HUMILITY_EGG_IDS: ReadonlyArray<readonly [VirtueEgg, ei.Egg]> = [
   ['curiosity', ei.Egg.CURIOSITY],
   ['integrity', ei.Egg.INTEGRITY],

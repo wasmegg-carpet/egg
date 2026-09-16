@@ -86,8 +86,10 @@ export function parsePlanSave(json: unknown): PlanSave {
 
 // AP writes the ascension start as a wall clock plus an IANA zone. Restated here rather than
 // imported: the whole seam is two JSON documents, and this is the one calculation on the far side
-// of it that has to agree.
-function localTimestampInTimezone(dateStr: string, timeStr: string, timezone: string): number | null {
+// of it that has to agree. `plan-seam.spec.ts` runs this against AP's `getLocalTimestampInTimezone`
+// on a shared grid of timestamps and zones to check that agreement, rather than just asserting it
+// in a comment.
+export function localTimestampInTimezone(dateStr: string, timeStr: string, timezone: string): number | null {
   const [y, m, d] = dateStr.split('-').map(Number);
   const [h, min] = timeStr.split(':').map(Number);
   if (![y, m, d, h, min].every(Number.isFinite)) return null;
@@ -127,28 +129,38 @@ function ascensionStartSeconds(save: PlanSave): number | null {
   return localTimestampInTimezone(v.ascensionDate, v.ascensionTime, v.ascensionTimezone);
 }
 
+// AP always writes these as concrete non-negative numbers; a missing or unreadable one is a
+// corrupt save, not a state the plan can legitimately be in. Coercing it to zero was the bug this
+// guards against: a ship priced against a silently-zeroed bank or duration looks the same as a
+// visit with nothing to spend, with no message telling the player their file is damaged.
+function requireNumber(value: unknown, field: string, actionId: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new PlanSaveError(`Action "${actionId}" has an invalid ${field}.`);
+  }
+  return value;
+}
+
 function secondsOf(action: PlanSaveAction): number {
-  const t = action.totalTimeSeconds;
-  return Number.isFinite(t) && t > 0 ? t : 0;
+  return requireNumber(action.totalTimeSeconds, 'totalTimeSeconds', action.id);
 }
 
 // Shifting resets population to one. Estimate refilled-farm earnings from the maximum
 // across the visit and the pre-shift snapshot, including visits with no missions yet.
 function earningsRateOf(action: PlanSaveAction | undefined): number {
-  const state = action?.endState;
-  if (!state) return 0;
+  // `action` is genuinely absent, not malformed, when the plan opens straight onto Humility and
+  // there is no prior action to read a rate from.
+  if (!action?.endState) return 0;
   return Math.max(
-    Number.isFinite(state.onlineEarnings) ? state.onlineEarnings : 0,
-    Number.isFinite(state.offlineEarnings) ? state.offlineEarnings : 0
+    requireNumber(action.endState.onlineEarnings, 'onlineEarnings', action.id),
+    requireNumber(action.endState.offlineEarnings, 'offlineEarnings', action.id)
   );
 }
 
 function fuelByEggOf(action: PlanSaveAction): Map<ei.Egg, number> {
-  const amounts = action.endState?.fuelTankAmounts ?? {};
+  const amounts = action.endState.fuelTankAmounts;
   const fuels = new Map<ei.Egg, number>();
   for (const [egg, id] of NON_HUMILITY_EGG_IDS) {
-    const amount = amounts[egg];
-    fuels.set(id, Number.isFinite(amount) && (amount as number) > 0 ? (amount as number) : 0);
+    fuels.set(id, requireNumber(isRecord(amounts) ? amounts[egg] : undefined, `fuelTankAmounts.${egg}`, action.id));
   }
   return fuels;
 }
@@ -178,8 +190,8 @@ export function sliceHumilityVisits(save: PlanSave): HumilityVisit[] {
         arrivalTimestamp: start === null ? null : start + elapsed + secondsOf(action),
         plannedDurationSeconds: 0,
         fuelByEgg: fuelByEggOf(action),
-        tankLevel: Number.isFinite(action.endState?.tankLevel) ? action.endState.tankLevel : 0,
-        bankValue: Number.isFinite(action.endState?.bankValue) ? action.endState.bankValue : 0,
+        tankLevel: requireNumber(action.endState.tankLevel, 'tankLevel', action.id),
+        bankValue: requireNumber(action.endState.bankValue, 'bankValue', action.id),
         earningsPerSecond: Math.max(earningsRateOf(action), earningsRateOf(previous)),
         epicResearchFTLLevel: ftl,
         epicResearchZerogLevel: zerog,

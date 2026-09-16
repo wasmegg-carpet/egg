@@ -226,6 +226,10 @@
 
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Settings</h3>
+      <p class="text-xs text-gray-400 mb-1">
+        Save or Plan badges show a value from your data; check Override to type your own; Manual means there's no data
+        to compare against.
+      </p>
       <div class="divide-y divide-gray-100">
         <optimizer-setting-row
           label="Crafting level"
@@ -247,7 +251,7 @@
           :save-entries="previousCraftEntries"
           :manual-value="extras.previousCrafts"
           :min="0"
-          hint="Applies to every selected target."
+          hint="This count applies to every artifact you're planning, not one count per artifact."
           @update:overridden="setOverridePreviousCrafts"
           @update:manual="setPreviousCraftCount"
         />
@@ -278,7 +282,7 @@
               @change="writePerEggBudget(($event.target as HTMLInputElement).checked)"
             />
             <span>
-              {{ planVisit ? 'Only use fuel in tank' : 'Use fuel banked in plan.' }}
+              {{ planVisit ? 'Only use fuel already banked for this visit' : 'Only use fuel already in your tank' }}
             </span>
           </label>
           <ul v-if="perEggBudget" class="mt-2 pl-6 space-y-0.5">
@@ -509,14 +513,23 @@ export default defineComponent({
     // A plan visit's figures beat the save's wherever it has one, because the visit simulates a
     // moment the save knows nothing about, and the manual override still beats both. The rows say
     // which of the two they are showing rather than both claiming to come from the save.
-    const planSourceLabel = computed(() => (activePlanVisit.value ? 'from plan' : 'save'));
+    const planSourceLabel = computed(() => (activePlanVisit.value ? 'Plan' : 'Save'));
 
-    const sourceTankLevel = computed(() => activePlanVisit.value?.tankLevel ?? playerTankLevel.value);
-    const sourceFTLLevel = computed(
-      () => activePlanVisit.value?.epicResearchFTLLevel ?? playerShipsConfig.value?.epicResearchFTLLevel ?? null
+    // Shared by every setting that reads "the visit's figure, else the save's, else nothing":
+    // one place that can't drop a source and leave a setting silently unsourced.
+    function fromVisitOrSave(
+      visitValue: number | null | undefined,
+      saveValue: number | null | undefined
+    ): number | null {
+      return visitValue ?? saveValue ?? null;
+    }
+
+    const sourceTankLevel = computed(() => fromVisitOrSave(activePlanVisit.value?.tankLevel, playerTankLevel.value));
+    const sourceFTLLevel = computed(() =>
+      fromVisitOrSave(activePlanVisit.value?.epicResearchFTLLevel, playerShipsConfig.value?.epicResearchFTLLevel)
     );
-    const sourceZerogLevel = computed(
-      () => activePlanVisit.value?.epicResearchZerogLevel ?? playerShipsConfig.value?.epicResearchZerogLevel ?? null
+    const sourceZerogLevel = computed(() =>
+      fromVisitOrSave(activePlanVisit.value?.epicResearchZerogLevel, playerShipsConfig.value?.epicResearchZerogLevel)
     );
     const shownTankLevel = computed(() => {
       const editable = sourceTankLevel.value === null || overrides.value.tankLevel;
