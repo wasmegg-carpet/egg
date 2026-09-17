@@ -8,12 +8,12 @@
     "long": "^5.3.2",
     "lunr": "^2.3.9",
     "pako": "2.1.0",
-    "protobufjs": "^8.0.0",
+    "protobufjs": "^8.6.6",
     "typescript-memoize": "^1.1.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
+    "@babel/core": "^7.29.6",
     "@babel/plugin-transform-modules-commonjs": "^7.28.6",
     "@types/jest": "^30.0.0",
     "@types/lunr": "^2.3.7",
@@ -21,7 +21,7 @@
     "babel-jest": "^30.3.0",
     "jest": "^30.3.0",
     "pinia": "^3.0.4",
-    "protobufjs-cli": "^2.0.0",
+    "protobufjs-cli": "^2.5.0",
     "ts-jest": "^29.4.9",
     "vue": "^3.5.31"
   },
