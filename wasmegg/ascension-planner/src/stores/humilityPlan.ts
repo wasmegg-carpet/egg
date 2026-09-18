@@ -14,7 +14,7 @@ import {
   type HumilityPlanVisit,
 } from '@/lib/humilityPlan';
 import { fuelForLaunches } from '@/lib/rockets/launches';
-import { humilitySourceTag, stageHumilityVisit } from '@/lib/humilityPlanStage';
+import { humilitySourceTag, stageHumilityVisit, type StageOptions } from '@/lib/humilityPlanStage';
 import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import { useActionsStore } from './actions';
 import { useInitialStateStore } from './initialState';
@@ -46,11 +46,11 @@ export const useHumilityPlanStore = defineStore('humilityPlan', () => {
     return stagedTags.value.has(humilitySourceTag(visit.visitId));
   }
 
-  async function stage(visit: HumilityPlanVisit) {
+  async function stage(visit: HumilityPlanVisit, options: StageOptions = {}) {
     const actionsStore = useActionsStore();
     const base = createBaseEngineState(actionsStore._initialSnapshot);
     const context = getSimulationContext();
-    const replacement = stageHumilityVisit(actionsStore.actions, visit, base, context);
+    const replacement = stageHumilityVisit(actionsStore.actions, visit, base, context, options);
     const initialEgg = replacement.initialEgg;
     const initialSnapshot = initialEgg
       ? {

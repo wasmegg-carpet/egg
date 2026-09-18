@@ -7,7 +7,8 @@ import { useActionsStore } from '@/stores/actions';
 import { exportPlanData } from '@/stores/actions/io';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useHumilityPlanStore } from '@/stores/humilityPlan';
-import { humilitySourceTag, stageHumilityVisit } from './humilityPlanStage';
+import { simulate } from '@/engine/simulate';
+import { humilitySourceTag, previewLaunchDurations, stageHumilityVisit } from './humilityPlanStage';
 import { fuelForLaunches } from './rockets/launches';
 import { resolveLaunches, type HumilityPlanVisit } from './humilityPlan';
 
@@ -341,5 +342,62 @@ describe('staging a Humility visit', () => {
     const before = JSON.stringify({ actions: actions.actions, snapshot: actions._initialSnapshot });
     await expect(useHumilityPlanStore().stage(v)).rejects.toThrow(/overflow/);
     expect(JSON.stringify({ actions: actions.actions, snapshot: actions._initialSnapshot })).toBe(before);
+  });
+});
+
+describe('swapping to the earnings set for the launch', () => {
+  // On the elr set with the earnings set defined and a low bank, so the launch has to save.
+  function elrBase() {
+    const base = baseState();
+    base.artifactSets = {
+      earnings: [{ artifactId: 'lunar-totem-4-2', stones: ['lunar-stone-4', 'lunar-stone-4'] }],
+      elr: [{ artifactId: 'gusset-4-2', stones: [] }],
+    };
+    base.activeArtifactSet = 'elr';
+    base.artifactLoadout = base.artifactSets.elr!;
+    base.population = 1e9;
+    return base;
+  }
+  function elrPlan(): Action[] {
+    return [createSimAction('start_ascension', { initialEgg: 'curiosity' }), shift('humility')];
+  }
+
+  it('previews a shorter launch on the earnings set', () => {
+    const context = getSimulationContext();
+    const actions = simulate(elrPlan(), context, elrBase());
+    const preview = previewLaunchDurations(actions, visit('ATREGGIES', 1), context)!;
+    expect(preview.withEarningsSet).toBeLessThan(preview.seconds);
+    // The preview is what staging actually produces.
+    const launchSeconds = (staged: Action[]) => staged.find(a => a.type === 'launch_missions')!.totalTimeSeconds;
+    expect(launchSeconds(stage(actions, visit('ATREGGIES', 1), elrBase())) / preview.seconds).toBeCloseTo(1, 6);
+    const swapped = stageHumilityVisit(actions, visit('ATREGGIES', 1), elrBase(), context, { equipEarningsSet: true });
+    expect(launchSeconds(swapped.actions) / preview.withEarningsSet!).toBeCloseTo(1, 6);
+  });
+
+  it('wraps the launch in tagged equips and waits out the window on the restored set', () => {
+    const context = getSimulationContext();
+    const result = stageHumilityVisit(elrPlan(), visit(), elrBase(), context, { equipEarningsSet: true }).actions;
+    const index = result.findIndex(a => a.type === 'launch_missions');
+    expect(result.slice(index - 1, index + 3).map(a => a.type)).toEqual([
+      'equip_artifact_set',
+      'launch_missions',
+      'equip_artifact_set',
+      'wait_for_time',
+    ]);
+    expect(result[index - 1].payload).toEqual({ setName: 'earnings' });
+    expect(result[index + 1].payload).toEqual({ setName: 'elr' });
+    expect(result[index].endState.activeArtifactSet).toBe('earnings');
+    expect(result[index + 2].endState.activeArtifactSet).toBe('elr');
+    for (const a of result.slice(index - 1, index + 3)) expect(a.sourceTag).toBe(humilitySourceTag('humility'));
+  });
+
+  it('offers no swap when the plan is already on the earnings set', () => {
+    const context = getSimulationContext();
+    const base = elrBase();
+    base.activeArtifactSet = 'earnings';
+    const actions = simulate(elrPlan(), context, base);
+    expect(previewLaunchDurations(actions, visit(), context)!.withEarningsSet).toBeUndefined();
+    const result = stageHumilityVisit(elrPlan(), visit(), base, context, { equipEarningsSet: true }).actions;
+    expect(result.some(a => a.type === 'equip_artifact_set')).toBe(false);
   });
 });

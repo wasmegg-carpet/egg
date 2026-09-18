@@ -59,6 +59,18 @@
           Purchase limits apply per ship.
         </p>
 
+        <p
+          v-if="launchDurations.get(visit.visitId)?.withEarningsSet !== undefined"
+          class="mt-1 text-[11px] text-gray-600"
+        >
+          Launch takes {{ formatDuration(launchDurations.get(visit.visitId)!.seconds) }} on the elr set,
+          {{ formatDuration(launchDurations.get(visit.visitId)!.withEarningsSet!) }} on the earnings set.
+          <label class="ml-1 inline-flex items-center gap-1 cursor-pointer">
+            <input v-model="swapSets[visit.visitId]" type="checkbox" class="h-3 w-3" />
+            Swap to the earnings set for the launch
+          </label>
+        </p>
+
         <div class="mt-2 flex items-center gap-2">
           <button
             type="button"
@@ -87,11 +99,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { formatProbability, getTargetName } from 'lib';
 
+import { getSimulationContext } from '@/engine/adapter';
 import { useActionsStore } from '@/stores/actions';
 import { useHumilityPlanStore } from '@/stores/humilityPlan';
+import { previewLaunchDurations, type LaunchDurations } from '@/lib/humilityPlanStage';
 import {
   humilityVisitIds,
   launchLabel,
@@ -131,6 +145,29 @@ const unavailableReasons = computed(() => {
   return reasons;
 });
 
+const launchDurations = computed(() => {
+  const context = getSimulationContext();
+  const durations = new Map<string, LaunchDurations>();
+  for (const visit of planStore.file?.visits ?? []) {
+    if (!stageable.value.has(visit.visitId)) continue;
+    const preview = previewLaunchDurations(actionsStore.actions, visit, context);
+    if (preview) durations.set(visit.visitId, preview);
+  }
+  return durations;
+});
+
+// Ticked whenever the swap is faster; the user can untick it to keep the plan's set.
+const swapSets = reactive<Record<string, boolean>>({});
+watch(
+  launchDurations,
+  durations => {
+    for (const [visitId, d] of durations) {
+      if (!(visitId in swapSets)) swapSets[visitId] = d.withEarningsSet !== undefined && d.withEarningsSet < d.seconds;
+    }
+  },
+  { immediate: true }
+);
+
 function totalShips(visit: HumilityPlanVisit): number {
   return visit.launches.reduce((sum, l) => sum + l.count, 0);
 }
@@ -153,7 +190,7 @@ async function onFilePicked(event: Event) {
 async function onStage(visit: HumilityPlanVisit) {
   error.value = '';
   try {
-    await planStore.stage(visit);
+    await planStore.stage(visit, { equipEarningsSet: swapSets[visit.visitId] === true });
   } catch (err) {
     error.value = err instanceof HumilityPlanError ? err.message : (err as Error).message;
   }

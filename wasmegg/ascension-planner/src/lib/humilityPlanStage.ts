@@ -5,9 +5,13 @@ import {
   type Action,
   type ActionPayloadMap,
   type ActionType,
+  type CalculationsSnapshot,
   type VirtueEgg,
 } from '@/types';
 import { simulate } from '@/engine/simulate';
+import { applyAction, getActionDuration } from '@/engine/apply';
+import { createBaseEngineState } from '@/engine/adapter';
+import { computeSnapshot } from '@/engine/compute';
 import type { EngineState, SimulationContext } from '@/engine/types';
 import { TANK_CAPACITIES } from '@/stores/fuelTank';
 import { fuelForLaunches, launchCost } from './rockets/launches';
@@ -18,6 +22,7 @@ import {
   launchSchedule,
   resolveLaunches,
   type HumilityPlanVisit,
+  type ResolvedLaunch,
 } from './humilityPlan';
 
 export function humilitySourceTag(visitId: string): string {
@@ -68,12 +73,73 @@ function tankSpace(actions: readonly Action[]) {
   };
 }
 
+function launchPayload(launches: ResolvedLaunch[], context: SimulationContext) {
+  const schedule = launchSchedule(launches, context.epicResearchLevels['afx_mission_time'] ?? 0);
+  return {
+    payload: {
+      missions: launches.map(launch => ({ ...launch })),
+      totalTimeSeconds: schedule.totalSeconds,
+      totalMissions: schedule.totalMissions,
+      fuelConsumed: fuelForLaunches(launches),
+    },
+    cost: launchCost(launches),
+  };
+}
+
+// The launch is priced at the earnings rate of whichever set is on when it goes. The elr set lays
+// eggs faster but can earn thousands of times less offline, so a launch the explorer budgeted
+// against the earnings set can spend weeks saving under elr; swapping just for the launch is only
+// offered when both sets are known and the plan is on elr at that point.
+function canSwapToEarningsSet(previous: CalculationsSnapshot): boolean {
+  return previous.activeArtifactSet === 'elr' && previous.artifactSets.earnings !== null;
+}
+
+export interface LaunchDurations {
+  seconds: number;
+  /** Absent when no swap can be offered. */
+  withEarningsSet?: number;
+}
+
+/** How long the visit's launch would take from where it will be inserted, on each set. */
+export function previewLaunchDurations(
+  actions: readonly Action[],
+  visit: HumilityPlanVisit,
+  context: SimulationContext
+): LaunchDurations | null {
+  const tag = humilitySourceTag(visit.visitId);
+  const untagged = actions.filter(action => action.sourceTag !== tag);
+  const launchIndex = humilityVisitInsertIndex(untagged, visit.visitId);
+  if (launchIndex === null || launchIndex === 0) return null;
+  const previous = untagged[launchIndex - 1].endState;
+  const { payload, cost } = launchPayload(resolveLaunches(visit), context);
+  const launch = createSimAction('launch_missions', payload, cost);
+  const durations: LaunchDurations = { seconds: getActionDuration(launch, previous, context) };
+  if (canSwapToEarningsSet(previous)) {
+    const swapped = applyAction(
+      createBaseEngineState(previous),
+      createSimAction('equip_artifact_set', { setName: 'earnings' })
+    );
+    durations.withEarningsSet = getActionDuration(
+      launch,
+      computeSnapshot(swapped, context, { skipEpochConversion: true }),
+      context
+    );
+  }
+  return durations;
+}
+
+export interface StageOptions {
+  /** Equip the earnings set for the launch and put the elr set back after it. */
+  equipEarningsSet?: boolean;
+}
+
 /** Build and validate a replacement without mutating the live plan. */
 export function stageHumilityVisit(
   original: Action[],
   visit: HumilityPlanVisit,
   base: EngineState,
-  context: SimulationContext
+  context: SimulationContext,
+  options: StageOptions = {}
 ): { actions: Action[]; initialEgg?: VirtueEgg } {
   const tag = humilitySourceTag(visit.visitId);
   let actions = simulate(
@@ -186,19 +252,19 @@ export function stageHumilityVisit(
   }
   insert(arrivalIndex, newPhases);
 
-  const ftl = context.epicResearchLevels['afx_mission_time'] ?? 0;
-  const schedule = launchSchedule(launches, ftl);
-  const launch = action(
-    'launch_missions',
-    {
-      missions: launches.map(launch => ({ ...launch })),
-      totalTimeSeconds: schedule.totalSeconds,
-      totalMissions: schedule.totalMissions,
-      fuelConsumed: required,
-    },
-    launchCost(launches)
+  const { payload, cost } = launchPayload(launches, context);
+  const launch = action('launch_missions', payload, cost);
+  const swap = options.equipEarningsSet && canSwapToEarningsSet(previous);
+  insert(
+    launchIndex,
+    swap
+      ? [
+          action('equip_artifact_set', { setName: 'earnings' }),
+          launch,
+          action('equip_artifact_set', { setName: 'elr' }),
+        ]
+      : [launch]
   );
-  insert(launchIndex, [launch]);
 
   const result = simulate(weave(filled), context, base);
   for (const step of result) validateTank(step.endState.fuelTankAmounts, step.endState.tankLevel);
@@ -206,11 +272,13 @@ export function stageHumilityVisit(
   const launched = result[launchedIndex];
   const remaining = Math.max(0, visit.makespanSeconds - launched.totalTimeSeconds);
   if (remaining === 0) return { actions: result, initialEgg };
+  // The rest of the window is waited out on the set the plan had on, after any swap is undone.
+  const tailIndex = launchedIndex + (swap ? 2 : 1);
   const tail = simulate(
-    [action('wait_for_time', { totalTimeSeconds: remaining }), ...result.slice(launchedIndex + 1)],
+    [action('wait_for_time', { totalTimeSeconds: remaining }), ...result.slice(tailIndex)],
     context,
-    launched.endState,
-    launchedIndex + 1
+    result[tailIndex - 1].endState,
+    tailIndex
   );
-  return { actions: [...result.slice(0, launchedIndex + 1), ...tail], initialEgg };
+  return { actions: [...result.slice(0, tailIndex), ...tail], initialEgg };
 }
