@@ -51,7 +51,8 @@ ENV CLAUDE_CONFIG_DIR=/opt/.claude
 
 ENV PNPM_HOME=/opt/pnpm
 
-ENV PATH=$PATH:/opt/protoc/bin:/opt/ets:/opt/node/node-v24.13.1-linux-x64/bin:$HOME/bin:/opt/netlify-headers-expander:/opt/gh/bin:$HOME/go/bin:$PNPM_HOME
+# Build-time ENV does not expand $HOME, so spell out the home directory.
+ENV PATH=$PATH:/opt/protoc/bin:/opt/ets:/opt/node/node-v24.13.1-linux-x64/bin:/home/dev/bin:/opt/netlify-headers-expander:/opt/gh/bin:/home/dev/go/bin:$PNPM_HOME:/home/dev/.local/bin
 
 # Keep netlify-cli unpinned to match .github/workflows/build-wasmegg.yml.
 RUN curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.xz | tar xJ -C /opt/node && \

@@ -195,8 +195,9 @@ describe('the LP-format writer round-trips the model', () => {
       { terms: columns.map((c, j) => [j, c.objective!] as [number, number]), lower: -INF, upper: 6421.5 },
     ]);
     const solution = solve(m, { maxNodes: 1, relGap: 1e-9 });
-    expect(solution.status).not.toBe('unknown');
+    expect(['feasible', 'optimal']).toContain(solution.status);
     expectSatisfies(m, solution.columnValues);
+    expect(solution.objective).toBeGreaterThan(0);
   });
 
   it('reports infeasibility rather than a plausible-looking point', () => {

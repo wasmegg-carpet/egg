@@ -160,7 +160,6 @@ export interface BruteForceJointResult {
 // RANKING_SLOP_JOINT of the float best is re-evaluated exactly, so a float
 // near-tie cannot cost the true optimum.
 export const RANKING_SLOP_JOINT = 1e-6;
-const MAX_FINALISTS_JOINT = 8;
 
 // Ranks maximal allocations by the JOINT probability, the objective the solver
 // maximizes at every target count.
@@ -180,11 +179,9 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
   let feasibleCount = 0;
   let evaluatedCount = 0;
   let bestFloat = -Infinity;
-  // Keep the float winner outside the capped near-tie set so arrival order cannot evict it.
+  // Scores travel with the finalists so a new best can evict the entries that are no longer near-ties of it.
+  // The list is uncapped: a cap let arrival order drop the exact optimum.
   // Regression: random-multi/8 previously returned 5.3e-9 instead of 5.8e-7.
-  let bestFloatAllocation: number[] | null = null;
-  // Scores travel with the finalists so a new best can evict the entries that are no longer near-ties of it,
-  // rather than leaving a full list of some earlier score's ties in the way.
   let finalists: { allocation: number[]; score: number }[] = [];
 
   const isMaximal = (fuelLeft: number): boolean => {
@@ -211,10 +208,9 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
       evaluatedCount++;
       if (jointProbability > bestFloat) {
         bestFloat = jointProbability;
-        bestFloatAllocation = allocation.slice();
         finalists = finalists.filter(f => f.score > bestFloat - RANKING_SLOP_JOINT);
       }
-      if (jointProbability > bestFloat - RANKING_SLOP_JOINT && finalists.length < MAX_FINALISTS_JOINT) {
+      if (jointProbability > bestFloat - RANKING_SLOP_JOINT) {
         finalists.push({ allocation: allocation.slice(), score: jointProbability });
       }
       return;
@@ -247,8 +243,7 @@ export function bruteForceBestJoint(inst: OracleInstance): BruteForceJointResult
     feasibleCount,
     evaluatedCount,
   };
-  const ranked = finalists.map(f => f.allocation);
-  for (const candidate of bestFloatAllocation === null ? ranked : [bestFloatAllocation, ...ranked]) {
+  for (const { allocation: candidate } of finalists) {
     const exact = evaluateAllocationJoint(inst, candidate);
     if (exact.jointProbability > best.bestJointProbability) {
       best.bestJointProbability = exact.jointProbability;
