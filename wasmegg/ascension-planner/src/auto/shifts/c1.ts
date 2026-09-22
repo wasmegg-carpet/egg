@@ -1,4 +1,5 @@
 import type { Action } from '@/types/actions/meta';
+import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { isTierUnlocked, getTiers, getResearchById } from '../../calculations/commonResearch';
 import { rankResearchByROI, buyWhilePassingCheck } from '../../calculations/researchRanking';
@@ -8,8 +9,10 @@ import {
   runSmartBuyForSeconds,
   createMilestoneShiftHelpers,
 } from './helpers/milestones';
+import { applyDecoratedAction } from './helpers/actionHelpers';
 import { computeSnapshot } from '../../engine/compute';
 import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
+import { getOptimalEarningsSet } from '@/lib/artifacts';
 
 const FLEET_RESEARCH_IDS = [
   'vehicle_reliablity',
@@ -50,6 +53,40 @@ export function runC1(
   let currentState: EngineState = { ...startState, maxELR: peakELR };
   let elapsedSeconds = 0;
   const actions: Action[] = [];
+
+  // C1-C3 is the earnings-farming phase of an ascension — H1 is the only shift that should ever
+  // switch to ELR gear (see h1.ts). C1 runs at the start of EVERY ascension in a chain, including
+  // chain continuations (`deriveNextStartState` copies artifact sets from the chain's original
+  // `baseBackupState`, not from the previous ascension's H1-ended state), so an inherited
+  // `activeArtifactSet` is never trustworthy here. Equip earnings unconditionally — not only when
+  // it differs from the current state — so every generated plan makes the expected starting
+  // loadout explicit in its action list (and visible in the shift summary, see ShiftSummary.vue's
+  // `equip_artifact_set` handling) instead of silently relying on whatever was already equipped.
+  {
+    let earningsSet = currentState.artifactSets.earnings;
+    const needsUpdate = !earningsSet;
+    if (needsUpdate && context.rawBackup) {
+      earningsSet = getOptimalEarningsSet(context.rawBackup);
+    }
+    if (earningsSet) {
+      if (needsUpdate) {
+        const updated = applyDecoratedAction(
+          currentState,
+          context,
+          createSimAction('update_artifact_set', { setName: 'earnings', newLoadout: earningsSet })
+        );
+        currentState = updated.state;
+        actions.push(updated.action);
+      }
+      const equipped = applyDecoratedAction(
+        currentState,
+        context,
+        createSimAction('equip_artifact_set', { setName: 'earnings' })
+      );
+      currentState = equipped.state;
+      actions.push(equipped.action);
+    }
+  }
 
   const remainingBudget = () => timeLimit - elapsedSeconds;
 

@@ -17,11 +17,24 @@ export function calculateEggsLaidDuringActions(
 
   for (const action of actions) {
     // Before applying the action, we compute the ELR of the current state.
-    // If the action has a duration (wait_for_time), we lay eggs at this ELR.
+    // If the action has a duration, we lay eggs at this ELR — except wait_for_te, which already
+    // carries the exact eggs-to-lay figure computed for its (possibly variable-rate) wait.
     const snap = computeSnapshot(currentState, context, { skipGrowth: true });
-    
-    if (action.type === 'wait_for_time') {
+
+    if (action.type === 'wait_for_te') {
+      totalEggs += action.payload.eggsToLay || 0;
+    } else if (
+      action.type === 'wait_for_time' ||
+      action.type === 'wait_for_research_sale' ||
+      action.type === 'wait_for_earnings_boost' ||
+      action.type === 'wait_for_full_habs' ||
+      action.type === 'wait_for_missions'
+    ) {
       const duration = action.payload.totalTimeSeconds || 0;
+      totalEggs += snap.elr * duration;
+    } else if (action.type === 'wait_for_gems') {
+      // WaitForGemsPayload names its duration field `timeSeconds`, not `totalTimeSeconds`.
+      const duration = action.payload.timeSeconds || 0;
       totalEggs += snap.elr * duration;
     }
 

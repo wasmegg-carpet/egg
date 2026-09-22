@@ -28,6 +28,7 @@ import {
   countSalesThrough,
 } from '@/lib/events';
 import { DEBUG_SHIFT_TIMING } from '@/lib/debugFlags';
+import { calculateEggsLaidDuringActions } from '../engine/eggs';
 
 export interface C3Params {
   /** Attempt to unlock Tier 13 before anything else, if it isn't already unlocked. Default false. */
@@ -544,6 +545,17 @@ export function runC3Variants(
   const tier13AlreadyUnlocked = isTierUnlocked(startState.researchLevels, maxTier);
   const variants: C3Variant[] = [];
   const variantTimings: { name: string; ms: number }[] = [];
+  // Unlike C1/C2/etc., these `runC3` calls never pass through `runAscension`'s/`runUntilShift`'s own
+  // eggsLaid-attachment loop — `runAscensionFromC3Variant` resumes past C3 entirely (see its own doc
+  // comment), so a variant's actions here are the only chance to attach it before the shift summary
+  // UI looks for it.
+  const attachEggsLaid = (result: ShiftResult) => {
+    const eggsLaid = calculateEggsLaidDuringActions(result.actions, startState, context);
+    if (result.actions.length > 0) {
+      (result.actions[0].payload as any).eggsLaid = eggsLaid;
+    }
+  };
+
   let tier13KnownImpossible = skipTier13Attempts;
   for (let saleCount = maxSaleCount; saleCount >= 1; saleCount--) {
     const buildPhaseEnd = getBuildPhaseEndForSaleCount(context.ascensionStartTime, saleCount);
@@ -552,6 +564,7 @@ export function runC3Variants(
     if (!tier13AlreadyUnlocked && !tier13KnownImpossible) {
       const t0 = performance.now();
       const result = runC3(startState, context, buildPhaseEnd, undefined, { attemptTier13Unlock: true });
+      attachEggsLaid(result);
       variantTimings.push({ name: `${saleCount}-sale-tier13`, ms: performance.now() - t0 });
       const impossible = !isTierUnlocked(result.endState.researchLevels, maxTier);
       if (impossible) {
@@ -565,6 +578,7 @@ export function runC3Variants(
     if (!tier13SucceededThisSaleCount) {
       const t0 = performance.now();
       const result = runC3(startState, context, buildPhaseEnd, undefined, { attemptTier13Unlock: false });
+      attachEggsLaid(result);
       variantTimings.push({ name: `${saleCount}-sale`, ms: performance.now() - t0 });
       variants.push({ saleCount, attemptTier13Unlock: false, buildPhaseEnd, result, impossible: false });
     }
