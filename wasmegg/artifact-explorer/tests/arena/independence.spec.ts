@@ -93,8 +93,7 @@ const HARNESS_FILES = [
 // The planner and everything downstream of it. The harness must not run any of
 // this: it is the thing being measured.
 const IMPLEMENTATION = [
-  'concave.ts', // the objective's own g/g'/line search; the judge re-derives all three
-  'lp.ts', // the incumbent's LP
+  'objective.ts', // the objective's own g/g'/line search and the craft-count-to-probability step; the judge re-derives all three
   'optimizer-client.ts', // worker-backed entry point to the planner
   'optimizer-core.ts', // the plan pipeline; calls the planner
   // Prices a finished plan and derives the cap's per-craft prices from the same curve. Everything here
@@ -105,14 +104,18 @@ const IMPLEMENTATION = [
   'optimizer-worker-protocol.ts',
   'optimizer.worker.ts',
   'packing.ts', // the app's packer — the arena has its own, on purpose
+  // The ascension-planner seam. `write.ts` projects a finished plan; the other two read the file
+  // that supplies one's budgets. None of it is anything the arena states a problem with.
+  'plan/read.ts',
+  'plan/schema.ts',
+  'plan/write.ts',
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
   'solver/highs.ts',
   'solver/milp.ts',
   'solver/model.ts',
-  'solver/oa.ts',
   'solver/simplex.ts',
+  'solver/solve.ts',
   'solver/types.ts',
-  'value-function.ts',
 ];
 
 // Game data, problem construction and pure types. The harness needs these to state a problem at all, and
@@ -124,7 +127,7 @@ const PROBLEM_SURFACE = [
   'loot-json.ts',
   'loot.ts',
   'missions.ts',
-  'phases.ts',
+  'problem-inputs.ts',
   'tank-ids.ts',
   'types.ts',
 ];
@@ -216,7 +219,7 @@ describe('arena independence', () => {
       expect(code.length, entry).toBeLessThan(700);
       expect(/\bfor\s*\(|\bwhile\s*\(|\bfunction\b/.test(code), entry).toBe(false);
       // It must go through the same entry points `optimizer-core.ts` does.
-      expect(code, entry).toContain("from '@/lib/solver/oa'");
+      expect(code, entry).toContain("from '@/lib/solver/solve'");
       expect(code, entry).toContain("from '@/lib/solver/highs'");
     }
   });

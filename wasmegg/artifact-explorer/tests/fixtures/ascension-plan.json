@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "timestamp": 1756000000000,
+  "initialState": {
+    "playerId": "EIxxxxxxxxxx",
+    "nickname": "Redacted",
+    "epicResearchLevels": {
+      "afx_mission_time": 55,
+      "afx_mission_capacity": 8
+    }
+  },
+  "virtueState": {
+    "shiftCount": 0,
+    "initialTE": 0,
+    "ascensionDate": "2026-03-01",
+    "ascensionTime": "12:00",
+    "ascensionTimezone": "UTC"
+  },
+  "actions": [
+    {
+      "id": "start_a0a0a0a",
+      "type": "start_ascension",
+      "totalTimeSeconds": 0,
+      "payload": { "initialEgg": "curiosity" },
+      "endState": {
+        "currentEgg": "curiosity",
+        "tankLevel": 4,
+        "bankValue": 0,
+        "onlineEarnings": 0,
+        "offlineEarnings": 0,
+        "fuelTankAmounts": {
+          "curiosity": 0,
+          "integrity": 0,
+          "humility": 0,
+          "resilience": 0,
+          "kindness": 0
+        }
+      }
+    },
+    {
+      "id": "shift_a1b2c3d",
+      "type": "shift",
+      "totalTimeSeconds": 3600,
+      "payload": { "fromEgg": "curiosity", "toEgg": "humility", "newShiftCount": 1 },
+      "endState": {
+        "currentEgg": "humility",
+        "tankLevel": 6,
+        "bankValue": 1.9e39,
+        "onlineEarnings": 5e33,
+        "offlineEarnings": 2e33,
+        "fuelTankAmounts": {
+          "curiosity": 4.5e14,
+          "integrity": 0,
+          "humility": 1e15,
+          "resilience": 3.6e14,
+          "kindness": 6.75e14
+        }
+      }
+    },
+    {
+      "id": "wait_b1b1b1b",
+      "type": "wait_for_time",
+      "totalTimeSeconds": 86400,
+      "payload": {},
+      "endState": {
+        "currentEgg": "humility",
+        "tankLevel": 6,
+        "bankValue": 6.22e39,
+        "onlineEarnings": 5e33,
+        "offlineEarnings": 2e33,
+        "fuelTankAmounts": {
+          "curiosity": 4.5e14,
+          "integrity": 0,
+          "humility": 1e15,
+          "resilience": 3.6e14,
+          "kindness": 6.75e14
+        }
+      }
+    },
+    {
+      "id": "shift_c3c3c3c",
+      "type": "shift",
+      "totalTimeSeconds": 1800,
+      "payload": { "fromEgg": "humility", "toEgg": "resilience", "newShiftCount": 2 },
+      "endState": {
+        "currentEgg": "resilience",
+        "tankLevel": 6,
+        "bankValue": 6.22e39,
+        "onlineEarnings": 5e33,
+        "offlineEarnings": 2e33,
+        "fuelTankAmounts": {
+          "curiosity": 4.5e14,
+          "integrity": 0,
+          "humility": 1e15,
+          "resilience": 3.6e14,
+          "kindness": 6.75e14
+        }
+      }
+    },
+    {
+      "id": "wait_d4d4d4d",
+      "type": "wait_for_te",
+      "totalTimeSeconds": 43200,
+      "payload": { "egg": "resilience" },
+      "endState": {
+        "currentEgg": "resilience",
+        "tankLevel": 7,
+        "bankValue": 9e39,
+        "onlineEarnings": 7e33,
+        "offlineEarnings": 3e33,
+        "fuelTankAmounts": {
+          "curiosity": 8e14,
+          "integrity": 1e14,
+          "humility": 1e15,
+          "resilience": 5e14,
+          "kindness": 9e14
+        }
+      }
+    },
+    {
+      "id": "shift_e5e5e5e",
+      "type": "shift",
+      "totalTimeSeconds": 1800,
+      "payload": { "fromEgg": "resilience", "toEgg": "humility", "newShiftCount": 3 },
+      "endState": {
+        "currentEgg": "humility",
+        "tankLevel": 7,
+        "bankValue": 9e39,
+        "onlineEarnings": 7e33,
+        "offlineEarnings": 3e33,
+        "fuelTankAmounts": {
+          "curiosity": 8e14,
+          "integrity": 1e14,
+          "humility": 1e15,
+          "resilience": 5e14,
+          "kindness": 9e14
+        }
+      }
+    }
+  ],
+  "activePlanId": null
+}
