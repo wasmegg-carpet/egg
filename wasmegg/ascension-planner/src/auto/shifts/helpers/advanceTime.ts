@@ -30,6 +30,29 @@ import {
   BOUNDARY_EPSILON_SECONDS,
 } from '@/lib/events';
 
+// Actions that pass time (or mark an event boundary) without the player doing anything.
+const IDLE_ACTION_TYPES = new Set([
+  'wait_for_time',
+  'wait_for_research_sale',
+  'wait_for_earnings_boost',
+  'toggle_sale',
+  'toggle_earnings_boost',
+]);
+
+/**
+ * How long the player has been idle as of the end of `actions` — the summed duration of its
+ * trailing run of waits/event toggles, i.e. the offline gap since the last real action. The
+ * earnings-event `modify_bank` credit uses this rather than just the final wait step, which a
+ * research-sale boundary inside the gap would otherwise cut short.
+ */
+function trailingIdleSeconds(actions: Action[]): number {
+  let seconds = 0;
+  for (let i = actions.length - 1; i >= 0 && IDLE_ACTION_TYPES.has(actions[i].type); i--) {
+    seconds += actions[i].totalTimeSeconds || 0;
+  }
+  return seconds;
+}
+
 export interface AdvanceTimeResult {
   currentState: EngineState;
   elapsedSeconds: number;
@@ -195,7 +218,7 @@ export function advanceTimeWithBoundaries(
       if (isBoostNow && context.deferForEarningsMode) {
         const siloCapacityLevel = context.epicResearchLevels['silo_capacity'] || 0;
         const totalSiloSeconds = totalAwayTime(currentState.siloCount, siloCapacityLevel) * 60;
-        const creditSeconds = Math.min(stepSeconds, totalSiloSeconds);
+        const creditSeconds = Math.min(trailingIdleSeconds(actions), totalSiloSeconds);
         if (creditSeconds > 0) {
           const preBoostSnap = computeSnapshot(currentState, context, { skipGrowth: true });
           const delta = preBoostSnap.offlineEarnings * creditSeconds;

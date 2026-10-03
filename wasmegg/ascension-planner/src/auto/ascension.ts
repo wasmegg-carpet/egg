@@ -132,8 +132,12 @@ function runC1K1I1Segment(
 
   const pushShiftResult = (name: string, result: ShiftResult, ms: number) => {
     const eggsLaid = calculateEggsLaidDuringActions(result.actions, currentState, context);
-    if (result.actions.length > 0 && result.actions[0].type === 'shift') {
-      result.actions[0].payload.eggsLaid = eggsLaid;
+    // Not gated on `actions[0].type === 'shift'`: some shifts (e.g. C1) lead with a non-shift
+    // action (equipping the earnings set), so requiring 'shift' silently dropped eggsLaid for
+    // them — the UI only looks for the field, not a specific action type, so any first action
+    // works as the attachment point.
+    if (result.actions.length > 0) {
+      (result.actions[0].payload as any).eggsLaid = eggsLaid;
     }
     actions.push(...result.actions);
     currentState = result.endState;
@@ -212,8 +216,12 @@ export function runUntilShift(
 
     // Calculate eggs laid during this shift (assuming full habs)
     const eggsLaid = calculateEggsLaidDuringActions(result.actions, currentState, context);
-    if (result.actions.length > 0 && result.actions[0].type === 'shift') {
-      result.actions[0].payload.eggsLaid = eggsLaid;
+    // Not gated on `actions[0].type === 'shift'`: some shifts (e.g. C1) lead with a non-shift
+    // action (equipping the earnings set), so requiring 'shift' silently dropped eggsLaid for
+    // them — the UI only looks for the field, not a specific action type, so any first action
+    // works as the attachment point.
+    if (result.actions.length > 0) {
+      (result.actions[0].payload as any).eggsLaid = eggsLaid;
     }
 
     currentActions.push(...result.actions);
@@ -448,8 +456,12 @@ export function runAscension(
 
     // Calculate eggs laid during this shift (assuming full habs)
     const eggsLaid = calculateEggsLaidDuringActions(result.actions, currentState, context);
-    if (result.actions.length > 0 && result.actions[0].type === 'shift') {
-      result.actions[0].payload.eggsLaid = eggsLaid;
+    // Not gated on `actions[0].type === 'shift'`: some shifts (e.g. C1) lead with a non-shift
+    // action (equipping the earnings set), so requiring 'shift' silently dropped eggsLaid for
+    // them — the UI only looks for the field, not a specific action type, so any first action
+    // works as the attachment point.
+    if (result.actions.length > 0) {
+      (result.actions[0].payload as any).eggsLaid = eggsLaid;
     }
 
     ascShiftTimings.push({ name: shift.name, ms: performance.now() - t0 });

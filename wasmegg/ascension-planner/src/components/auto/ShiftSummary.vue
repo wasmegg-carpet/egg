@@ -13,11 +13,11 @@
             />
           </svg>
         </div>
-        <span class="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">{{ title }}</span>
+        <span class="text-[9px] font-black text-slate-500 uppercase tracking-[0.1em]">{{ title }}</span>
       </div>
 
       <!-- Col 2 Row 1 (mobile only): Duration, right-aligned -->
-      <div class="flex justify-end items-center text-[9px] font-black text-slate-400 sm:hidden">
+      <div class="flex justify-end items-center text-[8.5px] font-black tracking-tight text-slate-600 sm:hidden">
         <span
           v-tippy="{ content: timeTooltipContent, allowHTML: true }"
           class="cursor-help border-b border-dashed border-slate-300/50 transition-colors"
@@ -27,73 +27,89 @@
       </div>
 
       <!-- Col 1 Row 2 (mobile only): SE cost, left-aligned -->
-      <div class="flex items-center gap-1 text-[9px] font-black text-slate-400 sm:hidden">
+      <div class="flex items-center gap-1 text-[8.5px] font-black tracking-tight text-slate-600 sm:hidden">
         <span>{{ formatNumber(cost, 3) }}</span>
-        <img v-if="costType === 'SE'" :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3 opacity-40" alt="SE" />
+        <img v-if="costType === 'SE'" :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3" alt="SE" />
       </div>
 
       <!-- Col 2 Row 2 (mobile only): Eggs delivered, right-aligned -->
-      <div class="flex justify-end items-center gap-1 text-[9px] font-black text-slate-500 sm:hidden">
-        <template v-if="totalEggsLaid > 0">
-          <span>{{ formatNumber(totalEggsLaid, 3) }}</span>
-          <span class="text-[7.5px] opacity-60">EGGS</span>
-        </template>
+      <div class="flex justify-end items-center gap-1 text-[8.5px] font-black tracking-tight text-slate-600 sm:hidden">
+        <span>{{ formatNumber(totalEggsLaid, 3) }}</span>
+        <span>Eggs</span>
       </div>
 
       <!-- Desktop only: full right-side row with dot separators (unchanged) -->
-      <div class="hidden sm:flex items-center gap-2 text-[9px] font-black text-slate-400">
+      <div class="hidden sm:flex items-center gap-2 text-[8.5px] font-black tracking-tight text-slate-600">
         <span
           v-tippy="{ content: timeTooltipContent, allowHTML: true }"
           class="cursor-help border-b border-dashed border-slate-300/50 hover:text-slate-500 hover:border-slate-400 transition-colors"
         >
           {{ formatDuration(duration) }}
         </span>
-        <span class="w-1 h-1 bg-slate-200 rounded-full"></span>
+        <span class="w-1 h-1 bg-slate-400 rounded-full"></span>
         <div class="flex items-center gap-1">
           <span>{{ formatNumber(cost, 3) }}</span>
-          <img v-if="costType === 'SE'" :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3 opacity-40" alt="SE" />
+          <img v-if="costType === 'SE'" :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3" alt="SE" />
         </div>
-        <template v-if="totalEggsLaid > 0">
-          <span class="w-1 h-1 bg-slate-200 rounded-full"></span>
-          <div class="flex items-center gap-1 text-slate-500">
-            <span>{{ formatNumber(totalEggsLaid, 3) }}</span>
-            <span class="text-[7.5px] opacity-60">EGGS</span>
-          </div>
-        </template>
+        <span class="w-1 h-1 bg-slate-400 rounded-full"></span>
+        <div class="flex items-center gap-1">
+          <span>{{ formatNumber(totalEggsLaid, 3) }}</span>
+          <span>Eggs</span>
+        </div>
       </div>
     </div>
 
     <div v-if="summaryItems.length > 0" class="flex flex-wrap gap-1">
       <div v-for="(item, index) in summaryItems" :key="index" class="flex items-center">
         <template v-if="item.isPremium">
-          <span
-            class="badge-premium px-1.5 py-0.5 text-[8.5px] font-black tracking-tight"
-            :class="eggTheme.badge"
-          >
+          <span class="px-1.5 py-0.5 rounded border text-[8.5px] font-black tracking-tight bg-slate-50 text-slate-600 border-slate-100">
             {{ item.text }}
           </span>
         </template>
-        <template v-else-if="item.isPeakELR">
-          <div
-            class="flex items-center gap-1 px-1.5 py-0.5 rounded border transition-all duration-500"
-            :class="item.isOvertake ? 'bg-amber-50 border-amber-100' : 'bg-indigo-50 border-indigo-100'"
-          >
-            <div
-              class="w-1.5 h-1.5 rounded-full animate-pulse"
-              :class="item.isOvertake ? 'bg-amber-500' : 'bg-indigo-500'"
-            ></div>
+        <template v-else-if="item.isLoadout">
+          <div class="flex items-center gap-1.5 px-1.5 py-0.5 rounded border bg-slate-50 text-slate-600 border-slate-100">
             <span
-              class="text-[8.5px] font-black tracking-tighter"
-              :class="item.isOvertake ? 'text-amber-700' : 'text-indigo-700'"
+              v-if="item.setNames.length"
+              class="text-[8.5px] font-black tracking-tight text-slate-600 whitespace-nowrap"
             >
+              {{ item.setNames.length > 1 ? `Equipped ${item.setNames.join(' + ')} Sets` : `Equipped ${item.setNames[0]} Set` }}
+            </span>
+            <div class="flex items-center gap-1">
+              <div
+                v-for="(art, artIndex) in item.artifacts"
+                :key="`art-${artIndex}`"
+                v-tippy="{ content: `T${art.tier}${art.rarity} ${art.name}` }"
+                class="w-5 h-5 rounded flex items-center justify-center"
+                :style="{ backgroundColor: rarityBg(art.rarity) }"
+              >
+                <img :src="iconURL(art.iconPath, 64)" class="w-4 h-4" :alt="art.name" />
+              </div>
+              <div
+                v-for="(stone, stoneIndex) in item.stones"
+                :key="`stone-${stoneIndex}`"
+                v-tippy="{ content: `T${stone.tier} ${stone.name}${stone.count > 1 ? ` ×${stone.count}` : ''}` }"
+                class="flex items-center gap-0.5 w-5 h-5 rounded bg-slate-50 border border-slate-100"
+                :class="stone.count > 1 ? 'w-auto pl-0.5 pr-1' : 'justify-center'"
+              >
+                <img :src="iconURL(stone.iconPath, 64)" class="w-4 h-4 flex-shrink-0" :alt="stone.name" />
+                <span v-if="stone.count > 1" class="text-[8px] leading-none font-black text-slate-600">
+                  ×{{ stone.count }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="item.isPeakELR">
+          <div class="flex items-center px-1.5 py-0.5 rounded border bg-slate-50 border-slate-100">
+            <span class="text-[8.5px] font-black tracking-tight text-slate-600">
               {{ item.text }}
             </span>
           </div>
         </template>
         <template v-else>
           <div class="flex items-center gap-1 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">
-            <span class="text-[8.5px] font-bold text-slate-600">{{ item.name }}</span>
-            <span class="text-[8.5px] font-black text-indigo-500 tracking-tighter">{{ item.delta }}</span>
+            <span class="text-[8.5px] font-black tracking-tight text-slate-600">{{ item.name }}</span>
+            <span class="text-[8.5px] font-black tracking-tight text-slate-600">{{ item.delta }}</span>
           </div>
         </template>
       </div>
@@ -148,19 +164,32 @@ const timeTooltipContent = computed(() => {
   `;
 });
 
-const eggThemes: Record<VirtueEgg, { bg: string; text: string; badge: string }> = {
-  curiosity: { bg: 'bg-amber-50', text: 'text-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-100' },
-  integrity: { bg: 'bg-blue-50', text: 'text-blue-500', badge: 'bg-blue-50 text-blue-700 border-blue-100' },
-  humility: { bg: 'bg-purple-50', text: 'text-purple-500', badge: 'bg-purple-50 text-purple-700 border-purple-100' },
-  resilience: { bg: 'bg-rose-50', text: 'text-rose-500', badge: 'bg-rose-50 text-rose-700 border-rose-100' },
-  kindness: {
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-500',
-    badge: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  },
+const eggThemes: Record<VirtueEgg, { bg: string; text: string }> = {
+  curiosity: { bg: 'bg-amber-50', text: 'text-amber-500' },
+  integrity: { bg: 'bg-blue-50', text: 'text-blue-500' },
+  humility: { bg: 'bg-purple-50', text: 'text-purple-500' },
+  resilience: { bg: 'bg-rose-50', text: 'text-rose-500' },
+  kindness: { bg: 'bg-emerald-50', text: 'text-emerald-500' },
 };
 
 const eggTheme = computed(() => eggThemes[props.egg] || eggThemes.curiosity);
+
+// Order the summary pills appear in, regardless of shift type. Edit this to reorder them.
+const CATEGORY_ORDER = ['loadout', 'silos', 'habs', 'vehicles', 'peakELR', 'te', 'overtake', 'research'] as const;
+
+// Rarity background tint, matching ArtifactSelector.vue's color scheme.
+function rarityBg(rarityCode: string): string {
+  switch (rarityCode) {
+    case 'R':
+      return '#0D6DFD30';
+    case 'E':
+      return '#FF00FF30';
+    case 'L':
+      return '#FECD1B40';
+    default:
+      return '#F1F5F9'; // slate-100
+  }
+}
 
 const totalEggsLaid = computed(() => {
   const eggAction = props.actions.find(a => a.payload?.eggsLaid !== undefined);
@@ -178,6 +207,29 @@ const summaryItems = computed(() => {
   let finalSiloCount = 0;
   const equippedArtifacts: any[] = [];
   const equippedSets: string[] = [];
+
+  // Shared by change_artifacts/update_artifact_set/equip_artifact_set below — each one replaces
+  // whatever the previous artifact-related action in this shift left equipped.
+  const setEquippedArtifacts = (loadout: { artifactId: string | null; stones: (string | null)[] }[]) => {
+    equippedArtifacts.length = 0;
+    for (const slot of loadout) {
+      if (slot.artifactId) {
+        const artifact = getArtifact(slot.artifactId);
+        if (artifact) {
+          const stones = (slot.stones || [])
+            .map((s: string | null) => (s ? getStone(s) : null))
+            .filter((s: any) => s !== null);
+          equippedArtifacts.push({
+            name: artifact.familyName,
+            tier: artifact.tier,
+            rarity: artifact.rarityCode,
+            iconPath: artifact.iconPath,
+            stones: stones.map((s: any) => ({ name: s.familyName, tier: s.tier, iconPath: s.iconPath })),
+          });
+        }
+      }
+    }
+  };
 
   for (const action of props.actions) {
     if (action.type === 'buy_research') {
@@ -206,61 +258,30 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
     } else if (action.type === 'change_artifacts') {
       const { toLoadout } = action.payload;
       // Clear previous if multiple change actions exist in one shift (unlikely but safe)
-      equippedArtifacts.length = 0;
-      for (const slot of toLoadout) {
-        if (slot.artifactId) {
-          const artifact = getArtifact(slot.artifactId);
-          if (artifact) {
-            const stones = (slot.stones || [])
-              .map((s: string | null) => (s ? getStone(s) : null))
-              .filter((s: any) => s !== null);
-            equippedArtifacts.push({
-              name: artifact.familyName,
-              tier: artifact.tier,
-              rarity: artifact.rarityCode,
-              stones: stones.map((s: any) => ({ name: s.familyName, tier: s.tier })),
-            });
-          }
-        }
-      }
+      setEquippedArtifacts(toLoadout);
     } else if (action.type === 'update_artifact_set') {
       const { newLoadout } = action.payload;
-      equippedArtifacts.length = 0;
-      for (const slot of newLoadout) {
-        if (slot.artifactId) {
-          const artifact = getArtifact(slot.artifactId);
-          if (artifact) {
-            const stones = (slot.stones || [])
-              .map((s: string | null) => (s ? getStone(s) : null))
-              .filter((s: any) => s !== null);
-            equippedArtifacts.push({
-              name: artifact.familyName,
-              tier: artifact.tier,
-              rarity: artifact.rarityCode,
-              stones: stones.map((s: any) => ({ name: s.familyName, tier: s.tier })),
-            });
-          }
-        }
-      }
+      setEquippedArtifacts(newLoadout);
     } else if (action.type === 'equip_artifact_set') {
       const setName = action.payload.setName === 'earnings' ? 'Earnings' : 'Delivery Rate';
       equippedSets.push(setName);
+      // No accompanying update_artifact_set in this shift (the set's contents were already known,
+      // e.g. C1 re-equipping a set computed by an earlier shift or loaded from the backup) — fall
+      // back to the resulting snapshot so the set's artifacts still show, same as H1's does via its
+      // own update_artifact_set action.
+      if (!props.actions.some(a => a.type === 'update_artifact_set' || a.type === 'change_artifacts')) {
+        setEquippedArtifacts(action.endState.artifactLoadout);
+      }
     }
   }
 
     const items: any[] = [];
 
-    for (const setName of equippedSets) {
-      items.push({
-        isPremium: true,
-        text: `Equipped ${setName} Set`,
-      });
-    }
-
     // --- Peak ELR / K3 Wait ---
     const peakELRAction = props.actions.find(a => a.payload?.peakELR !== undefined);
     if (peakELRAction) {
       items.push({
+        category: 'peakELR',
         isPeakELR: true,
         text: `Peak Delivery Rate: ${formatNumber(peakELRAction.payload.peakELR * 3600, 3)}/hr`,
       });
@@ -271,6 +292,7 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
       const totalTE = teWaitActions.reduce((sum, a) => sum + (a.payload.teGained || a.payload.teEarned || 0), 0);
       if (totalTE > 0) {
         items.push({
+          category: 'te',
           isPremium: true,
           text: `+${totalTE} Truth Eggs`,
         });
@@ -281,35 +303,42 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
     const overtakeAction = props.actions.find(a => a.type === 'virtual_overtake_info');
     if (overtakeAction) {
       items.push({
-        isPeakELR: true, // Use same styling but different icon/color if possible
-        isOvertake: true,
+        category: 'overtake',
+        isPeakELR: true,
         text: `Overtakes 1-sale in ${overtakeAction.payload.daysToOvertake.toFixed(1)}d`,
       });
     }
 
-  // --- Artifacts & Stones ---
-  const totalStoneCounts: Record<string, number> = {};
-  for (const art of equippedArtifacts) {
-    items.push({
-      isPremium: true,
-      text: `T${art.tier}${art.rarity} ${art.name}`,
-    });
-    for (const s of art.stones) {
-      const label = `T${s.tier} ${s.name.split(' ')[0]}`;
-      totalStoneCounts[label] = (totalStoneCounts[label] || 0) + 1;
+  // --- Equipped Loadout (combines "Equipped X Set" with the artifact/stone icons) ---
+  if (equippedArtifacts.length > 0 || equippedSets.length > 0) {
+    const loadoutStoneCounts: Record<string, { iconPath: string; tier: number; name: string; count: number }> = {};
+    for (const art of equippedArtifacts) {
+      for (const s of art.stones) {
+        const key = `${s.tier}-${s.name}`;
+        if (!loadoutStoneCounts[key]) {
+          loadoutStoneCounts[key] = { iconPath: s.iconPath, tier: s.tier, name: s.name, count: 0 };
+        }
+        loadoutStoneCounts[key].count++;
+      }
     }
-  }
 
-  for (const [label, count] of Object.entries(totalStoneCounts)) {
     items.push({
-      isPremium: true,
-      text: `${count}x ${label}`,
+      category: 'loadout',
+      isLoadout: true,
+      setNames: equippedSets,
+      artifacts: equippedArtifacts.map((art: any) => ({
+        iconPath: art.iconPath,
+        tier: art.tier,
+        rarity: art.rarity,
+        name: art.name,
+      })),
+      stones: Object.values(loadoutStoneCounts),
     });
   }
 
   // --- Silos ---
   if (finalSiloCount > 0) {
-    items.push({ isPremium: true, text: `${finalSiloCount} Silos` });
+    items.push({ category: 'silos', isPremium: true, text: `${finalSiloCount} Silos` });
   }
 
   // --- Habs ---
@@ -324,10 +353,10 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
   }
 
   if (hasCU) {
-    items.push({ isPremium: true, text: `${habCounts[18]}x Chicken Universe` });
+    items.push({ category: 'habs', isPremium: true, text: `${habCounts[18]}x Chicken Universe` });
   } else if (highestHabId >= 0) {
     const habName = getHabById(highestHabId as HabId)?.name || 'Hab';
-    items.push({ isPremium: false, name: `Hab Upgrade`, delta: `to ${habName}` });
+    items.push({ category: 'habs', isPremium: false, name: `Hab Upgrade`, delta: `to ${habName}` });
   }
 
   // --- Vehicles ---
@@ -343,9 +372,9 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
 
   for (const [label, count] of Object.entries(vehicleCounts)) {
     if (count > 1) {
-      items.push({ isPremium: false, name: label, delta: `${count}x` });
+      items.push({ category: 'vehicles', isPremium: false, name: label, delta: `${count}x` });
     } else {
-      items.push({ isPremium: false, name: 'Vehicle', delta: label });
+      items.push({ category: 'vehicles', isPremium: false, name: 'Vehicle', delta: label });
     }
   }
 
@@ -374,6 +403,7 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
           prev = curr;
         } else {
           items.push({
+            category: 'research',
             isPremium: true,
             text: start === prev ? `Max Tier ${start}` : `Max Tiers ${start}-${prev}`,
           });
@@ -391,19 +421,21 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
     for (const r of remaining) {
       const final = finalResearch[r.id] || 0;
       if (final >= r.levels) {
-        items.push({ isPremium: false, name: `Max ${r.name}`, delta: '' });
+        items.push({ category: 'research', isPremium: false, name: `Max ${r.name}`, delta: '' });
       } else {
-        items.push({ isPremium: false, name: r.name, delta: `${startResearch[r.id] ?? 0} -> ${final}` });
+        items.push({
+          category: 'research',
+          isPremium: false,
+          name: r.name,
+          delta: `${startResearch[r.id] ?? 0} -> ${final}`,
+        });
       }
     }
   }
 
+  const categoryRank = new Map(CATEGORY_ORDER.map((c, i) => [c, i]));
+  items.sort((a, b) => (categoryRank.get(a.category) ?? 999) - (categoryRank.get(b.category) ?? 999));
+
   return items;
 });
 </script>
-
-<style scoped>
-.badge-premium {
-  @apply border rounded-lg;
-}
-</style>
