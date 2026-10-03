@@ -4,7 +4,7 @@
 import { perfectShipsConfig } from 'lib';
 import type { LaunchOption, RecipeDAG } from '@/lib/types';
 import { buildRecipeDag } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 import { artifactTiers } from '@/lib/artifacts';
 import { countFeasible } from './enumerate';
 import type { OracleInstance } from './evaluate';
@@ -130,7 +130,7 @@ function pickLevel(rng: Rng, targets: string[]): number {
   return 30;
 }
 
-function maybeBaseYield(rng: Rng, dag: RecipeDAG, targets: string[]): Map<string, number> {
+function maybeOwnedStock(rng: Rng, dag: RecipeDAG, targets: string[]): Map<string, number> {
   const base = new Map<string, number>();
   if (rng() < 0.5) {
     const roots = new Set(targets);
@@ -158,7 +158,7 @@ function finalize(
   options: LaunchOption[],
   fuelCapacity: number,
   timeCapacityPerSlot: number,
-  baseYield: Map<string, number>,
+  ownedStock: Map<string, number>,
   minFeasible = 24
 ): OracleInstance | null {
   // unique (fuel, time, target) triples are the precondition for mapping the
@@ -181,7 +181,7 @@ function finalize(
       targets: pool.targets,
       fuelCapacity: fuel,
       timeCapacityPerSlot: time,
-      baseYield,
+      ownedStock,
     };
     const count = countFeasible(inst, FEASIBLE_CAP);
     if (count !== null) {
@@ -251,7 +251,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
         return null;
       }
       const [fuel, time] = basketBudgets(rng, options);
-      return finalize(family, seed, pool, options, fuel, time, maybeBaseYield(rng, pool.dag, targets));
+      return finalize(family, seed, pool, options, fuel, time, maybeOwnedStock(rng, pool.dag, targets));
     }
 
     case 'cheap-filler': {
@@ -276,7 +276,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
       }
       const fuel = expensive.actualFuel * (randInt(rng, 2, 4) + dyadic(rng, 0.1, 0.9, 16));
       const time = Math.max(...options.map(o => o.actualTime)) * dyadic(rng, 3, 10);
-      return finalize(family, seed, pool, options, fuel, time, maybeBaseYield(rng, pool.dag, targets));
+      return finalize(family, seed, pool, options, fuel, time, maybeOwnedStock(rng, pool.dag, targets));
     }
 
     case 'near-tie': {
@@ -303,7 +303,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
       const third = pick(rng, byFuel);
       const options = bestPair[0] === third || bestPair[1] === third ? [...bestPair] : [...bestPair, third];
       const [fuel, time] = basketBudgets(rng, options);
-      return finalize(family, seed, pool, options, fuel, time, maybeBaseYield(rng, pool.dag, targets));
+      return finalize(family, seed, pool, options, fuel, time, maybeOwnedStock(rng, pool.dag, targets));
     }
 
     case 'chunky-knapsack': {
@@ -318,7 +318,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
       const upperHalf = byFuel.slice(Math.floor(byFuel.length / 2));
       const options = sample(rng, upperHalf, Math.min(randInt(rng, 3, 4), upperHalf.length));
       const [fuel, time] = basketBudgets(rng, options);
-      return finalize(family, seed, pool, options, fuel * 0.75, time * 0.75, maybeBaseYield(rng, pool.dag, targets));
+      return finalize(family, seed, pool, options, fuel * 0.75, time * 0.75, maybeOwnedStock(rng, pool.dag, targets));
     }
 
     case 'edge': {
@@ -358,7 +358,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
           options,
           minPositiveFuel(options) * 0.5,
           minTime(options) * 0.5,
-          maybeBaseYield(rng, pool.dag, targets),
+          maybeOwnedStock(rng, pool.dag, targets),
           0
         );
       }
@@ -375,7 +375,7 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
           [opt],
           opt.actualFuel * randInt(rng, 1, 8),
           opt.actualTime * 20,
-          maybeBaseYield(rng, pool.dag, targets),
+          maybeOwnedStock(rng, pool.dag, targets),
           0
         );
       }
@@ -386,13 +386,13 @@ export function generateInstance(family: Family, seed: number): OracleInstance |
         const second = pick(rng, pool.contributingOptions);
         const options = first === second ? [first] : [first, second];
         const [fuel, time] = basketBudgets(rng, options);
-        return finalize(family, seed, pool, options, fuel, time, maybeBaseYield(rng, pool.dag, targets), 0);
+        return finalize(family, seed, pool, options, fuel, time, maybeOwnedStock(rng, pool.dag, targets), 0);
       }
       // time budget binding, fuel effectively unconstrained
       const options = bandSample(rng, pool.contributingOptions, Math.min(3, pool.contributingOptions.length));
       const fuel = options.reduce((total, o) => total + o.actualFuel, 0) * 100;
       const time = minTime(options) * dyadic(rng, 1, 6);
-      return finalize(family, seed, pool, options, fuel, time, maybeBaseYield(rng, pool.dag, targets), 0);
+      return finalize(family, seed, pool, options, fuel, time, maybeOwnedStock(rng, pool.dag, targets), 0);
     }
   }
 }

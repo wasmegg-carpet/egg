@@ -1,0 +1,296 @@
+// Persist the loaded plan, selected visit and per-visit settings across reloads.
+// Store solved visits in export format; OptimizerSolution contains non-JSON Maps.
+
+import { computed, ref } from 'vue';
+
+import { ei, formatDuration, getLocalStorage, parseDurationDays, setLocalStorage } from 'lib';
+
+import { parseBudgetInput } from '@/store/budget-input';
+
+import type { HumilityVisit } from '@/lib/plan/read';
+import type { HumilityPlanVisit } from '@/lib/plan/schema';
+
+const PLAN_LOCALSTORAGE_KEY = 'humility_plan';
+
+// Bumped when the persisted shape changes. A mismatch discards rather than migrates: the plan is
+// one file re-pick away, and a half-understood blob would solve against budgets nobody can see.
+const PLAN_STORE_VERSION = 1;
+
+// banked uses per-egg fuel on arrival; full-tank uses pooled tank capacity
+// to plan fuel that has not yet been stored.
+export type VisitFuelBudget = 'banked' | 'full-tank';
+export type GemCostMode = 'plan' | 'custom' | 'unlimited';
+
+export interface VisitSettings {
+  // Artifact node ids the optimizer should aim at for this visit.
+  targetIds: string[];
+  // Null means "use the duration the plan itself spends on Humility here". A plan that has not
+  // scheduled this visit's missions yet reports zero, so the page takes a typed value instead.
+  waitTimeOverride: string | null;
+  fuelBudget: VisitFuelBudget;
+  gemCostMode: GemCostMode;
+  gemCostInput: string;
+}
+
+export interface LoadedPlan {
+  label: string;
+  loadedAt: number;
+  visits: HumilityVisit[];
+  // The visit the optimizer is pointed at, or null for the off-plan entry, which budgets against
+  // the loaded save exactly as the page does with no plan at all.
+  currentVisitId: string | null;
+  settings: Record<string, VisitSettings>;
+  solved: Record<string, HumilityPlanVisit>;
+}
+
+function newVisitSettings(): VisitSettings {
+  return {
+    targetIds: [],
+    waitTimeOverride: null,
+    // The plan's own numbers, until the player says otherwise.
+    fuelBudget: 'banked',
+    gemCostMode: 'plan',
+    gemCostInput: '0',
+  };
+}
+
+export const loadedPlan = ref<LoadedPlan | null>(loadPlan());
+
+export const activePlanVisit = computed<HumilityVisit | null>(() => {
+  const plan = loadedPlan.value;
+  if (!plan || plan.currentVisitId === null) return null;
+  return plan.visits.find(v => v.visitId === plan.currentVisitId) ?? null;
+});
+
+export function setLoadedPlan(label: string, visits: HumilityVisit[]): void {
+  // A freshly loaded plan starts off-plan: the file says nothing about which visit the player came
+  // here to solve, and guessing one would silently swap the budgets under a selection they made
+  // before loading it.
+  loadedPlan.value = { label, loadedAt: Date.now(), visits, currentVisitId: null, settings: {}, solved: {} };
+  persistPlan();
+}
+
+// Unloading discards the cycle's recorded answers with it: they are keyed to this plan's visits,
+// and keeping them for the next file would attach one plan's budgets to another's.
+export function clearLoadedPlan(): void {
+  loadedPlan.value = null;
+  persistPlan();
+}
+
+// Selecting a visit repoints the one target selector on the page at that visit's saved targets. A
+// newly opened visit starts with the current targets. An explicitly emptied visit stays empty.
+export function setCurrentVisit(visitId: string | null, seedTargets: readonly string[] = []): void {
+  const plan = loadedPlan.value;
+  if (!plan) return;
+  plan.currentVisitId = visitId;
+  if (visitId !== null) {
+    const isNew = !plan.settings[visitId];
+    const settings = mutableSettingsFor(visitId);
+    if (settings && isNew) settings.targetIds = [...seedTargets];
+  }
+  persistPlan();
+}
+
+// Computed readers must not mutate loadedPlan. Use a stable frozen default
+// for visits without saved settings.
+const DEFAULT_VISIT_SETTINGS: VisitSettings = Object.freeze({
+  ...newVisitSettings(),
+  targetIds: Object.freeze([]) as readonly string[] as string[],
+});
+
+export function settingsFor(visitId: string): VisitSettings {
+  return loadedPlan.value?.settings[visitId] ?? DEFAULT_VISIT_SETTINGS;
+}
+
+/** The writable entry, created on demand. Only the setters below reach for it, and each persists. */
+function mutableSettingsFor(visitId: string): VisitSettings | null {
+  const plan = loadedPlan.value;
+  if (!plan) return null;
+  return (plan.settings[visitId] ??= newVisitSettings());
+}
+
+export const activeVisitSettings = computed<VisitSettings | null>(() => {
+  const visit = activePlanVisit.value;
+  if (!visit || !loadedPlan.value) return null;
+  return settingsFor(visit.visitId);
+});
+
+// Seconds a visit is solved against: what the player typed for it, or what the plan already
+// spends on Humility there.
+function waitTimeSecondsOf(settings: VisitSettings, plannedDurationSeconds: number): number {
+  const override = settings.waitTimeOverride;
+  return override === null ? plannedDurationSeconds : parseDurationDays(override);
+}
+
+export function waitTimeSecondsFor(visit: HumilityVisit): number {
+  return waitTimeSecondsOf(settingsFor(visit.visitId), visit.plannedDurationSeconds);
+}
+
+export function waitTimeInputFor(visit: HumilityVisit): string {
+  const settings = settingsFor(visit.visitId);
+  return settings.waitTimeOverride ?? formatDurationInput(visit.plannedDurationSeconds);
+}
+
+// Invalidate a solved visit only when its effective inputs change.
+// `asks` normalizes equivalent input text (e.g. "11" and "11d") so blur
+// normalization does not discard a result without triggering a new solve.
+function editVisit(
+  visitId: string,
+  edit: (settings: VisitSettings) => void,
+  asks?: (settings: VisitSettings) => number | string
+): void {
+  const plan = loadedPlan.value;
+  const settings = mutableSettingsFor(visitId);
+  if (!plan || !settings) return;
+  const before = asks?.(settings);
+  edit(settings);
+  // `!==`, not `Object.is`: an unparseable duration is NaN on both sides, and an answer to a
+  // question that can no longer be posed has to go.
+  if (asks === undefined || before !== asks(settings)) delete plan.solved[visitId];
+  persistPlan();
+}
+
+export function setVisitTargets(visitId: string, targetIds: readonly string[]): void {
+  editVisit(
+    visitId,
+    s => {
+      s.targetIds = [...targetIds];
+    },
+    s => JSON.stringify(s.targetIds)
+  );
+}
+
+export function setVisitWaitTime(visitId: string, value: string | null): void {
+  const planned = loadedPlan.value?.visits.find(v => v.visitId === visitId)?.plannedDurationSeconds ?? NaN;
+  editVisit(
+    visitId,
+    s => {
+      s.waitTimeOverride = value;
+    },
+    s => waitTimeSecondsOf(s, planned)
+  );
+}
+
+export function setVisitFuelBudget(visitId: string, budget: VisitFuelBudget): void {
+  editVisit(
+    visitId,
+    s => {
+      s.fuelBudget = budget;
+    },
+    s => s.fuelBudget
+  );
+}
+
+export function setVisitGemCostMode(visitId: string, mode: GemCostMode): void {
+  editVisit(
+    visitId,
+    s => {
+      s.gemCostMode = mode;
+    },
+    s => s.gemCostMode
+  );
+}
+
+export function setVisitGemCostInput(visitId: string, value: string): void {
+  editVisit(
+    visitId,
+    s => {
+      s.gemCostInput = value;
+    },
+    s => parseBudgetInput(s.gemCostInput)
+  );
+}
+
+export function recordSolvedVisit(visit: HumilityPlanVisit): void {
+  const plan = loadedPlan.value;
+  if (!plan) return;
+  plan.solved[visit.visitId] = visit;
+  persistPlan();
+}
+
+export function clearSolvedVisit(visitId: string): void {
+  const plan = loadedPlan.value;
+  if (!plan || !(visitId in plan.solved)) return;
+  delete plan.solved[visitId];
+  persistPlan();
+}
+
+export const solvedVisitCount = computed<number>(() => Object.keys(loadedPlan.value?.solved ?? {}).length);
+
+// `parseDurationDays` takes whole-unit tokens, so this rounds to the minute. Only ever seeds an
+// input the player can then edit, and a visit budgeted to the second was never meaningful.
+function formatDurationInput(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  return formatDuration(Math.round(seconds / 60) * 60, true);
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+// `fuelByEgg` is a Map, so the blob carries it as a plain record keyed by the egg's enum value
+// and rebuilds it on the way back in.
+interface PersistedVisit extends Omit<HumilityVisit, 'fuelByEgg'> {
+  fuelByEgg: Record<string, number>;
+}
+
+interface PersistedPlan {
+  version: number;
+  label: string;
+  loadedAt: number;
+  currentVisitId: string | null;
+  visits: PersistedVisit[];
+  settings: Record<string, VisitSettings>;
+  solved: Record<string, HumilityPlanVisit>;
+}
+
+function persistPlan(): void {
+  const plan = loadedPlan.value;
+  if (!plan) {
+    setLocalStorage(PLAN_LOCALSTORAGE_KEY, '');
+    return;
+  }
+  const blob: PersistedPlan = {
+    version: PLAN_STORE_VERSION,
+    label: plan.label,
+    loadedAt: plan.loadedAt,
+    currentVisitId: plan.currentVisitId,
+    visits: plan.visits.map(v => ({ ...v, fuelByEgg: Object.fromEntries(v.fuelByEgg) })),
+    settings: plan.settings,
+    solved: plan.solved,
+  };
+  setLocalStorage(PLAN_LOCALSTORAGE_KEY, JSON.stringify(blob));
+}
+
+// Settings written before a field existed come back without it. Filled from the defaults rather
+// than answered with a version bump, which would discard a plan mid-cycle over an additive change.
+function normalizeSettings(stored: Record<string, VisitSettings> | undefined): Record<string, VisitSettings> {
+  const settings: Record<string, VisitSettings> = {};
+  for (const [visitId, value] of Object.entries(stored ?? {})) {
+    settings[visitId] = { ...newVisitSettings(), ...value };
+  }
+  return settings;
+}
+
+function loadPlan(): LoadedPlan | null {
+  const str = getLocalStorage(PLAN_LOCALSTORAGE_KEY);
+  if (!str) return null;
+  try {
+    const parsed = JSON.parse(str) as PersistedPlan;
+    if (!parsed || parsed.version !== PLAN_STORE_VERSION || !Array.isArray(parsed.visits)) return null;
+    return {
+      label: typeof parsed.label === 'string' ? parsed.label : 'Plan',
+      loadedAt: typeof parsed.loadedAt === 'number' ? parsed.loadedAt : 0,
+      currentVisitId: typeof parsed.currentVisitId === 'string' ? parsed.currentVisitId : null,
+      visits: parsed.visits.map(v => ({
+        ...v,
+        fuelByEgg: new Map(Object.entries(v.fuelByEgg ?? {}).map(([egg, amount]) => [Number(egg) as ei.Egg, amount])),
+      })),
+      settings: normalizeSettings(parsed.settings),
+      solved: parsed.solved ?? {},
+    };
+  } catch (err) {
+    console.warn(`error parsing stored plan: ${err}`);
+    return null;
+  }
+}

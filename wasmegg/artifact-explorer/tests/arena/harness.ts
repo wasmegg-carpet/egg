@@ -3,7 +3,7 @@
 
 import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
 import { buildRecipeDag } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
 import type { CraftBudget, LaunchOption, RecipeDAG } from '@/lib/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
@@ -46,7 +46,7 @@ export interface SolveOverrides {
   effort?: EffortLevel;
   craftingLevel?: number;
   previousCrafts?: number;
-  baseYield?: Map<string, number>;
+  ownedStock?: Map<string, number>;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -79,7 +79,7 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     fuelCapacity: over.fuelCapacity ?? inst.fuelCapacity,
     timeCapacityPerSlot: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
     slots: NUM_SLOTS,
-    baseYield: over.baseYield ?? new Map<string, number>(),
+    ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
     // sweep every recorded result was measured on is unchanged.
     craftBudget: over.craftBudget,
@@ -127,7 +127,7 @@ function problemKey(problem: PlanProblem): string {
     .sort()
     .map(id => {
       const node = problem.dag.get(id)!;
-      const children = node.children.map(c => `${c.nodeId}:${c.quantity}`).join(',');
+      const children = node.children.map(c => `${c.nodeId}:${c.qty}`).join(',');
       return `${id}~${node.isLeaf ? 1 : 0}~${node.legendaryCraftProbability}~${children}`;
     })
     .join(';');
@@ -142,7 +142,7 @@ function problemKey(problem: PlanProblem): string {
     problem.timeCapacityPerSlot,
     budget,
     problem.slots,
-    sortedEntries(problem.baseYield),
+    sortedEntries(problem.ownedStock),
     dag,
     options,
   ].join('##');
@@ -180,7 +180,7 @@ export function oracleInstanceOf(problem: PlanProblem): OracleInstance {
       targets: problem.targets as string[],
       fuelCapacity: problem.fuelCapacity,
       timeCapacityPerSlot: problem.timeCapacityPerSlot,
-      baseYield: problem.baseYield as Map<string, number>,
+      ownedStock: problem.ownedStock as Map<string, number>,
       craftBudget: problem.craftBudget,
     };
     if (instancesByKey.size >= INSTANCE_CACHE_MAX) instancesByKey.clear();

@@ -5,9 +5,6 @@
         "args": {}
     },
     "remoteUser": "dev",
-    "remoteEnv": {
-        "CLAUDE_CONFIG_DIR": "/opt/.claude"
-    },
     "customizations": {
         
         "vscode": {
@@ -17,10 +14,8 @@
             ]
         }
     },
-    "features": {
-        "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
-    },
     "mounts": [
-        "source=claude-code-config,target=/opt/.claude,type=volume"
+        "source=claude-code-config,target=/opt/.claude,type=volume",
+        "source=codex-config,target=/opt/.codex,type=volume"
     ]
 }

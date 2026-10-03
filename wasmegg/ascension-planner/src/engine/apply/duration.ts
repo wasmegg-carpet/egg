@@ -1,3 +1,4 @@
+import { shiftCost } from 'lib';
 import {
   Action,
   CalculationsSnapshot,
@@ -30,6 +31,13 @@ export function refreshActionPayload(
   prevSnapshot: CalculationsSnapshot,
   context?: SimulationContext
 ): Action {
+  if (action.type === 'shift') {
+    return {
+      ...action,
+      payload: { ...action.payload, fromEgg: prevSnapshot.currentEgg, newShiftCount: prevSnapshot.shiftCount + 1 },
+      cost: shiftCost(prevSnapshot.soulEggs, prevSnapshot.shiftCount),
+    };
+  }
   if (context) {
     if (action.type === 'buy_research') {
       const payload = action.payload as import('@/types').BuyResearchPayload;
