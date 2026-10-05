@@ -29095,5 +29095,14 @@
     "startTimestamp": 1791129600,
     "type": "vehicle-sale",
     "ultra": true
+  },
+  {
+    "endTimestamp": 1791302400,
+    "id": "event-10-5",
+    "message": "2x EARNINGS!",
+    "multiplier": 2,
+    "startTimestamp": 1791216000,
+    "type": "earnings-boost",
+    "ultra": false
   }
 ]
