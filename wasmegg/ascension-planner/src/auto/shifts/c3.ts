@@ -45,6 +45,9 @@ const MULTI_LAYERING_TARGET_LEVEL = 2;
 // jobs and have no reason to move together.
 const OPENING_SMART_BUY_THRESHOLD_SECONDS = 10;
 
+// Graviton Coupling's tier — normally unlocked by C1/C2, but not always (see step 1b).
+const TIER_12 = 12;
+
 /**
  * C3: the "build phase" shift, spent riding out one or more weekly research sales in Curiosity.
  *
@@ -69,6 +72,17 @@ const OPENING_SMART_BUY_THRESHOLD_SECONDS = 10;
  *    being hoisted out and shared — deliberately, to keep all of C3's buying logic together in one
  *    place instead of splitting it across a shared pre-step and this function; the sweep itself is
  *    cheap enough that repeating it a handful of times is not worth that split.
+ * 1b. If Tier 12 isn't unlocked yet (C1/C2 only attempt it within their own short time budgets, so
+ *    a low-earnings ascension can reach C3 without it), try to unlock it via the milestone view's
+ *    tier-unlock chain, capped at whatever's left of `buildPhaseEnd`. Runs unconditionally — not
+ *    just for Tier 13 variants — since everything in Tier 12 is otherwise out of reach for the rest
+ *    of the ascension, including step 4's delivery buying. If the chain can't finish in time, it's
+ *    rolled back in full so that budget goes to steps 3-4's ROI-gated buying instead; if it
+ *    succeeds, step 1a's sweep runs again so Tier 12's newly available research gets the same
+ *    cheap pre-pass (for the same performance reason). Placed after
+ *    step 1a so the sweep's cheap purchases count toward the unlock threshold first, and before
+ *    step 2 since Tier 13 can't be reached without passing Tier 12 anyway (step 2's own rewind
+ *    point is taken after this step, so a retry never undoes it).
  * 2. If Tier 13 is wanted: first, if Multiversal Layering 2 isn't already unlocked, try to grab it
  *    via the milestone view's research-level-target chain — staged as level 1 (if not already
  *    bought) then level 2, as two separate chain attempts, so a level-1-only ML doesn't get skipped
@@ -356,6 +370,35 @@ export function runC3(
       Math.max(0, buildPhaseEnd - getAbsTime())
     )
   );
+
+  // 1b. Unlock Tier 12 if C1/C2 didn't — see this function's own top-level doc comment (step 1b).
+  // Checkpointed so a chain that runs out of runway partway is discarded in full rather than
+  // leaving a pile of unlock-motivated purchases with no unlock to show for them (mirrors C2's own
+  // Graviton Coupling checkpoint/rollback).
+  if (!isTierUnlocked(currentState.researchLevels, TIER_12)) {
+    const checkpointState = currentState;
+    const checkpointElapsedSeconds = elapsedSeconds;
+    const checkpointActionsLength = actions.length;
+
+    const timeLimit = Math.max(0, buildPhaseEnd - getAbsTime());
+    runStep(runTierUnlockMilestone(currentState, context, TIER_12, timeLimit, roiDeadline, true));
+
+    if (!isTierUnlocked(currentState.researchLevels, TIER_12)) {
+      currentState = checkpointState;
+      elapsedSeconds = checkpointElapsedSeconds;
+      actions.length = checkpointActionsLength;
+    } else {
+      // Same sweep as step 1a, now that Tier 12's own research is available to it.
+      runStep(
+        runSmartBuyForSeconds(
+          currentState,
+          context,
+          OPENING_SMART_BUY_THRESHOLD_SECONDS,
+          Math.max(0, buildPhaseEnd - getAbsTime())
+        )
+      );
+    }
+  }
 
   // 2 (only when requested): try to unlock Tier 13 before any of steps 3-4's own deliberate,
   // ROI-gated spending gets a chance to eat into the same budget. Safe to run after step 1a's sweep
