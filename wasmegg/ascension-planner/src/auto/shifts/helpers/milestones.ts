@@ -20,6 +20,7 @@ import { advanceTimeWithBoundaries } from './advanceTime';
 import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from '@/lib/events';
 import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from '@/lib/actions/notes';
 import { runWithEarningsEventDeferral } from './earningsEventDeferral';
+import type { DeferralCheckpoint, EarningsEventDeferralHost } from './earningsEventDeferral';
 
 /**
  * Shared mutable-simulation plumbing for the milestone/smart-buy helpers below.
@@ -61,6 +62,27 @@ export function createMilestoneShiftHelpers(
     const result = advanceTimeWithBoundaries(currentState, actions, elapsedSeconds, context, baseAbsTime, totalSeconds);
     currentState = result.currentState;
     elapsedSeconds = result.elapsedSeconds;
+  };
+
+  // Rewind support for `runWithEarningsEventDeferral`'s undo-and-rebuy search. Safe because every
+  // state transition here produces a new `EngineState` rather than mutating the old one, and the
+  // action log is only ever appended to between a checkpoint and its restore.
+  const checkpoint = (): DeferralCheckpoint => ({ state: currentState, elapsedSeconds, actionsLength: actions.length });
+  const restore = (cp: DeferralCheckpoint, appendActions: Action[] = []) => {
+    currentState = cp.state;
+    elapsedSeconds = cp.elapsedSeconds;
+    actions.length = cp.actionsLength;
+    actions.push(...appendActions);
+  };
+  const actionsSince = (cp: DeferralCheckpoint): Action[] => actions.slice(cp.actionsLength);
+  const deferralHost: EarningsEventDeferralHost = {
+    getAbsTime,
+    advanceTime,
+    getElapsedSeconds: () => elapsedSeconds,
+    getState: () => currentState,
+    checkpoint,
+    restore,
+    actionsSince,
   };
 
   /**
@@ -158,9 +180,7 @@ export function createMilestoneShiftHelpers(
    * than factored out of it, since `buyResearch` already has more branches (`checkRoiGate`'s
    * defer-and-recurse path) than this needs, and refactoring it risks disturbing that delicate
    * logic. Returns `null` for the same "can't ever buy this" reasons `buyResearch` bails out early
-   * for. Used by C3's silo-mode purchase deferral (`executePlanToLevels`) to decide whether a
-   * planned purchase would naturally complete before an upcoming earnings boost starts, without
-   * actually committing to it.
+   * for.
    */
   const previewPurchase = (researchId: string): { waitSeconds: number } | null => {
     const research = getResearchById(researchId);
@@ -239,15 +259,11 @@ export function createMilestoneShiftHelpers(
    * Returns the number of items actually executed (may be less than `items.length` if `timeLimit`
    * was hit).
    *
-   * `deferForEarningsMode` (only ever passed `true` by C3's Tier 13 unlock step — see its own call
-   * site's comment) opts into the same defer-for-earnings-mode purchase deferral
-   * `executePlanToLevels` (c3.ts) uses for its own sweep: an item that would otherwise complete
-   * within the pre-boost silo window is skipped and bought instead right after the boost starts,
-   * where the same price is reached in less real time. Multiversal Layering is exempt (and
-   * protects anything scheduled before it in this same chain) since it meaningfully raises the
-   * earn rate and should start compounding ASAP. Defaults to `false` so C1/C2's own
-   * `runTierUnlockMilestone` calls — tightly time-boxed budgets unrelated to riding out a boost
-   * cycle — are unaffected regardless of `context.deferForEarningsMode`.
+   * `deferForEarningsMode` (only ever passed `true` by C3's Tier 13 and Multiversal Layering
+   * steps) opts into the same defer-for-earnings-mode undo-and-rebuy search `executePlanToLevels`
+   * (c3.ts) uses for its own sweep — see `runWithEarningsEventDeferral`'s module doc comment.
+   * Defaults to `false` so C1/C2's own milestone calls — tightly time-boxed budgets unrelated to
+   * riding out a boost cycle — are unaffected regardless of `context.deferForEarningsMode`.
    */
   const executeChain = (
     items: MilestoneChainItem[],
@@ -264,7 +280,7 @@ export function createMilestoneShiftHelpers(
           items,
           item => item.research.id,
           executeChainItem,
-          { getAbsTime, previewPurchase, advanceTime, getElapsedSeconds: () => elapsedSeconds, getState: () => currentState },
+          deferralHost,
           context,
           timeLimit
         )
@@ -303,6 +319,7 @@ export function createMilestoneShiftHelpers(
     executeChainItem,
     executeChain,
     addNotification,
+    deferralHost,
     getState: () => currentState,
     getElapsedSeconds: () => elapsedSeconds,
     getActions: () => actions,
@@ -454,7 +471,9 @@ export function runResearchMilestoneIfWorthwhile(
   maxOptimizedSeconds: number,
   timeLimit: number,
   // See `runTierUnlockMilestone`'s identical parameter.
-  roiDeadlineOverride?: number
+  roiDeadlineOverride?: number,
+  // Forwarded to `executeChain`'s own `deferForEarningsMode` — see that parameter's doc comment.
+  deferForEarningsMode = false
 ): ShiftResult {
   const noop: ShiftResult = { actions: [], elapsedSeconds: 0, endState: startState };
 
@@ -496,7 +515,7 @@ export function runResearchMilestoneIfWorthwhile(
   const research = getResearchById(researchId);
   const targetLabel = research ? `${research.name} (Lv ${targetLevel}/${research.levels})` : 'Milestone';
 
-  helpers.executeChain(chain.items, targetLabel, timeLimit, summary.timeSavedSeconds);
+  helpers.executeChain(chain.items, targetLabel, timeLimit, summary.timeSavedSeconds, deferForEarningsMode);
 
   return {
     actions: helpers.getActions(),

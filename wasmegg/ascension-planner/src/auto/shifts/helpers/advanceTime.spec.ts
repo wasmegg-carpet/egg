@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import type { EngineState, SimulationContext } from '../../types';
+import type { Action } from '@/types/actions/meta';
 import { advanceTimeWithBoundaries } from './advanceTime';
 import { getNextEarningsBoostStart, getNextSaleStart, isResearchSaleActive } from '@/lib/events';
 
@@ -53,21 +54,41 @@ describe('advanceTimeWithBoundaries defer for earnings mode', () => {
     const state = fakeState({ siloCount: 2, lastStepTime: 0 });
     const context = fakeContext({ ascensionStartTime: anchor, deferForEarningsMode: true });
 
-    const actions: any[] = [];
+    const actions: Action[] = [];
     advanceTimeWithBoundaries(state, actions, 0, context, anchor, totalSeconds);
 
     const boostOnIdx = actions.findIndex(a => a.type === 'toggle_earnings_boost' && a.payload.active === true);
     expect(boostOnIdx).toBeGreaterThan(0);
     expect(actions[boostOnIdx - 1].type).toBe('modify_bank');
-    expect(actions[boostOnIdx - 1].payload.delta).toBeGreaterThan(0);
-    expect(actions[boostOnIdx - 1].bankDelta).toBeGreaterThan(0);
+    const credit = actions[boostOnIdx - 1] as Action<'modify_bank'>;
+    expect(credit.payload.delta).toBeGreaterThan(0);
+    expect(credit.bankDelta).toBeGreaterThan(0);
+  });
+
+  test('credits the whole idle gap since the last purchase, not just the final wait step', () => {
+    // Idle for 50h straight into the event: a research-sale boundary falls inside that gap and
+    // splits it into several wait steps. Enough silos that the cap doesn't bind.
+    const start = boostStart - 50 * 3600;
+    const state = fakeState({ siloCount: 60, lastStepTime: 0 });
+    const context = fakeContext({ ascensionStartTime: start, deferForEarningsMode: true });
+
+    const actions: Action[] = [];
+    advanceTimeWithBoundaries(state, actions, 0, context, start, boostStart - start + 3600);
+
+    const boostOnIdx = actions.findIndex(a => a.type === 'toggle_earnings_boost' && a.payload.active === true);
+    const waitsBeforeBoost = actions.slice(0, boostOnIdx).filter(a => a.type.startsWith('wait_for_'));
+    expect(waitsBeforeBoost.length).toBeGreaterThan(1);
+    expect(actions[boostOnIdx - 1].type).toBe('modify_bank');
+    const credit = actions[boostOnIdx - 1] as Action<'modify_bank'>;
+    const rate = actions[0].bankDelta / actions[0].totalTimeSeconds;
+    expect(credit.payload.delta / rate).toBeCloseTo(50 * 3600, 0);
   });
 
   test('does NOT insert a modify_bank credit when defer for earnings mode is off', () => {
     const state = fakeState({ siloCount: 2, lastStepTime: 0 });
     const context = fakeContext({ ascensionStartTime: anchor, deferForEarningsMode: false });
 
-    const actions: any[] = [];
+    const actions: Action[] = [];
     advanceTimeWithBoundaries(state, actions, 0, context, anchor, totalSeconds);
 
     expect(actions.some(a => a.type === 'modify_bank')).toBe(false);
@@ -102,7 +123,7 @@ describe('advanceTimeWithBoundaries boundary-landing precision', () => {
     const state = fakeState({ lastStepTime: priorLastStepTime });
     const totalSeconds = saleStart - driftedBaseAbsTime;
 
-    const actions: any[] = [];
+    const actions: Action[] = [];
     const result = advanceTimeWithBoundaries(state, actions, 0, context, driftedBaseAbsTime, totalSeconds);
 
     const reconstructedAbsTime =
