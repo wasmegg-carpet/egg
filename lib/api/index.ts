@@ -17,8 +17,7 @@ const AUTH_API_ROOT = 'https://egg-auth-worker.carpet.workers.dev';
 // Endpoints that must be routed through the authenticated API worker.
 const AUTH_ENDPOINTS = new Set(['/ei_ctx/get_contracts_info', '/ei_ctx/get_contract_player_info']);
 
-const CONFIG_GIST_URL =
-  'https://gist.githubusercontent.com/carpetsage/373992bc6c5e00f8abd39dfb752845c0/raw/config.json';
+const CONFIG_GIST_URL = 'https://gist.githubusercontent.com/carpetsage/563c3a4c073f0c658f51a52975b9f929/raw/8ac535c0be50def044c0dd70265d01a157c0b5ec/config.json'
 const TIMEOUT = 30000;
 
 // A valid userId donated by a volunteer.
