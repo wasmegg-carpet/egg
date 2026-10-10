@@ -1,4 +1,33 @@
 import { trimTrailingZeros } from '@/lib';
+import { ei, MissionType } from 'lib';
+
+export function missionDurationTypeFgClass(mission: MissionType): string {
+  switch (mission.durationType) {
+    case ei.MissionInfo.DurationType.TUTORIAL:
+    case ei.MissionInfo.DurationType.SHORT:
+      return 'text-blue-500';
+    case ei.MissionInfo.DurationType.LONG:
+      return 'text-purple-500';
+    case ei.MissionInfo.DurationType.EPIC:
+      return 'text-yellow-500';
+    default:
+      return '';
+  }
+}
+
+export function missionDurationTypeBgClass(mission: MissionType): string {
+  switch (mission.durationType) {
+    case ei.MissionInfo.DurationType.TUTORIAL:
+    case ei.MissionInfo.DurationType.SHORT:
+      return 'bg-blue-500';
+    case ei.MissionInfo.DurationType.LONG:
+      return 'bg-purple-500';
+    case ei.MissionInfo.DurationType.EPIC:
+      return 'bg-yellow-500';
+    default:
+      return '';
+  }
+}
 
 export enum RoundingMode {
   Down = -1,

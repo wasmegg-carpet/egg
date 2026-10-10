@@ -4,6 +4,7 @@ export * from './drones';
 export * from './earning_bonus';
 export * from './earnings';
 export * from './egg_value';
+export * from './elr';
 export * from './farm_value';
 export * from './hab_space';
 export * from './internal_hatchery';
