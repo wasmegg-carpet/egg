@@ -40,12 +40,17 @@ import {
   getNumProphecyEggs,
   Inventory,
   InventoryFamily,
+  InventoryItem,
   Item,
   newItem,
 } from '..';
 // Separated from other barrel imports due to module level references
 // causing circular import crashes when running test frameworks
 import { ei } from '../proto';
+import { Strategy, isVirtueStrategy, isElrStrategy, ELR_TARGET_AFX_IDS, ELR_STONE_FAMILY_IDS } from './strategies';
+import { EquippedArtifact } from './types';
+import { createEmptyLoadout } from './calculator';
+import { getArtifact } from './options';
 
 const debug = import.meta.env.DEV || import.meta.env.VITE_APP_BETA;
 import Name = ei.ArtifactSpec.Name;
@@ -55,21 +60,9 @@ import Type = ei.ArtifactSpec.Type;
 type ArtifactSlotCount = number;
 type StoneSlotCount = number;
 
-export enum Strategy {
-  // Prestige strategies
-  STANDARD_PERMIT_SINGLE_PRELOAD,
-  PRO_PERMIT_SINGLE_PRELOAD,
-  PRO_PERMIT_MULTI,
-  PRO_PERMIT_LUNAR_PRELOAD_AIO,
-
-  // Virtue strategies
-  STANDARD_PERMIT_VIRTUE_CTE,
-  PRO_PERMIT_VIRTUE_CTE,
-}
-
-function isVirtueStrategy(strategy: Strategy): boolean {
-  return strategy === Strategy.STANDARD_PERMIT_VIRTUE_CTE || strategy === Strategy.PRO_PERMIT_VIRTUE_CTE;
-}
+// Strategies and their classification helpers live in strategies.ts, re-exported
+// here so existing `Strategy` imports keep resolving.
+export * from './strategies';
 
 export class Contender {
   constructor(
@@ -997,4 +990,393 @@ export function contenderToArtifactSet(
     artifactSet: constructedSet,
     assemblyStatuses,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Delivery-rate (effective lay rate) recommendation
+//
+// Unlike the drift-based search above, delivery rate is maximized by a small
+// set of interdependent artifacts (Quantum Metronome, Interstellar Compass,
+// Ornate Gusset) whose value comes from their stone slots as much as from their
+// own effects. The search therefore enumerates artifact STRUCTURES (combinations
+// of 1-4 owned artifacts) and greedily balances Tachyon/Quantum stones into the
+// free slots, scoring each candidate with a caller-supplied callback — the
+// lay-rate/shipping/hab-capacity formulas differ per app.
+// ---------------------------------------------------------------------------
+
+/**
+ * Metrics produced by an {@link RecommendElrSetOptions.evaluate} callback for a
+ * candidate loadout.
+ */
+export interface ElrMetrics {
+  layRate: number;
+  shipRate: number;
+  elr: number;
+}
+
+export interface RecommendElrSetOptions {
+  /** Prebuilt virtue inventory; defaults to one built from the backup. */
+  inventory?: Inventory;
+  /** Skip Gussets when generating candidate structures. */
+  excludeGusset?: boolean;
+  /**
+   * Skip the up-to-495-combo artifact STRUCTURE search entirely and evaluate stone placement for
+   * exactly this structure instead — one `artifactId` per slot (`null` for an empty slot), same
+   * shape as a prior call's own return value's `.map(slot => slot.artifactId)`. Any stones on
+   * those slots are ignored; stone placement is always re-solved fresh against the given research
+   * state, since which stone type (tachyon vs. quantum) belongs in each slot depends on which of
+   * lay rate/shipping capacity is currently the bottleneck — that shifts as research levels
+   * change, even though which ARTIFACTS are worth equipping doesn't (that's driven by owned
+   * inventory and target-artifact tiers, neither of which a research purchase changes). Intended
+   * for callers that already know the winning structure from an earlier, unforced call against
+   * the same backup and just want that same structure's stats at a different research level —
+   * skipping the structure search this way is roughly 500x cheaper per call, since only one
+   * structure's stone placement runs instead of every combo's.
+   */
+  forcedArtifacts?: (string | null)[];
+  /** If the winning set is functionally identical to this one, return it unchanged. */
+  currentSet?: (EquippedArtifact | null)[] | null;
+  /** Stone slot count for a given artifact option ID (defaults to the shared registry). */
+  slotsForArtifact?: (artifactId: string | null) => number;
+  /**
+   * Compute the lay rate, shipping rate, and effective lay rate (delivery rate) for a candidate
+   * loadout under the caller's farm state. Supplied by each app since the underlying lay
+   * rate/shipping/hab-capacity formulas differ between the planner and the companion.
+   */
+  evaluate: (loadout: EquippedArtifact[]) => ElrMetrics;
+}
+
+/**
+ * Find the optimal delivery-rate (effective lay rate) artifact set for one of the ELR strategies.
+ *
+ * Thin strategy-aware entry over {@link recommendElrArtifactSet}: validates the strategy and
+ * builds the virtue inventory when the caller doesn't supply one (the search only makes sense
+ * over the virtue artifact inventory).
+ */
+export function recommendElrSet(
+  backup: ei.IBackup,
+  strategy: Strategy,
+  options: RecommendElrSetOptions
+): EquippedArtifact[] {
+  if (!isElrStrategy(strategy)) {
+    throw new Error(`strategy ${Strategy[strategy]} is not a delivery-rate (ELR) strategy`);
+  }
+  if (!backup.artifactsDb) {
+    return createEmptyLoadout();
+  }
+  const { inventory, ...searchOptions } = options;
+  return recommendElrArtifactSet(
+    backup,
+    inventory ?? new Inventory(backup.artifactsDb, { virtue: true }),
+    searchOptions
+  );
+}
+
+/**
+ * Find the artifact set that maximizes effective lay rate (delivery rate) for the given virtue
+ * inventory, balancing Metronomes, Compasses, and Gussets with Tachyon/Quantum stones.
+ *
+ * The structure search and stone placement are app-agnostic; the caller supplies an `evaluate`
+ * callback that turns a candidate loadout into lay rate/shipping/ELR metrics.
+ */
+function recommendElrArtifactSet(
+  backup: ei.IBackup,
+  inventory: Inventory,
+  options: Omit<RecommendElrSetOptions, 'inventory'>
+): EquippedArtifact[] {
+  const excludeGusset = options.excludeGusset ?? false;
+  const slotsForArtifact = options.slotsForArtifact ?? (id => (id ? (getArtifact(id)?.slots ?? 0) : 0));
+
+  // 1. Identify candidate artifact STRUCTURES to search over — skipped entirely when
+  // `forcedArtifacts` is given: the search collapses to the one caller-supplied structure
+  // instead of the up-to-495-combo search below, so step 3 only ever evaluates stone placement
+  // for that one structure.
+  let candidateLoadouts: EquippedArtifact[][];
+
+  if (options.forcedArtifacts) {
+    const forcedLoadout: EquippedArtifact[] = options.forcedArtifacts.map(artifactId => ({
+      artifactId,
+      stones: new Array(slotsForArtifact(artifactId)).fill(null),
+    }));
+    while (forcedLoadout.length < 4) forcedLoadout.push({ artifactId: null, stones: [] });
+    candidateLoadouts = [forcedLoadout];
+  } else {
+    const name = ei.ArtifactSpec.Name;
+    const targetAfxIds = new Set(ELR_TARGET_AFX_IDS);
+
+    // Candidate Wrapper
+    type Candidate = { item: InventoryItem; rarity: ei.ArtifactSpec.Rarity; slots: number; isTarget: boolean };
+    const afxGroups = new Map<number, Candidate[]>();
+
+    for (const item of inventory.items) {
+      if (item.have === 0 || !item.isArtifact) continue;
+
+      const afxId = item.afxId;
+      if (excludeGusset && afxId === name.ORNATE_GUSSET) continue;
+
+      const isTarget = targetAfxIds.has(afxId);
+
+      // Find best rarity for this tier
+      for (const rarity of [
+        ei.ArtifactSpec.Rarity.LEGENDARY,
+        ei.ArtifactSpec.Rarity.EPIC,
+        ei.ArtifactSpec.Rarity.RARE,
+        ei.ArtifactSpec.Rarity.COMMON,
+      ]) {
+        if (item.haveRarity[rarity] > 0) {
+          const slots = item.stoneSlotCount(rarity);
+          const cand: Candidate = { item, rarity, slots, isTarget };
+
+          if (!afxGroups.has(afxId)) afxGroups.set(afxId, []);
+          afxGroups.get(afxId)!.push(cand);
+          break; // Only take best rarity of each tier
+        }
+      }
+    }
+
+    const finalCandidates: Candidate[] = [];
+
+    // Sort each AFX group by "goodness"
+    for (const [afxId, group] of afxGroups.entries()) {
+      const isTarget = targetAfxIds.has(afxId);
+
+      if (isTarget) {
+        // Keep only the Pareto-optimal tier/rarity for this family: a candidate
+        // is dropped when some other owned tier is at least as good on both
+        // base effect delta and stone slots (and strictly better on one). This
+        // reduces a T4 Legendary (typically max delta AND max slots) down to a
+        // single candidate, but keeps genuine trade-offs alive -- e.g. a T2
+        // Epic Gusset (fewer tiers, more slots) survives alongside a T4 Common
+        // Gusset (more delta, no slots) because neither dominates the other,
+        // and it's the stone/ELR search below that has to settle it.
+        const delta = (c: Candidate) => c.item.effectDelta(c.rarity);
+        const pareto = group.filter(
+          a =>
+            !group.some(
+              b => b !== a && delta(b) >= delta(a) && b.slots >= a.slots && (delta(b) > delta(a) || b.slots > a.slots)
+            )
+        );
+        finalCandidates.push(...pareto);
+      } else {
+        group.sort((a, b) => {
+          if (a.slots !== b.slots) return b.slots - a.slots;
+          return b.item.tierNumber - a.item.tierNumber;
+        });
+        // For non-targets, we only care about the single best carrier from this family
+        finalCandidates.push(group[0]);
+      }
+    }
+
+    // Pick top 4 of the non-target leaders based on slots
+    const targetCands = finalCandidates.filter(c => c.isTarget);
+    const nonTargetCands = finalCandidates
+      .filter(c => !c.isTarget)
+      .sort((a, b) => b.slots - a.slots)
+      .slice(0, 4);
+
+    const topCandidates = [...targetCands, ...nonTargetCands];
+
+    // Search through combinations of 1 to 4 artifacts
+    // 12C4 = 495, which is small enough.
+    function combinations<T>(array: T[], r: number): T[][] {
+      const result: T[][] = [];
+      function helper(start: number, combo: T[]) {
+        if (combo.length === r) {
+          result.push([...combo]);
+          return;
+        }
+        for (let i = start; i < array.length; i++) {
+          helper(i + 1, [...combo, array[i]]);
+        }
+      }
+      helper(0, []);
+      return result;
+    }
+
+    const combos = [
+      ...combinations(topCandidates, 1),
+      ...combinations(topCandidates, 2),
+      ...combinations(topCandidates, 3),
+      ...combinations(topCandidates, 4),
+    ];
+
+    candidateLoadouts = combos
+      .filter(comboWrappers => {
+        // Ensure all artifacts in the combination are from unique families
+        const families = new Set(comboWrappers.map(w => w.item.props.family.afx_id));
+        return families.size === comboWrappers.length;
+      })
+      .map(comboWrappers => {
+        const loadout: EquippedArtifact[] = comboWrappers.map(wrapper => ({
+          // Use the family ID from props. This maps correctly to gusset-x-y instead of ornate-gusset-x-y
+          artifactId: `${wrapper.item.props.family.id}-${wrapper.item.tierNumber}-${wrapper.rarity}`,
+          stones: new Array(wrapper.slots).fill(null),
+        }));
+        while (loadout.length < 4) loadout.push({ artifactId: null, stones: [] });
+        return loadout;
+      });
+  }
+
+  // 2. Gather available stones (Tachyon and Quantum)
+  const tachyonStones = inventory.items
+    .filter(i => i.isStone && i.props.family.id === ELR_STONE_FAMILY_IDS.tachyon && i.tierNumber >= 2)
+    .map(i => ({
+      id: i.id,
+      delta: i.props.effects?.[0]?.effect_delta || 0,
+      count: i.haveCommon,
+      tier: i.tierNumber,
+    }))
+    .sort((a, b) => b.tier - a.tier);
+
+  const quantumStones = inventory.items
+    .filter(i => i.isStone && i.props.family.id === ELR_STONE_FAMILY_IDS.quantum && i.tierNumber >= 2)
+    .map(i => ({
+      id: i.id,
+      delta: i.props.effects?.[0]?.effect_delta || 0,
+      count: i.haveCommon,
+      tier: i.tierNumber,
+    }))
+    .sort((a, b) => b.tier - a.tier);
+
+  // 3. Optimization Loop
+  let bestSet: EquippedArtifact[] = createEmptyLoadout();
+  let maxELR = -1;
+  let bestMetrics: ElrMetrics | null = null;
+
+  for (const loadout of candidateLoadouts) {
+    const totalStoneSlots = loadout.reduce((sum, slot) => sum + slot.stones.length, 0);
+
+    const evaluateStones = (stones: (string | null)[]): ElrMetrics => {
+      const tempLoadout: EquippedArtifact[] = JSON.parse(JSON.stringify(loadout));
+      let sIdx = 0;
+      for (const slot of tempLoadout) {
+        for (let i = 0; i < slot.stones.length; i++) {
+          slot.stones[i] = stones[sIdx++];
+        }
+      }
+      return options.evaluate(tempLoadout);
+    };
+
+    const remTachyonStones = tachyonStones.map(s => ({ ...s }));
+    const remQuantumStones = quantumStones.map(s => ({ ...s }));
+    const currentStones: (string | null)[] = new Array(totalStoneSlots).fill(null);
+
+    for (let slotIdx = 0; slotIdx < totalStoneSlots; slotIdx++) {
+      const metrics = evaluateStones(currentStones);
+
+      if (metrics.layRate < metrics.shipRate) {
+        const bestTachyon = remTachyonStones.find(s => s.count > 0);
+        if (bestTachyon) {
+          currentStones[slotIdx] = bestTachyon.id;
+          bestTachyon.count--;
+        } else {
+          const bestQuantum = remQuantumStones.find(s => s.count > 0);
+          if (bestQuantum) {
+            currentStones[slotIdx] = bestQuantum.id;
+            bestQuantum.count--;
+          }
+        }
+      } else {
+        const bestQuantum = remQuantumStones.find(s => s.count > 0);
+        if (bestQuantum) {
+          currentStones[slotIdx] = bestQuantum.id;
+          bestQuantum.count--;
+        } else {
+          const bestTachyon = remTachyonStones.find(s => s.count > 0);
+          if (bestTachyon) {
+            currentStones[slotIdx] = bestTachyon.id;
+            bestTachyon.count--;
+          }
+        }
+      }
+    }
+
+    currentStones.sort((a, b) => {
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+
+      const isTa = a.indexOf('quantum') === 0;
+      const isTb = b.indexOf('quantum') === 0;
+      if (isTa && !isTb) return -1;
+      if (!isTa && isTb) return 1;
+
+      const tierA = parseInt(a.split('-').pop() || '0', 10);
+      const tierB = parseInt(b.split('-').pop() || '0', 10);
+      return tierB - tierA;
+    });
+
+    const bestStonesForThisLoadout = currentStones;
+    const bestMetricsForThisLoadout = evaluateStones(currentStones);
+    const bestELRForThisLoadout = bestMetricsForThisLoadout.elr;
+
+    const currentBestLayRate = bestMetricsForThisLoadout?.layRate ?? -1;
+    const globalBestLayRate = bestMetrics?.layRate ?? -1;
+
+    const isGlobalBetter =
+      bestELRForThisLoadout > maxELR || (bestELRForThisLoadout === maxELR && currentBestLayRate > globalBestLayRate);
+
+    if (isGlobalBetter) {
+      maxELR = bestELRForThisLoadout;
+      const optimizedLoadout = JSON.parse(JSON.stringify(loadout));
+      let sIdx = 0;
+      for (const slot of optimizedLoadout) {
+        for (let i = 0; i < slot.stones.length; i++) {
+          slot.stones[i] = bestStonesForThisLoadout[sIdx++];
+        }
+      }
+      bestSet = optimizedLoadout;
+      bestMetrics = bestMetricsForThisLoadout;
+    }
+  }
+
+  if (options.currentSet && isFunctionallyIdentical(bestSet, options.currentSet)) {
+    return options.currentSet as EquippedArtifact[];
+  }
+
+  return bestSet;
+}
+
+/**
+ * Compare two artifact sets for functional equivalence.
+ */
+export function isFunctionallyIdentical(
+  setA: EquippedArtifact[],
+  setB: (EquippedArtifact | null)[] | undefined
+): boolean {
+  if (!setA || !setB) return false;
+
+  const targetAfxIds = ELR_TARGET_AFX_IDS;
+
+  const normalize = (set: (EquippedArtifact | null)[]) => {
+    const targets: string[] = []; // Target IDs (e.g. quantum-metronome-4-3)
+    const holderSlots: number[] = []; // Slot counts for non-target artifacts
+    const stoneCounts: Record<string, number> = {};
+
+    for (const slot of set) {
+      if (!slot?.artifactId) continue;
+      const artifact = getArtifact(slot.artifactId);
+      if (!artifact) continue;
+
+      if (targetAfxIds.includes(artifact.afxId as ei.ArtifactSpec.Name)) {
+        targets.push(slot.artifactId);
+      } else {
+        holderSlots.push(artifact.slots);
+      }
+
+      for (const stoneId of slot.stones) {
+        if (stoneId) {
+          stoneCounts[stoneId] = (stoneCounts[stoneId] || 0) + 1;
+        }
+      }
+    }
+
+    return JSON.stringify({
+      targets: targets.sort(),
+      holders: holderSlots.sort((a, b) => a - b),
+      stones: Object.entries(stoneCounts).sort((a, b) => a[0].localeCompare(b[0])),
+    });
+  };
+
+  return normalize(setA) === normalize(setB);
 }

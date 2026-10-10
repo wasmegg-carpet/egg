@@ -90,6 +90,8 @@
       </collapsible-section>
       <hr class="mt-2" />
 
+      <hr class="mt-2" />
+
       <collapsible-section
         section-title="Habs & Vehicles"
         :visible="isVisibleSection('habs_vehicles')"
@@ -163,6 +165,17 @@
         />
       </collapsible-section>
 
+      <hr class="mt-2" />
+
+      <collapsible-section
+        section-title="Rockets"
+        :visible="isVisibleSection('rockets')"
+        class="my-2 text-sm"
+        @toggle="toggleSectionVisibility('rockets')"
+      >
+        <rockets-section :backup="backup" />
+      </collapsible-section>
+
       <hr />
 
       <collapsible-section
@@ -183,6 +196,28 @@
           :artifact-set="cteArtiSet"
           :reference-set="equippedArtiSet"
           :artifact-assembly-statuses="cteAssemblyStatuses"
+          :farm="homeFarm"
+        />
+      </collapsible-section>
+      <collapsible-section
+        section-title="Optimal Artifacts for Delivery Rate"
+        :visible="isVisibleSection('artifacts-elr')"
+        class="my-2 text-sm"
+        @toggle="toggleSectionVisibility('artifacts-elr')"
+      >
+        <div v-if="currentPopulation < totalHabSpace" class="mb-2 flex items-center">
+          <input
+            id="elr-assume-max-pop"
+            v-model="assumeMaxPopulation"
+            type="checkbox"
+            class="h-4 w-4 text-green-600 border-gray-300 rounded focus:outline-none focus:ring-0 focus:ring-offset-0"
+          />
+          <label for="elr-assume-max-pop" class="ml-2 text-sm text-gray-600">Assume max population</label>
+        </div>
+        <artifacts-gallery
+          :artifact-set="elrArtiSet"
+          :reference-set="equippedArtiSet"
+          :artifact-assembly-statuses="elrAssemblyStatuses"
           :farm="homeFarm"
         />
       </collapsible-section>
@@ -230,6 +265,7 @@ import {
   resolveColleggtibleContracts,
   farmEggLayingRate,
   pendingTruthEggs,
+  getOptimalELRSet,
 } from '@/lib';
 import { TE_BREAKPOINTS } from '@/lib/virtue';
 import { useSectionVisibility } from 'ui/composables/section_visibility';
@@ -245,6 +281,7 @@ import VehiclesSection from '@/components/VehiclesSection.vue';
 import SilosSection from '@/components/SilosSection.vue';
 import InternalHatcheryInfo from '@/components/InternalHatcheryInfo.vue';
 import EarningsSection from '@/components/EarningsSection.vue';
+import RocketsSection from '@/components/RocketsSection.vue';
 
 // Note that timezone abbreviation may not work due to
 // https://github.com/iamkun/dayjs/issues/1154, in which case the GMT offset is
@@ -268,6 +305,7 @@ export default defineComponent({
     SilosSection,
     InternalHatcheryInfo,
     EarningsSection,
+    RocketsSection,
   },
   props: {
     playerId: {
@@ -345,6 +383,18 @@ export default defineComponent({
     const maxClothedTE = computed(() => maxClothedTEResult.value.clothedTE);
     const cteArtiSet = computed(() => maxClothedTEResult.value.recommendedArtifacts.artifactSet);
     const cteAssemblyStatuses = computed(() => maxClothedTEResult.value.recommendedArtifacts.assemblyStatuses);
+
+    const assumeMaxPopulation = ref(true);
+    const elrResult = computed(() =>
+      getOptimalELRSet(backup, {
+        modifiers: modifiers.value,
+        assumeMaxPopulation: assumeMaxPopulation.value,
+        currentPopulation: currentPopulation.value,
+        equipped: equippedArtiSet,
+      })
+    );
+    const elrArtiSet = computed(() => elrResult.value.artifactSet);
+    const elrAssemblyStatuses = computed(() => elrResult.value.assemblyStatuses);
 
     refreshIntervalId = window.setInterval(() => {
       currentTimestamp.value = Date.now();
@@ -515,9 +565,13 @@ export default defineComponent({
       equippedArtiSet,
       cteArtiSet,
       cteAssemblyStatuses,
+      elrArtiSet,
+      elrAssemblyStatuses,
+      assumeMaxPopulation,
 
       // Population & timing
       currentPopulation,
+      totalHabSpace,
       currentTimestamp,
 
       // Earnings data
