@@ -217,9 +217,9 @@ export function checkA4Inventory(c: CheckContext) {
   const axis: { label: string; over: SolveOverrides }[] = [];
   if (consumed.length > 0) {
     const solo = consumed[c.inst.seed % consumed.length];
-    axis.push({ label: `owning 25x ${solo} alone`, over: { baseYield: new Map([[solo, 25]]) } });
+    axis.push({ label: `owning 25x ${solo} alone`, over: { ownedStock: new Map([[solo, 25]]) } });
   }
-  axis.push({ label: 'owning 25x of every ingredient', over: { baseYield: uniform } });
+  axis.push({ label: 'owning 25x of every ingredient', over: { ownedStock: uniform } });
 
   for (const step of axis) {
     const p = solve(c, step.over).joint;

@@ -1,5 +1,7 @@
 // Recipe-tree builders for the inventory and craft-chain panels. Only a node's shallowest occurrence is
-// expanded; the rest render inline as duplicates, which is what keeps the tree finite over a cyclic DAG.
+// expanded; the rest render inline as duplicates. Game recipe data is acyclic, but these builders still
+// terminate if handed a cycle (see optimizer-tree.spec.ts's malformed-DAG cases); the `expanded` set below
+// is what makes that true.
 
 import type { Inventory } from 'lib';
 import { getArtifactTierPropsFromId, iconURL } from 'lib';
@@ -11,9 +13,9 @@ export interface RecipeTreeNode<M> {
   name: string;
   iconUrl: string;
   depth: number;
-  qtyPerParentCraft: number;
+  qty: number;
   isLeaf: boolean;
-  isDuplicate: boolean; // true = not the canonical (shallowest) occurrence
+  isDuplicate: boolean;
   metrics: M;
   children: RecipeTreeNode<M>[]; // empty for leaves AND duplicate occurrences
 }
@@ -25,8 +27,6 @@ export interface CanonicalOccurrence {
   canonicalParent: Map<string, string | null>;
 }
 
-// BFS: first dequeue of a nodeId is its shallowest occurrence, ties broken by
-// enqueue order.
 export function computeCanonicalOccurrence(rootId: string, dag: RecipeDAG): CanonicalOccurrence {
   const minDepth = new Map<string, number>();
   const canonicalParent = new Map<string, string | null>();
@@ -55,7 +55,7 @@ export function computeCanonicalOccurrence(rootId: string, dag: RecipeDAG): Cano
 }
 
 // The `expanded` set, not just the canonical check, is what prevents infinite
-// recursion over a cyclic DAG.
+// recursion should a cycle reach it.
 export function buildRecipeTree<M>(
   rootId: string,
   dag: RecipeDAG,
@@ -66,7 +66,7 @@ export function buildRecipeTree<M>(
 
   const expanded = new Set<string>();
 
-  function build(nodeId: string, depth: number, qtyPerParentCraft: number, parentId: string | null): RecipeTreeNode<M> {
+  function build(nodeId: string, depth: number, qty: number, parentId: string | null): RecipeTreeNode<M> {
     const node = dag.get(nodeId)!;
     const props = getArtifactTierPropsFromId(nodeId);
     const isCanonical =
@@ -79,7 +79,7 @@ export function buildRecipeTree<M>(
     const children: RecipeTreeNode<M>[] = shouldExpand
       ? node.children
           .filter(child => dag.has(child.nodeId))
-          .map(child => build(child.nodeId, depth + 1, child.quantity, nodeId))
+          .map(child => build(child.nodeId, depth + 1, child.qty, nodeId))
       : [];
 
     return {
@@ -87,7 +87,7 @@ export function buildRecipeTree<M>(
       name: props.name,
       iconUrl: iconURL('egginc/' + props.icon_filename, 64),
       depth,
-      qtyPerParentCraft,
+      qty,
       isLeaf: node.isLeaf,
       isDuplicate,
       metrics: metricsFor(nodeId),
@@ -116,11 +116,11 @@ export function computeInventoryTree(
 }
 
 export interface CraftChainMetrics {
-  owned: number;
-  dropped: number;
-  crafted: number;
-  consumed: number;
-  goldenEggCost: number; // cost of this node's `crafted` share; 0 for leaves
+  ownedShare: number;
+  droppedShare: number;
+  craftedShare: number;
+  consumedShare: number;
+  goldenEggCost: number; // cost of this node's `craftedShare`; 0 for leaves
 }
 
 // Units of each descendant consumed per craft of `nodeId`, summed over every
@@ -137,16 +137,16 @@ function recursiveConsumption(
   const node = dag.get(nodeId);
   if (node && !node.isLeaf) {
     for (const child of node.children) {
-      out.set(child.nodeId, (out.get(child.nodeId) ?? 0) + child.quantity);
+      out.set(child.nodeId, (out.get(child.nodeId) ?? 0) + child.qty);
       for (const [x, m] of recursiveConsumption(dag, child.nodeId, memo)) {
-        out.set(x, (out.get(x) ?? 0) + child.quantity * m);
+        out.set(x, (out.get(x) ?? 0) + child.qty * m);
       }
     }
   }
   return out;
 }
 
-// Craft-chain breakdown tree. `craftPrimal`/`finalYieldVector` are pooled across targets, so every metric
+// Craft-chain breakdown tree. `craftPrimal`/`supplyByItem` are pooled across targets, so every metric
 // here is scaled to this target's share of demand — the root included, since a selected target can also be
 // an ingredient of another selected target. See OPTIMIZER.md.
 export function computeCraftChainTree(
@@ -163,7 +163,7 @@ export function computeCraftChainTree(
     const crafted = solution.craftPrimal.get(nodeId) ?? 0;
     if (crafted <= 0) continue;
     for (const child of node.children) {
-      consumed.set(child.nodeId, (consumed.get(child.nodeId) ?? 0) + crafted * child.quantity);
+      consumed.set(child.nodeId, (consumed.get(child.nodeId) ?? 0) + crafted * child.qty);
     }
   }
 
@@ -174,7 +174,8 @@ export function computeCraftChainTree(
   // ingredient of another: without it the ingredient target claimed the whole pool in its own
   // tree and the parent target claimed it again, so the two craft-chain subtotals summed past
   // `computePlanCraftingCost(...).total`.
-  const demandOf = (targetId: string, targetCrafts: number, nodeId: string): number => {
+  const demandOf = (targetId: string, nodeId: string): number => {
+    const targetCrafts = solution.perTarget.find(t => t.nodeId === targetId)?.expectedCrafts ?? 0;
     const chain = recursiveConsumption(dag, targetId, consumptionMemo).get(nodeId) ?? 0;
     return targetCrafts * (chain + (nodeId === targetId ? 1 : 0));
   };
@@ -183,17 +184,16 @@ export function computeCraftChainTree(
     const demanded = new Set(recursiveConsumption(dag, target.nodeId, consumptionMemo).keys());
     demanded.add(target.nodeId);
     for (const x of demanded) {
-      totalDemand.set(x, (totalDemand.get(x) ?? 0) + demandOf(target.nodeId, target.expectedCrafts, x));
+      totalDemand.set(x, (totalDemand.get(x) ?? 0) + demandOf(target.nodeId, x));
     }
   }
-  const rootCrafts = solution.perTarget.find(t => t.nodeId === rootId)?.expectedCrafts ?? 0;
   // Nothing demands the node: hand the root its own pool whole, and split anything else
   // evenly rather than hand each target all of it.
   const evenShare = solution.perTarget.length > 0 ? 1 / solution.perTarget.length : 1;
   const shareOf = (nodeId: string): number => {
     const denom = totalDemand.get(nodeId) ?? 0;
     if (denom <= 0) return nodeId === rootId ? 1 : evenShare;
-    return demandOf(rootId, rootCrafts, nodeId) / denom;
+    return demandOf(rootId, nodeId) / denom;
   };
 
   const canonical = computeCanonicalOccurrence(rootId, dag);
@@ -205,13 +205,13 @@ export function computeCraftChainTree(
       ownedCount = it.haveRarity[0] + it.haveRarity[1] + it.haveRarity[2] + it.haveRarity[3];
     }
     const share = shareOf(nodeId);
-    const dropped = Math.max(0, (solution.finalYieldVector.get(nodeId) ?? 0) - (solution.baseYield.get(nodeId) ?? 0));
+    const dropped = Math.max(0, (solution.supplyByItem.get(nodeId) ?? 0) - (solution.ownedStock.get(nodeId) ?? 0));
     const pooledCrafts = solution.craftPrimal.get(nodeId) ?? 0;
     return {
-      owned: ownedCount * share,
-      dropped: dropped * share,
-      crafted: pooledCrafts * share,
-      consumed: (consumed.get(nodeId) ?? 0) * share,
+      ownedShare: ownedCount * share,
+      droppedShare: dropped * share,
+      craftedShare: pooledCrafts * share,
+      consumedShare: (consumed.get(nodeId) ?? 0) * share,
       // Price the pooled crafts once, then take this target's share of that bill. Pricing `pooledCrafts * share`
       // would restart the decreasing curve for every target and overstate the total.
       goldenEggCost: craftCostOf(nodeId, pooledCrafts, playerInventory) * share,

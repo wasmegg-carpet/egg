@@ -3,11 +3,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { optimizeFull } from '@/lib/optimizer-core';
-import { compileInnerLp } from '@/lib/value-function';
+import { buildModel } from '@/lib/solver/model';
+import { simplexMax } from '@/lib/solver/simplex';
 import { craftDag, makeOpt } from './spec-helpers';
 
 describe('the product objective reduces to the linear score at n=1', () => {
-  // Checked against independently computed answers, not a second code path.
+  // Independent here is the sweep over craft counts k below, not the LP: the polytope and the solver
+  // are the same production pair `optimizeFull` reaches through the judge. What this checks is that
+  // optimizeFull's search reduces to "take the best k by hand-sweeping the LP," not that the LP is right.
   const dag = craftDag(0.1);
   const opt = makeOpt(10, 10, [['B', 1]]);
   const args = {
@@ -16,8 +19,23 @@ describe('the product objective reduces to the linear score at n=1', () => {
     desiredArtifactNodeIds: ['A'],
     fuelCapacity: 65,
     timeCapacityPerSlot: 40,
-    baseYield: new Map<string, number>(),
+    ownedStock: new Map<string, number>(),
     maximumCost: Infinity,
+  };
+
+  // The craft-conservation polytope at an inventory of k of the leaf, maximized on A's craft column.
+  const maxCrafts = (k: number) => {
+    const model = buildModel({
+      options: [],
+      dag,
+      targets: ['A'],
+      fuelCapacity: 0,
+      timeCapacityPerSlot: 0,
+      slots: 3,
+      ownedStock: new Map([['B', k]]),
+    });
+    const c = model.craftables.map((_, i) => (i === model.targetCraftIdx[0] ? 1 : 0));
+    return simplexMax(model.consRows, model.baseInventoryByItem, c).objective;
   };
 
   it('lands on the plain linear score optimum', async () => {
@@ -29,8 +47,7 @@ describe('the product objective reduces to the linear score at n=1', () => {
     let bestScore = 0;
     for (let k = 0; k <= maxK; k++) {
       if (k > 3 * perSlot) continue;
-      const alpha = compileInnerLp(dag, ['A']).solve(new Map([['B', k]])).alpha;
-      bestScore = Math.max(bestScore, Q * alpha);
+      bestScore = Math.max(bestScore, Q * maxCrafts(k));
     }
 
     expect(sol.bestProbability).toBeCloseTo(1 - Math.exp(-bestScore), 9);

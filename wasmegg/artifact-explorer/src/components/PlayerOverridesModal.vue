@@ -1,6 +1,6 @@
 <template>
   <TransitionRoot as="template" :show="playerOverridesModalOpen">
-    <Dialog as="div" class="fixed z-10 inset-0 overflow-y-auto" @close="closePlayerOverridesModal">
+    <HeadlessDialog as="div" class="fixed z-10 inset-0 overflow-y-auto" @close="closePlayerOverridesModal">
       <div class="min-h-screen text-center px-4">
         <TransitionChild
           as="template"
@@ -65,6 +65,7 @@
                   </label>
                   <div v-if="shipMaxLevel(ship) > 0" class="flex-shrink-0">
                     <ShipStars
+                      :label="spaceshipName(ship)"
                       :level="config.shipLevels[ship]"
                       :max="shipMaxLevel(ship)"
                       :interactive="true"
@@ -132,6 +133,7 @@
                     </span>
                     <ShipStars
                       v-if="shipMaxLevel(ship) > 0"
+                      :label="spaceshipName(ship)"
                       :level="player.shipLevels[ship]"
                       :max="shipMaxLevel(ship)"
                     />
@@ -171,6 +173,7 @@
                     />
                     <ShipStars
                       v-if="shipMaxLevel(ship) > 0"
+                      :label="spaceshipName(ship)"
                       :level="config.shipLevels[ship]"
                       :max="shipMaxLevel(ship)"
                       :interactive="isManual(ship)"
@@ -192,13 +195,13 @@
           </div>
         </TransitionChild>
       </div>
-    </Dialog>
+    </HeadlessDialog>
   </TransitionRoot>
 </template>
 
 <script lang="ts">
 import { computed, defineComponent } from 'vue';
-import { Dialog, DialogOverlay, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
+import { Dialog as HeadlessDialog, DialogOverlay, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { XIcon } from '@heroicons/vue/solid';
 
 import { ei, shipMaxLevel, spaceshipList, spaceshipName } from 'lib';
@@ -222,7 +225,7 @@ import Spaceship = ei.MissionInfo.Spaceship;
 
 export default defineComponent({
   components: {
-    Dialog,
+    HeadlessDialog,
     DialogOverlay,
     DialogTitle,
     TransitionChild,

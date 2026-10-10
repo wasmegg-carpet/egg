@@ -56,14 +56,14 @@ describe('buildRecipeTree', () => {
 
     expect(tree.nodeId).toBe(lt4);
     expect(tree.depth).toBe(0);
-    expect(tree.qtyPerParentCraft).toBe(1);
+    expect(tree.qty).toBe(1);
     expect(tree.isLeaf).toBe(false);
     expect(tree.isDuplicate).toBe(false);
     expect(tree.children).toHaveLength(2);
 
     const [lt3Node, lt2Node] = tree.children;
     expect(lt3Node.nodeId).toBe(lt3);
-    expect(lt3Node.qtyPerParentCraft).toBe(2);
+    expect(lt3Node.qty).toBe(2);
     expect(lt3Node.isDuplicate).toBe(false);
     expect(lt3Node.children).toHaveLength(1);
     const lt1ViaLt3 = lt3Node.children[0];
@@ -74,7 +74,7 @@ describe('buildRecipeTree', () => {
     expect(lt1ViaLt3.children).toEqual([]);
 
     expect(lt2Node.nodeId).toBe(lt2);
-    expect(lt2Node.qtyPerParentCraft).toBe(1);
+    expect(lt2Node.qty).toBe(1);
     expect(lt2Node.isDuplicate).toBe(false);
     expect(lt2Node.children).toHaveLength(1);
     const lt1ViaLt2 = lt2Node.children[0];
@@ -100,7 +100,7 @@ describe('computeInventoryTree', () => {
     const walk = (n: typeof tree, key: string) => {
       flat.set(key, {
         depth: n.depth,
-        qty: n.qtyPerParentCraft,
+        qty: n.qty,
         dup: n.isDuplicate,
         have: n.metrics.have,
       });
@@ -134,12 +134,12 @@ describe('computeCraftChainTree', () => {
         [lt4, 2],
         [lt3, 4],
       ]),
-      finalYieldVector: new Map([
+      supplyByItem: new Map([
         [lt3, 10],
         [lt2, 1],
         [lt1, 12],
       ]),
-      baseYield: new Map([
+      ownedStock: new Map([
         [lt3, 3],
         [lt2, 5],
       ]),
@@ -149,38 +149,50 @@ describe('computeCraftChainTree', () => {
     expect(tree.nodeId).toBe(lt4);
     expect(tree.depth).toBe(0);
     expect(tree.isDuplicate).toBe(false);
-    // never consumed (it's the final target), never dropped/baseYield-tracked
+    // never consumed (it's the final target), never dropped/ownedStock-tracked
     expect(tree.metrics).toEqual({
-      owned: 0,
-      dropped: 0,
-      crafted: 2,
-      consumed: 0,
+      ownedShare: 0,
+      droppedShare: 0,
+      craftedShare: 2,
+      consumedShare: 0,
       goldenEggCost: libCost(lt4, 0, 2),
     });
 
     const lt3Node = tree.children.find(c => c.nodeId === lt3)!;
-    expect(lt3Node.qtyPerParentCraft).toBe(2);
+    expect(lt3Node.qty).toBe(2);
     expect(lt3Node.isDuplicate).toBe(false);
     expect(lt3Node.metrics).toEqual({
-      owned: 0,
-      dropped: 7,
-      crafted: 4,
-      consumed: 4,
+      ownedShare: 0,
+      droppedShare: 7,
+      craftedShare: 4,
+      consumedShare: 4,
       goldenEggCost: libCost(lt3, 0, 4),
     });
 
     const lt2Node = tree.children.find(c => c.nodeId === lt2)!;
-    expect(lt2Node.qtyPerParentCraft).toBe(1);
+    expect(lt2Node.qty).toBe(1);
     expect(lt2Node.isDuplicate).toBe(false);
-    // baseYield exceeds finalYield here; dropped clamps to 0
+    // ownedStock exceeds finalYield here; dropped clamps to 0
     // nothing crafted, so nothing billed
-    expect(lt2Node.metrics).toEqual({ owned: 2, dropped: 0, crafted: 0, consumed: 2, goldenEggCost: 0 });
+    expect(lt2Node.metrics).toEqual({
+      ownedShare: 2,
+      droppedShare: 0,
+      craftedShare: 0,
+      consumedShare: 2,
+      goldenEggCost: 0,
+    });
 
     const lt1ViaLt3 = lt3Node.children[0];
     expect(lt1ViaLt3.nodeId).toBe(lt1);
     expect(lt1ViaLt3.isDuplicate).toBe(false);
     // lt1 is a leaf: no recipe, no price
-    expect(lt1ViaLt3.metrics).toEqual({ owned: 5, dropped: 12, crafted: 0, consumed: 12, goldenEggCost: 0 });
+    expect(lt1ViaLt3.metrics).toEqual({
+      ownedShare: 5,
+      droppedShare: 12,
+      craftedShare: 0,
+      consumedShare: 12,
+      goldenEggCost: 0,
+    });
 
     const lt1ViaLt2 = lt2Node.children[0];
     expect(lt1ViaLt2.nodeId).toBe(lt1);
@@ -205,7 +217,7 @@ describe('computeCraftChainTree', () => {
         [lt3, 2],
         [lt2, 5],
       ]),
-      finalYieldVector: new Map([[lt1, 16]]),
+      supplyByItem: new Map([[lt1, 16]]),
       perTarget: [
         { nodeId: lt3, expectedCrafts: 2, ...prob },
         { nodeId: lt2, expectedCrafts: 5, ...prob },
@@ -213,22 +225,22 @@ describe('computeCraftChainTree', () => {
     });
 
     const lt3Tree = computeCraftChainTree(solution, lt3, null)!;
-    expect(lt3Tree.metrics.crafted).toBe(2); // root target: full, never scaled
+    expect(lt3Tree.metrics.craftedShare).toBe(2); // nothing else consumes lt3, so its share of its own pool is whole
     const lt1ViaLt3 = lt3Tree.children.find(c => c.nodeId === lt1)!;
     // lt3's share of lt1 is 6/16 = 0.375
-    expect(lt1ViaLt3.metrics.consumed).toBeCloseTo(6, 9);
-    expect(lt1ViaLt3.metrics.dropped).toBeCloseTo(6, 9);
+    expect(lt1ViaLt3.metrics.consumedShare).toBeCloseTo(6, 9);
+    expect(lt1ViaLt3.metrics.droppedShare).toBeCloseTo(6, 9);
 
     const lt2Tree = computeCraftChainTree(solution, lt2, null)!;
-    expect(lt2Tree.metrics.crafted).toBe(5);
+    expect(lt2Tree.metrics.craftedShare).toBe(5);
     const lt1ViaLt2 = lt2Tree.children.find(c => c.nodeId === lt1)!;
     // lt2's share of lt1 is 10/16 = 0.625
-    expect(lt1ViaLt2.metrics.consumed).toBeCloseTo(10, 9);
-    expect(lt1ViaLt2.metrics.dropped).toBeCloseTo(10, 9);
+    expect(lt1ViaLt2.metrics.consumedShare).toBeCloseTo(10, 9);
+    expect(lt1ViaLt2.metrics.droppedShare).toBeCloseTo(10, 9);
 
     // The per-target slices reconstitute the pooled totals.
-    expect(lt1ViaLt3.metrics.consumed + lt1ViaLt2.metrics.consumed).toBeCloseTo(16, 9);
-    expect(lt1ViaLt3.metrics.dropped + lt1ViaLt2.metrics.dropped).toBeCloseTo(16, 9);
+    expect(lt1ViaLt3.metrics.consumedShare + lt1ViaLt2.metrics.consumedShare).toBeCloseTo(16, 9);
+    expect(lt1ViaLt3.metrics.droppedShare + lt1ViaLt2.metrics.droppedShare).toBeCloseTo(16, 9);
   });
 
   it('splits owned stock by the same share, so the coverage check stays consistent', () => {
@@ -253,9 +265,9 @@ describe('computeCraftChainTree', () => {
     });
 
     const ownedViaLt3 = computeCraftChainTree(solution, lt3, totemInventory())!.children.find(c => c.nodeId === lt1)!
-      .metrics.owned;
+      .metrics.ownedShare;
     const ownedViaLt2 = computeCraftChainTree(solution, lt2, totemInventory())!.children.find(c => c.nodeId === lt1)!
-      .metrics.owned;
+      .metrics.ownedShare;
 
     expect(ownedViaLt3).toBeCloseTo(5 * (6 / 16), 9);
     expect(ownedViaLt2).toBeCloseTo(5 * (10 / 16), 9);
@@ -287,16 +299,16 @@ describe('computeCraftChainTree', () => {
 
     const lt3ViaLt4 = computeCraftChainTree(solution, lt4, null)!.children.find(c => c.nodeId === lt3)!;
     const lt3Root = computeCraftChainTree(solution, lt3, null)!;
-    expect(lt3ViaLt4.metrics.crafted).toBeCloseTo(8 * (6 / 8), 9);
-    expect(lt3Root.metrics.crafted).toBeCloseTo(8 * (2 / 8), 9);
+    expect(lt3ViaLt4.metrics.craftedShare).toBeCloseTo(8 * (6 / 8), 9);
+    expect(lt3Root.metrics.craftedShare).toBeCloseTo(8 * (2 / 8), 9);
 
     // The whole point: the two slices reconstitute the pool instead of over-drawing it, so the
     // per-tree bills sum to what the plan actually spends on lt3.
-    expect(lt3ViaLt4.metrics.crafted + lt3Root.metrics.crafted).toBeCloseTo(8, 9);
+    expect(lt3ViaLt4.metrics.craftedShare + lt3Root.metrics.craftedShare).toBeCloseTo(8, 9);
     expect(lt3ViaLt4.metrics.goldenEggCost + lt3Root.metrics.goldenEggCost).toBeCloseTo(libCost(lt3, 0, 8), 9);
 
     // An uncontested target still keeps its own pool whole.
-    expect(computeCraftChainTree(solution, lt4, null)!.metrics.crafted).toBe(3);
+    expect(computeCraftChainTree(solution, lt4, null)!.metrics.craftedShare).toBe(3);
   });
 
   it('falls back to an even split when no target demands the node', () => {
@@ -310,7 +322,7 @@ describe('computeCraftChainTree', () => {
     const prob = { bestProbability: 0, craftProbability: 0, dropProbability: 0 };
     const solution = makeSolution({
       recipeDag: dag,
-      finalYieldVector: new Map([[lt1, 8]]),
+      supplyByItem: new Map([[lt1, 8]]),
       perTarget: [
         { nodeId: lt3, expectedCrafts: 0, ...prob },
         { nodeId: lt2, expectedCrafts: 0, ...prob },
@@ -319,17 +331,17 @@ describe('computeCraftChainTree', () => {
 
     const lt1ViaLt3 = computeCraftChainTree(solution, lt3, null)!.children.find(c => c.nodeId === lt1)!;
     const lt1ViaLt2 = computeCraftChainTree(solution, lt2, null)!.children.find(c => c.nodeId === lt1)!;
-    expect(lt1ViaLt3.metrics.dropped).toBeCloseTo(4, 9);
-    expect(lt1ViaLt2.metrics.dropped).toBeCloseTo(4, 9);
-    expect(lt1ViaLt3.metrics.dropped + lt1ViaLt2.metrics.dropped).toBeCloseTo(8, 9);
+    expect(lt1ViaLt3.metrics.droppedShare).toBeCloseTo(4, 9);
+    expect(lt1ViaLt2.metrics.droppedShare).toBeCloseTo(4, 9);
+    expect(lt1ViaLt3.metrics.droppedShare + lt1ViaLt2.metrics.droppedShare).toBeCloseTo(8, 9);
   });
 
   it('reports owned as 0 without a player inventory', () => {
     const solution = makeSolution({ recipeDag: totemDag() });
     const tree = computeCraftChainTree(solution, lt4, null)!;
-    expect(tree.metrics.owned).toBe(0);
+    expect(tree.metrics.ownedShare).toBe(0);
     for (const child of tree.children) {
-      expect(child.metrics.owned).toBe(0);
+      expect(child.metrics.ownedShare).toBe(0);
     }
   });
 });

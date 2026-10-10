@@ -138,6 +138,11 @@ export const DURATION_NAMES: Record<DurationType, string> = {
   [DurationType.EPIC]: 'Extended',
 };
 
+/** How a mission reads in the grid, so every list of launches names it the same way. */
+export function missionName(ship: Spaceship, duration: DurationType): string {
+  return `${DURATION_NAMES[duration] ?? 'Unknown'} ${SHIP_INFO[ship]?.displayName ?? 'Unknown'}`;
+}
+
 // ============================================================================
 // Fuel requirements
 // ============================================================================

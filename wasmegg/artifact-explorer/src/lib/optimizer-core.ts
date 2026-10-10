@@ -3,16 +3,17 @@
 
 import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 import { ei } from 'lib';
-import { alphaToProb, compileJointInnerLp, JointInnerLp, refineJointCraftSplit } from './value-function';
+import { craftsToProbability } from './objective';
 import { NUM_SLOTS, packWitness } from './packing';
-import { finiteQ, qOf } from './concave';
 import { loadHighs } from './solver/highs';
-import { solveWith } from './solver/oa';
-import { fuelCostOnAxis, type FuelAxis, type PlanProblem } from './solver/types';
+import { DEFAULT_TUNING, solveWith } from './solver/solve';
+import { fuelCostOnAxis, normalizeProblem, type CraftSplitReport, type PlanProblem } from './solver/types';
 
-// Anything under this is zero: durations, fuel, score differences.
+// Below this, a mission's duration counts as zero — the only quantity it's compared against.
 const ZERO_TOL = 1e-9;
 
+// The budgets below obey `solver/types.ts`'s one rule: absent means no limit, a present one is a
+// finite non-negative number, and `normalizeProblem` holds every caller to it.
 export interface OptimizeArgs {
   options: LaunchOption[];
   recipeDag: RecipeDAG;
@@ -23,10 +24,13 @@ export interface OptimizeArgs {
   // much the tank could hold.
   fuelByEggCapacity?: Map<ei.Egg, number>;
   timeCapacityPerSlot: number;
+  // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
+  // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal
+  // way to say "the whole menu" where an infinite capacity would be malformed.
   maximumCost: number | undefined;
-  baseYield: Map<string, number>;
-  // Golden egg cap on the plan's crafts, or absent for no cap. It has to reach both the MILP and the inner
-  // LPs, or the cap does not bind on the craft counts the card actually prints.
+  ownedStock: Map<string, number>;
+  // Golden egg cap on the plan's crafts, or absent for no cap. It has to reach both the MILP and the
+  // judge's craft LP, or the cap does not bind on the craft counts the card actually prints.
   craftBudget?: CraftBudget;
 }
 
@@ -34,23 +38,12 @@ interface Assembly {
   options: LaunchOption[];
   recipeDag: RecipeDAG;
   targets: string[];
-  baseYield: Map<string, number>;
-  QByTarget: Map<string, number>;
-  innerLp: JointInnerLp;
-  craftBudget?: CraftBudget;
-}
-
-function qByTarget(recipeDag: RecipeDAG, targets: string[]): Map<string, number> {
-  const QByTarget = new Map<string, number>();
-  for (const t of targets) {
-    QByTarget.set(t, finiteQ(qOf(recipeDag.get(t)?.legendaryCraftProbability ?? 0)));
-  }
-  return QByTarget;
+  ownedStock: Map<string, number>;
 }
 
 // Per-slot occupancy of a chosen allocation. Repacked here because the seam the MILP returns through carries
 // only totals; if the exact packer cannot place the plan, the makespan shown is a best-fit estimate, not a claim.
-function slotsOfAllocation(options: LaunchOption[], alloc: Map<number, number>, capacity: number): SlotSummary[] {
+function slotSummariesOf(options: LaunchOption[], alloc: Map<number, number>, capacity: number): SlotSummary[] {
   const idx = [...alloc.keys()].filter(i => (alloc.get(i) ?? 0) > 0);
   if (idx.length === 0) return [];
 
@@ -93,44 +86,31 @@ function slotsOfAllocation(options: LaunchOption[], alloc: Map<number, number>, 
 // The whole plan, start to finish. Async because the solver is a WebAssembly module instantiated once;
 // every call after the first resolves off a cached promise.
 export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolution> {
-  const {
+  const { options, recipeDag, fuelByEggCapacity, maximumCost, ownedStock, craftBudget } = args;
+
+  // The whole boundary: budgets validated and clamped, targets deduplicated, fuel axes materialized.
+  // Everything below reads the normalized problem rather than `args`, so no rule is applied twice or
+  // differently — `buildModel` enters through the same function.
+  const normalized = normalizeProblem({
     options,
-    recipeDag,
-    desiredArtifactNodeIds,
-    fuelCapacity: rawR,
-    fuelByEggCapacity,
-    timeCapacityPerSlot: rawS,
-    maximumCost,
-    baseYield,
+    dag: recipeDag,
+    targets: args.desiredArtifactNodeIds,
+    fuelCapacity: args.fuelCapacity,
+    // A per-egg budget replaces the tank entirely: the egg amounts already sum to no more
+    // than the tank holds, so an aggregate row on top of them would be redundant.
+    fuelAxes: fuelByEggCapacity && [...fuelByEggCapacity].map(([egg, capacity]) => ({ egg, capacity })),
+    timeCapacityPerSlot: args.timeCapacityPerSlot,
+    slots: NUM_SLOTS,
+    ownedStock,
     craftBudget,
-  } = args;
-
-  // Rejected here rather than downstream: `model.ts` and `value-function.ts` both drop a budget
-  // they cannot turn into a row, so a negative or NaN capacity would silently become *no* cap —
-  // the one reading a caller who asked for a cap can least afford. `capacity === 0` is a valid
-  // binding cap and passes. A caller wanting no cap omits `craftBudget`.
-  if (craftBudget && (!Number.isFinite(craftBudget.capacity) || craftBudget.capacity < 0)) {
-    throw new Error(`craft budget capacity must be finite and non-negative, got ${craftBudget.capacity}`);
-  }
-
-  // An empty input field upstream arrives as NaN; clamp before it reaches the
-  // model, where a NaN budget would make every row unsatisfiable.
-  const R = Number.isFinite(rawR) && rawR > 0 ? rawR : 0;
-  const S = Number.isFinite(rawS) && rawS > 0 ? rawS : 0;
-
-  // A per-egg budget replaces the tank entirely: the egg amounts already sum to no more
-  // than the tank holds, so an aggregate row on top of them would be redundant.
-  const axes: FuelAxis[] =
-    fuelByEggCapacity === undefined
-      ? [{ egg: null, capacity: R }]
-      : [...fuelByEggCapacity].map(([egg, capacity]) => ({
-          egg,
-          capacity: Number.isFinite(capacity) && capacity > 0 ? capacity : 0,
-        }));
+  });
+  const S = normalized.timeCapacityPerSlot;
+  const axes = normalized.fuelAxes;
+  const targets = [...normalized.targets];
 
   // Dropped before indices are assigned, so an allocation index means the same thing here and inside the solver.
-  // Fuel is bounded from above only — a zero-fuel mission is legitimate — and the per-axis bound is what still
-  // holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
+  // Fuel is bounded from above only, since a zero-fuel mission is legitimate, and the per-axis bound is what
+  // still holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
   // from reading as free downstream, where a zero capacity means "ignore this axis".
   const feasibleOptions = options.filter(
     o =>
@@ -140,53 +120,37 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
       (maximumCost === undefined || o.cost <= maximumCost)
   );
 
-  const QByTarget = qByTarget(recipeDag, desiredArtifactNodeIds);
-  const assembly: Assembly = {
-    options: feasibleOptions,
-    recipeDag,
-    targets: desiredArtifactNodeIds,
-    baseYield,
-    QByTarget,
-    innerLp: compileJointInnerLp(recipeDag, desiredArtifactNodeIds, QByTarget, craftBudget),
-    craftBudget,
-  };
+  const assembly: Assembly = { options: feasibleOptions, recipeDag, targets, ownedStock };
 
-  const problem: PlanProblem = {
-    options: feasibleOptions,
-    dag: recipeDag,
-    targets: desiredArtifactNodeIds,
-    fuelCapacity: R,
-    fuelAxes: axes,
-    timeCapacityPerSlot: S,
-    slots: NUM_SLOTS,
-    baseYield,
-    craftBudget,
-  };
+  const problem: PlanProblem = { ...normalized, options: feasibleOptions };
 
   const solve = await loadHighs();
-  const { allocation } = solveWith(problem, solve);
+  // `report` is what makes the judge hand back the craft split as well as the plan, so the counts the
+  // card prints are the ones the plan was selected on rather than a second solver's answer to the same
+  // question. See `solver/SPEC.md` section 5.
+  const { allocation, craftSplit } = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
 
   const alloc = new Map<number, number>();
   for (let i = 0; i < allocation.length; i++) {
     if (allocation[i] > 0) alloc.set(i, allocation[i]);
   }
 
-  return assembleFullSolution(assembly, alloc, slotsOfAllocation(feasibleOptions, alloc, S));
+  return assembleFullSolution(assembly, alloc, slotSummariesOf(feasibleOptions, alloc, S), craftSplit);
 }
 
 function assembleFullSolution(
   a: Assembly,
   bestAlloc: Map<number, number>,
-  bestSlots: SlotSummary[]
+  bestSlots: SlotSummary[],
+  craftSplit: CraftSplitReport | undefined
 ): OptimizerSolution {
-  const { recipeDag, baseYield, targets } = a;
-  const { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
-    baseYield,
+  const { recipeDag, ownedStock, targets } = a;
+  const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
+    ownedStock,
     bestAlloc,
     a.options
   );
 
-  // wall-clock is the busiest slot's makespan; running time its raw flight time
   const busiest = bestSlots.reduce<SlotSummary | null>(
     (best, s) => (best === null || s.loadSeconds > best.loadSeconds ? s : best),
     null
@@ -194,22 +158,12 @@ function assembleFullSolution(
   const makespan = busiest?.loadSeconds ?? 0;
   const running = busiest?.rawLoadSeconds ?? 0;
 
-  // The tangent-LP split is only a seed: reported numbers must come off the
-  // exact objective, never the search's envelope. See OPTIMIZER.md.
-  const seedSolve = a.innerLp.solve(finalYieldVector, totalLegendary);
-  const finalSolve = refineJointCraftSplit(
-    recipeDag,
-    targets,
-    a.QByTarget,
-    finalYieldVector,
-    totalLegendary,
-    seedSolve,
-    a.craftBudget
-  );
+  // Absent when the judge could not re-derive the plan it had already selected. Empty maps then read
+  // as "no crafts", which is what every downstream figure already means by a missing node.
+  const craftByTarget = craftSplit?.byTarget ?? new Map<string, number>();
   const perTarget = targets.map(t => {
-    const craftCount =
-      finalSolve.craftByTarget.get(t) ?? (recipeDag.get(t)?.isLeaf ? (finalYieldVector.get(t) ?? 0) : 0);
-    const p = alphaToProb(craftCount, totalLegendary, [t], recipeDag);
+    const craftCount = craftByTarget.get(t) ?? (recipeDag.get(t)?.isLeaf ? (supplyByItem.get(t) ?? 0) : 0);
+    const p = craftsToProbability(craftCount, totalLegendary, [t], recipeDag);
     return { nodeId: t, expectedCrafts: craftCount, ...p };
   });
   const primary = perTarget[0] ?? {
@@ -219,8 +173,9 @@ function assembleFullSolution(
     expectedCrafts: 0,
   };
 
-  // No targets yields 0, not the empty product's 1: nothing was asked for, so
-  // nothing is achieved.
+  // No targets yields 0, not the empty product's 1: nothing was asked for, so nothing is achieved.
+  // Every factor is a distinct target: `normalizeProblem` deduplicates the list, so an id asked for
+  // twice cannot square its own probability here.
   let jointProbability = perTarget.length > 0 ? 1 : 0;
   for (const t of perTarget) jointProbability *= t.bestProbability;
 
@@ -236,19 +191,19 @@ function assembleFullSolution(
     slots: bestSlots.length > 0 ? bestSlots : undefined,
     choiceHistory: choiceHistory,
     expectedDrops: [], // populated by index.ts
-    finalYieldVector: finalYieldVector,
-    baseYield: new Map(baseYield),
+    supplyByItem: supplyByItem,
+    ownedStock: new Map(ownedStock),
     recipeDag: recipeDag,
-    craftPrimal: finalSolve.primalByNode,
+    craftPrimal: craftSplit?.byNode ?? new Map<string, number>(),
     perTarget: perTarget,
     jointProbability,
   };
 }
 
-function assembleSolution(baseYield: Map<string, number>, bestAlloc: Map<number, number>, options: LaunchOption[]) {
+function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number, number>, options: LaunchOption[]) {
   const choiceHistory: LaunchSolution[] = [];
   let fuelUsed = 0;
-  const finalYieldVector = new Map<string, number>(baseYield);
+  const supplyByItem = new Map<string, number>(ownedStock);
   const totalLegendary = new Map<string, number>();
   const fuelByEgg = new Map<ei.Egg, number>();
   for (const [idx, k] of bestAlloc) {
@@ -256,7 +211,7 @@ function assembleSolution(baseYield: Map<string, number>, bestAlloc: Map<number,
     const opt = options[idx];
     fuelUsed += k * opt.actualFuel;
     for (const [n, r] of opt.yieldVector) {
-      finalYieldVector.set(n, (finalYieldVector.get(n) ?? 0) + k * r);
+      supplyByItem.set(n, (supplyByItem.get(n) ?? 0) + k * r);
     }
     for (const [n, r] of opt.legendaryYieldVector) {
       totalLegendary.set(n, (totalLegendary.get(n) ?? 0) + k * r);
@@ -276,5 +231,5 @@ function assembleSolution(baseYield: Map<string, number>, bestAlloc: Map<number,
       legendarySupplyVector: opt.legendaryYieldVector,
     });
   }
-  return { finalYieldVector, totalLegendary, fuelUsed, fuelByEgg, choiceHistory };
+  return { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory };
 }
