@@ -130,6 +130,37 @@ export function buildFinalSaleGapBuyNotePayload(
 }
 
 /**
+ * Builds the inline-note payload `auto/shifts/c2.ts`'s R1 lookahead inserts ahead of its purchases —
+ * see `runR1LookaheadEarningsBuy`'s own doc comment for what this sweep buys and why. Auto-engine-only,
+ * like `buildFinalSaleGapBuyNotePayload`: it only makes sense with K2/R1 known to follow.
+ *
+ * `extraSilos` and `timeSavedSeconds` compare the kept plan against stopping C2 without the sweep,
+ * both measured through the end of R1. An extra silo is the headline whenever there is one — it
+ * wins regardless of time, so the time comparison is dropped in that case.
+ *
+ * Returns null when the sweep bought nothing.
+ */
+export function buildR1LookaheadNotePayload(
+  purchaseCount: number,
+  elapsedSeconds: number,
+  totalGemsSpent: number,
+  extraSilos: number,
+  timeSavedSeconds: number
+): NotificationPayload | null {
+  if (purchaseCount <= 0) return null;
+
+  const outcome =
+    extraSilos > 0
+      ? `+${extraSilos} silo${extraSilos === 1 ? '' : 's'} on R1`
+      : `saves ${formatDuration(timeSavedSeconds)} through R1`;
+
+  return {
+    message: 'R1 Lookahead Earnings Buy',
+    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalGemsSpent)}, ${outcome}`,
+  };
+}
+
+/**
  * Builds the inline-note payload the Milestone view's "Buy Entire Chain" button inserts ahead of
  * its purchases — `ResearchActions.vue`'s `handleBuyMilestoneChain`. `targetLabel` is a caller-built
  * description of what was targeted (e.g. "Unlock Tier 8" or "Graviton Coupling (Lv 5/20)") —
