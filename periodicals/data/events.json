@@ -29491,5 +29491,14 @@
     "startTimestamp": 1793203200,
     "type": "shell-sale",
     "ultra": true
+  },
+  {
+    "endTimestamp": 1793376000,
+    "id": "event-10-29",
+    "message": "2x GIFTS!",
+    "multiplier": 2,
+    "startTimestamp": 1793289600,
+    "type": "gift-boost",
+    "ultra": false
   }
 ]
