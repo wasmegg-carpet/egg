@@ -29536,5 +29536,32 @@
     "startTimestamp": 1793462400,
     "type": "piggy-boost",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1793638800,
+    "id": "event-11-1",
+    "message": "30% OFF CRAFTING!",
+    "multiplier": 0.7,
+    "startTimestamp": 1793552400,
+    "type": "crafting-sale",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1793725200,
+    "id": "event-11-1-2",
+    "message": "DOUBLE CAPACITY!",
+    "multiplier": 2,
+    "startTimestamp": 1793552400,
+    "type": "mission-capacity",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1793638800,
+    "id": "ultra-11-1",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1793552400,
+    "type": "vehicle-sale",
+    "ultra": true
   }
 ]
