@@ -23,6 +23,7 @@ import { tableHeaderWarnings } from '@/buildTable/header';
 import { readTable } from '@/lib/instantSearch/table';
 import {
   fetchCatalog,
+  deliveryCoreKey,
   findDeliveryTable,
   findTable,
   maxedTable,
@@ -33,14 +34,20 @@ import { describeTableArtifacts, tableArtifacts } from '@/lib/instantSearch/tabl
 import { fetchTableBytes, isTableStall } from '@/lib/instantSearch/tableFetch';
 import { backupGearContext, gearChanges, gearStamp, gearTableNames, tableName } from '@/lib/instantSearch/tableGear';
 import { instantDeliveryScale } from '@/lib/instantSearch/deliveryScale';
-import { getOptimalEarningsSet } from '@/lib/artifacts';
+import { getArtifact, getOptimalEarningsSet } from '@/lib/artifacts';
 import { readCurrentAscension, type CurrentAscension } from '@/lib/instantSearch/currentAscension';
 import {
+  chainFinderLoadout,
   chainFinderLoadoutFromBackup,
   deliveryMatchesTable,
   earningsShift as earningsShiftOf,
 } from '@/lib/instantSearch/earningsShift';
-import { cloneLoadoutInputs, type AutoLoadoutInputs } from '@/auto/loadout';
+import {
+  cloneLoadoutInputs,
+  loadoutInputsEqual,
+  seedFixedDeliveryFromAuto,
+  type AutoLoadoutInputs,
+} from '@/auto/loadout';
 import { maxedLoadoutInputs } from '@/buildTable/maxedAccount';
 import { parseVirtueProgress } from '@/lib/backupVirtue';
 import { fetchPlayerBackup } from '@/lib/modes/fetchBackup';
@@ -230,9 +237,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     header.value ? tableHeaderWarnings(header.value as unknown as Record<string, unknown>) : []
   );
   const tableSource = ref('');
-  /** What the loaded table was built with (tableArtifacts.ts), in words; '' when it records none. */
-  const tableArtifactsText = computed(() => (header.value ? describeTableArtifacts(header.value) : ''));
-  /** Why the table in use is not the player's own, when their own is out of date; '' otherwise. */
+  /** Why the table in use is not built for the player's own gear or delivery set; '' when it is. */
   const tableNote = ref('');
   const tableStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const status = ref<'idle' | 'running' | 'done' | 'error'>('idle');
@@ -305,7 +310,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
         console.error("Chain Finder: could not read the save's artifacts", err);
       }
     }
-    return maxedLoadoutInputs();
+    return chainFinderLoadout(maxedLoadoutInputs());
   });
   /** The artifacts and stones searched with: the save's until edited, to try higher or lower ones.
    *  Another save replaces any edits. */
@@ -392,13 +397,33 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
    *  worked out once per id; the id never leaves the page. */
   let ownName: { id: string; name: Promise<string> } | null = null;
 
+  const labelOf = (id: string) => getArtifact(id)?.label ?? id;
+
+  /** `loadout`'s delivery set, as the table is picked by it: the fixed one, or the one the inventory
+   *  would wear. */
+  const loadoutDelivery = computed(() => {
+    const d = loadout.value.delivery;
+    return d.mode === 'fixed' ? d.artifactIds : seedFixedDeliveryFromAuto(loadout.value);
+  });
+  /** `loadout` was edited away from the save: the save's own gear (account and gear tables) is then
+   *  not what is searched with. */
+  const loadoutEdited = computed(() => !loadoutInputsEqual(loadout.value, defaultLoadout.value));
+  /** What `loadTable` picks a table by; a change picks again. */
+  const tablePick = computed(
+    () => `${loadoutEdited.value ? 'edited' : 'save'}|${deliveryCoreKey(loadoutDelivery.value)}`
+  );
+  /** The `tablePick` the store's table was picked for; null before one is, and for a file loaded by
+   *  hand, which a change in `loadout` leaves alone. */
+  let pickedFor: string | null = null;
+
   /**
-   * Load the best table the store has for this player, as AutoAutoAP's instant answer does: their own
-   * account table when the store has one whose gear stamp still matches their save; else a gear
+   * Load the best table the store has for `loadout` (the Artifacts & stones section): while it is the
+   * save's, their own account table when the store has one whose gear stamp still matches; else a gear
    * table built on gear exactly like theirs, below GEAR_TABLE_TO with the maxed table from there at
-   * their delivery rate; else the maxed table. The store's catalog (`/tables/index.json`) says which
-   * tables exist before anything is downloaded; without it (offline, or a web page in its place) the
-   * maxed table's own URL is all that is tried.
+   * their delivery rate. Then, edited or not, a delivery table for its metronome, compass and gusset;
+   * else the maxed table. The store's catalog (`/tables/index.json`) says which tables exist before
+   * anything is downloaded; without it (offline, or a web page in its place) the maxed table's own URL
+   * is all that is tried.
    */
   let loadingTable: Promise<void> | null = null;
   async function loadTable(): Promise<void> {
@@ -407,9 +432,12 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       tableStatus.value = 'loading';
       error.value = '';
       tableNote.value = '';
+      pickedFor = tablePick.value;
+      const deliveryIds = [...loadoutDelivery.value];
       try {
         const entries = await fetchCatalog();
-        const ctx = gearContext.value;
+        // The save's own gear only while the section is the save's.
+        const ctx = loadoutEdited.value ? null : gearContext.value;
         const id = (backup.value as { eiUserId?: string } | null)?.eiUserId ?? resolveFetchablePlayerId();
 
         // The player's own table, when the store has one and its gear still matches their save.
@@ -423,7 +451,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
               const stamp = gearStamp(ctx, getOptimalEarningsSet(ctx.rawBackup!), own.header.gear.research ?? {});
               const changes = stamp ? gearChanges(own.header.gear, stamp) : ['gear'];
               if (!changes.length) {
-                await loadBytes(ownBytes, 'your own table');
+                await loadBytes(ownBytes, entry.name);
                 return;
               }
               tableNote.value = `Your own table is out of date for your save (its ${changes.join(', ')} changed); using the best other table.`;
@@ -445,6 +473,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
               'so there is nothing to compare your gear with'
           );
         }
+        const maxedName = maxedEntry?.name ?? 'table.bin';
         const maxedBytes = await fetchTableBytes(maxedEntry ? tableUrl(maxedEntry.name) : DEFAULT_TABLE_URL);
         const maxed = readTable(maxedBytes);
 
@@ -460,7 +489,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
               if (!entry) continue;
               try {
                 const gearBytes = await fetchTableBytes(tableUrl(entry.name));
-                await loadBytes(gearBytes, 'a gear table like yours', {
+                await loadBytes(gearBytes, `${entry.name} + ${maxedName} from ${GEAR_TABLE_TO}`, {
                   bytes: maxedBytes,
                   split: GEAR_TABLE_TO,
                   scale,
@@ -474,36 +503,65 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
           }
         }
 
-        // A delivery-combination table built for exactly the delivery set in the loadout (what the
-        // search assumes anyway, and what `deliveryMatches` then reports as matched). Its earnings
-        // set is the maxed one, which `earningsShift` reads the table down for.
-        if (entries) {
-          const chosen = loadout.value.delivery;
-          const ids = chosen.mode === 'fixed' ? chosen.artifactIds.filter((id): id is string => !!id) : [];
-          const entry = ids.length === 4 ? findDeliveryTable(entries, ids) : null;
-          if (entry) {
-            try {
-              await loadBytes(await fetchTableBytes(tableUrl(entry.name)), 'a delivery table for your delivery set');
-              return;
-            } catch (err) {
-              if (isTableStall(err)) throw err;
-              // Listed but unreadable: the maxed table is still an answer.
-            }
+        // The table built for the loadout's metronome, compass and gusset, or the closest one: two of
+        // the three, the third nearest (what the search then assumes, and what `deliveryMatches`
+        // reports). The maxed table is one of them (its set is in its header, not the catalog). Their
+        // earnings set is the maxed one, which `earningsShift` reads the table down for.
+        const match = entries
+          ? findDeliveryTable(
+              entries.map(e => (e === maxedEntry ? { ...e, delivery: maxed.header.delivery ?? null } : e)),
+              deliveryIds
+            )
+          : null;
+        const sendIt = 'build one with the Table Builder and send it to joobrainie to upload.';
+        if (match && !match.exact) {
+          const swaps = match.differs.map(d => `${labelOf(d.table)} instead of ${d.mine ? labelOf(d.mine) : 'none'}`);
+          tableNote.value = `No table for your exact delivery set, so this is the closest (${swaps.join(', ')}). For an exact one, ${sendIt}`;
+        } else if (entries && !match) {
+          tableNote.value = `No table close to your delivery set, so this is the maxed one. For yours, ${sendIt}`;
+        }
+        if (match && match.entry.kind !== 'maxed') {
+          try {
+            await loadBytes(await fetchTableBytes(tableUrl(match.entry.name)), match.entry.name);
+            return;
+          } catch (err) {
+            if (isTableStall(err)) throw err;
+            // Listed but unreadable: the maxed table is still an answer.
+            tableNote.value = '';
           }
         }
 
-        await loadBytes(maxedBytes, 'the maxed table');
+        await loadBytes(maxedBytes, maxedName);
       } catch (err) {
         tableStatus.value = 'error';
         error.value = `Couldn't download the table: ${err instanceof Error ? err.message : String(err)}`;
       } finally {
         loadingTable = null;
       }
+      // The section changed while this one loaded: pick again.
+      if (pickedFor !== null && pickedFor !== tablePick.value) await loadTable();
     })();
     return loadingTable;
   }
 
+  // A store table follows the Artifacts & stones section, a moment after it stops changing; an answer
+  // found on another table is dropped, as when a file is loaded.
+  let pickTimer: ReturnType<typeof setTimeout> | undefined;
+  watch(tablePick, () => {
+    clearTimeout(pickTimer);
+    pickTimer = setTimeout(async () => {
+      if (pickedFor === null || pickedFor === tablePick.value || loadingTable) return;
+      const was = tableSource.value;
+      await loadTable();
+      if (tableSource.value !== was && status.value !== 'running') {
+        answer.value = null;
+        status.value = 'idle';
+      }
+    }, 500);
+  });
+
   async function loadFile(file: File): Promise<void> {
+    pickedFor = null;
     tableNote.value = '';
     await loadBytes(await file.arrayBuffer(), file.name);
     answer.value = null;
@@ -755,7 +813,6 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     header,
     headerWarnings,
     tableSource,
-    tableArtifactsText,
     tableNote,
     tableStatus,
     status,

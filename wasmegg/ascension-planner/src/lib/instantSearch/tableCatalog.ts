@@ -12,6 +12,7 @@
  * client that knows only a name — an account's PBKDF2 name or a gear stamp's hash — can look it up
  * without downloading anything. The catalog is edge-cached for 5 minutes on the worker.
  */
+import { getArtifact } from '@/lib/artifacts';
 
 /** The table store: the maxed table and every other table it serves. */
 export const TABLE_STORE = 'https://ap-table-store.carpet.workers.dev';
@@ -81,19 +82,72 @@ export function deliveryTables(entries: IndexEntry[]): IndexEntry[] {
   return entries.filter(e => e.kind === 'delivery' && (e.delivery?.length ?? 0) === 4);
 }
 
-/** A set as the catalog compares one: sorted, so slot order and the file's own order do not matter. */
-function setKey(ids: string[]): string {
-  return [...ids].sort().join(',');
+/** The delivery artifacts a table is built for. The fourth slot can be any T4L (the Table Builder
+ *  uses the totem), and every player at 120 TE has one, so it is not compared. */
+export const DELIVERY_CORE_FAMILIES = ['quantum-metronome', 'interstellar-compass', 'gusset'];
+
+/** A delivery set's metronome, compass and gusset, in that order: null for one it doesn't have. */
+export function deliveryCore(ids: (string | null)[]): (string | null)[] {
+  return DELIVERY_CORE_FAMILIES.map(family => ids.find(id => !!id && getArtifact(id)?.familyId === family) ?? null);
+}
+
+/** A delivery set as tables are compared by it: its metronome, compass and gusset, so slot order and
+ *  the fourth slot do not matter. '' when it has none of them. */
+export function deliveryCoreKey(ids: (string | null)[]): string {
+  return deliveryCore(ids)
+    .filter((id): id is string => !!id)
+    .join(',');
+}
+
+/** A delivery table for a delivery set, and how close it is. */
+export interface DeliveryMatch {
+  entry: IndexEntry;
+  /** The set has the table's metronome, compass and gusset. */
+  exact: boolean;
+  /** Where they differ: the set's artifact (null when it has none of that kind) and the table's. */
+  differs: { mine: string | null; table: string }[];
+}
+
+/** An artifact's tier and rarity on one scale (T3L is next to T4C), to tell how far apart two are. */
+function grade(id: string): number {
+  const a = getArtifact(id);
+  return a ? a.tier * 4 + a.rarity : 0;
 }
 
 /**
- * The delivery table built for exactly this delivery set, or null. The store lists each one twice —
- * its built name and `delivery-<key>.bin.gz` — so a named file is preferred for the label only; both
- * are the same bytes.
+ * The table closest to this delivery set's metronome, compass and gusset, or null: an exact one,
+ * else one with two of the three, the third the nearest tier and rarity to the set's; none with fewer
+ * than `minMatched`. Delivery tables and a maxed one whose `delivery` is filled in from its header
+ * (the catalog lists it without) are candidates. The store lists each delivery table twice — its built
+ * name and `delivery-<key>.bin.gz` — so a named file is preferred for the label only; both are the
+ * same bytes.
  */
-export function findDeliveryTable(entries: IndexEntry[], ids: string[]): IndexEntry | null {
-  if (ids.length !== 4) return null;
-  const want = setKey(ids);
-  const matches = deliveryTables(entries).filter(e => setKey(e.delivery!) === want);
-  return matches.find(e => !e.name.startsWith('delivery-')) ?? matches[0] ?? null;
+export function findDeliveryTable(entries: IndexEntry[], ids: (string | null)[], minMatched = 2): DeliveryMatch | null {
+  const mine = deliveryCore(ids);
+  if (mine.every(id => !id)) return null;
+  let best: { match: DeliveryMatch; matched: number; distance: number } | null = null;
+  const candidates = [...deliveryTables(entries), ...entries.filter(e => e.kind === 'maxed' && e.delivery?.length)];
+  for (const entry of candidates) {
+    const theirs = deliveryCore(entry.delivery!);
+    if (theirs.some(id => !id)) continue;
+    const differs: DeliveryMatch['differs'] = [];
+    let distance = 0;
+    mine.forEach((id, i) => {
+      if (id === theirs[i]) return;
+      differs.push({ mine: id, table: theirs[i]! });
+      distance += id ? Math.abs(grade(id) - grade(theirs[i]!)) : 100;
+    });
+    const matched = 3 - differs.length;
+    if (matched < minMatched) continue;
+    const better =
+      !best ||
+      matched > best.matched ||
+      (matched === best.matched &&
+        (distance < best.distance ||
+          (distance === best.distance &&
+            best.match.entry.name.startsWith('delivery-') &&
+            !entry.name.startsWith('delivery-'))));
+    if (better) best = { match: { entry, exact: matched === 3, differs }, matched, distance };
+  }
+  return best?.match ?? null;
 }

@@ -6,7 +6,12 @@
         <div class="flex items-center justify-between px-1 h-7">
           <h4 class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Earnings Set</h4>
         </div>
-        <ArtifactSelector :model-value="modelValue.earnings" stones="hidden" @update:model-value="onEarningsChange" />
+        <ArtifactSelector
+          :model-value="modelValue.earnings"
+          :families="earningsFamilies"
+          stones="hidden"
+          @update:model-value="onEarningsChange"
+        />
       </div>
 
       <!-- Delivery -->
@@ -159,7 +164,38 @@
             </div>
           </div>
         </template>
-        <ArtifactSelector v-else :model-value="fixedDeliveryDisplay" stones="hidden" @update:model-value="onFixedDeliveryChange" />
+        <template v-else>
+          <ArtifactSelector
+            :model-value="stoneHolders ? fixedDeliveryDisplay.slice(0, -1) : fixedDeliveryDisplay"
+            :families="deliveryFamilies"
+            stones="hidden"
+            @update:model-value="onFixedDeliveryChange"
+          />
+          <!-- The last slot as a stone holder: only its stone slots count. -->
+          <div v-if="stoneHolders" class="section-premium p-3 flex items-center gap-3">
+            <span
+              class="text-[10px] font-black text-slate-400 w-5 h-5 flex items-center justify-center bg-white/50 rounded-full shadow-inner flex-shrink-0"
+              >{{ fixedDeliveryDisplay.length }}</span
+            >
+            <span class="text-[11px] font-black text-slate-800">Stone holder</span>
+            <div class="flex gap-1">
+              <button
+                v-for="holder in stoneHolders"
+                :key="holder.id"
+                class="px-2 py-0.5 rounded-md border text-[10px] font-black transition-all"
+                :class="
+                  fixedHolder === holder.id
+                    ? 'border-indigo-500 ring-1 ring-indigo-500 text-slate-900 bg-indigo-50'
+                    : 'border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 bg-white'
+                "
+                :aria-pressed="fixedHolder === holder.id"
+                @click="setFixedHolder(holder.id)"
+              >
+                {{ holder.label }}
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -284,8 +320,22 @@ const props = withDefaults(
     defaultLabel?: string;
     /** The inventory's own `auto` delivery inputs, so a fixed set can switch back to them. */
     inventoryDelivery?: DeliveryInputs | null;
+    /** The artifact family each earnings slot may hold (ArtifactSelector `families`). */
+    earningsFamilies?: (string | null)[];
+    /** The artifact family each fixed delivery slot may hold, before any stone holder. */
+    deliveryFamilies?: (string | null)[];
+    /** When given, a fixed delivery set's last slot is a choice of these stand-in holders. */
+    stoneHolders?: { id: string; label: string }[] | null;
   }>(),
-  { defaultValue: null, resetLabel: 'Reset', defaultLabel: 'Default', inventoryDelivery: null }
+  {
+    defaultValue: null,
+    resetLabel: 'Reset',
+    defaultLabel: 'Default',
+    inventoryDelivery: null,
+    earningsFamilies: () => [],
+    deliveryFamilies: () => [],
+    stoneHolders: null,
+  }
 );
 
 const emit = defineEmits<{
@@ -314,9 +364,20 @@ const fixedDeliveryDisplay = computed<EquippedArtifact[]>(() =>
     : []
 );
 
+const fixedHolder = computed(() =>
+  props.modelValue.delivery.mode === 'fixed' ? (props.modelValue.delivery.artifactIds.at(-1) ?? null) : null
+);
+
 function onFixedDeliveryChange(value: EquippedArtifact[]) {
   update(next => {
-    next.delivery = { mode: 'fixed', artifactIds: value.map(s => s.artifactId ?? null) };
+    const ids = value.map(s => s.artifactId ?? null);
+    next.delivery = { mode: 'fixed', artifactIds: props.stoneHolders ? [...ids, fixedHolder.value] : ids };
+  });
+}
+
+function setFixedHolder(id: string) {
+  update(next => {
+    if (next.delivery.mode === 'fixed') next.delivery.artifactIds[next.delivery.artifactIds.length - 1] = id;
   });
 }
 
@@ -329,14 +390,16 @@ const autoCandidates = computed(() =>
 
 // One row of tier/rarity toggles per delivery target family; everything else is a stone holder.
 const targetFamilies = computed(() =>
-  [ei.ArtifactSpec.Name.QUANTUM_METRONOME, ei.ArtifactSpec.Name.INTERSTELLAR_COMPASS, ei.ArtifactSpec.Name.ORNATE_GUSSET].map(
-    afxId => {
-      const options = artifactOptions
-        .filter(a => a.afxId === afxId)
-        .sort((a, b) => b.tier - a.tier || b.rarity - a.rarity);
-      return { afxId, name: options[0]?.familyName ?? '', iconPath: options[0]?.iconPath ?? '', options };
-    }
-  )
+  [
+    ei.ArtifactSpec.Name.QUANTUM_METRONOME,
+    ei.ArtifactSpec.Name.INTERSTELLAR_COMPASS,
+    ei.ArtifactSpec.Name.ORNATE_GUSSET,
+  ].map(afxId => {
+    const options = artifactOptions
+      .filter(a => a.afxId === afxId)
+      .sort((a, b) => b.tier - a.tier || b.rarity - a.rarity);
+    return { afxId, name: options[0]?.familyName ?? '', iconPath: options[0]?.iconPath ?? '', options };
+  })
 );
 const holderOptions = artifactOptions.filter(a => !isDeliveryTargetArtifact(a.id) && a.slots > 0);
 const holderCandidates = computed(() => autoCandidates.value.filter(c => !c.isTarget));

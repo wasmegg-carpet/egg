@@ -18,12 +18,12 @@
         <ArtifactSelect
           :model-value="slot.artifactId"
           placeholder="Select artifact..."
-          :items="artifactOptions"
+          :items="slotOptions(slotIndex)"
           :get-item-id="item => item.id"
           :get-item-display="item => item.label"
           :get-item-icon-path="item => item.iconPath"
           :item-from-id="id => getArtifact(id)!"
-          :search-items="searchArtifacts"
+          :search-items="query => searchArtifacts(query, slotIndex)"
           :item-color-class="getArtifactColorClass"
           allow-clearing
           @update:model-value="onArtifactChange(slotIndex, $event || '')"
@@ -105,8 +105,10 @@ const props = withDefaults(
      * stones are handled elsewhere (the auto planner places them from its own stone pool).
      */
     stones?: 'edit' | 'hidden';
+    /** The artifact family each slot may hold, by slot; a slot with none (or no list) takes any. */
+    families?: (string | null)[];
   }>(),
-  { stones: 'edit' }
+  { stones: 'edit', families: () => [] }
 );
 
 const emit = defineEmits<{
@@ -117,9 +119,16 @@ const emit = defineEmits<{
 const ArtifactSelect = GenericBaseSelectFilterable<ArtifactOption>();
 const StoneSelect = GenericBaseSelectFilterable<StoneOption>();
 
-const searchArtifacts = (query: string) => {
+const slotOptions = (slotIndex: number) => {
+  const family = props.families[slotIndex];
+  return family ? artifactOptions.filter(a => a.familyId === family) : artifactOptions;
+};
+
+const searchArtifacts = (query: string, slotIndex: number) => {
   const q = query.toLowerCase();
-  return artifactOptions.filter(a => a.label.toLowerCase().includes(q) || a.familyName.toLowerCase().includes(q));
+  return slotOptions(slotIndex).filter(
+    a => a.label.toLowerCase().includes(q) || a.familyName.toLowerCase().includes(q)
+  );
 };
 
 const searchStones = (query: string) => {

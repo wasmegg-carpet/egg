@@ -32,7 +32,7 @@ describe('earningsShift', () => {
     expect(earningsShift(null, table.header)).toBe(0);
   });
 
-  it("is the Clothed TE a weaker artifact gives up", () => {
+  it('is the Clothed TE a weaker artifact gives up', () => {
     expect(earningsShift(save({ ankh: [3, AfxRarity.LEGENDARY] }), table.header)).toBeCloseTo(2.34, 2);
     expect(earningsShift(save({ cube: [4, AfxRarity.EPIC] }), table.header)).toBeCloseTo(4.77, 2);
   });
@@ -58,6 +58,9 @@ describe('deliveryMatchesTable', () => {
     if (inputs.delivery.mode !== 'fixed') throw new Error('maxed delivery is fixed');
     inputs.delivery.artifactIds.reverse();
     expect(deliveryMatchesTable(inputs, header)).toBe(true);
+    // reversed: [totem, gusset, compass, metronome]
+    inputs.delivery.artifactIds[0] = 'puzzle-cube-4-3';
+    expect(deliveryMatchesTable(inputs, header)).toBe(true);
     inputs.delivery.artifactIds[3] = 'quantum-metronome-4-2';
     expect(deliveryMatchesTable(inputs, header)).toBe(false);
     expect(deliveryMatchesTable(inputs, {})).toBe(true);
@@ -80,7 +83,9 @@ describe('shiftedLookup', () => {
         // The same build, with the eggs it delivers itself on top of TE 200's counts.
         expect({ ...b, delivered: undefined }).toEqual({ ...raw[j], delivered: undefined });
         const canon = canonicalDelivered(200);
-        b.delivered.forEach((d, e) => expect(d - canon[e]).toBeCloseTo(raw[j].delivered[e] - canonicalDelivered(197)[e], 0));
+        b.delivered.forEach((d, e) =>
+          expect(d - canon[e]).toBeCloseTo(raw[j].delivered[e] - canonicalDelivered(197)[e], 0)
+        );
         // Rebased onto real counts and priced, it stops at real TEs.
         const real = [...canon];
         real[j % 5] += 1e15;

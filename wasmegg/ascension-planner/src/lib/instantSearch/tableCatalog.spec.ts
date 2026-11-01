@@ -76,17 +76,67 @@ describe('delivery tables', () => {
   });
 
   it('finds the table built for a delivery set, whichever order the sets come in', () => {
-    expect(findDeliveryTable(entries, [...MAXED_SET].reverse())?.name).toBe(
-      'table-metronome-T4L_compass-T4L_gusset-T4L-te120-489.bin.gz'
-    );
-    expect(findDeliveryTable(entries, OTHER_SET)?.name).toBe(
+    const exact = findDeliveryTable(entries, [...MAXED_SET].reverse());
+    expect(exact?.entry.name).toBe('table-metronome-T4L_compass-T4L_gusset-T4L-te120-489.bin.gz');
+    expect(exact?.exact).toBe(true);
+    expect(exact?.differs).toEqual([]);
+    expect(findDeliveryTable(entries, OTHER_SET)?.entry.name).toBe(
       'table-metronome-T3E_compass-T4C_gusset-T2E-te120-489.bin.gz'
     );
   });
 
-  it('has no table for a set the store never built, or for something that is not a set of four', () => {
+  it('matches on the metronome, compass and gusset only: any T4L in the fourth slot, or none', () => {
+    const name = 'table-metronome-T4L_compass-T4L_gusset-T4L-te120-489.bin.gz';
+    for (const set of [
+      [...MAXED_SET.slice(0, 3), 'puzzle-cube-4-3'],
+      [...MAXED_SET.slice(0, 3), null],
+      MAXED_SET.slice(0, 3),
+    ]) {
+      const match = findDeliveryTable(entries, set);
+      expect(match?.entry.name).toBe(name);
+      expect(match?.exact).toBe(true);
+    }
+  });
+
+  it('takes the closest table with two of the three, the third the nearest tier and rarity', () => {
+    const near = delivery('table-near.bin.gz', [
+      'quantum-metronome-4-3',
+      'interstellar-compass-4-3',
+      'gusset-4-2',
+      'lunar-totem-4-3',
+    ]);
+    const far = delivery('table-far.bin.gz', [
+      'quantum-metronome-4-3',
+      'interstellar-compass-4-3',
+      'gusset-2-2',
+      'lunar-totem-4-3',
+    ]);
+    const mine = ['quantum-metronome-4-3', 'interstellar-compass-4-3', 'gusset-4-0', 'lunar-totem-4-3'];
+    const match = findDeliveryTable([far, near, ...entries], mine);
+    expect(match?.entry.name).toBe('table-near.bin.gz');
+    expect(match?.exact).toBe(false);
+    expect(match?.differs).toEqual([{ mine: 'gusset-4-0', table: 'gusset-4-2' }]);
+    // Two of three beat a nearer table with only one.
+    expect(findDeliveryTable([far, ...entries], mine)?.entry.name).toBe(
+      'table-metronome-T4L_compass-T4L_gusset-T4L-te120-489.bin.gz'
+    );
+  });
+
+  it('counts a maxed table whose delivery set is filled in, and a set with no gusset as two of three', () => {
+    const maxed = { ...line('maxed.bin.gz'), delivery: MAXED_SET };
+    expect(findDeliveryTable([maxed], MAXED_SET)).toMatchObject({ entry: { name: 'maxed.bin.gz' }, exact: true });
+    expect(findDeliveryTable([maxed], MAXED_SET.slice(0, 2))).toMatchObject({
+      exact: false,
+      differs: [{ mine: null, table: 'gusset-4-3' }],
+    });
+  });
+
+  it("has no table for a set with fewer than two of any table's three, or nothing to compare", () => {
     expect(findDeliveryTable(entries, ['a', 'b', 'c', 'd'])).toBeNull();
-    expect(findDeliveryTable(entries, MAXED_SET.slice(0, 3))).toBeNull();
+    expect(
+      findDeliveryTable(entries, ['quantum-metronome-4-2', 'interstellar-compass-4-2', 'gusset-4-0', 'lunar-totem-4-3'])
+    ).toBeNull();
+    expect(findDeliveryTable(entries, ['quantum-metronome-4-3', 'interstellar-compass-4-2'], 1)?.exact).toBe(false);
   });
 
   it('does not count a gear table as a delivery table even when it names its set', () => {

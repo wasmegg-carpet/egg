@@ -134,20 +134,14 @@
           <span class="ml-auto truncate text-[11px] text-slate-400">{{ artifactsSummary }}</span>
         </button>
         <div v-if="artifactsOpen" class="space-y-2 border-t border-slate-200 px-4 py-4">
-          <p class="text-[11px] text-slate-500">
-            Your artifacts and stones, as your save has them. Change them to see routes with higher or lower ones. The
-            earnings set and lunar and shell stones move the search: the table is read lower by the Clothed TE they give
-            up, rounded down.
-          </p>
-          <p v-if="!store.deliveryMatches && store.header?.delivery" class="text-[11px] text-amber-700">
-            Your delivery set isn't this table's ({{ labels(store.header.delivery) }}). The search still assumes the
-            table's: a different delivery set needs a table of its own (Table Builder).
-          </p>
           <AutoLoadoutEditor
             v-model="store.loadout"
             :default-value="store.defaultLoadout"
             :reset-label="store.backup ? 'Reset to inventory' : 'Reset to maxed'"
             :default-label="store.backup ? 'Inventory' : 'Maxed'"
+            :earnings-families="CHAIN_FINDER_EARNINGS_FAMILIES"
+            :delivery-families="DELIVERY_CORE_FAMILIES"
+            :stone-holders="STONE_HOLDERS"
           />
         </div>
       </section>
@@ -174,21 +168,27 @@
 
     <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
       <template v-if="store.tableStatus === 'loading'">Loading the table…</template>
-      <template v-else-if="store.header">
-        Table: {{ store.tableSource }} · start TE {{ store.header.from }}–{{ store.header.to }} · simulator
-        {{ store.header.simVersion ?? 'unstamped' }}
-        <template v-if="store.header.builtAt">· built {{ showTime(Date.parse(store.header.builtAt) / 1000) }}</template>
-        <template v-if="store.header.delivery">· delivery {{ labels(store.header.delivery) }}</template>
+      <span v-else-if="store.header" class="inline-flex flex-wrap items-center gap-1.5" :title="tableDetails">
+        Table:
+        <template v-if="tableDelivery.length">
+          <span
+            v-for="a in tableDelivery"
+            :key="a.id"
+            class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold text-slate-700"
+            :style="{ backgroundColor: rarityTint(a.rarity, '#f1f5f9') }"
+            :title="a.label"
+          >
+            <img :src="iconURL(a.iconPath, 64)" class="w-4 h-4" />T{{ a.tier }}{{ a.rarityCode }}
+          </span>
+        </template>
+        <template v-else>{{ store.tableSource }}</template>
         <template v-if="store.header.deferForEarnings">· silo mode</template>
-      </template>
+      </span>
       <label class="cursor-pointer font-bold text-emerald-700 hover:underline">
         Load a table file…
         <input type="file" accept=".bin,.gz" class="hidden" @change="onFile" />
       </label>
     </div>
-    <p v-if="store.tableArtifactsText" class="mt-1 text-[11px] text-slate-400">
-      Built with: {{ store.tableArtifactsText }}
-    </p>
     <p v-if="store.tableNote" class="mt-2 text-[11px] text-amber-700">{{ store.tableNote }}</p>
 
     <div
@@ -234,7 +234,12 @@ import {
 } from '@/stores/instantSearch';
 import { useInitialStateStore } from '@/stores/initialState';
 import { formatDuration, formatNumber } from '@/lib/format';
-import { labels } from '@/buildTable/header';
+import { iconURL } from 'lib';
+import { getArtifact } from '@/lib/artifacts';
+import { rarityTint } from '@/lib/artifacts/display';
+import type { ArtifactOption } from '@/lib/artifacts/types';
+import { DELIVERY_CORE_FAMILIES, deliveryCore } from '@/lib/instantSearch/tableCatalog';
+import { CHAIN_FINDER_EARNINGS_FAMILIES, STONE_HOLDERS } from '@/lib/instantSearch/earningsShift';
 import { VIRTUE_EGG_NAMES } from '@/types';
 
 const store = useInstantSearchStore();
@@ -247,6 +252,24 @@ watch(
   () => initialState.rawBackup,
   () => store.onSaveLoaded()
 );
+
+/** The loaded table's metronome, compass and gusset, shown as the section shows artifacts. */
+const tableDelivery = computed(() =>
+  deliveryCore(store.header?.delivery ?? [])
+    .map(id => getArtifact(id))
+    .filter((a): a is ArtifactOption => !!a)
+);
+/** The rest of what the table line used to say, on hover. */
+const tableDetails = computed(() => {
+  const h = store.header;
+  if (!h) return '';
+  return [
+    store.tableSource,
+    `start TE ${h.from}–${h.to}`,
+    `simulator ${h.simVersion ?? 'unstamped'}`,
+    ...(h.builtAt ? [`built ${showTime(Date.parse(h.builtAt) / 1000)}`] : []),
+  ].join(' · ');
+});
 
 /** Ticks once a minute so "last sync … ago" stays current. */
 /** Artifacts & stones, folded away until asked for. */
