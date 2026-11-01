@@ -598,6 +598,7 @@ import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { readHandoff, searchWithoutHandoff } from '@/lib/instantSearch/autoPlannerHandoff';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useTablePrefetch } from '@/composables/useTablePrefetch';
 import { usePersistence } from '@/composables/usePersistence';
 import { compactActionHistory } from '@/composables/useCompactActionHistory';
 import { generateActionId } from '@/types';
@@ -638,6 +639,10 @@ const autoPlannerStore = useAutoPlannerStore();
 const notesStore = useNotesStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
+
+// The Chain Finder's tables, fetched in the background once a save is loaded (composables/
+// useTablePrefetch.ts), so its answer is ready when the tab is opened.
+useTablePrefetch();
 
 const isEarningsBoostActive = computed(() => actionsStore.effectiveSnapshot?.earningsBoost?.active ?? false);
 

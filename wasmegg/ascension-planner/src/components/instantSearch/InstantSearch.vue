@@ -5,7 +5,12 @@
         class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200"
       >
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+          />
         </svg>
       </div>
       <h2 class="text-xl font-black text-slate-900 uppercase tracking-tight">Chain Finder</h2>
@@ -14,9 +19,9 @@
     <p class="text-xs text-slate-500 mb-6">
       Every ascension a maxed account can make was simulated ahead of time, from every TE at every hour of the week, so
       finding a route is arithmetic: it tries every stop at every TE, with up to {{ MAX_ASCENSIONS }} ascensions. Every
-      prestige is a fresh build on the next whole hour (or later, when waiting for eggs gets you there sooner), on
-      maxed artifacts. Weaker earnings artifacts are allowed for (the table is read lower by the Clothed TE they
-      give up); delivery artifacts are not.
+      prestige is a fresh build on the next whole hour (or later, when waiting for eggs gets you there sooner), on the
+      best table the store has for your gear: your own, one built on the same gear, one built for your delivery set, or
+      the maxed one. Weaker earnings artifacts are allowed for (the table is read lower by the Clothed TE they give up).
     </p>
 
     <fieldset :disabled="store.status === 'running'" class="space-y-6 disabled:opacity-50">
@@ -79,8 +84,8 @@
             </div>
           </div>
           <div v-else class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            No ascension in progress in your save ({{ store.saveTE }} TE), so every route starts with a prestige on
-            the next whole hour.
+            No ascension in progress in your save ({{ store.saveTE }} TE), so every route starts with a prestige on the
+            next whole hour.
             <RefreshBackupButton class="ml-2" />
           </div>
         </template>
@@ -131,8 +136,8 @@
         <div v-if="artifactsOpen" class="space-y-2 border-t border-slate-200 px-4 py-4">
           <p class="text-[11px] text-slate-500">
             Your artifacts and stones, as your save has them. Change them to see routes with higher or lower ones. The
-            earnings set and lunar and shell stones move the search: the table is read lower by the Clothed TE they
-            give up, rounded down.
+            earnings set and lunar and shell stones move the search: the table is read lower by the Clothed TE they give
+            up, rounded down.
           </p>
           <p v-if="!store.deliveryMatches && store.header?.delivery" class="text-[11px] text-amber-700">
             Your delivery set isn't this table's ({{ labels(store.header.delivery) }}). The search still assumes the
@@ -148,7 +153,6 @@
       </section>
 
       <InstantSearchFilters />
-
     </fieldset>
 
     <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -182,6 +186,10 @@
         <input type="file" accept=".bin,.gz" class="hidden" @change="onFile" />
       </label>
     </div>
+    <p v-if="store.tableArtifactsText" class="mt-1 text-[11px] text-slate-400">
+      Built with: {{ store.tableArtifactsText }}
+    </p>
+    <p v-if="store.tableNote" class="mt-2 text-[11px] text-amber-700">{{ store.tableNote }}</p>
 
     <div
       v-if="store.tableStatus === 'ready' && store.headerWarnings.length"
@@ -286,7 +294,7 @@ const hypotheticalTE = computed({
 });
 
 onMounted(() => {
-  if (store.tableStatus === 'idle') store.loadDefaultTable();
+  if (store.tableStatus === 'idle') store.loadTable();
 });
 
 function onFile(event: Event) {

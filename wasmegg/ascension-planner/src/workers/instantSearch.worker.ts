@@ -20,7 +20,7 @@ import {
   type ChainSpace,
   type LegHours,
 } from '@/lib/instantSearch/chainSpace';
-import { readTable, shiftedLookup, unpackTableBytes, type Table } from '@/lib/instantSearch/table';
+import { compositeTable, readTable, shiftedLookup, unpackTableBytes, type Table } from '@/lib/instantSearch/table';
 import type { InstantSearchRequest, InstantSearchResponse } from './instantSearch.protocol';
 
 // `Worker`, not `DedicatedWorkerGlobalScope`: see researchCalc.worker.ts (dom and webworker libs clash).
@@ -82,7 +82,10 @@ ctx.onmessage = async (event: MessageEvent<InstantSearchRequest>) => {
   const msg = event.data;
   try {
     if (msg.kind === 'load') {
-      table = readTable(await unpackTableBytes(msg.bytes));
+      const low = readTable(await unpackTableBytes(msg.bytes));
+      table = msg.high
+        ? compositeTable(low, readTable(await unpackTableBytes(msg.high.bytes)), msg.high.split, msg.high.scale)
+        : low;
       space = null;
       shifted = null;
       legHours = null;
@@ -128,8 +131,7 @@ ctx.onmessage = async (event: MessageEvent<InstantSearchRequest>) => {
       const chainOf = (c: number) => Array.from(s.chains.stops.subarray(c * n, (c + 1) * n));
       const shown = matches.length <= msg.show ? matches : null;
       const routes = shown?.flatMap(c => s.pricer.price(chainOf(c)) ?? []) ?? null;
-      const waits =
-        !!shown && !!s.options.waitForEggs && shown.length > 0 && shown.length * perWait <= WAIT_BUDGET_MS;
+      const waits = !!shown && !!s.options.waitForEggs && shown.length > 0 && shown.length * perWait <= WAIT_BUDGET_MS;
       post({ type: 'filtered', requestId: msg.requestId, matches: matches.length, routes, waits, perWait });
       if (!waits) return;
       // A few at a time, so a newer filter can stop this one.
@@ -157,7 +159,9 @@ ctx.onmessage = async (event: MessageEvent<InstantSearchRequest>) => {
     // Chain comparison needs them next; they fill between this search's messages.
     ensureLegHours(table, msg.options.earningsShift);
     const found = polishFound(lookup, msg.options, findRoutes(lookup, options), (done, of) =>
-      msg.options.waitForEggs ? post({ type: 'progress', requestId: msg.requestId, done, of, stage: 'waits' }) : undefined
+      msg.options.waitForEggs
+        ? post({ type: 'progress', requestId: msg.requestId, done, of, stage: 'waits' })
+        : undefined
     );
     post({ type: 'result', requestId: msg.requestId, found, ms: performance.now() - t0 });
   } catch (err) {

@@ -8,6 +8,7 @@
  */
 import { canonicalDelivered, EGG_ORDER, rebase, WEEK_HOURS, type BuildParams } from './precomputedLeg';
 import type { BuildLookup } from './routeFinder';
+import type { TableGear } from './tableGear';
 
 const FIELDS = 9;
 
@@ -32,7 +33,33 @@ export interface TableHeader {
    *  from before it. */
   earnings?: string[];
   delivery?: string[];
+  /** 8 hex of the delivery set: the store's `delivery-<key>.bin.gz` alias names it. */
   deliveryKey?: string;
+  /** The research a build waits with and the table's delivery set there (the builder's k3 record):
+   *  a player's peak delivery rate is compared with the table's at that research. */
+  k3?: {
+    research?: Record<string, number>;
+    delivery?: unknown[];
+    /** The table's own peak delivery rate (eggs/s): a player's own build there, against this, is
+     *  their delivery scale. */
+    peak?: number;
+  };
+  /** An account's own table: the gear it was built on (tableGear.ts). The page uses it only for a
+   *  save whose stamp matches. Absent on the maxed reference table. */
+  gear?: TableGear;
+  /** A gear table joined to the maxed one (compositeTable): the last start TE from the gear table. */
+  gearTo?: number;
+  /** The simulation settings the cells were built with. Absent on tables packed before 19 Oct 2026. */
+  settings?: { assumeDoubleEarnings?: boolean; deferForEarnings?: boolean };
+  /** What the simulator reads of the account it was built on, for a table with no gear stamp (the
+   *  maxed one): the epic research it models and the colleggtible effects. */
+  epicResearch?: Record<string, number>;
+  colleggtibleEffects?: Record<string, number>;
+  /** Rows below what was generated filled from the nearest real ones, for trying the page while the
+   *  table is built. Never a real answer. */
+  fake?: boolean;
+  /** Who built it and with what: provenance, not a stamp. */
+  builtWith?: string;
   stones?: Record<string, number>;
 }
 
@@ -143,4 +170,36 @@ export async function unpackTableBytes(bytes: ArrayBuffer): Promise<ArrayBuffer>
   if (head[0] !== 0x1f || head[1] !== 0x8b) return bytes;
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream).arrayBuffer();
+}
+
+/**
+ * A gear table below a start TE and the maxed table from it, as one table (ported from AutoAutoAP's
+ * src/search/precomputedTable.ts): a board gear combination's table covers the TEs where gear shows,
+ * below GEAR_TABLE_TO; from there the maxed table at the player's delivery rate is exact.
+ */
+export function compositeTable(low: Table, high: Table, split: number, scale: number): Table {
+  const scaled = new LruCache<number, BuildParams[]>(DECODED_CELLS);
+  const top = Math.max(split - 1, low.header.to);
+  return {
+    header: {
+      ...low.header,
+      to: Math.max(high.header.to, low.header.to),
+      k3: high.header.k3,
+      gearTo: top,
+      simVersion:
+        low.header.simVersion && low.header.simVersion === high.header.simVersion ? low.header.simVersion : undefined,
+    },
+    lookup(te, hour) {
+      if (te <= top) return low.lookup(te, hour);
+      const raw = high.lookup(te, hour);
+      if (!raw || scale === 1) return raw;
+      const key = te * WEEK_HOURS + hour;
+      let hit = scaled.get(key);
+      if (!hit) {
+        hit = raw.map(b => ({ ...b, peakELR: b.peakELR * scale }));
+        scaled.set(key, hit);
+      }
+      return hit;
+    },
+  };
 }

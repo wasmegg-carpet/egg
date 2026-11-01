@@ -20,8 +20,9 @@ export interface SpaceSummary {
 }
 
 export type InstantSearchRequest =
-  /** A table file's bytes, gzipped or not (transferred). */
-  | { kind: 'load'; requestId: number; bytes: ArrayBuffer }
+  /** A table file's bytes, gzipped or not (transferred), with the maxed table's bytes to join it
+   *  to above `split` (a gear table below, the maxed one from there, its delivery rate scaled). */
+  | { kind: 'load'; requestId: number; bytes: ArrayBuffer; high?: { bytes: ArrayBuffer; split: number; scale: number } }
   | { kind: 'search'; requestId: number; options: Omit<FindOptions, 'onProgress'> }
   /** Every chain like `route` that `filter` lets through (`enumerateChains`), kept for 'filter'. */
   | {
