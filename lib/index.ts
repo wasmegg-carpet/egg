@@ -9,6 +9,7 @@ export * from './farm';
 export * from './fundraising';
 export * from './goatcounter';
 export * from './missions';
+export * from './probability';
 export * from './prophecy_eggs';
 export { ei } from './proto';
 export * from './rewards';
