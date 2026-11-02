@@ -1,6 +1,10 @@
 <template>
   <div class="space-y-4">
-    <ResearchSaleToggle :is-active="isResearchSaleActive" @toggle="handleToggleSale" />
+    <ResearchSaleToggle
+      :is-active="isResearchSaleActive"
+      :seconds-until-change="isResearchSaleActive ? secondsUntilSaleEnd : secondsUntilNextSale"
+      @toggle="handleToggleSale"
+    />
 
     <ResearchViewSelector v-model="currentView" :views="VIEWS" />
 
@@ -285,6 +289,7 @@ import { formatDuration, formatNumber, formatGemPrice, formatAbsoluteTime } from
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useSalesStore } from '@/stores/sales';
+import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
 import { useVirtueStore } from '@/stores/virtue';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, type Action } from '@/types';
@@ -332,6 +337,7 @@ import { useEventExpiry } from '@/composables/useEventExpiry';
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const salesStore = useSalesStore();
+const { secondsUntilNextSale, secondsUntilSaleEnd, waitForNextSale, waitForSaleEnd } = useResearchSaleWaits();
 const virtueStore = useVirtueStore();
 const { prepareExecution, completeExecution, batch } = useActionExecutor();
 const {
@@ -617,34 +623,6 @@ function insertWait(
   return id;
 }
 
-function insertToggleSale(
-  active: boolean,
-  waitId: string | undefined,
-  beforeSnapshot: ReturnType<typeof prepareExecution>
-) {
-  const payload = { saleType: 'research' as const, active, multiplier: 0.3 };
-  salesStore.setSaleActive('research', active);
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'toggle_sale',
-      payload,
-      cost: 0,
-      dependsOn: [
-        ...computeDependencies(
-          'toggle_sale',
-          payload,
-          actionsStore.actionsBeforeInsertion,
-          actionsStore.initialSnapshot.researchLevels
-        ),
-        ...(waitId ? [waitId] : []),
-      ],
-    },
-    beforeSnapshot
-  );
-}
-
 function insertToggleEarningsBoost(
   active: boolean,
   waitId: string | undefined,
@@ -815,9 +793,9 @@ function insertEventCrossingWaits(
   for (const crossing of allCrossings) {
     const waitSeconds = crossing.absoluteTime - cursor;
     if (crossing.kind === 'sale') {
+      // The sale itself follows sim time (engine/researchSale.ts), so only the clock needs moving.
       const waitId = insertWait(crossing.togglesTo ? 'wait_for_research_sale' : 'wait_for_time', waitSeconds, snapshot);
       snapshot = waitId ? prepareExecution() : snapshot;
-      insertToggleSale(crossing.togglesTo, waitId, snapshot);
     } else {
       const waitId = insertWait(
         crossing.togglesTo ? 'wait_for_earnings_boost' : 'wait_for_time',
@@ -1359,37 +1337,16 @@ async function handleBuyMilestoneChain() {
   }
 }
 
-function handleToggleSale() {
-  const beforeSnapshot = prepareExecution();
-  const currentlyActive = beforeSnapshot.activeSales.research;
-
-  const payload = {
-    saleType: 'research' as const,
-    active: !currentlyActive,
-    multiplier: 0.3, // 70% off
-  };
-
-  // Update store state
-  salesStore.setSaleActive('research', !currentlyActive);
-
+// The sale follows sim time, so the toggle moves the clock: turning it on waits for the next sale to
+// start, and turning it off waits for the current one to end.
+async function handleToggleSale() {
   // Deactivate Auto Buy whenever a sale is toggled
   autoBuyState.value.alwaysOn = false;
 
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'toggle_sale',
-      payload,
-      cost: 0,
-      dependsOn: computeDependencies(
-        'toggle_sale',
-        payload,
-        actionsStore.actionsBeforeInsertion,
-        actionsStore.initialSnapshot.researchLevels
-      ),
-    },
-    beforeSnapshot
-  );
+  if (isResearchSaleActive.value) {
+    await waitForSaleEnd();
+  } else {
+    await waitForNextSale();
+  }
 }
 </script>

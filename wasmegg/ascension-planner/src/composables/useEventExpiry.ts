@@ -5,11 +5,13 @@ import { useSalesStore } from '@/stores/sales';
 import { generateActionId } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
 
 export function useEventExpiry() {
     const actionsStore = useActionsStore();
     const salesStore = useSalesStore();
     const { prepareExecution, completeExecution } = useActionExecutor();
+    const { waitForSaleEnd } = useResearchSaleWaits();
 
     const showExpiryDialog = ref(false);
     const expiryData = ref({
@@ -69,32 +71,14 @@ export function useEventExpiry() {
     }
 
     /**
-     * Adds an action that deactivates the currently expiring event.
+     * Ends the currently expiring event: waits out a research sale, or adds an action turning off a boost.
      */
     async function deactivateEvent() {
-        const beforeSnapshot = prepareExecution();
-
         if (expiryData.value.type === EventType.RESEARCH_SALE) {
-            const payload = {
-                saleType: 'research' as const,
-                active: false,
-                multiplier: 0.3,
-            };
-            salesStore.setSaleActive('research', false);
-            await completeExecution({
-                id: generateActionId(),
-                timestamp: Date.now(),
-                type: 'toggle_sale',
-                payload,
-                cost: 0,
-                dependsOn: computeDependencies(
-                    'toggle_sale',
-                    payload,
-                    actionsStore.actionsBeforeInsertion,
-                    actionsStore.initialSnapshot.researchLevels
-                ),
-            }, beforeSnapshot);
+            // The sale follows sim time, so ending it means reaching the end of the sale.
+            await waitForSaleEnd();
         } else {
+            const beforeSnapshot = prepareExecution();
             const payload = {
                 active: false,
                 multiplier: 2,

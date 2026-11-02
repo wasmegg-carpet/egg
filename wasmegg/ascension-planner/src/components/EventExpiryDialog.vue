@@ -36,7 +36,12 @@
               which is <span class="text-rose-600 font-bold">{{ formatDuration(completionTime - endTime) }}</span> after the event expiry.
             </p>
             <p class="text-xs text-slate-500 italic">
-              Continuing will add the action(s) using the current event rates, even though the simulation time will pass the expiry threshold.
+              <template v-if="isResearchSale">
+                Waiting advances the plan to the end of the sale. Continuing then adds the action(s) at full price.
+              </template>
+              <template v-else>
+                Continuing will add the action(s) using the current event rates, even though the simulation time will pass the expiry threshold.
+              </template>
             </p>
           </div>
 
@@ -46,7 +51,7 @@
                 class="flex-1 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors"
                 @click="$emit('deactivateAndCancel')"
               >
-                Deactivate & Cancel
+                {{ isResearchSale ? 'Wait for Sale End & Cancel' : 'Deactivate & Cancel' }}
               </button>
             </div>
             <div class="flex gap-2">
@@ -60,7 +65,7 @@
                 class="btn-premium bg-rose-600 text-white px-8 py-2 text-[10px] font-black uppercase tracking-wider shadow-lg"
                 @click="$emit('deactivateAndContinue')"
               >
-                Deactivate and Continue
+                {{ isResearchSale ? 'Wait for Sale End and Continue' : 'Deactivate and Continue' }}
               </button>
             </div>
           </div>
@@ -71,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useVirtueStore } from '@/stores/virtue';
 
 interface Props {
@@ -79,7 +85,9 @@ interface Props {
   completionTime: number; // Unix timestamp
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
+
+const isResearchSale = computed(() => props.eventName === 'Research Sale');
 
 defineEmits<{
   cancel: [];

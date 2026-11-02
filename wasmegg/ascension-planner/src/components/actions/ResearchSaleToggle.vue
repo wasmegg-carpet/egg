@@ -15,6 +15,7 @@
     </div>
 
     <button
+      v-tippy="tooltip"
       @click="$emit('toggle')"
       class="relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-300 focus:outline-none shadow-inner"
       :class="isActive ? 'bg-indigo-500' : 'bg-slate-200'"
@@ -28,8 +29,18 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue';
+import { formatDuration } from '@/lib/format';
+
+const props = defineProps<{
   isActive: boolean;
+  secondsUntilChange: number;
 }>();
 defineEmits(['toggle']);
+
+const tooltip = computed(() =>
+  props.isActive
+    ? `Sale ends Saturday at +0. Click to wait ${formatDuration(props.secondsUntilChange)} until it ends.`
+    : `Next sale starts Friday at +0. Click to wait ${formatDuration(props.secondsUntilChange)} until it starts.`
+);
 </script>

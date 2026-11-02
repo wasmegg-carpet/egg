@@ -182,7 +182,7 @@ function deadlineWarningTooltip(seconds?: number) {
   if (seconds === undefined) return '';
   const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
   if (props.isResearchSaleActive && (baseTimestamp.value / 1000 + seconds > props.researchSaleDeadline)) {
-    return `${timeStr} is after next Saturday at +0. Turn off the research sale to see realistic prices.`;
+    return `${timeStr} is after the sale ends (Saturday at +0), so this sale price won't last that long.`;
   }
   return timeStr;
 }

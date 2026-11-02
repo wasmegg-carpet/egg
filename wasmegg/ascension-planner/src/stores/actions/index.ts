@@ -27,6 +27,7 @@ import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useEventsStore } from '@/stores/events';
 
 import { simulateAsync } from '@/engine/simulate';
+import { hasStaleResearchSaleFlags } from '@/engine/researchSale';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -560,7 +561,6 @@ export const useActionsStore = defineStore('actions', {
           });
         }
         const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle'; egg: string }> = {
-          'research-sale': { type: 'research', egg: 'curiosity' },
           'hab-sale': { type: 'hab', egg: 'integrity' },
           'vehicle-sale': { type: 'vehicle', egg: 'kindness' },
         };
@@ -745,7 +745,7 @@ export const useActionsStore = defineStore('actions', {
       const initialSnapshot = computeSnapshot(baseState, getSimulationContext());
       this._initialSnapshot = markRaw(initialSnapshot);
 
-      if (!skipRecalculate) {
+      if (!skipRecalculate || hasStaleResearchSaleFlags(this.actions, this.ascensionStartTime)) {
         await this.recalculateFrom(0);
       } else {
         syncStoresToSnapshot(this.effectiveSnapshot);

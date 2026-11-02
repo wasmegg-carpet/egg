@@ -173,8 +173,8 @@ function handleWaitTime() {
 
   const duration = parsedSeconds.value;
 
-  // We check both events because any time addition could cross either
-  withExpiryCheck(duration, true, () => {
+  // Only the earnings boost needs checking: the research sale follows sim time on its own
+  withExpiryCheck(duration, false, () => {
     const beforeSnapshot = prepareExecution();
 
     const payload = {

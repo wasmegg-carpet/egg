@@ -333,7 +333,7 @@ function deadlineWarningTooltip(seconds?: number, extraText?: string) {
   if (seconds === undefined) return extraText || '';
   const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
   const warning = props.showDeadlineWarning
-    ? `${timeStr} is after next Saturday at +0. Turn off the research sale to see realistic prices.`
+    ? `${timeStr} is after the sale ends (Saturday at +0), so this sale price won't last that long.`
     : timeStr;
   
   if (extraText) {
