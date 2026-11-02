@@ -48,6 +48,7 @@ RUN yum install -y \
 USER dev
 
 ENV CLAUDE_CONFIG_DIR=/opt/.claude
+ENV CODEX_HOME=/opt/.codex
 
 ENV PNPM_HOME=/opt/pnpm
 
@@ -66,7 +67,8 @@ RUN curl -fsSL https://nodejs.org/dist/v24.13.1/node-v24.13.1-linux-x64.tar.xz |
     curl -fsSL https://github.com/zmwangx/ets/releases/download/v0.2.2/ets_0.2.2_linux_amd64.tar.gz | tar zx -C /opt/ets && \
     curl -fsSL https://github.com/zmwangx/netlify-headers-expander/releases/download/v1.0.0/netlify-headers-expander_1.0.0_linux_amd64.tar.gz | tar zx -C /opt/netlify-headers-expander && \
     curl -fsSL https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz | tar xz -C /opt/gh --strip-components=1 && \
-    curl -fsSL https://claude.ai/install.sh | bash
+    curl -fsSL https://claude.ai/install.sh | bash && \
+    curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 
 # Preinstall browsers for fresh worktrees. A repo-level @playwright/test must
 # match PLAYWRIGHT_VERSION to reuse them.
