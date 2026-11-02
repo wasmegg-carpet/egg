@@ -205,7 +205,8 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
   const hypotheticalStart = ref(Math.ceil(Date.now() / 1000 / 3600) * 3600);
   const hypotheticalTE = ref<number | null>(null);
   const { date: hypotheticalDate, time: hypotheticalTime } = localInputs(hypotheticalStart);
-  /** Filter: the numbers of ascensions to show (display only; the search looks at every count). */
+  /** Filter: the numbers of ascensions to show. The search stops at the highest of them, so any lower
+   *  count shows without a new search. */
   const ascensionCounts = ref<number[]>(ALL_COUNTS());
   /** Filter: days (YYYY-MM-DD, read in `timezone`) no prestige may start on. */
   const avoidDates = ref<string[]>([]);
@@ -231,6 +232,10 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
   });
   /** Waiting for eggs was turned on or off since the shown answer. */
   const waitsChanged = computed(() => !!answer.value && answer.value.waitForEggs !== waitForEggs.value);
+  /** A number of ascensions is picked that the shown answer's search stopped short of. */
+  const countsPastAnswer = computed(
+    () => !!answer.value && ascensionCounts.value.some(n => n > answer.value!.options.maxAscensions)
+  );
 
   const header = shallowRef<TableHeader | null>(null);
   /** What's missing or unexpected in the loaded table's header (buildTable/header.ts). */
@@ -576,6 +581,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     const h = header.value;
     const te = startTE.value;
     if (!h) return '';
+    if (!ascensionCounts.value.length) return 'Pick at least one number of ascensions in Filters.';
     // Continuing needs no table row at the start TE; a prestige does.
     const canContinue = fromSave.value && !!current.value;
     const row = rowFor(te);
@@ -622,7 +628,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       startTE: asked.startTE,
       start: asked.start,
       final: asked.final,
-      maxAscensions: MAX_ASCENSIONS,
+      maxAscensions: Math.max(...ascensionCounts.value),
       ...(asked.deadline !== undefined ? { deadline: asked.deadline } : {}),
       ...(delivered ? { startDelivered: [...delivered] } : {}),
       ...(cont ? { cont: { ...cont, delivered: [...cont.delivered] } } : {}),
@@ -813,6 +819,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     avoidChanged,
     waitForEggs,
     waitsChanged,
+    countsPastAnswer,
     header,
     headerWarnings,
     simChanges,

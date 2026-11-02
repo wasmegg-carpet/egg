@@ -68,6 +68,17 @@ describe('instant search', () => {
     }
   });
 
+  it('finds the same routes for the counts it reaches when stopped at a lower count', () => {
+    const start = pt('2026-10-22', '01:30');
+    for (const extra of [{}, { waitForEggs: true }, { deadline: start + 120 * 86400 }]) {
+      const o = { startTE: 226, start, final: 490, ...extra };
+      const all = search({ ...o, maxAscensions: 12 });
+      const capped = search({ ...o, maxAscensions: 4 });
+      expect(capped.byAscensions).toEqual(all.byAscensions.slice(0, 5));
+      expect(capped.byDateByAscensions).toEqual(all.byDateByAscensions.slice(0, 5));
+    }
+  }, 30_000);
+
   it('continues the ascension in progress when that is sooner', () => {
     // A strong farm at 300 TE with integrity part-way to its next TE.
     const start = pt('2026-10-20', '08:13');

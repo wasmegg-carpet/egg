@@ -20,7 +20,7 @@
       <div>
         <div class="mb-1 flex flex-wrap items-baseline gap-2">
           <h4 class="text-xs font-bold text-slate-700">Number of ascensions</h4>
-          <span class="text-[11px] text-slate-400">Shows only these counts; no new search needed.</span>
+          <span class="text-[11px] text-slate-400">Searches up to the highest picked; lower counts show with no new search.</span>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
           <button

@@ -38,6 +38,14 @@
     </div>
 
     <div
+      v-if="store.countsPastAnswer"
+      class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
+    >
+      This answer searched up to {{ answer.options.maxAscensions }} ascensions: press Find routes again for higher
+      counts.
+    </div>
+
+    <div
       v-if="store.artifactsChanged"
       class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
     >
@@ -45,7 +53,8 @@
     </div>
 
     <div v-if="!lead" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-      <template v-if="byDate">No route reaches a higher TE by {{ show(answer.deadline!) }}.</template>
+      <template v-if="store.countsPastAnswer">Nothing to show yet for {{ countsText }} ascensions.</template>
+      <template v-else-if="byDate">No route reaches a higher TE by {{ show(answer.deadline!) }}.</template>
       <template v-else-if="!store.ascensionCounts.length">No numbers of ascensions are picked in Filters.</template>
       <template v-else>No route reaches {{ answer.final }} TE with {{ countsText }} ascensions.</template>
     </div>

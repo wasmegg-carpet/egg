@@ -160,10 +160,7 @@
         {{ store.status === 'running' ? 'Searching…' : 'Find routes' }}
       </button>
       <span v-if="store.status === 'running' && store.progress" class="text-xs text-slate-500">
-        <template v-if="store.progress.stage === 'waits'">
-          Finding prestiges worth waiting for: {{ store.progress.done }} of {{ store.progress.of }} routes…
-        </template>
-        <template v-else>{{ store.progress.done }} of {{ store.progress.of }} ascension counts done…</template>
+        {{ store.progress.stage === 'waits' ? 'Finding prestiges worth waiting for…' : 'Finding routes…' }}
       </span>
       <span v-else-if="store.problem" class="text-xs text-amber-700">{{ store.problem }}</span>
     </div>
