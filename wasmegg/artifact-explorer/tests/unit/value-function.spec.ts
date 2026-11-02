@@ -18,23 +18,37 @@ describe('alphaToProb', () => {
   }
 
   it('alpha=0 means no crafting regardless of pCraft', () => {
-    const r = alphaToProb(0, new Map(), ['A'], makedag(0.5));
-    expect(r.craftProbability).toBeCloseTo(0, PREC);
-    expect(r.dropProbability).toBeCloseTo(0, PREC);
-    expect(r.bestProbability).toBeCloseTo(0, PREC);
+    // pCraft=1 is the only value that makes this title testable: at every other pCraft the closed form
+    // returns 0 at alpha=0 on its own, so a guard that stopped excluding alpha=0 would go unseen.
+    for (const pCraft of [0, 0.5, 1]) {
+      const r = alphaToProb(0, new Map(), ['A'], makedag(pCraft));
+      expect(r.craftProbability).toBeCloseTo(0, PREC);
+      expect(r.dropProbability).toBeCloseTo(0, PREC);
+      expect(r.bestProbability).toBeCloseTo(0, PREC);
+    }
   });
 
   it('craft probability is 1 - (1-p)^alpha', () => {
-    // p=0.5, alpha=4: 1 - 0.0625
-    const r = alphaToProb(4, new Map(), ['A'], makedag(0.5));
-    expect(r.craftProbability).toBeCloseTo(0.9375, PREC);
-    expect(r.dropProbability).toBeCloseTo(0, PREC);
-    expect(r.bestProbability).toBeCloseTo(0.9375, PREC);
+    // p=0.5, so 1 - 2^-alpha. One `it` over several alphas rather than one per alpha: they run the same
+    // branch and differ only in the arithmetic, which is what the table is for.
+    for (const [alpha, expected] of [
+      [1, 0.5],
+      [2, 0.75],
+      [4, 0.9375],
+    ] as const) {
+      const r = alphaToProb(alpha, new Map(), ['A'], makedag(0.5));
+      expect(r.craftProbability).toBeCloseTo(expected, PREC);
+      expect(r.dropProbability).toBeCloseTo(0, PREC);
+      expect(r.bestProbability).toBeCloseTo(expected, PREC);
+    }
   });
 
-  it('craft probability with alpha=2', () => {
-    const r = alphaToProb(2, new Map(), ['A'], makedag(0.5));
-    expect(r.craftProbability).toBeCloseTo(0.75, PREC);
+  it('treats a target the dag does not describe as uncraftable', () => {
+    // The `?? 0` behind pCraft decides what the card prints for a node nothing is known about. The other
+    // default reachable by a one-character change is 1, which prints a guaranteed legendary.
+    const r = alphaToProb(4, new Map(), ['ghost'], makedag(0.5));
+    expect(r.craftProbability).toBe(0);
+    expect(r.bestProbability).toBe(0);
   });
 
   it('drop-only path when pCraft is 0', () => {
