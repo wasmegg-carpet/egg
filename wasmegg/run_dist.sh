@@ -3,7 +3,7 @@
 # netlify dev forces max-age=0; test asset caching with netlify deploy --alias <name>.
 set -euo pipefail
 
-here=$(realpath $(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd))
+here=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 port=${1:-8888}
 
 cd "$here"

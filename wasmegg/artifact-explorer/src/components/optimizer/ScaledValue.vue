@@ -1,6 +1,13 @@
 <template>
   <span v-if="short === exact">{{ short }}</span>
-  <span v-else v-tippy="exact" class="cursor-help border-b border-dotted border-current">{{ short }}</span>
+  <span
+    v-else
+    v-tippy="exact"
+    tabindex="0"
+    :aria-label="`${short}; exact value ${exact}`"
+    class="cursor-help border-b border-dotted border-current"
+    >{{ short }}</span
+  >
 </template>
 
 <script lang="ts">
