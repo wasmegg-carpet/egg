@@ -20,6 +20,11 @@ export const SIM_CHANGES: SimChange[] = [
     date: '2026-11-01T20:35:29-06:00',
     note: 'Corrected a bug where vehicles cost too much. Mostly affected 200 TE and below.',
   },
+  {
+    commit: '4a9b110e',
+    date: '2026-11-02T13:54:14-06:00',
+    note: 'Delivery research that needs several levels to help now ranks by its real hr/%, and is only bought if all those levels fit before the sale ends.',
+  },
 ];
 
 /**
