@@ -217,6 +217,7 @@ import { computed, ref } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useVirtueStore } from '@/stores/virtue';
+import { useHumilityMissionsStore } from '@/stores/humilityMissions';
 
 import { type CalculationsSnapshot, type VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
@@ -418,6 +419,7 @@ function handleImport(event: Event) {
       }
 
       await actionsStore.importPlan(jsonString);
+      useHumilityMissionsStore().clear();
     } catch (error) {
       console.error(error);
       alert('Failed to import plan: Invalid file format.');

@@ -3,6 +3,7 @@ import { markRaw } from 'vue';
 import {
   Action,
   CalculationsSnapshot,
+  DraftAction,
   UndoValidation,
   VirtueEgg,
   ToggleSalePayload,
@@ -35,6 +36,17 @@ import { ActionsState } from './types';
 import { createDefaultStartAction, calculateActionResult } from './simulation';
 import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from './dependency';
 import { exportPlanLogic, importPlanLogic, exportPlanData } from './io';
+
+/** Position a draft; recalculateFrom fills derived fields afterward. */
+function hydrateDraft(draft: DraftAction, index: number): Action {
+  return {
+    ...draft,
+    index,
+    dependents: [],
+    totalTimeSeconds: 0,
+    endState: createEmptySnapshot(),
+  } as unknown as Action;
+}
 
 export const useActionsStore = defineStore('actions', {
   state: (): ActionsState => {
@@ -171,7 +183,7 @@ export const useActionsStore = defineStore('actions', {
       };
 
       const currentSummary = JSON.stringify(summarize(this.actions));
-      
+
       let savedActions: Action[] = [];
       try {
         savedActions = JSON.parse(this.lastSavedActionsJson);
@@ -258,7 +270,7 @@ export const useActionsStore = defineStore('actions', {
       return collectDependentActions(this.actions, actionId);
     },
 
-    pushAction(action: import('@/types').DraftAction) {
+    pushAction(action: DraftAction) {
       // Logic for redundant actions
       if (action.type === 'toggle_sale' || action.type === 'toggle_earnings_boost') {
         const lastAction = this.actions[this.actions.length - 1];
@@ -412,13 +424,20 @@ export const useActionsStore = defineStore('actions', {
         new Set(ids),
         this.initialSnapshot.researchLevels
       );
-      const fullIds = new Set(fullToRemove.map(a => a.id));
-      const minIndex = Math.min(...this.actions.map((a, i) => fullIds.has(a.id) ? i : Infinity));
-      this.actions = this.actions.filter(a => !fullIds.has(a.id));
+      await this.dropActions(new Set(fullToRemove.map(a => a.id)));
+    },
+
+    /**
+     * Removes exactly these actions and no others, then resimulates from the gap they leave.
+     * Callers that want the dependent cascade compute it first; `removeActions` is that caller.
+     */
+    async dropActions(ids: Set<string>) {
+      const firstIndex = this.actions.findIndex(a => ids.has(a.id));
+      this.actions = this.actions.filter(a => !ids.has(a.id));
       this.actions.forEach(a => {
-        a.dependents = a.dependents.filter(d => !fullIds.has(d));
+        a.dependents = a.dependents.filter(d => !ids.has(d));
       });
-      await this.recalculateFrom(minIndex === Infinity ? 0 : minIndex);
+      await this.recalculateFrom(firstIndex === -1 ? 0 : firstIndex);
     },
 
     async clearAll(resetCallback?: () => void, skipRecalculate = false) {
@@ -478,7 +497,7 @@ export const useActionsStore = defineStore('actions', {
         a.index = idx;
         a.dependents = [];
       });
-      
+
       for (let i = 1; i < keptActions.length; i++) {
         keptActions[i].dependsOn = [keptActions[i - 1].id];
         keptActions[i - 1].dependents.push(keptActions[i].id);
@@ -583,7 +602,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     async insertAction(
-      action: import('@/types').DraftAction,
+      action: DraftAction,
       _replayCallback?: (action: Action, previousSnapshot: CalculationsSnapshot) => CalculationsSnapshot
     ) {
       const insertIndex = this.editingInsertIndex;
@@ -595,13 +614,7 @@ export const useActionsStore = defineStore('actions', {
       // Duplicate logic for sequential toggles/updates...
       // (omitted for brevity in this first pass, but I should probably include it)
 
-      const fullAction: Action = {
-        ...action,
-        index: insertIndex,
-        dependents: [],
-        totalTimeSeconds: 0,
-        endState: createEmptySnapshot(),
-      } as unknown as Action;
+      const fullAction = hydrateDraft(action, insertIndex);
 
       for (const depId of action.dependsOn) {
         const depAction = this.actions.find(a => a.id === depId);
@@ -626,6 +639,17 @@ export const useActionsStore = defineStore('actions', {
       } else {
         await this.recalculateFrom(insertIndex);
       }
+    },
+
+    /** Publish an already simulated and validated timeline in one update. */
+    replaceSimulatedActions(actions: Action[], initialSnapshot?: CalculationsSnapshot) {
+      if (initialSnapshot) this._initialSnapshot = markRaw(initialSnapshot);
+      this.actions = actions.map(action => ({ ...action, endState: markRaw(action.endState) }));
+      if (this.editingGroupId && !this.actions.some(action => action.id === this.editingGroupId)) {
+        this.editingGroupId = null;
+      }
+      this.relinkDependencies();
+      syncStoresToSnapshot(this.effectiveSnapshot);
     },
 
     startBatch() {
@@ -706,7 +730,7 @@ export const useActionsStore = defineStore('actions', {
         return true;
       }
       const data = importPlanLogic(jsonString);
-      
+
       // NEW: Skip recalculation if the plan already contains calculated result data (endState).
       // Since the user is in a long session, we trust the cached calculations in the library.
       const isPreCalculated = data.actions &&
