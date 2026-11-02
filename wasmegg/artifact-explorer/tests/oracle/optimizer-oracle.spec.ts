@@ -37,7 +37,7 @@ async function runOptimizer(inst: OracleInstance): Promise<OptimizerSolution> {
     desiredArtifactNodeIds: inst.targets,
     fuelCapacity: inst.fuelCapacity,
     timeCapacityPerSlot: inst.timeCapacityPerSlot,
-    baseYield: inst.baseYield,
+    ownedStock: inst.ownedStock,
     craftBudget: inst.craftBudget,
     maximumCost: Infinity,
   });
@@ -84,7 +84,7 @@ async function solverPricesAllocation(inst: OracleInstance, allocation: number[]
     desiredArtifactNodeIds: inst.targets,
     fuelCapacity: 1,
     timeCapacityPerSlot: 1,
-    baseYield: inst.baseYield,
+    ownedStock: inst.ownedStock,
     craftBudget: inst.craftBudget,
     maximumCost: Infinity,
   });
@@ -229,7 +229,7 @@ describe('oracle calibration', () => {
       targets: ['t'],
       fuelCapacity: 0,
       timeCapacityPerSlot: 0,
-      baseYield: new Map([
+      ownedStock: new Map([
         ['a', 5],
         ['b', 1.5],
       ]),
@@ -257,7 +257,7 @@ describe('oracle calibration', () => {
       targets: ['t'],
       fuelCapacity: 6,
       timeCapacityPerSlot: 100,
-      baseYield: new Map(),
+      ownedStock: new Map(),
     };
     // no craftable supply at all, so the only play is 3 launches of drops
     const expected = 1 - Math.exp(-3 * 0.125);
@@ -291,7 +291,7 @@ describe('oracle calibration', () => {
       targets: ['t'],
       fuelCapacity: 0,
       timeCapacityPerSlot: 0,
-      baseYield: new Map([['a', 4]]),
+      ownedStock: new Map([['a', 4]]),
     };
     // each craft consumes 1 mid (2a) + 1a = 3a, so crafts = 4/3
     const crafts = 4 / 3;
@@ -311,7 +311,7 @@ describe('oracle calibration', () => {
       targets: ['t'],
       fuelCapacity: 7,
       timeCapacityPerSlot: 100,
-      baseYield: new Map([['a', 1]]),
+      ownedStock: new Map([['a', 1]]),
     };
     // 2 launches -> inventory a = 1 + 3 = 4 -> crafts = 2
     const expected = 1 - Math.exp(-2 * targetQ(inst, 't'));
@@ -334,7 +334,7 @@ describe('oracle calibration', () => {
       targets: ['t0', 't1'],
       fuelCapacity: 0,
       timeCapacityPerSlot: 0,
-      baseYield: new Map([['a', 2]]),
+      ownedStock: new Map([['a', 2]]),
     };
     const theirs = await runOptimizer(inst);
     const crafts = theirs.perTarget.map(p => p.expectedCrafts);
@@ -358,7 +358,7 @@ describe('oracle calibration', () => {
       targets: ['t0', 't1', 't2'],
       fuelCapacity: 6,
       timeCapacityPerSlot: 3,
-      baseYield: new Map([['a', 1]]),
+      ownedStock: new Map([['a', 1]]),
     };
     assertNoFailures([await checkInstance(inst)]);
     const theirs = await runOptimizer(inst);
@@ -394,7 +394,7 @@ describe('oracle calibration', () => {
       targets: ['t0', 't1', 't2'],
       fuelCapacity: 6,
       timeCapacityPerSlot: 3,
-      baseYield: new Map([['a', 2]]),
+      ownedStock: new Map([['a', 2]]),
     };
     assertNoFailures([await checkInstance(inst)]);
     expect((await runOptimizer(inst)).perTarget).toHaveLength(3);
@@ -419,7 +419,7 @@ describe('the enumeration behind the oracle', () => {
       // Three slots of two time units hold six one-unit missions and fuel pays for at most four, so packing
       // never binds: the feasible set is exactly the lattice under the fuel line.
       timeCapacityPerSlot: 2,
-      baseYield: new Map(),
+      ownedStock: new Map(),
     };
     const feasible: number[][] = [];
     for (let a = 0; 2 * a <= inst.fuelCapacity; a++) {
@@ -449,7 +449,7 @@ describe('the enumeration behind the oracle', () => {
       targets: ['t'],
       fuelCapacity: 10,
       timeCapacityPerSlot: 4,
-      baseYield: new Map(),
+      ownedStock: new Map(),
     };
     const res = bruteForceBestJoint(inst);
     expect(res.feasibleCount).toBe(NUM_SLOTS + 1); // 0..3 launches
@@ -473,7 +473,7 @@ describe('the enumeration behind the oracle', () => {
       targets: ['t'],
       fuelCapacity: fuel,
       timeCapacityPerSlot: 4,
-      baseYield: new Map(),
+      ownedStock: new Map(),
     };
     const res = bruteForceBestJoint(inst);
     // Every (x, y) with x + y <= fuel is feasible; the maximal ones are those that spend all of it.

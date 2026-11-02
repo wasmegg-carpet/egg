@@ -36,6 +36,8 @@ function model(
     columnIsInteger: Uint8Array.from(columns.map(c => (c.integer ? 1 : 0))),
     objective: Float64Array.from(columns.map(c => c.objective ?? 0)),
     rowCount: rows.length,
+    // `writeLp` names each LP row after this; the production names come from `Rows.begin`.
+    rowNames: rows.map((_, i) => `row_${i}`),
     rowLower: Float64Array.from(rows.map(r => r.lower)),
     rowUpper: Float64Array.from(rows.map(r => r.upper)),
     offsets: Int32Array.from(offsets),
@@ -171,6 +173,30 @@ describe('the LP-format writer round-trips the model', () => {
     expect(solution.status).toBe('optimal');
     expectSatisfies(m, solution.columnValues);
     expect(objectiveOf(m, solution.columnValues)).toBeCloseTo(solution.objective, 6);
+  });
+
+  it('reports an unbounded objective as unbounded, not as a plan', () => {
+    // The point that comes back is a waypoint on the ray. `scales` reads one of these as a ceiling,
+    // so the status has to say which it is.
+    const m = model([{ lower: 0, upper: INF, objective: 1 }], [{ terms: [[0, 1]], lower: 0, upper: INF }]);
+    expect(solve(m, { maxNodes: 1000, relGap: 1e-9 }).status).toBe('unbounded');
+  });
+
+  it('keeps the incumbent of a search stopped on its node limit', () => {
+    // The production path (SPEC.md section 7), and this build labels it `Unknown` whether or not the
+    // limit bit. Discarding those emptied every plan the optimizer made.
+    const columns = Array.from({ length: 24 }, (_, j) => ({
+      lower: 0,
+      upper: 1,
+      integer: true,
+      objective: 1000 + j * 7.13,
+    }));
+    const m = model(columns, [
+      { terms: columns.map((c, j) => [j, c.objective!] as [number, number]), lower: -INF, upper: 6421.5 },
+    ]);
+    const solution = solve(m, { maxNodes: 1, relGap: 1e-9 });
+    expect(solution.status).not.toBe('unknown');
+    expectSatisfies(m, solution.columnValues);
   });
 
   it('reports infeasibility rather than a plausible-looking point', () => {

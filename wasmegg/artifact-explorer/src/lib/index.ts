@@ -7,7 +7,7 @@ export * from './optimizer-cost';
 export * from './tank-ids';
 
 import type { DAGNode, LaunchSolution, OptimizerSolution, DropRow, RecipeDAG } from './types';
-import { generateRecipeDag } from './phases';
+import { generateRecipeDag } from './problem-inputs';
 import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, iconURL, Inventory, InventoryItem } from 'lib';
 
 // An undefined previousCraftsOverride means "read each target's own crafted
@@ -46,15 +46,15 @@ export function buildRecipeDag(
 
 // Counted across all rarities: this is "copies you can feed a recipe", never
 // "you already own a legendary". See OPTIMIZER.md.
-export function computeBaseYield(
+export function computeOwnedStock(
   playerInventory: Inventory | null | undefined,
   desiredArtifactNodeIds: string[],
   recipeDag: Map<string, DAGNode>
 ) {
-  const baseYield = new Map<string, number>();
+  const ownedStock = new Map<string, number>();
 
   if (playerInventory) {
-    // Must match compileInnerLp's parent relation exactly.
+    // Must match `solver/model.ts`'s item relation exactly: the same nodes get a conservation row.
     const hasParent = new Set<string>();
     for (const node of recipeDag.values()) {
       if (node.isLeaf) continue;
@@ -67,11 +67,11 @@ export function computeBaseYield(
       const props = getArtifactTierPropsFromId(nodeId);
       const item = playerInventory.getItem({ name: props.afx_id, level: props.afx_level });
       const total = item.have;
-      if (total > 0) baseYield.set(nodeId, total);
+      if (total > 0) ownedStock.set(nodeId, total);
     }
   }
 
-  return baseYield;
+  return ownedStock;
 }
 
 function computeExpectedDrops(solution: OptimizerSolution, dag: Map<string, DAGNode>): DropRow[] {
