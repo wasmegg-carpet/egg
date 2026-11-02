@@ -13,7 +13,7 @@ export interface OracleInstance {
   targets: string[];
   fuelCapacity: number;
   timeCapacityPerSlot: number;
-  baseYield: Map<string, number>;
+  ownedStock: Map<string, number>;
   craftBudget?: CraftBudget;
 }
 
@@ -78,7 +78,7 @@ function lpTemplate(inst: OracleInstance): LpTemplate {
       const j = varIndex.get(node.id)!;
       for (const child of node.children) {
         if (child.nodeId === item) {
-          row[j] += child.quantity;
+          row[j] += child.qty;
         }
       }
     }
@@ -146,7 +146,7 @@ function inventoryFor(inst: OracleInstance, allocation: number[]): Map<string, F
   const bump = (item: string, amount: Frac) => {
     inv.set(item, (inv.get(item) ?? Frac.ZERO).add(amount));
   };
-  for (const [item, qty] of inst.baseYield) {
+  for (const [item, qty] of inst.ownedStock) {
     bump(item, Frac.fromNumber(qty));
   }
   inst.options.forEach((opt, i) => {
@@ -174,7 +174,7 @@ function directDrops(inst: OracleInstance, allocation: number[]): number {
 export function evaluateAllocationFloat(inst: OracleInstance, allocation: number[]): number {
   const template = lpTemplate(inst);
   const inv = new Map<string, number>();
-  for (const [item, qty] of inst.baseYield) {
+  for (const [item, qty] of inst.ownedStock) {
     inv.set(item, (inv.get(item) ?? 0) + qty);
   }
   inst.options.forEach((opt, i) => {
@@ -238,7 +238,7 @@ function logHitProbability(s: number): number {
 
 function inventoryFloat(inst: OracleInstance, allocation: number[]): Map<string, number> {
   const inv = new Map<string, number>();
-  for (const [item, qty] of inst.baseYield) {
+  for (const [item, qty] of inst.ownedStock) {
     inv.set(item, (inv.get(item) ?? 0) + qty);
   }
   inst.options.forEach((opt, i) => {

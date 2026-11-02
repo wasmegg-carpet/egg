@@ -19,7 +19,7 @@ export type WireSolution = Omit<OptimizerSolution, 'choiceHistory'> & { choiceHi
 // narrow/reconstruct pair the way `ship` does.
 export type WireOptimizeArgs = Omit<OptimizeArgs, 'options'> & { options: WireLaunchOption[] };
 
-// The id is the protocol's own, so it sits beside the arguments rather than among them — the worker
+// The id is the protocol's own, so it sits beside the arguments rather than among them. The worker
 // then forwards `args` whole, and a new solver argument needs no edit here.
 export interface OptimizerRequest {
   id: number;

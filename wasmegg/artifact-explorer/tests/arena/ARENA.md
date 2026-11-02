@@ -14,15 +14,16 @@ harness, and you must not import it.
 Pick how many of each available mission to launch, so as to maximise the
 probability of getting a legendary of **every** target artifact.
 
-| field | meaning |
-| --- | --- |
-| `options` | the menu of launches, already enumerated from the player's ships, research and effort level. Your allocation is indexed against this array, in this order. |
-| `dag` | the recipe graph for the targets: what crafts into what, how many of each ingredient a craft consumes, and each node's legendary craft chance. |
-| `targets` | the desired artifact node ids. |
-| `fuelCapacity` | total fuel for the whole plan. |
-| `timeCapacityPerSlot` | seconds available **per slot**. |
-| `slots` | how many missions can be in flight at once. Always 3. |
-| `baseYield` | copies of each node the player already owns. |
+| field                 | meaning                                                                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `options`             | the menu of launches, already enumerated from the player's ships, research and effort level. Your allocation is indexed against this array, in this order. |
+| `dag`                 | the recipe graph for the targets: what crafts into what, how many of each ingredient a craft consumes, and each node's legendary craft chance.             |
+| `targets`             | the desired artifact node ids.                                                                                                                             |
+| `fuelCapacity`        | total fuel for the whole plan.                                                                                                                             |
+| `timeCapacityPerSlot` | seconds available **per slot**.                                                                                                                            |
+| `slots`               | how many missions can be in flight at once. Always 3.                                                                                                      |
+| `ownedStock`          | copies of each node the player already owns.                                                                                                               |
+| `craftBudget`         | optional golden-egg cap on the plan's crafts, with a unit price per node. Absent on every generated instance; only **A9** supplies one.                    |
 
 You return an `allocation` parallel to `problem.options`, plus an optional
 `reported` (see below).
@@ -49,8 +50,10 @@ is a hard failure, not a low score.
 **The golden egg budget is not part of this.** Missions cost no golden eggs, so
 no allocation can breach `craftBudget` and there is nothing here for a
 feasibility check to test. It binds on the craft split, which the judge chooses
-for itself, so the judge solves its craft polytope with the row in it and a
-candidate that ignored the cap simply scores worse. That is why the budget
+for itself, so the judge solves its craft polytope (`src/lib/solver/SPEC.md`'s
+introduction defines this feasible set, there called the conservation polytope)
+with the budget row in it, and a candidate that ignored the cap simply scores
+worse. That is why the budget
 appears under **A9** and has no C1 twin. Generated instances carry no budget; A9
 introduces one as a perturbation, the way the other A checks perturb fuel and
 time, so every recorded sweep result still measures the problems it always did.
@@ -84,6 +87,7 @@ planner and its judge would agree with itself no matter what it computed.
   shipped planner and the measured one are one code path. A candidate importing
   `src/lib` would close that loop the other way and measure the app grading
   itself.
+
 - **Be deterministic.** Same problem in, same allocation out. If your method is
   stochastic, seed it from the problem, not from a clock or a global. You do not
   need to memoize: the harness caches plans by problem content.
@@ -103,15 +107,15 @@ factors must multiply to your `jointProbability`).
 **Correctness**, as invariant violations. Every invariant is a property that
 holds without knowing the optimum, so none needs a reference answer:
 
-| group | asserts |
-| --- | --- |
-| **C0** contract | the returned allocation has one entry per option, and every entry is a non-negative whole number |
-| **C1** feasibility | the plan fits the fuel tank and packs into the slots |
-| **C2/C3** honesty | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in) |
-| **A1-A9** monotonicity | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely): each is solved alongside the original, and the relaxed solve must not score below it |
-| **B1-B6** invariance | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering. |
-| **M1-M3** cross-path | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3) |
-| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every *pair* — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass. |
+| group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                 |
+| **C1** feasibility         | the plan fits the fuel tank and packs into the slots                                                                                                                                                                                                                                                                                                                                                             |
+| **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                    |
+| **A1-A9** monotonicity     | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely): each is solved alongside the original, and the relaxed solve must not score below it |
+| **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                            |
+| **M1-M3** cross-path       | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3)                                                                                                                               |
+| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every _pair_ — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass.                                                   |
 
 **Quality**, as the judged joint probability on the unperturbed instance,
 reported in log10 and compared head-to-head. This is the only relative measure.
@@ -136,13 +140,13 @@ ARENA_INSTANCES=80 ARENA_SEED_BASE=9000 ARENA=sweep pnpm arena
 pnpm arena:check                            # independence guard only
 ```
 
-| variable | default | meaning |
-| --- | --- | --- |
-| `ARENA` | `smoke` | tier; also the switch that makes the suite run at all |
-| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count |
-| `ARENA_SEED_BASE` | 2000 | first seed |
-| `SOLVER` | whole roster | run one entry |
-| `ARENA_GATE` | — | `all` promotes every invariant to a hard failure |
+| variable          | default                | meaning                                               |
+| ----------------- | ---------------------- | ----------------------------------------------------- |
+| `ARENA`           | `smoke`                | tier; also the switch that makes the suite run at all |
+| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count                                        |
+| `ARENA_SEED_BASE` | 2000                   | first seed                                            |
+| `SOLVER`          | whole roster           | run one entry                                         |
+| `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure      |
 
 The sweep is opt-in and `pnpm test` does not run it: every tier here is minutes
 at best. `vitest.config.ts` drops `invariants.spec.ts` from the selection when
@@ -162,9 +166,10 @@ than thrown, because what the arena measures is how far a candidate is from
 holding them — a suite that aborts on the first monotonicity wobble stops
 producing a scorecard and starts producing a stack trace.
 
-**Cost.** A 40-instance cheap sweep is at least 15 minutes, heavily dependent on
-solver runtime; the deep tier adds substantially more. Instances range from 63 to
-285 options and from 1 to 4 targets.
+**Cost.** Minutes per instance, almost all of it solver runtime: `invariants.spec.ts`
+puts the four-instance smoke tier at about 12 minutes, and the forty-instance sweep
+scales from there. The deep tier adds substantially more. Over the default seed base
+(2000-2039) instances carry 63 to 289 options and 1 to 4 targets.
 
 ## The roster
 

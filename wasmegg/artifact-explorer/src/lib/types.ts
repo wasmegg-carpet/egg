@@ -1,6 +1,5 @@
 import { ei, MissionType } from 'lib';
 
-// documents intent only, not enforced
 type integer = number;
 export type { integer };
 
@@ -18,15 +17,15 @@ export interface LaunchOption {
   cost: number;
   // everything this launch drops, per single ship — display only
   supplyVector: Map<string, number>;
-  // subset of supplyVector restricted to recipe ingredients; this is what
-  // the optimizer feeds the inner LP
+  // subset of supplyVector restricted to recipe ingredients; this is what stocks
+  // the craft-conservation rows in `solver/model.ts`
   yieldVector: Map<string, number>;
   legendaryYieldVector: Map<string, number>;
 }
 
 export interface DAGChildRef {
   nodeId: string;
-  quantity: integer;
+  qty: integer;
 }
 
 export interface DAGNode {
@@ -38,9 +37,8 @@ export interface DAGNode {
 
 export type RecipeDAG = Map<string, DAGNode>;
 
-// A cap on what the plan's crafts may cost in golden eggs. `unitPrices` is a *linear* price per craft, which
-// the real curve is not, so the row is an upper bound on the true bill: a plan that satisfies it is always
-// affordable, while a plan leaning hard on one node may be rejected despite fitting. See OPTIMIZER.md.
+// A cap on what the plan's crafts may cost in golden eggs. `unitPrices` is linear, not the real curve;
+// see `computeCraftUnitPrices` in optimizer-cost.ts for what that costs the bound.
 export interface CraftBudget {
   capacity: number; // golden eggs
   unitPrices: ReadonlyMap<string, number>; // per craft, by node id
@@ -97,9 +95,9 @@ export interface OptimizerSolution {
   slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];
-  finalYieldVector: Map<string, number>;
-  // owned-inventory head start already baked into finalYieldVector
-  baseYield: Map<string, number>;
+  supplyByItem: Map<string, number>;
+  // owned-inventory head start already baked into supplyByItem
+  ownedStock: Map<string, number>;
   recipeDag: RecipeDAG;
   craftPrimal: Map<string, number>;
   perTarget: TargetProbability[]; // perTarget[0] mirrors the scalar fields

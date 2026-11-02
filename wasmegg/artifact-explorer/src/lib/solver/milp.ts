@@ -1,11 +1,11 @@
 // The mixed-integer program handed to HiGHS: the continuous per-target scale
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
-import { MAX_PER_SLOT, type Model } from './model';
-import { finiteQ, logHit } from '../concave';
+import { UNBOUNDED_PER_SLOT, maxLaunches, type Model } from './model';
+import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
 
-// Uncapped on purpose — deliberately not `concave.gPrime`. See SPEC.md section 4.
+// Uncapped on purpose — deliberately not `objective.gPrime`. See SPEC.md section 4.
 function slopeAt(s: number): number {
   return 1 / Math.expm1(s);
 }
@@ -15,10 +15,11 @@ export interface Layout {
   groups: number;
   crafts: number;
   targets: number;
-  aBase: number;
-  cBase: number;
-  sBase: number;
-  zBase: number;
+  groupTotalBase: number;
+  craftBase: number;
+  // Score in units of theta: sigma in the 'oa' variant, and the raw score in 'scale', where theta is 1.
+  scoreBase: number;
+  envelopeBase: number;
   columnCount: number;
 }
 
@@ -29,22 +30,21 @@ export function layoutOf(model: Model, variant: Variant): Layout {
   const slots = model.slots;
   const groups = model.groups.length;
   const crafts = model.craftables.length;
-  const targets = model.targets.length;
-  // The n block leads the column vector, so it needs no base of its own.
-  const aBase = groups * slots;
-  const cBase = aBase + groups;
-  const sBase = cBase + crafts;
-  const zBase = sBase + targets;
+  const targets = model.sortedTargets.length;
+  const groupTotalBase = groups * slots;
+  const craftBase = groupTotalBase + groups;
+  const scoreBase = craftBase + crafts;
+  const envelopeBase = scoreBase + targets;
   return {
     slots,
     groups,
     crafts,
     targets,
-    aBase,
-    cBase,
-    sBase,
-    zBase: withZ ? zBase : -1,
-    columnCount: withZ ? zBase + targets : zBase,
+    groupTotalBase,
+    craftBase,
+    scoreBase,
+    envelopeBase: withZ ? envelopeBase : -1,
+    columnCount: withZ ? envelopeBase + targets : envelopeBase,
   };
 }
 
@@ -63,6 +63,12 @@ const SAFE_COEFFICIENT = 1e-6;
 // The same margin below `large_matrix_value` (1e15), which rejects the model.
 const SAFE_LARGE_COEFFICIENT = 1e12;
 
+// The ends of the ingestion window themselves: HiGHS *discards* an entry at or below the first and
+// treats one at or above the second as infinite, both while reading the model, where no option can
+// reach them (SPEC.md section 3). Scaling keeps rows clear of both; these are what says so.
+const SMALL_MATRIX_VALUE = 1e-9;
+const LARGE_MATRIX_VALUE = 1e15;
+
 function scaleBound(bound: number, scale: number): number {
   if (bound >= INF) return INF;
   if (bound <= -INF) return -INF;
@@ -73,15 +79,18 @@ function scaleBound(bound: number, scale: number): number {
 }
 
 class Rows {
+  private readonly names: string[] = [];
   private readonly offsets: number[] = [];
   private readonly indices: number[] = [];
   private readonly values: number[] = [];
   private readonly lower: number[] = [];
   private readonly upper: number[] = [];
   private current: Map<number, number> | null = null;
+  private currentName = '';
 
-  begin(): void {
+  begin(name: string): void {
     this.current = new Map();
+    this.currentName = name;
   }
 
   add(column: number, coefficient: number): void {
@@ -92,6 +101,7 @@ class Rows {
 
   end(lo: number, up: number): void {
     const row = this.current!;
+    const name = this.currentName;
     this.current = null;
 
     const entries: [number, number][] = [];
@@ -104,12 +114,27 @@ class Rows {
       if (magnitude < smallest) smallest = magnitude;
       if (magnitude > largest) largest = magnitude;
     }
+    // A row with no entries reads `0 in [lo, up]` and is dropped along with its bounds. Sound only
+    // because every row built here has 0 between its own bounds; one that did not would be an
+    // infeasible row, and dropping it would make the model feasible instead of unsolvable.
     if (entries.length === 0) return;
     entries.sort((a, b) => a[0] - b[0]);
 
     const headroom = largest > 0 ? SAFE_LARGE_COEFFICIENT / largest : Infinity;
     const scale = smallest < SAFE_COEFFICIENT ? Math.max(1, Math.min(1 / smallest, headroom)) : 1;
 
+    // The check is on the entries as HiGHS will read them, not on how many there are: a row whose own
+    // dynamic range is wider than the window cannot be written at any scale, and handing it over anyway
+    // deletes its smallest terms silently — a budget row losing its coefficients stops budgeting, with
+    // nothing anywhere saying so.
+    if (smallest * scale <= SMALL_MATRIX_VALUE || largest * scale >= LARGE_MATRIX_VALUE) {
+      throw new Error(
+        `row ${name} spans ${smallest * scale} to ${largest * scale} after scaling, outside ` +
+          `HiGHS's ingestion window (${SMALL_MATRIX_VALUE}, ${LARGE_MATRIX_VALUE})`
+      );
+    }
+
+    this.names.push(name);
     this.offsets.push(this.indices.length);
     for (const [column, coefficient] of entries) {
       this.indices.push(column);
@@ -119,9 +144,10 @@ class Rows {
     this.upper.push(scaleBound(up, scale));
   }
 
-  freeze(): Pick<MilpModel, 'rowCount' | 'rowLower' | 'rowUpper' | 'offsets' | 'indices' | 'values'> {
+  freeze(): Pick<MilpModel, 'rowCount' | 'rowNames' | 'rowLower' | 'rowUpper' | 'offsets' | 'indices' | 'values'> {
     return {
       rowCount: this.offsets.length,
+      rowNames: this.names.slice(),
       rowLower: Float64Array.from(this.lower),
       rowUpper: Float64Array.from(this.upper),
       offsets: Int32Array.from(this.offsets),
@@ -133,8 +159,9 @@ class Rows {
 
 function perSlotCap(model: Model, group: number): number {
   const grp = model.groups[group];
-  const byTime = grp.timeFraction > 0 ? Math.floor(1 / grp.timeFraction) : MAX_PER_SLOT;
-  return Math.max(0, Math.min(grp.cap, byTime, MAX_PER_SLOT));
+  // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
+  const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
+  return Math.max(0, Math.min(grp.cap, byTime, UNBOUNDED_PER_SLOT));
 }
 
 interface Core {
@@ -159,66 +186,66 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
       columnUpper[col] = cap;
       columnIsInteger[col] = withZ ? 1 : 0;
     }
-    columnUpper[layout.aBase + g] = model.groups[g].cap;
+    columnUpper[layout.groupTotalBase + g] = model.groups[g].cap;
   }
   for (let p = 0; p < layout.crafts; p++) {
     const cap = model.craftCaps[p];
-    if (Number.isFinite(cap) && cap >= 0 && cap < INF) columnUpper[layout.cBase + p] = cap;
+    if (Number.isFinite(cap) && cap >= 0 && cap < INF) columnUpper[layout.craftBase + p] = cap;
   }
 
   if (withZ) {
     for (let t = 0; t < layout.targets; t++) {
-      columnLower[layout.zBase + t] = -INF;
-      columnUpper[layout.zBase + t] = 0;
+      columnLower[layout.envelopeBase + t] = -INF;
+      columnUpper[layout.envelopeBase + t] = 0;
     }
   }
 
   const rows = new Rows();
 
   for (let g = 0; g < layout.groups; g++) {
-    rows.begin();
-    rows.add(layout.aBase + g, 1);
+    rows.begin(`total_g${g}`);
+    rows.add(layout.groupTotalBase + g, 1);
     for (let k = 0; k < layout.slots; k++) rows.add(nCol(layout, g, k), -1);
     rows.end(0, 0);
   }
 
   for (let i = 0; i < model.items.length; i++) {
-    rows.begin();
-    for (let p = 0; p < layout.crafts; p++) rows.add(layout.cBase + p, model.consRows[i][p]);
-    for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, -model.groups[g].yieldByItem[i]);
+    rows.begin(`cons_i${i}`);
+    for (let p = 0; p < layout.crafts; p++) rows.add(layout.craftBase + p, model.consRows[i][p]);
+    for (let g = 0; g < layout.groups; g++) rows.add(layout.groupTotalBase + g, -model.groups[g].yieldByItem[i]);
     rows.end(-INF, model.baseInventoryByItem[i]);
   }
 
   for (let t = 0; t < layout.targets; t++) {
-    rows.begin();
-    rows.add(layout.sBase + t, theta[t]);
+    rows.begin(`score_t${t}`);
+    rows.add(layout.scoreBase + t, theta[t]);
     const craft = model.targetCraftIdx[t];
-    if (craft >= 0) rows.add(layout.cBase + craft, -qs[t]);
-    for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, -model.groups[g].legendaryByTarget[t]);
+    if (craft >= 0) rows.add(layout.craftBase + craft, -qs[t]);
+    for (let g = 0; g < layout.groups; g++) rows.add(layout.groupTotalBase + g, -model.groups[g].legendaryByTarget[t]);
     rows.end(0, 0);
   }
 
   for (let a = 0; a < model.fuelAxes.length; a++) {
-    rows.begin();
-    for (let g = 0; g < layout.groups; g++) rows.add(layout.aBase + g, model.groups[g].fuelFractions[a]);
+    rows.begin(`fuel_a${a}`);
+    for (let g = 0; g < layout.groups; g++) rows.add(layout.groupTotalBase + g, model.groups[g].fuelFractions[a]);
     rows.end(-INF, 1);
   }
 
   if (Number.isFinite(model.craftBudgetCapacity)) {
-    rows.begin();
-    for (let p = 0; p < layout.crafts; p++) rows.add(layout.cBase + p, model.craftPrices[p]);
+    rows.begin('price');
+    for (let p = 0; p < layout.crafts; p++) rows.add(layout.craftBase + p, model.craftPrices[p]);
     rows.end(-INF, model.craftBudgetCapacity);
   }
 
   // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3.
   for (let k = 0; k < layout.slots; k++) {
-    rows.begin();
+    rows.begin(`slot_k${k}`);
     for (let g = 0; g < layout.groups; g++) rows.add(nCol(layout, g, k), model.groups[g].timeSeconds);
     rows.end(-INF, model.timeCapacitySeconds);
   }
 
   for (let k = 0; k + 1 < layout.slots; k++) {
-    rows.begin();
+    rows.begin(`order_k${k}`);
     for (let g = 0; g < layout.groups; g++) {
       const seconds = model.groups[g].timeSeconds;
       rows.add(nCol(layout, g, k), seconds);
@@ -245,20 +272,24 @@ function finisher(core: Core): (objective: Float64Array) => MilpModel {
   });
 }
 
+// A tangent slope below this is flat, in nats, over every sigma the MILP can reach. Pinned to the
+// judge's own resolution (`EXACT_PRECISION.gapTol`): no decision it can see turns on less.
+const FLAT_CUT_SLOPE = 1e-12;
+
 // Not 1: at raw-score magnitudes every reduced cost is inside HiGHS's dual
 // feasibility tolerance and it reports optimal at zero. See SPEC.md section 4.
 const SCALE_LP_OBJECTIVE = 1e9;
 
 export function scaleLps(model: Model, qs: readonly number[]): (t: number) => MilpModel {
-  const ones = new Array<number>(model.targets.length).fill(1);
+  const ones = new Array<number>(model.sortedTargets.length).fill(1);
   const core = buildCore(model, qs, ones, 'scale');
   const build = finisher(core);
   // Locals for the same reason `finisher` takes them: the returned closure outlives the solve loop, and
   // reading them off `core` would keep the whole sparse matrix reachable alongside `finisher`'s frozen copy.
-  const { columnCount, sBase } = core.layout;
+  const { columnCount, scoreBase } = core.layout;
   return t => {
     const objective = new Float64Array(columnCount);
-    objective[sBase + t] = SCALE_LP_OBJECTIVE;
+    objective[scoreBase + t] = SCALE_LP_OBJECTIVE;
     return build(objective);
   };
 }
@@ -273,21 +304,27 @@ export function buildOaMilp(
   const { layout, rows } = core;
 
   for (let t = 0; t < layout.targets; t++) {
-    for (const at of sigmaGrid) {
-      const s = theta[t] * at;
+    for (let j = 0; j < sigmaGrid.length; j++) {
+      const gridPoint = sigmaGrid[j];
+      const s = theta[t] * gridPoint;
       if (!(s > 0) || !Number.isFinite(s)) continue;
       const slope = theta[t] * slopeAt(s);
-      const rhs = logHit(s) - slope * at;
+      const rhs = logHit(s) - slope * gridPoint;
       if (!Number.isFinite(slope) || !Number.isFinite(rhs)) continue;
-      rows.begin();
-      rows.add(layout.zBase + t, 1);
-      rows.add(layout.sBase + t, -slope);
+      rows.begin(`cut_t${t}_${j}`);
+      rows.add(layout.envelopeBase + t, 1);
+      // Dropped here rather than by HiGHS at ingestion, which is where it went before and said nothing:
+      // past s ~ 400 the slope underflows next to the unit coefficient above and the row leaves the
+      // window `Rows.end` now enforces. Sound because sigma <= 1, so the term is worth at most `slope`
+      // nats across the whole feasible range and the cut it leaves is the same tangent held flat — which
+      // may sit under g by that much, a thousandth of the envelope error the grid already carries.
+      if (slope >= FLAT_CUT_SLOPE) rows.add(layout.scoreBase + t, -slope);
       rows.end(-INF, rhs);
     }
   }
 
   const objective = new Float64Array(layout.columnCount);
-  for (let t = 0; t < layout.targets; t++) objective[layout.zBase + t] = 1;
+  for (let t = 0; t < layout.targets; t++) objective[layout.envelopeBase + t] = 1;
   return finisher(core)(objective);
 }
 

@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
 import { buildRecipeDag } from '@/lib';
 import { loadHighs } from '@/lib/solver/highs';
-import { DEFAULT_TUNING, solveWith } from '@/lib/solver/oa';
+import { DEFAULT_TUNING, solveWith } from '@/lib/solver/solve';
 import type { PlanProblem } from '@/lib/solver/types';
 import { makeNode, makeOpt } from './spec-helpers';
 import type { RecipeDAG } from '@/lib/types';
@@ -102,7 +102,7 @@ function problemOf(targets: string[]): PlanProblem {
     fuelCapacity: 6,
     timeCapacityPerSlot: 4,
     slots: 3,
-    baseYield: new Map([['C1', 4]]),
+    ownedStock: new Map([['C1', 4]]),
   };
 }
 

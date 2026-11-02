@@ -157,6 +157,10 @@
 
     <section>
       <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Settings</h3>
+      <p class="text-xs text-gray-400 mb-1">
+        Save or Plan badges show a value from your data; check Override to type your own; Manual means there's no data
+        to compare against.
+      </p>
       <div class="divide-y divide-gray-100">
         <optimizer-setting-row
           label="Crafting level"
@@ -178,7 +182,7 @@
           :save-entries="previousCraftEntries"
           :manual-value="extras.previousCrafts"
           :min="0"
-          hint="Applies to every selected target."
+          hint="This count applies to every artifact you're planning, not one count per artifact."
           @update:overridden="setOverridePreviousCrafts"
           @update:manual="setPreviousCraftCount"
         />

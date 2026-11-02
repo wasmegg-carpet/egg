@@ -3,9 +3,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
-import { buildRecipeDag, computeBaseYield } from '@/lib';
+import { buildRecipeDag, computeOwnedStock } from '@/lib';
 import { CUBE_RUN, optimize } from './spec-helpers';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 
 const Name = ei.ArtifactSpec.Name;
 
@@ -19,13 +19,13 @@ describe('buildRecipeDag', () => {
     expect(dag.get('puzzle-cube-4')!.isLeaf).toBe(false);
     expect(dag.get('puzzle-cube-1')!.isLeaf).toBe(true);
     expect(dag.get('puzzle-cube-1')!.children).toEqual([]);
-    expect(dag.get('puzzle-cube-2')!.children).toEqual([{ nodeId: 'puzzle-cube-1', quantity: 3 }]);
+    expect(dag.get('puzzle-cube-2')!.children).toEqual([{ nodeId: 'puzzle-cube-1', qty: 3 }]);
 
     // every child reference resolves within the DAG
     for (const node of dag.values()) {
       for (const child of node.children) {
         expect(dag.has(child.nodeId)).toBe(true);
-        expect(child.quantity).toBeGreaterThanOrEqual(1);
+        expect(child.qty).toBeGreaterThanOrEqual(1);
       }
     }
   });
@@ -94,8 +94,8 @@ describe('optimize', () => {
 
   it('returns a plan the page can render', async () => {
     const dag = buildRecipeDag(config.desiredArtifactNodeIds, 30);
-    const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, dag);
-    const sol = await optimize(config, perfectShipsConfig, dag, baseYield);
+    const ownedStock = computeOwnedStock(null, config.desiredArtifactNodeIds, dag);
+    const sol = await optimize(config, perfectShipsConfig, dag, ownedStock);
 
     expect(sol.choiceHistory.length).toBeGreaterThan(0);
     // sorted by ship, so the launch list reads in fleet order
@@ -111,9 +111,9 @@ describe('optimize', () => {
 
   it('reports running time as the busiest slot real flight time', async () => {
     const dag = buildRecipeDag(config.desiredArtifactNodeIds, 30);
-    const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, dag);
+    const ownedStock = computeOwnedStock(null, config.desiredArtifactNodeIds, dag);
     const launchPeriod = 3600; // high effort: 1 launch / slot / hour
-    const sol = await optimize(config, perfectShipsConfig, dag, baseYield, { launchPeriodSeconds: launchPeriod });
+    const sol = await optimize(config, perfectShipsConfig, dag, ownedStock, { launchPeriodSeconds: launchPeriod });
 
     // `runningTimeSeconds` is the "you will be done in" figure on the card, and
     // it is raw flight time rather than the floored time the solver packs with.
@@ -125,7 +125,7 @@ describe('optimize', () => {
     expect(sol.runningTimeSeconds).toBeLessThanOrEqual(sol.timeUnitsUsed);
 
     // with a zero launch period nothing is floored: raw flight = makespan
-    const rawSol = await optimize(config, perfectShipsConfig, dag, baseYield);
+    const rawSol = await optimize(config, perfectShipsConfig, dag, ownedStock);
     expect(rawSol.runningTimeSeconds).toBe(rawSol.timeUnitsUsed);
   });
 });

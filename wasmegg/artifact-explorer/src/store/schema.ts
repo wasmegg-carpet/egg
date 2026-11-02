@@ -104,7 +104,7 @@ export interface MissionFilters {
   waitTimeDays: string;
   // Budget the plan against the fuel sitting in the tank right now, egg by egg,
   // instead of against what the tank could hold. Needs a save to mean anything, so
-  // `effectiveFuelByEggCapacity` ignores it when there is none — leaving it on across
+  // `effectiveFuelByEggCapacity` ignores it when there is none. Leaving it on across
   // a reload without player data degrades to the tank-capacity budget by itself.
   fuelFromTankContents: boolean;
 }

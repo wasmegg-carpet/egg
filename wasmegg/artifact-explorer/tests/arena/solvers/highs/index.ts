@@ -4,7 +4,7 @@
 // awaited at import time because `Planner` is synchronous.
 
 import { loadHighs } from '@/lib/solver/highs';
-import { DEFAULT_TUNING, solveWith } from '@/lib/solver/oa';
+import { DEFAULT_TUNING, solveWith } from '@/lib/solver/solve';
 import type { ArenaSolver, PlanProblem, PlanResult } from '../../contract';
 
 const solve = await loadHighs();

@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { ei, Inventory } from 'lib';
 import { optimizeFull } from '@/lib/optimizer-core';
-import { computeBaseYield } from '@/lib';
+import { computeOwnedStock } from '@/lib';
 import { lt1, lt2, lt4, makeNode, makeOpt, totemDag } from './spec-helpers';
 import type { RecipeDAG } from '@/lib/types';
 
@@ -23,9 +23,9 @@ function totemInventory(): Inventory {
   });
 }
 
-describe('computeBaseYield', () => {
+describe('computeOwnedStock', () => {
   it('keeps a target that another target consumes, and counts every rarity of it', () => {
-    const base = computeBaseYield(totemInventory(), [lt4, lt2], totemDag());
+    const base = computeOwnedStock(totemInventory(), [lt4, lt2], totemDag());
     // lt2 is an ingredient of lt4, so the owned copies are spendable there. All 2 count even though they are
     // rare: rarity is irrelevant to crafting, and this stock never feeds the legendary side of the objective.
     expect(base.get(lt2)).toBe(2);
@@ -33,14 +33,14 @@ describe('computeBaseYield', () => {
   });
 
   it('drops a target nothing consumes, whose stock the LP could never spend', () => {
-    const base = computeBaseYield(totemInventory(), [lt4, lt2], totemDag());
+    const base = computeOwnedStock(totemInventory(), [lt4, lt2], totemDag());
     expect(base.has(lt4)).toBe(false);
   });
 
   it('is unchanged from the single-target rule when there is one target', () => {
     // The lone target of a tier chain is never its own descendant, so "skip
     // every target" and "skip unconsumed targets" agree exactly at n=1.
-    const base = computeBaseYield(totemInventory(), [lt4], totemDag());
+    const base = computeOwnedStock(totemInventory(), [lt4], totemDag());
     expect(Object.fromEntries(base)).toEqual({ [lt1]: 5, [lt2]: 2 });
   });
 });
@@ -56,14 +56,14 @@ function nestedDag(): RecipeDAG {
   ]);
 }
 
-async function runNested(baseYield: Map<string, number>, targets = ['A', 'B']) {
+async function runNested(ownedStock: Map<string, number>, targets = ['A', 'B']) {
   return await optimizeFull({
     options: [makeOpt(1, 10, [['C', 1]], [], Name.TUNGSTEN_ANKH)],
     recipeDag: nestedDag(),
     desiredArtifactNodeIds: targets,
     fuelCapacity: 1000,
     timeCapacityPerSlot: 100, // per slot, so C arrives at a fixed rate the tests read back
-    baseYield,
+    ownedStock,
     maximumCost: Infinity,
   });
 }
@@ -89,7 +89,7 @@ describe('owned copies of a target', () => {
     // more without raising B's own craft count.
     const nested = with4B.perTarget.find(t => t.nodeId === 'B')!;
     const baseline = without.perTarget.find(t => t.nodeId === 'B')!;
-    expect(nested.expectedCrafts).toBeLessThanOrEqual(with4B.finalYieldVector.get('C')! / 2 + 1e-9);
+    expect(nested.expectedCrafts).toBeLessThanOrEqual(with4B.supplyByItem.get('C')! / 2 + 1e-9);
     expect(nested.expectedCrafts).toBeCloseTo(baseline.expectedCrafts, 9);
     expect(nested.craftProbability).toBeLessThanOrEqual(baseline.craftProbability + 1e-9);
 
@@ -98,7 +98,7 @@ describe('owned copies of a target', () => {
     expect(parent.expectedCrafts).toBeCloseTo(without.perTarget.find(t => t.nodeId === 'A')!.expectedCrafts + 2, 9);
   });
 
-  it('never reads as an owned legendary: dropProbability ignores baseYield', async () => {
+  it('never reads as an owned legendary: dropProbability ignores ownedStock', async () => {
     // dropProbability is built from the mission legendary vectors alone, and
     // this option drops none, so stocking every node still leaves it at 0.
     const stocked = await runNested(

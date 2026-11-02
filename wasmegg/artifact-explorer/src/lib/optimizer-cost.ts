@@ -11,7 +11,6 @@ export function craftingPriceParamsOf(nodeId: string): CraftingPriceParams | nul
   return getArtifactTierPropsFromId(nodeId).recipe?.crafting_price ?? null;
 }
 
-// How many times the player has already crafted this item; the price curve is indexed by that.
 export function previousCraftsOf(playerInventory: Inventory | null | undefined, nodeId: string): number {
   if (!playerInventory) return 0;
   const props = getArtifactTierPropsFromId(nodeId);
@@ -21,7 +20,7 @@ export function previousCraftsOf(playerInventory: Inventory | null | undefined, 
 // Every craft charged at the player's *next* craft price — deliberately the same linear price
 // `computeCraftUnitPrices` writes into the golden egg budget row, so the number the card reports is the number
 // the plan was chosen under. Linear in `crafts`, which is what makes it meaningful on fractional LP counts.
-export function fractionalCraftCost(params: CraftingPriceParams, previousCrafts: number, crafts: number): number {
+export function linearCraftCost(params: CraftingPriceParams, previousCrafts: number, crafts: number): number {
   if (!Number.isFinite(crafts) || crafts <= 0) return 0;
   return crafts * singleCraftCost(params, previousCrafts);
 }
@@ -29,11 +28,14 @@ export function fractionalCraftCost(params: CraftingPriceParams, previousCrafts:
 export function craftCostOf(nodeId: string, crafts: number, playerInventory: Inventory | null | undefined): number {
   const params = craftingPriceParamsOf(nodeId);
   if (!params) return 0;
-  return fractionalCraftCost(params, previousCraftsOf(playerInventory, nodeId), crafts);
+  return linearCraftCost(params, previousCraftsOf(playerInventory, nodeId), crafts);
 }
 
-// Linear per-craft prices for the golden egg budget row. The curve decreases in the craft index, so charging
-// every craft at the player's next (dearest) one can only over-state the bill — the direction a hard cap must err in.
+// Linear per-craft prices for the golden egg budget row. The game's price curve decreases in the craft
+// index, so charging every craft at the player's next (dearest) one over-states the true, concave cost:
+// a plan that satisfies the row is always affordable. It errs the other way too — a plan taking many
+// crafts of one node is charged as though every one cost the first one's price, so some affordable plans
+// are rejected — and the gap between the two is the node's base/low price ratio at worst.
 export function computeCraftUnitPrices(
   recipeDag: RecipeDAG,
   playerInventory: Inventory | null | undefined
@@ -43,8 +45,8 @@ export function computeCraftUnitPrices(
     if (node.isLeaf) continue;
     const params = craftingPriceParamsOf(nodeId);
     if (!params) continue;
-    // Literally the reported bill's own pricing at one craft, rather than a second spelling of it.
-    prices.set(nodeId, fractionalCraftCost(params, previousCraftsOf(playerInventory, nodeId), 1));
+    // Don't re-derive a single-craft price separately here: reuse linearCraftCost, or this row can drift from the bill it's supposed to bound.
+    prices.set(nodeId, linearCraftCost(params, previousCraftsOf(playerInventory, nodeId), 1));
   }
   return prices;
 }
@@ -57,7 +59,7 @@ export function formatGoldenEggs(cost: number): string {
 
 // A node can occur many times in the rendered tree (duplicates carry the same
 // metrics), so dedupe by nodeId or the subtotal double-counts.
-export function sumCraftChainCost(tree: RecipeTreeNode<CraftChainMetrics> | null): number {
+export function craftChainCost(tree: RecipeTreeNode<CraftChainMetrics> | null): number {
   const seen = new Map<string, number>();
   const walk = (node: RecipeTreeNode<CraftChainMetrics>) => {
     if (!seen.has(node.nodeId)) seen.set(node.nodeId, node.metrics.goldenEggCost);
@@ -71,7 +73,7 @@ export function sumCraftChainCost(tree: RecipeTreeNode<CraftChainMetrics> | null
 
 export interface PlanCost {
   total: number;
-  byNode: Map<string, number>; // priced nodes only
+  byNode: Map<string, number>;
 }
 
 // Plan-wide cost, priced off the unscaled `craftPrimal`: the craft pool is shared across targets, so this is
