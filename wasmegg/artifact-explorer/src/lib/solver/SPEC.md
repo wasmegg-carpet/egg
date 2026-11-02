@@ -60,8 +60,8 @@ clicked buttons.
 `pruneDominated` then drops a group when another can stand in for it launch for
 launch: no more fuel, no more seconds, and at least as much of every item the
 conservation rows read and of every target's legendary drops. What it buys is
-columns, and a mission column is `slots` integer columns plus a nonzero in every row
-it touches.
+columns: an integer total column plus a nonzero in every row it touches, and the
+`slots` class columns of section 2 when it was the last group of its duration.
 
 **Why it cannot cut off the optimum.** Take any point feasible for the full model and
 move every launch of the dropped group `i` onto its dominator `j`, _in the slot it
@@ -90,6 +90,12 @@ arena B1 and B5 are unaffected.
 A column summing each mission's allocation across slots keeps every row that does
 not care _which_ slot a mission went into (chiefly craft conservation) at one
 nonzero per group instead of three.
+
+The per-slot columns go the other way: they are per **duration class**, not per
+group. The only rows that read them, `slot_k` and `order_k`, read a mission's
+duration and nothing else, so every group of one duration shares `slots` integer
+columns and a `class_c` row ties the sum of their totals to the class's slot
+counts.
 
 Crafts stay continuous deliberately: the judge re-optimises the craft split as an
 LP for whatever allocation it is handed, so integralising crafts here would
@@ -346,9 +352,9 @@ _empty_ `fuelAxes` list is an empty tank, not an absent budget, and duplicate ta
 are dropped, since the objective is the probability of a legendary of every _distinct_
 target and an id listed twice is one event rather than two.
 
-`DEFAULT_TUNING` is `maxNodes: 400`, which is a latency choice: quality is flat
+`DEFAULT_TUNING` is `maxNodes: 1200`, which is a latency choice: quality is flat
 across every tuning ever swept (all means inside 0.005 log10), so what the number
-buys is a solve that stays around a second on a production instance and a lower
+buys is a solve that stays well under a second on a production instance and a lower
 rate of arena monotonicity violations, not a better plan. Two rules for anyone
 re-tuning it. The harness reproduces exactly, but the same tuning's severity
 swings 3x across seed bases, so **treat any single-campaign delta under about 1.5x
