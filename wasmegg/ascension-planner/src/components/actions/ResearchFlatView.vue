@@ -44,6 +44,7 @@
         :price="item.price"
         :time-to-buy="item.timeToBuy || getResearchTimeToBuy(item.research)"
         :time-to-buy-seconds="item.timeToBuySeconds ?? getResearchTimeToBuySeconds(item.research)"
+        :time-cost-tooltip-seconds="view === 'milestones' ? item.buyToHereSeconds : undefined"
         :can-buy="item.canBuy"
         :is-maxed="item.isMaxed"
         :show-max="false"

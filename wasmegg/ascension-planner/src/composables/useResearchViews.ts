@@ -459,7 +459,9 @@ export function useResearchViews() {
       result.roiLabel = roiLabel;
       result.extraStats = roiLabel;
       result.extraLabel = 'ROI';
-      result.extraSeconds = item.roiSeconds;
+      // Measured from the chain's start, like `buyToHereSeconds` — `roiSeconds` alone only counts
+      // from the purchase, and ResearchItem turns this into an absolute time for its tooltip.
+      result.extraSeconds = item.buyToHereSeconds + (item.roiStartDelaySeconds ?? 0) + item.roiSeconds;
     }
 
     return result;
@@ -695,6 +697,7 @@ export function useResearchViews() {
       purchaseCount: core.purchaseCount!,
       gemsSpent: core.gemsSpent!,
       finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
+      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
     };
   });
 

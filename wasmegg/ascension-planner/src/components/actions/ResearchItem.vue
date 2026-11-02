@@ -125,8 +125,9 @@
             </div>
             <div
               class="text-[11px] font-mono text-gray-900 leading-none"
+              :class="{ 'cursor-help': extraSeconds !== undefined }"
               v-tippy="
-                extraLabel === 'Achieve ROI' && extraSeconds !== undefined
+                extraSeconds !== undefined
                   ? formatAbsoluteTime(extraSeconds, baseTimestamp, virtueStore.ascensionTimezone)
                   : undefined
               "
@@ -155,7 +156,16 @@
       <!-- Time Cost and Actions (Right aligned) -->
       <div class="flex items-center gap-2 shrink-0">
         <!-- Time Cost -->
-        <div v-if="timeToBuy && !isMaxed" class="text-[11px] font-mono text-gray-400 whitespace-nowrap">
+        <div
+          v-if="timeToBuy && !isMaxed"
+          class="text-[11px] font-mono text-gray-400 whitespace-nowrap"
+          :class="{ 'cursor-help': timeCostTooltipSeconds !== undefined }"
+          v-tippy="
+            timeCostTooltipSeconds !== undefined
+              ? formatAbsoluteTime(timeCostTooltipSeconds, baseTimestamp, virtueStore.ascensionTimezone)
+              : undefined
+          "
+        >
           {{ timeToBuy }}
         </div>
 
@@ -294,6 +304,9 @@ const props = defineProps<{
   recommendationNote?: string;
   maxTime?: string;
   timeToBuySeconds?: number;
+  // Seconds from now until this purchase completes, shown as an absolute time on hover over the
+  // time cost. Differs from `timeToBuySeconds` in a chain, where that only counts this one wait.
+  timeCostTooltipSeconds?: number;
   maxTimeSeconds?: number;
   buyToHereSeconds?: number;
   buyToHereTooltip?: string;

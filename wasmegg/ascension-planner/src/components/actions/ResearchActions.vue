@@ -95,8 +95,8 @@
                 >Without This Research</span
               >
               <span
-                v-tippy="'Time to reach this milestone buying cheapest-first, with no ROI prioritization.'"
-                class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
+                v-tippy="`Finishes ${milestoneSummary.baselineFinishAbsoluteTime}. Time to reach this milestone buying cheapest-first, with no ROI prioritization.`"
+                class="text-sm font-mono font-bold text-gray-900 leading-none py-1 cursor-help"
               >
                 {{ formatDuration(milestoneSummary.baselineSeconds) }}
               </span>
@@ -106,8 +106,8 @@
                 >With This Research</span
               >
               <span
-                v-tippy="'Time to reach this milestone by always buying whatever currently pays for itself fastest.'"
-                class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
+                v-tippy="`Finishes ${milestoneSummary.finishAbsoluteTime}. Time to reach this milestone by always buying whatever currently pays for itself fastest.`"
+                class="text-sm font-mono font-bold text-gray-900 leading-none py-1 cursor-help"
               >
                 {{ formatDuration(milestoneSummary.optimizedSeconds) }}
               </span>
