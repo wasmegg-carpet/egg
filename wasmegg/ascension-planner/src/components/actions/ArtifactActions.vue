@@ -216,6 +216,8 @@ const isOptimalELR = computed(() => {
   const context = getSimulationContext();
   const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
     assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
+    habIds: actionsStore.effectiveSnapshot.habIds,
+    vehicles: actionsStore.effectiveSnapshot.vehicles,
     currentSet: savedSet || undefined,
     excludeGusset: excludeGusset.value,
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,
@@ -236,6 +238,8 @@ function equipOptimalELR() {
   const context = getSimulationContext();
   const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
     assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
+    habIds: actionsStore.effectiveSnapshot.habIds,
+    vehicles: actionsStore.effectiveSnapshot.vehicles,
     currentSet: savedSet || undefined,
     excludeGusset: excludeGusset.value,
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,

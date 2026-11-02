@@ -241,6 +241,9 @@ export interface OptimalELRSetOptions {
   colleggtibleModifiers?: Modifiers;
   /** false = Standard permit: structures of at most 2 artifacts. undefined = Pro (4). */
   proPermit?: boolean;
+  /** The farm to optimize for when not assuming maxed habs/vehicles. Defaults to the backup's. */
+  habIds?: (number | null)[];
+  vehicles?: VehicleSlot[];
   /**
    * Skip the up-to-495-combo artifact STRUCTURE search entirely and evaluate stone placement for
    * exactly this structure instead — one `artifactId` per slot (`null` for an empty slot), same
@@ -284,20 +287,22 @@ export function getOptimalELRSet(backup: ei.IBackup, options: OptimalELRSetOptio
     }
   }
 
-  // Current farm habs/vehicles, used only when not assuming maxed ones. A backup with no farm
-  // at all falls back to a single trike even under `assumeMaxHabsVehicles`, as it always has.
-  const farm = backup.farms?.[0];
-  let habIds: (number | null)[] | undefined;
-  let vehicles: VehicleSlot[] | undefined;
+  // Habs/vehicles are only needed when not assuming maxed ones: the caller's, else the backup's
+  // farm. Maxed ones come from research alone, so they work on a redacted backup, which has no farm.
+  let habIds = options.habIds;
+  let vehicles = options.vehicles;
   if (!assumeMax) {
-    habIds = (farm?.habs || []).map(h => (h === 19 ? null : h));
-    while (habIds.length < 4) habIds.push(null);
-  }
-  if (!farm) {
-    vehicles = [{ vehicleId: 0, trainLength: 1 }];
-  } else if (!assumeMax) {
-    const trainLengths = farm.trainLength || [];
-    vehicles = (farm.vehicles || []).map((type, i) => ({ vehicleId: type, trainLength: trainLengths[i] || 1 }));
+    const farm = backup.farms?.[0];
+    if (!habIds) {
+      habIds = (farm?.habs || []).map(h => (h === 19 ? null : h));
+      while (habIds.length < 4) habIds.push(null);
+    }
+    if (!vehicles) {
+      const trainLengths = farm?.trainLength || [];
+      vehicles = farm
+        ? (farm.vehicles || []).map((type, i) => ({ vehicleId: type, trainLength: trainLengths[i] || 1 }))
+        : [{ vehicleId: 0, trainLength: 1 }];
+    }
   }
 
   return getOptimalELRSetFromPool(buildDeliveryPoolFromBackup(backup), {
@@ -349,8 +354,8 @@ export function getOptimalELRSetFromSource(
 
 /**
  * The ELR search itself, over an explicit candidate/stone pool. Under `assumeMaxHabsVehicles`,
- * habs/vehicles are maxed for the given research unless `habIds`/`vehicles` are passed; otherwise
- * `habIds`/`vehicles` describe the current farm.
+ * habs/vehicles are maxed for the given research; otherwise `habIds`/`vehicles` describe the
+ * current farm.
  */
 export function getOptimalELRSetFromPool(
   pool: DeliveryPool,
@@ -358,8 +363,6 @@ export function getOptimalELRSetFromPool(
     commonResearch: Record<string, number>;
     epicResearchLevels: Record<string, number>;
     colleggtibleModifiers: Modifiers;
-    habIds?: (number | null)[];
-    vehicles?: VehicleSlot[];
   }
 ): EquippedArtifact[] {
   const assumeMax = options.assumeMaxHabsVehicles ?? false;
@@ -431,14 +434,12 @@ export function getOptimalELRSetFromPool(
 
   const habIds: (number | null)[] = assumeMax ? [18, 18, 18, 18] : options.habIds ?? [null, null, null, null];
   let vehicles: VehicleSlot[];
-  if (options.vehicles) {
-    vehicles = options.vehicles;
-  } else if (assumeMax) {
+  if (assumeMax) {
     const totalSlots = calculateMaxVehicleSlots(commonResearch);
     const maxTrainLen = calculateMaxTrainLength(commonResearch);
     vehicles = new Array(totalSlots).fill(null).map(() => ({ vehicleId: 11, trainLength: maxTrainLen }));
   } else {
-    vehicles = [{ vehicleId: 0, trainLength: 1 }];
+    vehicles = options.vehicles ?? [{ vehicleId: 0, trainLength: 1 }];
   }
 
   // What one stone placement achieves; the search compares placements by `elr`, then `layRate`.

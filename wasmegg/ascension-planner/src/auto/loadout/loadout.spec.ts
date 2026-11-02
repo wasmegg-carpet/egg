@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { allModifiersFromColleggtibles, modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { getOptimalELRSet, getOptimalELRSetFromPool, getOptimalELRSetFromSource } from '@/lib/artifacts/virtue';
+import { redactBackupForStorage } from '@/lib/artifacts/utils';
 import { createSimAction } from '@/types/actions/meta';
 import {
   buildLoadoutInputsFromBackup,
@@ -230,5 +231,52 @@ describe('extractUsedLoadout', () => {
     expect(inputs.earnings[0]).toEqual({ artifactId: 'tungsten-ankh-4-3', stones: [null, null, null] });
     expect(inputs.delivery).toEqual({ mode: 'fixed', artifactIds: [T4R_METRONOME, null, null, null] });
     expect(inputs.stones).toEqual(resolved.stones);
+  });
+});
+
+describe('getOptimalELRSet on a saved plan\'s redacted backup', () => {
+  const backup = syntheticBackup([
+    invArtifact(N.QUANTUM_METRONOME, 4, R.LEGENDARY),
+    invArtifact(N.TUNGSTEN_ANKH, 4, R.LEGENDARY),
+    invStone(N.QUANTUM_STONE, 4, 12),
+    invStone(N.TACHYON_STONE, 4, 12),
+  ]);
+  const redacted = redactBackupForStorage(backup)!;
+  const stones = (set: { stones: (string | null)[] }[]) => set.flatMap(slot => slot.stones);
+  const opts = {
+    commonResearch: { leafsprings: 30, lightweight_boxes: 40, driver_training: 30, micro_coupling: 5 },
+    epicResearchLevels: {},
+    colleggtibleModifiers: modifiersFromColleggtibleTiers({}),
+  };
+  const farm = {
+    habIds: [18, 18, 18, 18],
+    vehicles: new Array(17).fill(null).map(() => ({ vehicleId: 11, trainLength: 8 })),
+  };
+
+  it('has no farm', () => {
+    expect(redacted.farms).toBeUndefined();
+  });
+
+  it('assumes a maxed fleet, not a single trike, and balances stones', () => {
+    const set = getOptimalELRSet(redacted, { ...opts, assumeMaxHabsVehicles: true });
+    expect(stones(set).some(s => s?.startsWith('tachyon-stone'))).toBe(true);
+    expect(set).toEqual(getOptimalELRSet({ ...redacted, farms: [{}] }, { ...opts, assumeMaxHabsVehicles: true }));
+  });
+
+  it('ignores a passed farm when assuming maxed habs and vehicles', () => {
+    const trike = { habIds: [0, null, null, null], vehicles: [{ vehicleId: 0, trainLength: 1 }] };
+    expect(getOptimalELRSet(redacted, { ...opts, ...trike, assumeMaxHabsVehicles: true })).toEqual(
+      getOptimalELRSet(redacted, { ...opts, assumeMaxHabsVehicles: true })
+    );
+  });
+
+  it('optimizes for the passed farm when not assuming maxed habs and vehicles', () => {
+    const passed = getOptimalELRSet(redacted, { ...opts, ...farm, assumeMaxHabsVehicles: false });
+    const fromFarm = getOptimalELRSet(
+      { ...redacted, farms: [{ habs: farm.habIds as number[], vehicles: farm.vehicles.map(v => v.vehicleId), trainLength: farm.vehicles.map(v => v.trainLength) }] },
+      { ...opts, assumeMaxHabsVehicles: false }
+    );
+    expect(passed).toEqual(fromFarm);
+    expect(stones(passed).some(s => s?.startsWith('tachyon-stone'))).toBe(true);
   });
 });

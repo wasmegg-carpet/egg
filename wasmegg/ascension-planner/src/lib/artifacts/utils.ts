@@ -226,7 +226,8 @@ export function sanitizeLongs<T>(value: T): T {
  *   `backup.farms` entirely; `commonResearch`/`epicResearchLevels`/
  *   `colleggtibleModifiers` are always passed explicitly by every caller
  *   here, sourced from the plan's own stored state, never read off the
- *   backup.
+ *   backup. `getOptimalELRSet` only reads `backup.farms` when not assuming
+ *   maxed habs/vehicles and its caller passes no `habIds`/`vehicles`.
  * - `game.permitLevel` (Pro vs. Standard permit — a single small int, not
  *   remotely account-identifying). Read directly off `rawBackup` by
  *   ArtifactActions.vue, InitialStateContainer.vue, and
