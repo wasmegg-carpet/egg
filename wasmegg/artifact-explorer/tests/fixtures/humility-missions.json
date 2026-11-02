@@ -1,0 +1,81 @@
+{
+  "schema": "eggverse.humility-plan",
+  "schemaVersion": 1,
+  "source": "artifact-explorer",
+  "generatedAt": 1756000000000,
+  "planLabel": "ascension-plan",
+  "visits": [
+    {
+      "visitId": "shift_a1b2c3d",
+      "visitIndex": 0,
+      "label": "Humility #1",
+      "targets": [
+        {
+          "nodeId": "ship-in-a-bottle-4",
+          "targetAfxId": 25,
+          "probability": 0.87,
+          "expectedCrafts": 3.2
+        }
+      ],
+      "jointProbability": 0.87,
+      "launches": [
+        {
+          "ship": "HENERPRISE",
+          "duration": "LONG",
+          "targetAfxId": 25,
+          "count": 4
+        },
+        {
+          "ship": "ATREGGIES",
+          "duration": "EPIC",
+          "targetAfxId": 25,
+          "count": 9
+        }
+      ],
+      "makespanSeconds": 950400,
+      "rawMakespanSeconds": 933120,
+      "fuelRequired": {
+        "curiosity": 530000000000000.0,
+        "integrity": 0,
+        "resilience": 400000000000000.0,
+        "kindness": 735000000000000.0
+      },
+      "gemCost": 3.77224e+39,
+      "gemBudget": 2.332e+39,
+      "effort": "medium"
+    },
+    {
+      "visitId": "shift_e5e5e5e",
+      "visitIndex": 1,
+      "label": "Humility #2",
+      "targets": [
+        {
+          "nodeId": "interstellar-compass-4",
+          "targetAfxId": 27,
+          "probability": 0.41,
+          "expectedCrafts": 1.1
+        }
+      ],
+      "jointProbability": 0.41,
+      "launches": [
+        {
+          "ship": "VOYEGGER",
+          "duration": "EPIC",
+          "targetAfxId": 27,
+          "count": 2
+        }
+      ],
+      "makespanSeconds": 259200,
+      "rawMakespanSeconds": 233280,
+      "fuelRequired": {
+        "curiosity": 50000000000000.0,
+        "integrity": 0,
+        "resilience": 0,
+        "kindness": 30000000000000.0
+      },
+      "gemCost": 7.8e+31,
+      "gemBudget": 9.6e+39,
+      "effort": "medium"
+    }
+  ]
+}

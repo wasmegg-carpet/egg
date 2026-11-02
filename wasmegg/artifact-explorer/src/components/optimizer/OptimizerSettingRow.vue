@@ -51,7 +51,7 @@
           </div>
           <span v-if="maxLabel" class="text-xs text-gray-400">{{ maxLabel }}</span>
           <span v-if="hasSave && !perTargetSave && saveValue !== null" class="text-xs text-gray-400">
-            Save: {{ saveValue }}
+            {{ sourceLabel }}: {{ saveValue }}
           </span>
           <span v-if="capacity" class="ml-auto text-xs text-gray-500">{{ capacity }}</span>
         </div>
@@ -84,6 +84,9 @@ export default defineComponent({
   props: {
     label: { type: String, required: true },
     hasSave: { type: Boolean, required: true },
+    // A plan visit's figures are its own simulation of a moment the save knows nothing about, so it
+    // gets its own source word ('Plan') rather than both claiming 'Save'.
+    sourceLabel: { type: String, default: 'Save' },
     overridden: { type: Boolean, default: false },
     saveValue: { type: Number as PropType<number | null>, default: null },
     // Per-target values, shown as a list instead of the single saveValue.
@@ -104,7 +107,7 @@ export default defineComponent({
     'update:manual': (_n: number) => true,
   },
   setup(props) {
-    const { hasSave, overridden, saveEntries, min, max } = toRefs(props);
+    const { hasSave, overridden, saveEntries, sourceLabel, min, max } = toRefs(props);
     // No save data → edit inline; save data + override on → edit inline.
     const editable = computed(() => !hasSave.value || overridden.value);
     const perTargetSave = computed(() => hasSave.value && saveEntries.value.length > 0);
@@ -114,7 +117,7 @@ export default defineComponent({
     const badge = computed(() => {
       if (!hasSave.value) return { text: 'Manual', class: 'bg-gray-100 text-gray-500' };
       if (overridden.value) return { text: 'Override', class: 'bg-amber-100 text-amber-700' };
-      return { text: 'Save', class: 'bg-green-100 text-green-700' };
+      return { text: sourceLabel.value, class: 'bg-green-100 text-green-700' };
     });
     const rangeMessage = computed(() =>
       max.value !== undefined
