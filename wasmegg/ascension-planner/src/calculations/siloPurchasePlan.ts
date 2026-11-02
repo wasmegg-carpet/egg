@@ -1,5 +1,5 @@
 import { nextSiloCost, maxSilos } from '@/stores/silos';
-import { getTimeToSave } from '@/engine/apply';
+import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import type { CalculationsSnapshot } from '@/types';
 
 export interface SiloPurchaseStep {
@@ -19,11 +19,14 @@ export interface SiloPlanResult {
  * within a `budgetSeconds` window, using the growth-aware `getTimeToSave` for each
  * purchase's wait and hand-advancing population/layRate/elr/offlineEarnings toward
  * hab capacity for the next iteration.
+ *
+ * `startAbsoluteTime` makes the waits count 2x earnings from that instant; omitted, they run at the snapshot's own rate.
  */
 export function planSilosWithinBudget(
   startSnapshot: CalculationsSnapshot,
   startSiloCount: number,
-  budgetSeconds: number
+  budgetSeconds: number,
+  startAbsoluteTime?: number
 ): SiloPlanResult {
   const steps: SiloPurchaseStep[] = [];
   const virtualSnapshot: CalculationsSnapshot = { ...startSnapshot };
@@ -32,7 +35,9 @@ export function planSilosWithinBudget(
 
   while (currentSiloCount < maxSilos(startSnapshot.proPermit)) {
     const cost = nextSiloCost(currentSiloCount, startSnapshot.proPermit);
-    const seconds = getTimeToSave(cost, virtualSnapshot);
+    const transitions =
+      startAbsoluteTime === undefined ? [] : boostTransitionsFrom(virtualSnapshot, startAbsoluteTime + elapsedSeconds);
+    const seconds = getTimeToSave(cost, virtualSnapshot, transitions);
     if (!isFinite(seconds) || elapsedSeconds + seconds > budgetSeconds) break;
 
     elapsedSeconds += seconds;

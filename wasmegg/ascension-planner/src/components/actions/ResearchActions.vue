@@ -235,6 +235,7 @@
         :view-times="gameViewTimes"
         :levels="commonResearchStore.researchLevels"
         :get-research-price="getNextLevelPrice"
+        :get-research-during-sale="getNextLevelDuringSale"
         :get-research-time-to-buy="getTimeToBuy"
         :get-research-time-to-buy-seconds="getTimeToBuySeconds"
         :is-research-sale-active="isResearchSaleActive"
@@ -269,31 +270,22 @@
         <InlineSpinner class="w-6 h-6 text-blue-500" />
       </div>
     </div>
-
-    <EventExpiryDialog
-      v-if="showExpiryDialog"
-      :event-name="expiryData.eventName"
-      :end-time="expiryData.endTime"
-      :completion-time="expiryData.completionTime"
-      @cancel="handleExpiryCancel"
-      @deactivate-and-cancel="handleExpiryDeactivateAndCancel"
-      @deactivate-and-continue="handleExpiryDeactivateAndContinue"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue';
-import { getDiscountedVirtuePrice, getResearchById, type CommonResearch } from '@/calculations/commonResearch';
+import { getResearchById, type CommonResearch } from '@/calculations/commonResearch';
+import { researchPurchaseAt } from '@/engine/researchSale';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import type { SaleAwarePurchase } from '@/calculations/researchROI';
 import { formatDuration, formatNumber, formatGemPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
-import { useSalesStore } from '@/stores/sales';
 import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
 import { useVirtueStore } from '@/stores/virtue';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, type Action } from '@/types';
-import { useActionExecutor } from '@/composables/useActionExecutor';
 import {
   createNoteAction,
   buildQuickBuyNotePayload,
@@ -309,7 +301,6 @@ import {
   getSaleAwareTimeToSave,
   shouldDeferToNextSale,
   findEventCrossings,
-  type EventCrossing,
 } from '@/calculations/researchROI';
 import { getNextSaleStart } from '@/lib/events';
 import {
@@ -331,23 +322,21 @@ import ElrViewControls from './ElrViewControls.vue';
 import RoiViewControls from './RoiViewControls.vue';
 import SmartBuyView from './SmartBuyView.vue';
 import MilestoneTargetPicker from './MilestoneTargetPicker.vue';
-import EventExpiryDialog from '../EventExpiryDialog.vue';
-import { useEventExpiry } from '@/composables/useEventExpiry';
 
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
-const salesStore = useSalesStore();
 const { secondsUntilNextSale, secondsUntilSaleEnd, waitForNextSale, waitForSaleEnd } = useResearchSaleWaits();
 const virtueStore = useVirtueStore();
-const { prepareExecution, completeExecution, batch } = useActionExecutor();
 const {
-  showExpiryDialog,
-  expiryData,
-  withExpiryCheck,
-  cancel: handleExpiryCancel,
-  deactivateAndCancel: handleExpiryDeactivateAndCancel,
-  deactivateAndContinue: handleExpiryDeactivateAndContinue,
-} = useEventExpiry();
+  prepareExecution,
+  completeExecution,
+  batch,
+  isEditingPastGroup,
+  settled,
+  insertWait,
+  insertEventCrossingWaits,
+  insertCrossingWaits,
+} = useEventCrossingWaits();
 
 const autoBuyState = ref({ threshold: 0, alwaysOn: false });
 // Reactive (not a plain `let`) so the Quick Buy button can bind its disabled/spinner state to the
@@ -499,23 +488,30 @@ const quickBuyStats = computed(() => ({
   gems: quickBuyPlan.value.totalGemsSpent ?? 0,
 }));
 
-function getNextLevelPrice(research: CommonResearch): number {
+// The same resolver the action itself is charged and timed by, so what's shown is what's paid.
+function getNextLevelPurchase(research: CommonResearch): SaleAwarePurchase | null {
   const currentLevel = commonResearchStore.researchLevels[research.id] || 0;
-  if (currentLevel >= research.levels) return 0;
-  return getDiscountedVirtuePrice(research, currentLevel, costModifiers.value, isResearchSaleActive.value);
+  if (currentLevel >= research.levels) return null;
+  return researchPurchaseAt(research, currentLevel, actionsStore.effectiveSnapshot, getSimulationContext());
+}
+
+function getNextLevelPrice(research: CommonResearch): number {
+  return getNextLevelPurchase(research)?.price ?? 0;
+}
+
+function getNextLevelDuringSale(research: CommonResearch): boolean {
+  return getNextLevelPurchase(research)?.duringSale ?? false;
 }
 
 function getTimeToBuy(research: CommonResearch): string {
-  const price = getNextLevelPrice(research);
-  const seconds = getTimeToSave(price, actionsStore.effectiveSnapshot);
+  const seconds = getTimeToBuySeconds(research);
   if (seconds <= 0) return '0s';
   if (seconds === Infinity) return '∞';
   return formatDuration(seconds);
 }
 
 function getTimeToBuySeconds(research: CommonResearch): number {
-  const price = getNextLevelPrice(research);
-  return getTimeToSave(price, actionsStore.effectiveSnapshot);
+  return getNextLevelPurchase(research)?.waitSeconds ?? 0;
 }
 
 // Some sortedResearches branches (e.g. ROI view) don't populate buyToHereSeconds,
@@ -533,13 +529,15 @@ function buyOneLevel(research: CommonResearch): boolean {
   const currentLevel = commonResearchStore.researchLevels[research.id] || 0;
   if (currentLevel >= research.levels) return false;
 
+  insertCrossingWaits(research);
+
   // Prepare execution (restores stores if editing past group)
   const beforeSnapshot = prepareExecution();
 
   // Calculate cost based on current state (after restore if editing)
   const effectiveLevel = beforeSnapshot.researchLevels[research.id] || 0;
   const isSaleActive = beforeSnapshot.activeSales.research;
-  const cost = getDiscountedVirtuePrice(research, effectiveLevel, costModifiers.value, isSaleActive);
+  const cost = researchPurchaseAt(research, effectiveLevel, beforeSnapshot, getSimulationContext()).price;
 
   // Build payload
   const payload = {
@@ -595,62 +593,6 @@ function absoluteSimTimeAt(lastStepTime: number): number {
   return baseTimestamp + (lastStepTime - actionsStore.planStartOffset);
 }
 
-/** Inserts a wait action of the given type/duration, returning its id (or undefined if seconds <= 0). */
-function insertWait(
-  type: 'wait_for_research_sale' | 'wait_for_earnings_boost' | 'wait_for_time',
-  seconds: number,
-  beforeSnapshot: ReturnType<typeof prepareExecution>
-): string | undefined {
-  if (seconds <= 0) return undefined;
-  const id = generateActionId();
-  const payload = { totalTimeSeconds: seconds };
-  completeExecution(
-    {
-      id,
-      timestamp: Date.now(),
-      type,
-      payload,
-      cost: 0,
-      dependsOn: computeDependencies(
-        type,
-        payload,
-        actionsStore.actionsBeforeInsertion,
-        actionsStore.initialSnapshot.researchLevels
-      ),
-    },
-    beforeSnapshot
-  );
-  return id;
-}
-
-function insertToggleEarningsBoost(
-  active: boolean,
-  waitId: string | undefined,
-  beforeSnapshot: ReturnType<typeof prepareExecution>
-) {
-  const payload = { active, multiplier: active ? 2 : 1 };
-  salesStore.setEarningsBoost(active, payload.multiplier);
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'toggle_earnings_boost',
-      payload,
-      cost: 0,
-      dependsOn: [
-        ...computeDependencies(
-          'toggle_earnings_boost',
-          payload,
-          actionsStore.actionsBeforeInsertion,
-          actionsStore.initialSnapshot.researchLevels
-        ),
-        ...(waitId ? [waitId] : []),
-      ],
-    },
-    beforeSnapshot
-  );
-}
-
 /**
  * Before buying `item.research`, bring `activeSales.research`/`earningsBoost.active` in line with
  * whether THIS SPECIFIC purchase — computed fresh from the live/current state — actually resolves
@@ -676,9 +618,7 @@ function insertToggleEarningsBoost(
  * crossing — sale or boost, in whatever order they actually occur — gets its own wait+toggle action.
  *
  * When a boundary genuinely is crossed, a `wait_for_research_sale`/`wait_for_earnings_boost`
- * (starting) or plain `wait_for_time` (ending — there's no dedicated `wait_for_*_end` action type,
- * and the start-only types are hardcoded to the wrong day in `refreshActionPayload` if reused here)
- * action is inserted for exactly the calendar distance to that boundary, then the toggle. This
+ * (starting) or `wait_for_research_sale_end`/`wait_for_earnings_boost_end` (ending) action is inserted for exactly the calendar distance to that boundary, then the toggle. This
  * doesn't double-count time: the wait's duration is independent of price, and the purchase that
  * follows computes its own (correspondingly shorter) remaining wait from the bank/population the
  * wait action already advanced to. When no boundary is actually crossed, nothing is inserted at all.
@@ -759,58 +699,6 @@ function syncEventStateForItem(item: { research: CommonResearch }, checkRoiGate 
 }
 
 /**
- * Shared by `syncEventStateForItem` (crossings up to a purchase's own wait) and `advanceToDeadline`
- * (crossings up to a fixed target time with no purchase attached): merges the sale and boost
- * crossing lists into true chronological order and inserts a wait+toggle action pair for each one.
- * See `syncEventStateForItem`'s git history for why merging matters — treating sale and boost as two
- * independent sequential passes silently drops a boost window that falls entirely inside a
- * sale-wait period.
- *
- * Each list's `waitSeconds` is relative to its own previous crossing (or to `absoluteSimTime` for
- * the first) — convert both to absolute timestamps first so they can be merged regardless of which
- * type occurs first. Returns the snapshot and absolute time reached after the last crossing (equal
- * to `absoluteSimTime` itself, with the input snapshot, if there were no crossings at all).
- */
-function insertEventCrossingWaits(
-  absoluteSimTime: number,
-  crossings: { sale: EventCrossing[]; boost: EventCrossing[] },
-  beforeSnapshot: ReturnType<typeof prepareExecution>
-): { snapshot: ReturnType<typeof prepareExecution>; cursor: number } {
-  type TaggedCrossing = { absoluteTime: number; togglesTo: boolean; kind: 'sale' | 'boost' };
-  const toTagged = (list: EventCrossing[], kind: TaggedCrossing['kind']): TaggedCrossing[] => {
-    let cursor = absoluteSimTime;
-    return list.map(c => {
-      cursor += c.waitSeconds;
-      return { absoluteTime: cursor, togglesTo: c.togglesTo, kind };
-    });
-  };
-  const allCrossings = [...toTagged(crossings.sale, 'sale'), ...toTagged(crossings.boost, 'boost')].sort(
-    (a, b) => a.absoluteTime - b.absoluteTime
-  );
-
-  let cursor = absoluteSimTime;
-  let snapshot = beforeSnapshot;
-  for (const crossing of allCrossings) {
-    const waitSeconds = crossing.absoluteTime - cursor;
-    if (crossing.kind === 'sale') {
-      // The sale itself follows sim time (engine/researchSale.ts), so only the clock needs moving.
-      const waitId = insertWait(crossing.togglesTo ? 'wait_for_research_sale' : 'wait_for_time', waitSeconds, snapshot);
-      snapshot = waitId ? prepareExecution() : snapshot;
-    } else {
-      const waitId = insertWait(
-        crossing.togglesTo ? 'wait_for_earnings_boost' : 'wait_for_time',
-        waitSeconds,
-        snapshot
-      );
-      snapshot = waitId ? prepareExecution() : snapshot;
-      insertToggleEarningsBoost(crossing.togglesTo, waitId, snapshot);
-    }
-    cursor = crossing.absoluteTime;
-  }
-  return { snapshot, cursor };
-}
-
-/**
  * Carries the plan's clock the rest of the way to `targetDeadline` on its own, inserting whatever
  * wait+toggle actions the remaining sale/boost crossings between "wherever the buy loop stopped"
  * and the deadline need. `runSaleAwareBuyFlow`'s buy loop only advances time as a side effect of
@@ -854,8 +742,7 @@ watch(
 );
 
 function handleBuyResearch(research: CommonResearch) {
-  const duration = getTimeToBuySeconds(research);
-  withExpiryCheck(duration, true, () => buyOneLevel(research));
+  batch(() => void buyOneLevel(research));
 }
 
 // Whether the "70% Return" button has anything to buy — derived directly from the precomputed plan
@@ -878,7 +765,9 @@ const canBuyUntilSaleWarning = computed(() => saleAwarePlan70.value.entries.leng
 const EVENT_CROSSING_ACTION_TYPES = new Set<Action['type']>([
   'wait_for_time',
   'wait_for_research_sale',
+  'wait_for_research_sale_end',
   'wait_for_earnings_boost',
+  'wait_for_earnings_boost_end',
   'toggle_sale',
   'toggle_earnings_boost',
 ]);
@@ -923,7 +812,9 @@ function findBypassEventCrossingIds(actionId: string): string[] {
     if (
       action.type === 'wait_for_time' ||
       action.type === 'wait_for_research_sale' ||
-      action.type === 'wait_for_earnings_boost'
+      action.type === 'wait_for_research_sale_end' ||
+      action.type === 'wait_for_earnings_boost' ||
+      action.type === 'wait_for_earnings_boost_end'
     ) {
       totalWaitSeconds += (action.payload as { totalTimeSeconds: number }).totalTimeSeconds;
     }
@@ -1135,7 +1026,7 @@ async function handleThresholdBuy(threshold: number) {
   await yieldForOverlayPaint();
 
   try {
-    await batch(() => {
+    await batch(async () => {
       const plan = simulateThresholdBuy(
         commonResearchStore.researchLevels,
         actionsStore.effectiveSnapshot,
@@ -1173,6 +1064,7 @@ async function handleThresholdBuy(threshold: number) {
         const research = getResearchById(researchId);
         if (!research) continue;
         if (!buyOneLevel(research)) break;
+        if (isEditingPastGroup.value) await settled();
       }
     });
   } finally {
@@ -1181,31 +1073,23 @@ async function handleThresholdBuy(threshold: number) {
 }
 
 function handleMaxResearch(research: CommonResearch) {
-  // Estimate total duration for maxing
-  const currentLevels = commonResearchStore.researchLevels[research.id] || 0;
-  let totalDuration = 0;
-  for (let l = currentLevels; l < research.levels; l++) {
-    // This is an approximation as earnings might change, but good enough for warning
-    totalDuration += getTimeToBuySeconds(research);
-  }
-
-  withExpiryCheck(totalDuration, true, () => {
-    batch(() => {
-      const maxLevel = research.levels;
-      while ((commonResearchStore.researchLevels[research.id] || 0) < maxLevel) {
-        if (!buyOneLevel(research)) break;
-      }
-    });
+  batch(async () => {
+    const maxLevel = research.levels;
+    while ((commonResearchStore.researchLevels[research.id] || 0) < maxLevel) {
+      if (!buyOneLevel(research)) break;
+      if (isEditingPastGroup.value) await settled();
+    }
   });
 }
 
 function handleMaxTier(tier: number) {
-  batch(() => {
+  batch(async () => {
     const researches = researchByTier.value.get(tier) || [];
     for (const research of researches) {
       const maxLevel = research.levels;
       while ((commonResearchStore.researchLevels[research.id] || 0) < maxLevel) {
         if (!buyOneLevel(research)) break;
+        if (isEditingPastGroup.value) await settled();
       }
     }
   });
@@ -1215,23 +1099,12 @@ function handleBuyToHere(index: number) {
   const list = sortedResearches.value;
   if (index < 0 || index >= list.length) return;
 
-  // buyToHereSeconds is simulated step-by-step (earnings rate updates as each
-  // item is bought), unlike summing getTimeToBuySeconds against today's static rate.
-  let totalDuration = getSimulatedBuyToHereSeconds(list[index]);
-  if (totalDuration === undefined) {
-    totalDuration = 0;
+  batch(async () => {
     for (let i = 0; i <= index; i++) {
-      totalDuration += getTimeToBuySeconds(list[i].research);
+      const item = list[i];
+      buyOneLevel(item.research);
+      if (isEditingPastGroup.value) await settled();
     }
-  }
-
-  withExpiryCheck(totalDuration, true, () => {
-    batch(() => {
-      for (let i = 0; i <= index; i++) {
-        const item = list[i];
-        buyOneLevel(item.research);
-      }
-    });
   });
 }
 
@@ -1273,11 +1146,8 @@ async function handleBuyMilestoneChain() {
   // synchronous once it starts — blocks the tab.
   await yieldForOverlayPaint();
 
-  // No withExpiryCheck here, unlike handleMaxResearch/handleBuyToHere: each item's
-  // syncEventStateForItem call below already inserts its own wait+toggle actions for any
-  // sale/boost boundary the chain crosses, so the chain resolves those boundaries on its own
-  // instead of needing the player to confirm losing/keeping the event up front (same reasoning
-  // as handleThresholdBuy, which skips the check for the same reason).
+  // Each item's syncEventStateForItem call below inserts its own wait+toggle actions for any
+  // sale/boost boundary the chain crosses.
   try {
     await batch(() => {
       // Note goes in ahead of the purchases it's summarizing, same as the Smart Buy notes. Time

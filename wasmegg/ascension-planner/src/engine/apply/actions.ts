@@ -237,7 +237,9 @@ export function applyAction(
     case 'wait_for_full_habs':
     case 'wait_for_gems':
     case 'wait_for_research_sale':
+    case 'wait_for_research_sale_end':
     case 'wait_for_earnings_boost':
+    case 'wait_for_earnings_boost_end':
     case 'wait_for_no_earnings':
     case 'notification':
       return state;

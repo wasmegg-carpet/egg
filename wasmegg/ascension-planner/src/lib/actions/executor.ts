@@ -37,6 +37,8 @@ import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
 import { updateArtifactSetExecutor } from './executors/updateArtifactSet';
 import { waitForMissionsExecutor } from './executors/wait_for_missions';
 import { waitForTimeExecutor } from './executors/wait_for_time';
+import { waitForResearchSaleEndExecutor } from './executors/waitForResearchSaleEnd';
+import { waitForEarningsBoostEndExecutor } from './executors/waitForEarningsBoostEnd';
 import { removeFuelExecutor } from './executors/removeFuel';
 import { waitForFullHabsExecutor } from './executors/wait_for_full_habs';
 import { toggleEarningsBoostExecutor } from './executors/toggleEarningsBoost';
@@ -131,7 +133,9 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   wait_for_time: waitForTimeExecutor,
   wait_for_full_habs: waitForFullHabsExecutor,
   wait_for_research_sale: waitForResearchSaleExecutor,
+  wait_for_research_sale_end: waitForResearchSaleEndExecutor,
   wait_for_earnings_boost: waitForEarningsBoostExecutor,
+  wait_for_earnings_boost_end: waitForEarningsBoostEndExecutor,
   wait_for_gems: waitForGemsExecutor,
   wait_for_no_earnings: waitForNoEarningsExecutor,
   toggle_earnings_boost: toggleEarningsBoostExecutor,

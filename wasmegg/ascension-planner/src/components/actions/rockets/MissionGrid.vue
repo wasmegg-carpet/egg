@@ -96,7 +96,8 @@ import {
   type DurationType,
 } from '@/lib/missions';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { getTimeToSave } from '@/engine/apply';
+import { getBoostAwareTimeToSave } from '@/engine/apply';
+import { getSimulationContext } from '@/engine/adapter';
 
 const props = defineProps<{
   ftlLevel: number;
@@ -113,7 +114,7 @@ function canAfford(ship: Spaceship): boolean {
 function saveTime(ship: Spaceship): number {
   const price = SHIP_INFO[ship].price;
   const snapshot = actionsStore.effectiveSnapshot;
-  return getTimeToSave(price, snapshot);
+  return getBoostAwareTimeToSave(price, snapshot, getSimulationContext());
 }
 
 function maxCount(ship: Spaceship, dur: DurationType): number {

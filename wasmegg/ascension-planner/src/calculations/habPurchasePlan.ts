@@ -8,7 +8,7 @@ import {
   type HabId,
 } from '@/lib/habs';
 import { calculateHabCapacity } from '@/calculations/habCapacity';
-import { getTimeToSave } from '@/engine/apply';
+import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import type { CalculationsSnapshot } from '@/types';
 
 export const CHICKEN_UNIVERSE_ID = 18;
@@ -65,8 +65,10 @@ function findBestNextHabPurchase(
   virtualHabIds: (number | null)[],
   mods: HabCostModifiers,
   isSaleActive: boolean,
-  multipliers: HabMultipliers
+  multipliers: HabMultipliers,
+  absoluteTime?: number
 ) {
+  const transitions = absoluteTime === undefined ? [] : boostTransitionsFrom(virtualSnapshot, absoluteTime);
   const candidates: { slotIndex: number; habId: number; cost: number; waitSeconds: number }[] = [];
 
   for (let slotIndex = 0; slotIndex < 4; slotIndex++) {
@@ -85,7 +87,7 @@ function findBestNextHabPurchase(
       const existingCount = countHabsOfType(otherHabs, habId);
       const cost = getDiscountedHabPrice(hab, existingCount, mods, isSaleActive);
 
-      const waitSeconds = getTimeToSave(cost, virtualSnapshot);
+      const waitSeconds = getTimeToSave(cost, virtualSnapshot, transitions);
       if (waitSeconds === Infinity) continue;
 
       candidates.push({ slotIndex, habId, cost, waitSeconds });
@@ -124,6 +126,8 @@ function findBestNextHabPurchase(
  * `shouldStop` is checked against the elapsed time a prospective purchase would
  * bring us to, so callers can cut the simulation off at a time budget (5-min button)
  * or let it run until every slot holds a Chicken Universe (max habs button).
+ *
+ * `startAbsoluteTime` makes the waits count 2x earnings from that instant; omitted, they run at the snapshot's own rate.
  */
 export function simulateHabPurchases(
   startSnapshot: CalculationsSnapshot,
@@ -131,7 +135,8 @@ export function simulateHabPurchases(
   mods: HabCostModifiers,
   isSaleActive: boolean,
   multipliers: HabMultipliers,
-  shouldStop: (elapsedSeconds: number) => boolean
+  shouldStop: (elapsedSeconds: number) => boolean,
+  startAbsoluteTime?: number
 ): HabPlanResult {
   const steps: HabPurchaseStep[] = [];
   let elapsedSeconds = 0;
@@ -168,7 +173,14 @@ export function simulateHabPurchases(
       offlineEarnings,
     };
 
-    const best = findBestNextHabPurchase(virtualSnapshot, virtualHabIds, mods, isSaleActive, multipliers);
+    const best = findBestNextHabPurchase(
+      virtualSnapshot,
+      virtualHabIds,
+      mods,
+      isSaleActive,
+      multipliers,
+      startAbsoluteTime === undefined ? undefined : startAbsoluteTime + elapsedSeconds
+    );
     if (!best) break;
     if (shouldStop(elapsedSeconds + best.waitSeconds)) break;
 

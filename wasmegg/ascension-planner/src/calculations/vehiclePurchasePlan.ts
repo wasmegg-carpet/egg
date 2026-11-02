@@ -1,5 +1,5 @@
 import { getDiscountedVehiclePrice, getDiscountedTrainCarPrice, getVehicleType, type VehicleCostModifiers } from '@/lib/vehicles';
-import { getTimeToSave } from '@/engine/apply';
+import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import type { CalculationsSnapshot } from '@/types';
 
 export interface VehicleMultipliers {
@@ -127,6 +127,8 @@ function applyVirtualVehiclePurchase(
  * bounded-budget case): it always commits straight to Hyperloop for every slot, on the
  * assumption there's enough time to eventually afford it, so any intermediate tier would
  * just be sunk cost.
+ *
+ * `startAbsoluteTime` makes the waits count 2x earnings from that instant; omitted, they run at the snapshot's own rate.
  */
 export function planMaxVehicles(
   vehicles: { vehicleId: number | null; trainLength: number }[],
@@ -135,7 +137,8 @@ export function planMaxVehicles(
   costModifiers: VehicleCostModifiers,
   isSaleActive: boolean,
   multipliers: VehicleMultipliers,
-  startSnapshot: VehiclePlanningSnapshot
+  startSnapshot: VehiclePlanningSnapshot,
+  startAbsoluteTime?: number
 ): VehiclePlanResult {
   const steps: VehiclePurchaseStep[] = [];
   let totalSeconds = 0;
@@ -151,6 +154,14 @@ export function planMaxVehicles(
   const earningsPerEgg = startSnapshot.elr > 0 ? startSnapshot.offlineEarnings / startSnapshot.elr : 0;
 
   const virtualSnapshot: VehiclePlanningSnapshot = { ...startSnapshot };
+  const saveSeconds = (price: number) =>
+    getTimeToSave(
+      price,
+      virtualSnapshot as CalculationsSnapshot,
+      startAbsoluteTime === undefined
+        ? []
+        : boostTransitionsFrom(virtualSnapshot as CalculationsSnapshot, startAbsoluteTime + totalSeconds)
+    );
 
   for (let i = 0; i < maxSlots; i++) {
     const slot = virtualVehicles[i];
@@ -160,7 +171,7 @@ export function planMaxVehicles(
     if (slot.vehicleId !== HYPERLOOP_ID) {
       const currentHyperloopCount = virtualVehicles.filter(v => v.vehicleId === HYPERLOOP_ID).length;
       const price = getDiscountedVehiclePrice(HYPERLOOP_ID, currentHyperloopCount, costModifiers, isSaleActive);
-      const seconds = getTimeToSave(price, virtualSnapshot as CalculationsSnapshot);
+      const seconds = saveSeconds(price);
 
       totalSeconds += seconds;
       steps.push({ slotIndex: i, type: 'upgrade_hyperloop', cost: price, waitSeconds: seconds });
@@ -177,7 +188,7 @@ export function planMaxVehicles(
     // 2. Add cars
     for (let l = currentLength; l < maxTrainLength; l++) {
       const carPrice = getDiscountedTrainCarPrice(l, costModifiers, isSaleActive);
-      const seconds = getTimeToSave(carPrice, virtualSnapshot as CalculationsSnapshot);
+      const seconds = saveSeconds(carPrice);
 
       totalSeconds += seconds;
       steps.push({ slotIndex: i, type: 'add_car', cost: carPrice, waitSeconds: seconds });
@@ -291,6 +302,8 @@ function scoreVehicleCandidates(
  * Also used by the manual "5 Min Max Shipping" button (`VehicleActions.vue`) so the auto
  * planner and the manual UI pick purchases via the exact same logic, just with a
  * different `timeLimit`.
+ *
+ * `startAbsoluteTime` makes the waits count 2x earnings from that instant; omitted, they run at the snapshot's own rate.
  */
 export function planVehiclesForTimeLimit(
   vehicles: { vehicleId: number | null; trainLength: number }[],
@@ -300,7 +313,8 @@ export function planVehiclesForTimeLimit(
   isSaleActive: boolean,
   multipliers: VehicleMultipliers,
   timeLimit: number,
-  startSnapshot: VehiclePlanningSnapshot
+  startSnapshot: VehiclePlanningSnapshot,
+  startAbsoluteTime?: number
 ): VehicleTimePlanResult {
   const capacityOf = makeCapacityOf(multipliers);
 
@@ -318,9 +332,13 @@ export function planVehiclesForTimeLimit(
   while (true) {
     const candidates = scoreVehicleCandidates(virtualSlots, maxTrainLength, costModifiers, isSaleActive, multipliers);
 
+    const transitions =
+      startAbsoluteTime === undefined
+        ? []
+        : boostTransitionsFrom(virtualSnapshot as CalculationsSnapshot, startAbsoluteTime + elapsedSeconds);
     let best: (VehicleCandidate & { waitSeconds: number }) | null = null;
     for (const candidate of candidates) {
-      const waitSeconds = getTimeToSave(candidate.cost, virtualSnapshot as CalculationsSnapshot);
+      const waitSeconds = getTimeToSave(candidate.cost, virtualSnapshot as CalculationsSnapshot, transitions);
       // Infinity means genuinely unaffordable (see getTimeToSave's doc comment), not just
       // slow — never select it, regardless of how much of timeLimit is left (this also
       // guards a timeLimit of Infinity itself, where elapsedSeconds + Infinity > Infinity

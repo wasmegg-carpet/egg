@@ -10,7 +10,7 @@ import { getNextPacificTime, getNextSaleEnd, getNextSaleStart } from '@/lib/even
 /**
  * Advances the plan to the next research sale boundary. The sale itself follows sim time (see
  * engine/researchSale.ts), so these only need to move the clock. Shared by the Wait tab, the Smart
- * Buy view, the Research Sale toggle and the event expiry dialog.
+ * Buy view and the Research Sale toggle.
  */
 export function useResearchSaleWaits() {
   const actionsStore = useActionsStore();
@@ -39,7 +39,11 @@ export function useResearchSaleWaits() {
     let lastId: string | null = null;
 
     async function addWait(
-      type: 'wait_for_time' | 'wait_for_research_sale' | 'wait_for_earnings_boost',
+      type:
+        | 'wait_for_research_sale'
+        | 'wait_for_research_sale_end'
+        | 'wait_for_earnings_boost'
+        | 'wait_for_earnings_boost_end',
       totalTimeSeconds: number
     ) {
       const before = prepareExecution();
@@ -103,7 +107,7 @@ export function useResearchSaleWaits() {
       if (boostActive && boostEnd < researchSaleTarget) {
         // 2x Earnings is already running: ride it out to 9AM the next morning, end it,
         // then keep waiting for the research sale.
-        await addWait('wait_for_time', boostEnd - startTime);
+        await addWait('wait_for_earnings_boost_end', boostEnd - startTime);
         await addToggleEarningsBoost(false);
         await addWait('wait_for_research_sale', researchSaleTarget - boostEnd);
         return;
@@ -116,7 +120,7 @@ export function useResearchSaleWaits() {
         const nextBoostEnd = getNextPacificTime(2, 9, boostStart);
         await addWait('wait_for_earnings_boost', boostStart - startTime);
         await addToggleEarningsBoost(true);
-        await addWait('wait_for_time', nextBoostEnd - boostStart);
+        await addWait('wait_for_earnings_boost_end', nextBoostEnd - boostStart);
         await addToggleEarningsBoost(false);
         await addWait('wait_for_research_sale', researchSaleTarget - nextBoostEnd);
         return;
@@ -130,7 +134,7 @@ export function useResearchSaleWaits() {
   /** Waits for the current sale to end (Saturday 9 AM Pacific). */
   async function waitForSaleEnd() {
     await batch(async () => {
-      await createChain().addWait('wait_for_time', secondsUntilSaleEnd.value);
+      await createChain().addWait('wait_for_research_sale_end', secondsUntilSaleEnd.value);
     });
   }
 

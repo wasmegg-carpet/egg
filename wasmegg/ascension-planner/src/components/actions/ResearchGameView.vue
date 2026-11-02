@@ -52,6 +52,7 @@
           :research="research"
           :current-level="levels[research.id] || 0"
           :price="getResearchPrice(research)"
+          :during-sale="getResearchDuringSale(research)"
           :time-to-buy="getResearchTimeToBuy(research)"
           :time-to-buy-seconds="getResearchTimeToBuySeconds(research)"
           :can-buy="true"
@@ -88,6 +89,7 @@ const props = defineProps<{
   };
   levels: Record<string, number>;
   getResearchPrice: (r: CommonResearch) => number;
+  getResearchDuringSale: (r: CommonResearch) => boolean;
   getResearchTimeToBuy: (r: CommonResearch) => string;
   getResearchTimeToBuySeconds: (r: CommonResearch) => number;
   isResearchSaleActive: boolean;
@@ -182,7 +184,7 @@ function deadlineWarningTooltip(seconds?: number) {
   if (seconds === undefined) return '';
   const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
   if (props.isResearchSaleActive && (baseTimestamp.value / 1000 + seconds > props.researchSaleDeadline)) {
-    return `${timeStr} is after the sale ends (Saturday at +0), so this sale price won't last that long.`;
+    return `${timeStr} is after this sale ends (Saturday at +0). The price shown is what it will cost by then.`;
   }
   return timeStr;
 }

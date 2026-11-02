@@ -52,20 +52,21 @@ export function simulate(
   for (let i = 0; i < actions.length; i++) {
     let action = actions[i];
     const actualIndex = startIndex + i;
+    const stepContext = { ...context, planStartOffset };
 
     // 0. Refresh dynamic payloads (e.g. wait_for_te duration based on new ELR)
-    action = refreshActionPayload(action, currentSnapshot, context);
+    action = refreshActionPayload(action, currentSnapshot, stepContext);
 
     // 1. Apply action to get new pure state
     currentState = applyAction(currentState, action);
 
     // 1b. Add passively delivered eggs during this action's duration
     // Uses the PREVIOUS snapshot's ELR (eggs are shipped at the old rate while saving for the action)
-    const durationSeconds = getActionDuration(action, currentSnapshot, context);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
+    const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
-    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
       skipEarnings: action.type === 'store_fuel',
@@ -153,14 +154,15 @@ export async function simulateAsync(
 
     let action = actions[i];
     const actualIndex = startIndex + i;
+    const stepContext = { ...context, planStartOffset };
 
-    action = refreshActionPayload(action, currentSnapshot, context);
+    action = refreshActionPayload(action, currentSnapshot, stepContext);
     currentState = applyAction(currentState, action);
-    const durationSeconds = getActionDuration(action, currentSnapshot, context);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
+    const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
-    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     const transitions = boostTransitionsFrom(currentSnapshot, absoluteSimTime);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
