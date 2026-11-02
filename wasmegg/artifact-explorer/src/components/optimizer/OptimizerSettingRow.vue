@@ -36,6 +36,7 @@
           <div class="w-20">
             <input
               type="number"
+              :aria-label="label"
               :min="min"
               :max="max"
               :value="input"
