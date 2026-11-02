@@ -63,7 +63,7 @@ describe('optimizer worker protocol', () => {
       bestProbability: 0.42,
       jointProbability: 0.42,
       choiceHistory: [makeChoice()],
-      finalYieldVector: new Map([['tachyon-stone-1', 17.5]]),
+      supplyByItem: new Map([['tachyon-stone-1', 17.5]]),
       craftPrimal: new Map([['tachyon-deflector-4', 3]]),
       perTarget: [
         {
@@ -81,8 +81,8 @@ describe('optimizer worker protocol', () => {
     const [got] = received;
 
     expect(got.bestProbability).toBe(0.42);
-    expect(got.finalYieldVector).toBeInstanceOf(Map);
-    expect(got.finalYieldVector.get('tachyon-stone-1')).toBe(17.5);
+    expect(got.supplyByItem).toBeInstanceOf(Map);
+    expect(got.supplyByItem.get('tachyon-stone-1')).toBe(17.5);
     expect(got.craftPrimal.get('tachyon-deflector-4')).toBe(3);
     expect(got.perTarget[0].expectedCrafts).toBe(3);
 

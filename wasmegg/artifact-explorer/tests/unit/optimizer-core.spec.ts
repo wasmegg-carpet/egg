@@ -18,7 +18,7 @@ describe('optimizeFull', () => {
       desiredArtifactNodeIds: ['A'],
       fuelCapacity: 1000,
       timeCapacityPerSlot: 100,
-      baseYield: new Map(),
+      ownedStock: new Map(),
       maximumCost: Infinity,
     });
     expect(sol.bestProbability).toBeCloseTo(0, 9);
@@ -39,7 +39,7 @@ describe('optimizeFull', () => {
       desiredArtifactNodeIds: ['A'],
       fuelCapacity: 100,
       timeCapacityPerSlot: 100,
-      baseYield: new Map<string, number>(),
+      ownedStock: new Map<string, number>(),
     };
 
     const capped = await optimizeFull({ ...args, maximumCost: 129e24 });
@@ -67,7 +67,7 @@ describe('optimizeFull', () => {
       desiredArtifactNodeIds: ['A'],
       fuelCapacity: 100,
       timeCapacityPerSlot: 100,
-      baseYield: new Map(),
+      ownedStock: new Map(),
       maximumCost: Infinity,
     });
     expect(sol.craftProbability).toBeCloseTo(0, 9);
@@ -90,15 +90,15 @@ describe('optimizeFull', () => {
       desiredArtifactNodeIds: [root],
       fuelCapacity: 1_000_000,
       timeCapacityPerSlot: 50,
-      baseYield: new Map([[leaf, 5]]),
+      ownedStock: new Map([[leaf, 5]]),
       maximumCost: Infinity,
     });
-    expect(sol.baseYield.get(leaf)).toBe(5);
+    expect(sol.ownedStock.get(leaf)).toBe(5);
     // 10s per launch, 50s per-slot horizon, 3 slots: 5 per slot -> 15 dropped
-    expect(sol.finalYieldVector.get(leaf)).toBeCloseTo(20, 9); // 5 owned + 15 dropped
+    expect(sol.supplyByItem.get(leaf)).toBeCloseTo(20, 9); // 5 owned + 15 dropped
     const leafNode = computeCraftChainTree(sol, root, null)?.children.find(n => n.nodeId === leaf);
     expect(leafNode).toBeDefined();
-    expect(leafNode!.metrics.dropped).toBeCloseTo(15, 9);
+    expect(leafNode!.metrics.droppedShare).toBeCloseTo(15, 9);
   });
 
   it('treats a NaN or negative budget as zero (no launches)', async () => {
@@ -112,7 +112,7 @@ describe('optimizeFull', () => {
         desiredArtifactNodeIds: ['A'],
         fuelCapacity: 1000,
         timeCapacityPerSlot,
-        baseYield: new Map(),
+        ownedStock: new Map(),
         maximumCost: Infinity,
       });
       expect(sol.choiceHistory).toHaveLength(0);
@@ -126,7 +126,7 @@ describe('optimizeFull', () => {
       desiredArtifactNodeIds: ['A'],
       fuelCapacity: NaN,
       timeCapacityPerSlot: 100,
-      baseYield: new Map(),
+      ownedStock: new Map(),
       maximumCost: Infinity,
     });
     // the zero-fuel option is still launchable against the time budget

@@ -1,6 +1,6 @@
 // HiGHS as WebAssembly (`highs`, lovasoa/highs-js): the loader, and the text interface it insists on.
-// Options are applied *after* `Highs_readModel`, so anything governing ingestion (`small_matrix_value`,
-// `large_matrix_value`, `infinite_bound`) is set too late and silently does nothing; `milp.ts` scales rows instead.
+// Options are applied *after* `Highs_readModel`, so nothing governing ingestion takes effect and `milp.ts`
+// scales rows instead (SPEC.md section 3).
 
 import highsLoader from 'highs';
 import wasmUrl from 'highs/runtime?url';
@@ -88,7 +88,7 @@ function writeLp(model: MilpModel): string {
     if (relations.length === 0) continue;
 
     relations.forEach((relation, i) => {
-      out.push(` r${r}_${i}:${terms[0]}`);
+      out.push(` ${model.rowNames[r]}_${i}:${terms[0]}`);
       for (let k = 1; k < terms.length; k += TERMS_PER_LINE) {
         out.push(terms.slice(k, k + TERMS_PER_LINE).join(''));
       }
@@ -124,6 +124,35 @@ interface RawHighsSolution {
   Columns: Record<string, { Primal?: number; Index?: number }>;
 }
 
+// Every status the wasm build can report (`highs/types.d.ts`), mapped by name. Enumerated rather than
+// tested for the two or three that were expected: what fell through before was read as a plan whenever
+// any primal came back, and 'Unbounded' comes back with one. An unbounded *scale* LP is reachable — a
+// craftable with no children leaves its column with no upper bound (SPEC.md sections 2 and 4) — and its
+// point is a waypoint on a ray, not a ceiling to measure sigma against.
+const STATUS: Readonly<Record<string, MilpSolution['status']>> = {
+  Optimal: 'optimal',
+  Empty: 'optimal',
+  Infeasible: 'infeasible',
+  // HiGHS could not tell the two apart; either way there is no plan in it.
+  'Primal infeasible or unbounded': 'infeasible',
+  Unbounded: 'unbounded',
+  // Stopped without a verdict on the model, which may still carry a real incumbent, so `hasPrimal`
+  // decides below. 'Unknown' is not an edge case: this build reports it for *every* MIP solve, one that
+  // exhausted the node limit (SPEC.md section 7) and one that closed the gap alike.
+  Unknown: 'feasible',
+  'Bound on objective reached': 'feasible',
+  'Target for objective reached': 'feasible',
+  'Time limit reached': 'feasible',
+  'Iteration limit reached': 'feasible',
+  // The solve never got far enough to mean anything; a primal left over from one of these is not a plan.
+  'Not Set': 'unknown',
+  'Load error': 'unknown',
+  'Model error': 'unknown',
+  'Presolve error': 'unknown',
+  'Solve error': 'unknown',
+  'Postsolve error': 'unknown',
+};
+
 function readSolution(model: MilpModel, solution: RawHighsSolution): MilpSolution {
   // Keyed by *name*, not the reported `Index` — see SPEC.md section 8.
   const columnValues = new Float64Array(model.columnCount);
@@ -136,11 +165,10 @@ function readSolution(model: MilpModel, solution: RawHighsSolution): MilpSolutio
     hasPrimal = true;
   }
 
-  let status: MilpSolution['status'];
-  if (solution.Status === 'Optimal' || solution.Status === 'Empty') status = 'optimal';
-  else if (solution.Status === 'Infeasible' || solution.Status === 'Primal infeasible or unbounded') {
-    status = 'infeasible';
-  } else status = hasPrimal ? 'feasible' : 'unknown';
+  // A status this build does not list is treated like a limit: it is what a newer HiGHS stopping for a
+  // reason of its own looks like, and only the presence of a primal decides.
+  const mapped = STATUS[solution.Status] ?? 'feasible';
+  const status = mapped === 'feasible' && !hasPrimal ? 'unknown' : mapped;
 
   return { status, objective: solution.ObjectiveValue, columnValues };
 }
