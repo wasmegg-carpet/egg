@@ -628,6 +628,9 @@ export function rankResearchByELRImpact(
               realisticStats: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
             }
           | undefined;
+        // What the deadline check below judges: normally just the next level, but a candidate that
+        // needs N levels to help at all is only worth starting if all N can finish in time.
+        let secondsUntilUseful = secondsToBuyWithBank;
         if (impact <= 0 && level + 1 < r.levels) {
           for (let n = 2; n <= r.levels - level; n++) {
             const laLevels = { ...researchLevels, [r.id]: level + n };
@@ -653,8 +656,9 @@ export function rankResearchByELRImpact(
               for (let l = level; l < level + n; l++) {
                 totalPriceForN += getDiscountedVirtuePrice(r, l, mods, isSale);
               }
-              const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot);
+              const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
               const totalHoursForN = totalSecondsForN / 3600;
+              secondsUntilUseful = getTimeToSave(totalPriceForN, startSnapshot, transitions);
               lookahead = {
                 minLevels: n,
                 impact: laImpact,
@@ -689,7 +693,7 @@ export function rankResearchByELRImpact(
             elrDelta: (stats.effectiveRate - baseline.effectiveRate) * 3600,
           },
           showDeadlineWarning:
-            isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsToBuyWithBank > researchSaleDeadline,
+            isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsUntilUseful > researchSaleDeadline,
           duringSale: isActuallyDuringSale(
             withBankPurchase.duringSale,
             absoluteSimTime + secondsToBuyWithBank,
@@ -765,19 +769,24 @@ export function rankResearchByELRImpact(
       .filter(c => (c.impact ?? 0) > 0);
   }
 
+  // A candidate that needs several levels ranks on what those levels achieve together, the same
+  // figures the caller displays for it: its next level alone has no positive impact to rank on.
+  const rankHpp = (c: ResearchRankingItem) => c.lookahead?.hpp ?? c.hpp!;
+  const rankImpact = (c: ResearchRankingItem) => c.lookahead?.impact ?? c.impact!;
+
   if (sortMode === 'efficiency') {
     candidates.sort((a, b) => {
       if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
-      if (isFinite(a.hpp!) || isFinite(b.hpp!)) {
-        if (a.hpp !== b.hpp) return a.hpp! - b.hpp!;
+      if (isFinite(rankHpp(a)) || isFinite(rankHpp(b))) {
+        if (rankHpp(a) !== rankHpp(b)) return rankHpp(a) - rankHpp(b);
       }
-      return b.impact! - a.impact!;
+      return rankImpact(b) - rankImpact(a);
     });
   } else {
     candidates.sort((a, b) => {
       if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
-      if (a.impact !== b.impact) return b.impact! - a.impact!;
-      return a.hpp! - b.hpp!;
+      if (rankImpact(a) !== rankImpact(b)) return rankImpact(b) - rankImpact(a);
+      return rankHpp(a) - rankHpp(b);
     });
   }
 

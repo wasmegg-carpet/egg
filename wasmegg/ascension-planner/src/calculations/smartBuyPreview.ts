@@ -424,9 +424,14 @@ export function runDeliveryBuyLoop(
   let simSnapshot = snapshot;
   let simTime = absoluteSimTime;
   const purchases: DeliveryPurchase[] = [];
+  // A candidate that needs several levels to help (`lookahead`) stays committed until they're all
+  // bought: its first levels do nothing alone, so another candidate taking the time in between could
+  // strand them. `showDeadlineWarning` already confirmed all of them fit before the deadline.
+  let committed: { researchId: string; levelsLeft: number } | null = null;
 
   buyWhilePassingCheck(
     () => {
+      if (committed) return { researchId: committed.researchId };
       // Explicit stop condition, NOT delegated to `showDeadlineWarning` alone (unlike a plain
       // candidate filter — this loop needs a hard bound `buyWhilePassingCheck` itself has no concept
       // of). `showDeadlineWarning` is gated behind `isResearchSaleActive(simTime)`, correct for its
@@ -455,11 +460,15 @@ export function runDeliveryBuyLoop(
         elrSortMode
       );
       const candidate = ranked.find(item => item.canBuy && !item.showDeadlineWarning);
+      if (candidate?.lookahead) {
+        committed = { researchId: candidate.research.id, levelsLeft: candidate.lookahead.minLevels };
+      }
       return candidate ? { researchId: candidate.research.id } : undefined;
     },
     researchId => {
       const research = getResearchById(researchId);
       if (!research) return false;
+      if (committed && --committed.levelsLeft === 0) committed = null;
       const level = simState.researchLevels[researchId] || 0;
       const isSale = isResearchSaleActive(simTime);
       const transitions = boostTransitionsFrom(simSnapshot, simTime);
