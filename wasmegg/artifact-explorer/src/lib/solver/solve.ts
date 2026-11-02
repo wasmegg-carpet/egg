@@ -31,7 +31,7 @@ export function envelopeErrorNats(floor: number, count: number): number {
   return (decadesPerCut * Math.LN10) ** 2 / 8;
 }
 
-export const DEFAULT_TUNING: Tuning = { maxNodes: 400, sigmaGrid: logGrid(SIGMA_FLOOR, SIGMA_CUTS) };
+export const DEFAULT_TUNING: Tuning = { maxNodes: 1200, sigmaGrid: logGrid(SIGMA_FLOOR, SIGMA_CUTS) };
 
 const MIP_REL_GAP = 1e-6;
 
@@ -54,10 +54,10 @@ function fuelExceeded(model: Model, counts: readonly number[]): boolean {
 
 function slotLoads(model: Model, layout: Layout, columnValues: Float64Array): number[] {
   const loads = new Array<number>(model.slots).fill(0);
-  for (let g = 0; g < model.groups.length; g++) {
-    const seconds = model.groups[g].timeSeconds;
+  for (let c = 0; c < layout.classes; c++) {
+    const seconds = layout.classSeconds[c];
     for (let k = 0; k < model.slots; k++) {
-      const v = columnValues[nCol(layout, g, k)];
+      const v = columnValues[nCol(layout, c, k)];
       if (Number.isFinite(v) && v > 0) loads[k] += Math.round(v) * seconds;
     }
   }

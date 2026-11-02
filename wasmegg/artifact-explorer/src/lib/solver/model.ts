@@ -153,7 +153,7 @@ export function maxLaunches(capacity: number, unitCost: number): number {
 // or `cap` on a stand-in, and a group taking another's launches on is the one thing that can walk a column
 // into such a cap. A positive duration whose slot-row bound is under `UNBOUNDED_PER_SLOT` settles it: every other
 // term in either minimum is then that bound or smaller.
-function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number): boolean {
+export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number): boolean {
   return grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT;
 }
 
