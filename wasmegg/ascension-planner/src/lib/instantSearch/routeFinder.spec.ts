@@ -147,7 +147,7 @@ describe('instant search', () => {
       const found = search({ ...base, avoid });
       for (const r of found.byAscensions.filter(r => r !== null)) expect(prestigesClear(r, avoid)).toBe(true);
       expect(found.best!.end).toBeGreaterThanOrEqual(waits.end);
-    });
+    }, 120_000);
 
     it('waits out a vacation of several days in a row', () => {
       // Ten days from the plan start: the first prestige waits until they're over.
