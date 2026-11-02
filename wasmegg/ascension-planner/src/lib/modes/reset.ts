@@ -18,6 +18,7 @@
  * - truthEggsStore: all eggsDelivered=0, all teEarned=0
  * - salesStore: no sales active, no earnings boost
  * - notesStore: empty notes array
+ * - humilityMissionsStore: no file loaded, no fuel drift
  *
  * NOT reset (intentionally):
  * - eventsStore: holds game calendar data, not per-session state
@@ -34,6 +35,7 @@ import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { useNotesStore } from 'lib/planners/stores/notes';
+import { useHumilityMissionsStore } from '@/stores/humilityMissions';
 
 /**
  * Reset all stores to their default state.
@@ -82,4 +84,6 @@ export async function resetAllStores(): Promise<void> {
   useSilosStore().$reset();
   useSalesStore().$reset();
   useNotesStore().$reset();
+  // The file is keyed to the plan it was exported from, so it does not survive a plan change.
+  useHumilityMissionsStore().clear();
 }

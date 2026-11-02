@@ -12,6 +12,8 @@
       :tank-level="fuelTankStore.tankLevel"
     />
 
+    <HumilityMissionsImport />
+
     <!-- Mission Grid -->
     <MissionGrid :ftl-level="ftlLevel" :earnings-per-second="earningsPerSecond" />
 
@@ -19,10 +21,7 @@
     <MissionSummary :summary="summary" :schedule="schedule" />
 
     <!-- Artifact Warning -->
-    <div
-      v-if="showArtifactWarning"
-      class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3"
-    >
+    <div v-if="showArtifactWarning" class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
       <div class="text-amber-500 mt-0.5">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -33,8 +32,8 @@
         </svg>
       </div>
       <div class="text-xs text-amber-800 leading-normal">
-        Saving for these ships will take <strong>{{ formatDuration(saveTimeSeconds) }}</strong>. Consider switching to your
-        <strong>earnings set</strong> while you wait.
+        Saving for these ships will take <strong>{{ formatDuration(saveTimeSeconds) }}</strong
+        >. Consider switching to your <strong>earnings set</strong> while you wait.
       </div>
     </div>
 
@@ -81,12 +80,13 @@ import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, VIRTUE_EGGS } from '@/types';
 import type { VirtueEgg, LaunchMissionEntry } from '@/types';
-import { SHIP_INFO, Spaceship } from '@/lib/missions';
+import { launchCost } from '@/lib/rockets/launches';
 import { formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 
 import FuelTankGraphic from './rockets/FuelTankGraphic.vue';
+import HumilityMissionsImport from './rockets/HumilityMissionsImport.vue';
 import MissionGrid from './rockets/MissionGrid.vue';
 import MissionSummary from './rockets/MissionSummary.vue';
 
@@ -109,13 +109,7 @@ const earningsPerSecond = computed(() =>
 const schedule = computed(() => rocketsStore.getSchedule(ftlLevel.value));
 const summary = computed(() => rocketsStore.getSummary(ftlLevel.value));
 
-const totalLaunchCost = computed(() => {
-  let cost = 0;
-  for (const m of rocketsStore.queuedMissions) {
-    cost += SHIP_INFO[m.ship].price * m.count;
-  }
-  return cost;
-});
+const totalLaunchCost = computed(() => launchCost(rocketsStore.queuedMissions));
 
 const saveTimeSeconds = computed(() => {
   const cost = totalLaunchCost.value;
@@ -144,24 +138,13 @@ function handleLaunch() {
 function addLaunch() {
   const beforeSnapshot = prepareExecution();
 
-  // Build mission entries for the payload
   const missions: LaunchMissionEntry[] = rocketsStore.queuedMissions.map(m => ({
     ship: m.ship,
     duration: m.duration,
     count: m.count,
   }));
 
-  // Calculate total fuel consumed
-  const fuelConsumed: Record<VirtueEgg, number> = {
-    curiosity: 0,
-    integrity: 0,
-    humility: 0,
-    resilience: 0,
-    kindness: 0,
-  };
-  for (const egg of VIRTUE_EGGS) {
-    fuelConsumed[egg] = rocketsStore.totalFuelCost[egg];
-  }
+  const fuelConsumed: Record<VirtueEgg, number> = { ...rocketsStore.totalFuelCost };
 
   const scheduleResult = schedule.value;
   const isZeroTimeLaunch = isZeroTime.value;
@@ -189,25 +172,18 @@ function addLaunch() {
     }
   }
 
-  // Calculate total cost (gems)
-  let totalCost = 0;
-  for (const m of missions) {
-    totalCost += SHIP_INFO[m.ship as Spaceship].price * m.count;
-  }
-
   completeExecution(
     {
       id: generateActionId(),
       timestamp: Date.now(),
       type: 'launch_missions',
       payload,
-      cost: totalCost,
+      cost: totalLaunchCost.value,
       dependsOn: dependencies,
     },
     beforeSnapshot
   );
 
-  // Clear the mission queue
   rocketsStore.clearAll();
   isZeroTime.value = false;
 }
