@@ -11,6 +11,7 @@
   <eiafx-config-table />
 
   <config-modal />
+  <player-overrides-modal />
 </template>
 
 <script lang="ts">
@@ -19,13 +20,26 @@ import { defineComponent, watch } from 'vue';
 import TheNavBar from 'ui/components/NavBar.vue';
 import EiafxConfigTable from '@/components/EiafxConfigTable.vue';
 import ConfigModal from '@/components/ConfigModal.vue';
-import { config, persistConfig } from '@/store';
+import PlayerOverridesModal from '@/components/PlayerOverridesModal.vue';
+import {
+  autoCompute,
+  config,
+  extras,
+  missionFilters,
+  overrides,
+  persistAutoCompute,
+  persistConfig,
+  persistExtras,
+  persistMissionFilters,
+  persistOverrides,
+} from '@/store';
 
 export default defineComponent({
   components: {
     TheNavBar,
     EiafxConfigTable,
     ConfigModal,
+    PlayerOverridesModal,
   },
   setup() {
     watch(
@@ -35,6 +49,28 @@ export default defineComponent({
       },
       { deep: true }
     );
+    watch(
+      overrides,
+      () => {
+        persistOverrides();
+      },
+      { deep: true }
+    );
+    watch(
+      extras,
+      () => {
+        persistExtras();
+      },
+      { deep: true }
+    );
+    watch(
+      missionFilters,
+      () => {
+        persistMissionFilters();
+      },
+      { deep: true }
+    );
+    watch(autoCompute, () => persistAutoCompute());
   },
 });
 </script>
