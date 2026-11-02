@@ -7,6 +7,7 @@ import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
+import { activeSlots } from '@/lib/artifacts/calculator';
 import { getLocalTimestampInTimezone } from '@/lib/events';
 
 /**
@@ -58,6 +59,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
       researchLevels: { ...initialSnapshot.researchLevels },
       siloCount: initialSnapshot.siloCount,
       tankLevel: initialSnapshot.tankLevel || 0,
+      proPermit: initialSnapshot.proPermit,
       artifactLoadout: initialSnapshot.artifactLoadout.map(slot => ({
         artifactId: slot.artifactId,
         stones: [...slot.stones],
@@ -96,11 +98,15 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
     researchLevels: isContinuing ? { ...initialStateStore.currentFarmState?.commonResearches } : {},
     siloCount: silosStore.siloCount || 1,
     tankLevel: fuelTankStore.tankLevel || 0,
+    proPermit: initialStateStore.proPermit,
 
-    artifactLoadout: initialStateStore.artifactLoadout.map(slot => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    })),
+    artifactLoadout: activeSlots(
+      initialStateStore.artifactLoadout.map(slot => ({
+        artifactId: slot.artifactId,
+        stones: [...slot.stones],
+      })),
+      initialStateStore.proPermit
+    ),
 
     // Progress state starts from what was in the backup
     fuelTankAmounts: { ...initialStateStore.initialFuelAmounts },

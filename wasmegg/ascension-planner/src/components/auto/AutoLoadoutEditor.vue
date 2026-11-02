@@ -9,6 +9,7 @@
         <ArtifactSelector
           :model-value="modelValue.earnings"
           :families="earningsFamilies"
+          :slot-count="slotCount"
           stones="hidden"
           @update:model-value="onEarningsChange"
         />
@@ -48,13 +49,22 @@
             v-for="(view, idx) in deliveryViews"
             :key="idx"
             class="section-premium p-3 flex items-center gap-3 min-h-[3.25rem]"
-            :style="{ backgroundColor: view.kind === 'artifact' ? slotTint(view.artifactId) : 'white' }"
+            :class="{ 'bg-slate-50 border-dashed opacity-70': idx >= slotCount }"
+            :style="idx < slotCount ? { backgroundColor: view.kind === 'artifact' ? slotTint(view.artifactId) : 'white' } : {}"
           >
             <span
               class="text-[10px] font-black text-slate-400 w-5 h-5 flex items-center justify-center bg-white/50 rounded-full shadow-inner flex-shrink-0"
               >{{ idx + 1 }}</span
             >
-            <template v-if="view.kind === 'artifact'">
+            <template v-if="idx >= slotCount">
+              <span class="text-[10px] text-gray-400 italic">Empty slot</span>
+              <span
+                class="ml-auto flex-shrink-0 whitespace-nowrap rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-700"
+              >
+                Pro Permit only — ignored
+              </span>
+            </template>
+            <template v-else-if="view.kind === 'artifact'">
               <img :src="iconURL(getArtifact(view.artifactId)!.iconPath, 64)" class="w-7 h-7" />
               <div class="min-w-0">
                 <div class="text-[11px] font-black text-slate-800 truncate">{{ getArtifact(view.artifactId)!.label }}</div>
@@ -89,6 +99,14 @@
                 <div class="text-[11px] font-black text-slate-800">Stone holder</div>
                 <div class="text-[9px] font-bold text-amber-600 truncate">
                   H1 picks {{ view.pick === 1 ? 'one' : view.pick }} of: {{ view.artifactIds.map(id => getArtifact(id)!.label).join(', ') }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="view.kind === 'any'">
+              <div class="min-w-0">
+                <div class="text-[11px] font-black text-slate-800">Any delivery artifact</div>
+                <div class="text-[9px] font-bold text-amber-600 truncate">
+                  H1 picks {{ view.pick }} of: {{ view.artifactIds.map(id => getArtifact(id)!.label).join(', ') }}
                 </div>
               </div>
             </template>
@@ -168,6 +186,7 @@
           <ArtifactSelector
             :model-value="stoneHolders ? fixedDeliveryDisplay.slice(0, -1) : fixedDeliveryDisplay"
             :families="deliveryFamilies"
+            :slot-count="slotCount"
             stones="hidden"
             @update:model-value="onFixedDeliveryChange"
           />
@@ -326,6 +345,8 @@ const props = withDefaults(
     deliveryFamilies?: (string | null)[];
     /** When given, a fixed delivery set's last slot is a choice of these stand-in holders. */
     stoneHolders?: { id: string; label: string }[] | null;
+    /** How many artifact slots count: 4 with Pro permit, 2 with Standard. Later slots show as ignored. */
+    slotCount?: number;
   }>(),
   {
     defaultValue: null,
@@ -335,6 +356,7 @@ const props = withDefaults(
     earningsFamilies: () => [],
     deliveryFamilies: () => [],
     stoneHolders: null,
+    slotCount: 4,
   }
 );
 
@@ -356,7 +378,7 @@ function onEarningsChange(value: EquippedArtifact[]) {
   });
 }
 
-const deliveryViews = computed(() => deliveryCandidatesBySlot(props.modelValue));
+const deliveryViews = computed(() => deliveryCandidatesBySlot(props.modelValue, props.slotCount));
 
 const fixedDeliveryDisplay = computed<EquippedArtifact[]>(() =>
   props.modelValue.delivery.mode === 'fixed'

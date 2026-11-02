@@ -346,6 +346,7 @@
             :inventory-delivery="inventoryDelivery"
             reset-label="Undo changes"
             default-label="Was"
+            :slot-count="artifactSlotCount(initialStateStore.proPermit)"
           />
         </div>
 
@@ -459,6 +460,8 @@ import VariantComparisonModal from './VariantComparisonModal.vue';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import ShiftSummary from './ShiftSummary.vue';
 import AutoLoadoutEditor from './AutoLoadoutEditor.vue';
+import { useInitialStateStore } from '@/stores/initialState';
+import { artifactSlotCount } from '@/lib/artifacts/calculator';
 import {
   cloneLoadoutInputs,
   extractUsedLoadout,
@@ -466,6 +469,8 @@ import {
   type AutoLoadoutInputs,
   type DeliveryInputs,
 } from '@/auto/loadout';
+
+const initialStateStore = useInitialStateStore();
 
 const props = defineProps<{
   summary: AscensionSummary & {

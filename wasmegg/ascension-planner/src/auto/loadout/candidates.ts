@@ -13,18 +13,22 @@ export type DeliverySlotView =
   | { kind: 'choice'; artifactIds: string[] }
   /** A stone holder: more owned holders than free slots, so H1 picks `pick` of these. */
   | { kind: 'holder'; artifactIds: string[]; pick: number }
+  /** More target families than slots (Standard permit): H1 picks `pick` of all the candidates. */
+  | { kind: 'any'; artifactIds: string[]; pick: number }
   | { kind: 'empty' };
 
 /**
  * What the editor shows for the delivery set — read straight off the candidate pool, with no ELR
  * search and no research levels. Target families come first, one slot each; the slots they leave
- * free show the stone holders.
+ * free show the stone holders. Only the first `slotCount` slots (2 with Standard permit) are
+ * filled; the rest of the 4 are empty. When more target families are owned than fit, every slot
+ * is a pick among all candidates.
  */
-export function deliveryCandidatesBySlot(inputs: AutoLoadoutInputs): DeliverySlotView[] {
+export function deliveryCandidatesBySlot(inputs: AutoLoadoutInputs, slotCount = 4): DeliverySlotView[] {
   const views: DeliverySlotView[] = [];
 
   if (inputs.delivery.mode === 'fixed') {
-    for (const id of inputs.delivery.artifactIds.slice(0, 4)) {
+    for (const id of inputs.delivery.artifactIds.slice(0, slotCount)) {
       views.push(id ? { kind: 'artifact', artifactId: id } : { kind: 'empty' });
     }
   } else {
@@ -73,7 +77,13 @@ export function deliveryCandidatesBySlot(inputs: AutoLoadoutInputs): DeliverySlo
       views.push(ids.length === 1 ? { kind: 'artifact', artifactId: ids[0] } : { kind: 'choice', artifactIds: ids });
     }
 
-    const free = Math.max(0, 4 - views.length);
+    if (views.length > slotCount) {
+      const all = [...new Set(inputs.delivery.candidates.map(c => c.artifactId))].filter(id => getArtifact(id));
+      views.length = 0;
+      for (let i = 0; i < slotCount; i++) views.push({ kind: 'any', artifactIds: all, pick: slotCount });
+    }
+
+    const free = Math.max(0, slotCount - views.length);
     if (holders.length <= free) {
       for (const id of holders) views.push({ kind: 'artifact', artifactId: id });
     } else {
@@ -86,8 +96,10 @@ export function deliveryCandidatesBySlot(inputs: AutoLoadoutInputs): DeliverySlo
 }
 
 /** Number of delivery slots whose artifact isn't known until H1. */
-export function countUncertainDeliverySlots(inputs: AutoLoadoutInputs): number {
-  return deliveryCandidatesBySlot(inputs).filter(v => v.kind === 'choice' || v.kind === 'holder').length;
+export function countUncertainDeliverySlots(inputs: AutoLoadoutInputs, slotCount = 4): number {
+  return deliveryCandidatesBySlot(inputs, slotCount).filter(
+    v => v.kind === 'choice' || v.kind === 'holder' || v.kind === 'any'
+  ).length;
 }
 
 /** Fixed-mode artifact ids seeded from the auto view: the first (highest-tier) option of each slot. */
@@ -95,7 +107,7 @@ export function seedFixedDeliveryFromAuto(inputs: AutoLoadoutInputs): (string | 
   const used = new Set<string>();
   return deliveryCandidatesBySlot(inputs).map(view => {
     if (view.kind === 'artifact') return view.artifactId;
-    if (view.kind === 'choice' || view.kind === 'holder') {
+    if (view.kind === 'choice' || view.kind === 'holder' || view.kind === 'any') {
       const id = view.artifactIds.find(a => !used.has(a)) ?? null;
       if (id) used.add(id);
       return id;
@@ -104,15 +116,19 @@ export function seedFixedDeliveryFromAuto(inputs: AutoLoadoutInputs): (string | 
   });
 }
 
-/** One-line summary for a collapsed editor, e.g. "Earnings 4/4 · Delivery: 1 uncertain slot · Custom". */
-export function summarizeLoadoutInputs(inputs: AutoLoadoutInputs, customized: boolean): string {
-  const earnings = inputs.earnings.filter(s => s.artifactId).length;
+/**
+ * One-line summary for a collapsed editor, e.g. "Earnings 4/4 · Delivery: 1 uncertain slot · Custom".
+ * With Standard permit (`slotCount` 2) only the first 2 slots count: "Earnings 2/2 (Standard permit) · ...".
+ */
+export function summarizeLoadoutInputs(inputs: AutoLoadoutInputs, customized: boolean, slotCount = 4): string {
+  const earnings = inputs.earnings.slice(0, slotCount).filter(s => s.artifactId).length;
   let delivery: string;
   if (inputs.delivery.mode === 'fixed') {
     delivery = 'chosen manually';
   } else {
-    const uncertain = countUncertainDeliverySlots(inputs);
+    const uncertain = countUncertainDeliverySlots(inputs, slotCount);
     delivery = uncertain === 0 ? 'from inventory' : `${uncertain} uncertain slot${uncertain === 1 ? '' : 's'}`;
   }
-  return `Earnings ${earnings}/4 · Delivery: ${delivery}${customized ? ' · Custom' : ''}`;
+  const permit = slotCount < 4 ? ' (Standard permit)' : '';
+  return `Earnings ${earnings}/${slotCount}${permit} · Delivery: ${delivery}${customized ? ' · Custom' : ''}`;
 }

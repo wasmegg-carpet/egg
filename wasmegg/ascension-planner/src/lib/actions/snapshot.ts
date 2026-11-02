@@ -6,6 +6,7 @@
 
 import type { CalculationsSnapshot, CalculationsFullOutputs, VehicleSlot, ResearchLevels } from '@/types';
 import { type HabId } from '@/lib/habs';
+import { activeSlots } from '@/lib/artifacts/calculator';
 import { useEggValue } from '@/composables/useEggValue';
 import { useHabCapacity } from '@/composables/useHabCapacity';
 import { useLayRate } from '@/composables/useLayRate';
@@ -79,6 +80,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
 
     // Fuel tank state
     tankLevel: fuelTankStore.tankLevel,
+    proPermit: initialStateStore.proPermit,
     fuelTankAmounts: { ...fuelTankStore.fuelAmounts },
 
     // Truth Eggs state
@@ -89,10 +91,13 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     vehicles: [...shippingCapacityStore.vehicles],
     habIds: [...habCapacityStore.habIds],
     researchLevels: { ...commonResearchStore.researchLevels },
-    artifactLoadout: initialStateStore.artifactLoadout.map(slot => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    })),
+    artifactLoadout: activeSlots(
+      initialStateStore.artifactLoadout.map(slot => ({
+        artifactId: slot.artifactId,
+        stones: [...slot.stones],
+      })),
+      initialStateStore.proPermit
+    ),
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
     population: virtueStore.population,

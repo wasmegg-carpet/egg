@@ -17,6 +17,8 @@ interface ExportedInitialState {
   artifactLoadout: any[];
   soulEggs: number;
   isUltra: boolean;
+  /** Absent on exports made before Standard permit was supported; those plans were all Pro. */
+  proPermit?: boolean;
   initialTankLevel: number;
   initialFuelAmounts: Record<string, number>;
   initialEggsDelivered: Record<string, number>;

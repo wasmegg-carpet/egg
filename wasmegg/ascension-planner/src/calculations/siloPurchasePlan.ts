@@ -1,4 +1,4 @@
-import { nextSiloCost, MAX_SILOS } from '@/stores/silos';
+import { nextSiloCost, maxSilos } from '@/stores/silos';
 import { getTimeToSave } from '@/engine/apply';
 import type { CalculationsSnapshot } from '@/types';
 
@@ -30,8 +30,8 @@ export function planSilosWithinBudget(
   let elapsedSeconds = 0;
   let currentSiloCount = startSiloCount;
 
-  while (currentSiloCount < MAX_SILOS) {
-    const cost = nextSiloCost(currentSiloCount);
+  while (currentSiloCount < maxSilos(startSnapshot.proPermit)) {
+    const cost = nextSiloCost(currentSiloCount, startSnapshot.proPermit);
     const seconds = getTimeToSave(cost, virtualSnapshot);
     if (!isFinite(seconds) || elapsedSeconds + seconds > budgetSeconds) break;
 

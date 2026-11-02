@@ -20,6 +20,7 @@ import {
   type ArtifactModifiers,
   createEmptyLoadout,
   calculateArtifactModifiers,
+  activeSlots,
   getArtifactLoadoutFromBackup,
   getOptimalEarningsSet,
   getOptimalELRSet,
@@ -58,6 +59,9 @@ export interface InitialStateStoreState {
   // Assume double earnings (video doubler)
   assumeDoubleEarnings: boolean;
 
+  // Pro permit (vs. Standard): Standard halves offline earnings, caps silos at 2 and active artifacts at 2
+  proPermit: boolean;
+
   // Global progress metrics at start of ascension
   initialTankLevel: number;
   initialFuelAmounts: Record<VirtueEgg, number>;
@@ -83,6 +87,13 @@ function createEmptyVirtueMap(): Record<VirtueEgg, number> {
     resilience: 0,
     kindness: 0,
   };
+}
+
+/** Same artifacts and stones in every slot (missing slots count as empty). */
+function sameLoadout(a: EquippedArtifact[], b: EquippedArtifact[]): boolean {
+  const slot = (l: EquippedArtifact[], i: number) => JSON.stringify([l[i]?.artifactId ?? null, l[i]?.stones ?? []]);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) if (slot(a, i) !== slot(b, i)) return false;
+  return true;
 }
 
 function initializeEpicResearchLevels(): ResearchLevels {
@@ -112,6 +123,7 @@ export const useInitialStateStore = defineStore('initialState', {
     currentFarmState: null,
     soulEggs: 1e21, // Default to 1s
     assumeDoubleEarnings: true,
+    proPermit: true,
     initialTankLevel: 0,
     initialFuelAmounts: createEmptyVirtueMap(),
     initialEggsDelivered: createEmptyVirtueMap(),
@@ -144,7 +156,7 @@ export const useInitialStateStore = defineStore('initialState', {
      * Get calculated artifact modifiers from loadout
      */
     artifactModifiers(): ArtifactModifiers {
-      return calculateArtifactModifiers(this.artifactLoadout);
+      return calculateArtifactModifiers(activeSlots(this.artifactLoadout, this.proPermit));
     },
 
     /**
@@ -202,6 +214,8 @@ export const useInitialStateStore = defineStore('initialState', {
         backup.subInfo?.subscriptionLevel != null && backup.subInfo.status === ei.UserSubscriptionInfo.Status.ACTIVE;
       this.lastBackupTime = backup.settings?.lastBackupTime || backup.approxTime || 0;
       this.soulEggs = backup.game?.soulEggsD || 0;
+      // Reconciling keeps the loaded plan's own permit: a plan runs on the permit it was built with.
+      if (mode !== 'reconcile') this.proPermit = backup.game?.permitLevel === 1;
 
       const artifactsDB = backup.artifactsDb || {};
       this.activeMissions = [
@@ -229,7 +243,7 @@ export const useInitialStateStore = defineStore('initialState', {
 
       // Handle artifact sets based on mode
       if (mode === 'scratch' || mode === 'plan_next') {
-        const optimalEarnings = getOptimalEarningsSet(backup);
+        const optimalEarnings = getOptimalEarningsSet(backup, this.proPermit);
         this.artifactSets.earnings = optimalEarnings;
         this.artifactSets.elr = null;
         this.setActiveArtifactSet('earnings');
@@ -238,14 +252,14 @@ export const useInitialStateStore = defineStore('initialState', {
         this.artifactSets.elr = null;
         this.setActiveArtifactSet('earnings');
       } else if (mode === 'continue_elr') {
-        this.artifactSets.earnings = getOptimalEarningsSet(backup);
+        this.artifactSets.earnings = getOptimalEarningsSet(backup, this.proPermit);
         this.artifactSets.elr = backupLoadout;
         this.setActiveArtifactSet('elr');
       } else if (mode === 'reconcile') {
         // Do not update artifact sets from backup for reconcile
       } else {
         // Default behavior (e.g. initial load or form submit)
-        const optimalEarnings = getOptimalEarningsSet(backup);
+        const optimalEarnings = getOptimalEarningsSet(backup, this.proPermit);
         this.artifactSets.earnings = optimalEarnings;
         this.artifactSets.elr = JSON.parse(JSON.stringify(backupLoadout));
         this.setActiveArtifactSet('elr');
@@ -373,6 +387,21 @@ export const useInitialStateStore = defineStore('initialState', {
     },
 
     /**
+     * Set Pro vs. Standard permit. An earnings set that is still the optimizer's pick for the old
+     * permit is re-picked for the new one (Standard's best 2 aren't simply the first 2 of Pro's 4);
+     * a set the player edited is kept as is.
+     */
+    setProPermit(enabled: boolean) {
+      if (enabled === this.proPermit) return;
+      const backup = this.rawBackup;
+      const earnings = this.artifactSets.earnings;
+      if (backup && earnings && sameLoadout(earnings, getOptimalEarningsSet(backup, this.proPermit))) {
+        this.updateArtifactSet('earnings', getOptimalEarningsSet(backup, enabled));
+      }
+      this.proPermit = enabled;
+    },
+
+    /**
      * Hydrate store from exported data.
      */
     hydrate(data: Partial<InitialStateStoreState>) {
@@ -416,6 +445,8 @@ export const useInitialStateStore = defineStore('initialState', {
       } else {
         this.assumeDoubleEarnings = true;
       }
+      // Plans saved before Standard permit was supported were all built as Pro.
+      this.proPermit = data.proPermit ?? true;
       this.currentFarmState = data.currentFarmState || null;
       if (data.initialTankLevel !== undefined) {
         this.initialTankLevel = data.initialTankLevel;
@@ -496,6 +527,7 @@ export const useInitialStateStore = defineStore('initialState', {
       this.activeArtifactSet = null;
       this.soulEggs = 1e21;
       this.assumeDoubleEarnings = true;
+      this.proPermit = true;
       this.initialTankLevel = 0;
       this.initialFuelAmounts = createEmptyVirtueMap();
       this.initialEggsDelivered = createEmptyVirtueMap();

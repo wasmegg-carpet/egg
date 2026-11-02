@@ -133,6 +133,7 @@
           :inventory-delivery="autoPlannerStore.defaultLoadoutInputs?.delivery ?? null"
           reset-label="Reset to inventory"
           default-label="Inventory"
+          :slot-count="artifactSlotCount(initialStateStore.proPermit)"
           @update:model-value="handleLoadoutChange"
         />
       </div>
@@ -154,7 +155,7 @@ import { useVirtueStore } from '@/stores/virtue';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useSilosStore } from '@/stores/silos';
 import { getSimulationContext } from '@/engine/adapter';
-import { getArtifactLoadoutFromBackup, getOptimalEarningsSet } from '@/lib/artifacts';
+import { getArtifactLoadoutFromBackup, getOptimalEarningsSet, activeSlots, artifactSlotCount } from '@/lib/artifacts';
 import { useEarningsClothedTE } from '@/composables/useEarningsClothedTE';
 import { computeSnapshot } from '@/engine/compute';
 import { consumeAutoPlannerTEInputs, saveAutoPlannerTEInputs } from '@/lib/autoPlannerFormCache';
@@ -210,7 +211,7 @@ const earningsClothedTe = computed<number | null>(() => {
     truthEggs: currentTE.value,
     colleggtibleModifiers: context.colleggtibleModifiers,
     labUpgradeLevel: context.epicResearchLevels['cheaper_research'] ?? 0,
-    permitLevel: initialStateStore.rawBackup?.game?.permitLevel ?? null,
+    proPermit: initialStateStore.proPermit,
   });
 });
 
@@ -225,7 +226,7 @@ const currentELR = computed(() => {
     : initialStateStore.artifactLoadout;
 
   const optimalEarnings = initialStateStore.rawBackup
-    ? getOptimalEarningsSet(initialStateStore.rawBackup)
+    ? getOptimalEarningsSet(initialStateStore.rawBackup, initialStateStore.proPermit)
     : initialStateStore.artifactSets.earnings || null;
 
   const continueState: import('@/engine/types').EngineState = {
@@ -238,7 +239,11 @@ const currentELR = computed(() => {
     researchLevels: { ...farmState.commonResearches },
     siloCount: silosStore.siloCount || 1,
     tankLevel: fuelTankStore.tankLevel || 0,
-    artifactLoadout: rawLoadout.map(slot => ({ artifactId: slot.artifactId, stones: [...slot.stones] })),
+    proPermit: initialStateStore.proPermit,
+    artifactLoadout: activeSlots(
+      rawLoadout.map(slot => ({ artifactId: slot.artifactId, stones: [...slot.stones] })),
+      initialStateStore.proPermit
+    ),
     activeArtifactSet: 'elr',
     artifactSets: {
       earnings: optimalEarnings ? JSON.parse(JSON.stringify(optimalEarnings)) : null,
@@ -349,14 +354,15 @@ const loadoutSummary = computed(() =>
   autoPlannerStore.loadoutInputs
     ? summarizeLoadoutInputs(
         autoPlannerStore.loadoutInputs,
-        !loadoutInputsEqual(autoPlannerStore.loadoutInputs, autoPlannerStore.defaultLoadoutInputs)
+        !loadoutInputsEqual(autoPlannerStore.loadoutInputs, autoPlannerStore.defaultLoadoutInputs),
+        artifactSlotCount(initialStateStore.proPermit)
       )
     : ''
 );
 
 function inventoryLoadoutInputs(): AutoLoadoutInputs {
   return initialStateStore.rawBackup
-    ? buildLoadoutInputsFromBackup(initialStateStore.rawBackup)
+    ? buildLoadoutInputsFromBackup(initialStateStore.rawBackup, initialStateStore.proPermit)
     : buildLoadoutInputsFromSets(initialStateStore.artifactSets);
 }
 
@@ -382,8 +388,9 @@ function seedLoadoutInputs({ applyCache }: { applyCache: boolean }) {
 }
 
 seedLoadoutInputs({ applyCache: true });
+// A permit change also changes the default: the recommended earnings set is 2 artifacts with Standard.
 watch(
-  () => initialStateStore.rawBackup,
+  () => [initialStateStore.rawBackup, initialStateStore.proPermit],
   () => seedLoadoutInputs({ applyCache: false })
 );
 

@@ -58,6 +58,8 @@ export function maxedBaseState(): EngineState {
     researchLevels: {},
     siloCount: 1,
     tankLevel: 0,
+    // Tables are built for Pro permit only; the Chain Finder and Table Builder warn Standard players.
+    proPermit: true,
     artifactLoadout: [],
     activeArtifactSet: null,
     artifactSets: { earnings: null, elr: null },

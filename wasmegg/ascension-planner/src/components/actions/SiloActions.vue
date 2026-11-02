@@ -119,7 +119,9 @@
           v-else
           class="flex flex-col items-center py-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 border-dashed text-emerald-700/80"
         >
-          <p class="text-[10px] font-black uppercase tracking-widest">Maximum silos reached (10/10)</p>
+          <p class="text-[10px] font-black uppercase tracking-widest">
+            Maximum silos reached ({{ siloOutput.maxSilos }}/{{ siloOutput.maxSilos }})
+          </p>
         </div>
       </div>
 

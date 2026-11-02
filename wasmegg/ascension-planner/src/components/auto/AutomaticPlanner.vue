@@ -28,6 +28,7 @@
 
           <div class="space-y-8">
             <SchedulingInputs />
+            <ProPermitToggle :model-value="initialStateStore.proPermit" @update:model-value="setProPermit" />
             <VirtueProgressSection />
 
             <!-- Ascension Targets -->
@@ -256,12 +257,17 @@ import { storeToRefs } from 'pinia';
 import { useAutoPlannerStore, type VariantKey } from '@/stores/autoPlanner';
 import { useVirtueStore } from '@/stores/virtue';
 import { useTruthEggsStore } from '@/stores/truthEggs';
+import { useInitialStateStore } from '@/stores/initialState';
+import { useActionsStore } from '@/stores/actions';
+import { computeSnapshot } from '@/engine/compute';
+import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { useAscensionGenerator } from '@/auto/useAscensionGenerator';
 import { useEarningsClothedTE } from '@/composables/useEarningsClothedTE';
-import { loadAutoPlannerSchedule, saveAutoPlannerSchedule } from '@/lib/autoPlannerFormCache';
+import { loadAutoPlannerSchedule, saveAutoPlannerSchedule, saveAutoPlannerTEInputs } from '@/lib/autoPlannerFormCache';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
 import { iconURL } from 'lib';
 import SchedulingInputs from './SchedulingInputs.vue';
+import ProPermitToggle from '@/components/ProPermitToggle.vue';
 import VirtueProgressSection from './VirtueProgressSection.vue';
 import ChainSummaryBar from './ChainSummaryBar.vue';
 import SimulationErrorAlert from './SimulationErrorAlert.vue';
@@ -278,6 +284,14 @@ import type { VirtueEgg } from '@/types';
 const autoPlannerStore = useAutoPlannerStore();
 const virtueStore = useVirtueStore();
 const truthEggsStore = useTruthEggsStore();
+const initialStateStore = useInitialStateStore();
+const actionsStore = useActionsStore();
+
+/** Same switch as the manual planner's Initial State: also re-runs the manual plan on the new permit. */
+function setProPermit(enabled: boolean) {
+  initialStateStore.setProPermit(enabled);
+  actionsStore.setInitialSnapshot(computeSnapshot(createBaseEngineState(null), getSimulationContext()));
+}
 
 const { ascensionChain, timezone, startDate, startTime, startTimeOverride, targetTE, deferForEarningsMode } =
   storeToRefs(autoPlannerStore);
@@ -431,17 +445,28 @@ const confirmLoadoutOverride = (indices: number[]) => {
 // silo mode, end-time overrides (the prestiges that wait) and builds, then generate. On mount, so it
 // lands after VirtueProgressSection restores its cached TE inputs. `generate`, not `regeneratePlan`:
 // that would clear the overrides.
+//
+// A route from the save starts from the backup, not a TE override: its pending TE and the eggs laid
+// since the last sync count. It starts now, unless its first prestige is later (a whole hour, or
+// blocked dates and hours).
 onMounted(async () => {
   const chain = autoPlannerStore.pendingChain;
   if (!chain) return;
   autoPlannerStore.pendingChain = null;
-  startTimeOverride.value = true;
+  const nowUnix = Date.now() / 1000;
+  const start = chain.fromSave ? Math.max(chain.start, nowUnix) : chain.start;
+  startTimeOverride.value = !chain.fromSave || chain.start > nowUnix;
   timezone.value = chain.timezone;
-  startDate.value = formatUnixToDateInput(chain.start, chain.timezone);
-  startTime.value = formatUnixToTimeInput(chain.start, chain.timezone);
+  startDate.value = formatUnixToDateInput(start, chain.timezone);
+  startTime.value = formatUnixToTimeInput(start, chain.timezone);
   targetTE.value = chain.targets.join(' ');
   deferForEarningsMode.value = chain.siloMode;
-  autoPlannerStore.teOverride = { ...truthEggsStore.teEarned, ...chain.teEarned };
+  if (chain.fromSave) {
+    autoPlannerStore.teOverride = null;
+    saveAutoPlannerTEInputs(initialStateStore.playerId, null);
+  } else {
+    autoPlannerStore.teOverride = { ...truthEggsStore.teEarned, ...chain.teEarned };
+  }
   await applyAutoStartingTE();
   autoPlannerStore.ascensionChain = [];
   autoPlannerStore.planVariantOverrides = { ...chain.variantOverrides };

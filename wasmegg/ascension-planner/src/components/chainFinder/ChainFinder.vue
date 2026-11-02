@@ -16,6 +16,8 @@
       <h2 class="text-xl font-black text-slate-900 uppercase tracking-tight">Table Builder</h2>
     </div>
 
+    <StandardPermitWarning tool="Table Builder" />
+
     <h3 class="text-sm font-bold text-slate-800 mb-1">Delivery artifacts</h3>
     <p class="text-xs text-slate-500 mb-4">
       Choose the metronome, compass, and gusset you deliver with. The set's fourth artifact is a 3-slot stone
@@ -37,6 +39,7 @@
 <script setup lang="ts">
 import DeliveryArtifactPicker from './DeliveryArtifactPicker.vue';
 import TableBuildPanel from './TableBuildPanel.vue';
+import StandardPermitWarning from '@/components/StandardPermitWarning.vue';
 import { useChainFinderStore } from '@/stores/chainFinder';
 
 const store = useChainFinderStore();

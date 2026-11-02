@@ -7,7 +7,7 @@ import type {
   EarningsInput,
   IHRInput,
 } from '@/types';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
+import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
 import { totalAwayTime } from '@/stores/silos';
 import { integrateRate } from './apply/math';
 
@@ -34,7 +34,7 @@ export function computeSnapshot(
   const { epicResearchLevels, colleggtibleModifiers } = context;
 
   // 1. Artifacts - Calculate first as they affect almost everything
-  const artifactMods = calculateArtifactModifiers(state.artifactLoadout);
+  const artifactMods = calculateArtifactModifiers(activeSlots(state.artifactLoadout, state.proPermit));
 
   // 2. Egg Value
   const eggValueInput: EggValueInput = {
@@ -139,6 +139,7 @@ export function computeSnapshot(
     artifactAwayMultiplier: artifactMods.awayEarnings.totalMultiplier,
     videoDoublerMultiplier: context.assumeDoubleEarnings ? 2 : 1,
     eventMultiplier: state.earningsBoost.active ? state.earningsBoost.multiplier : 1,
+    proPermit: state.proPermit,
     artifactEffects: artifactMods.awayEarnings.effects,
   };
   const earningsOutput = calculateEarnings(earningsInput);
@@ -204,6 +205,7 @@ export function computeSnapshot(
     siloCount: state.siloCount,
     siloTimeMinutes,
     tankLevel: state.tankLevel,
+    proPermit: state.proPermit,
     fuelTankAmounts: state.fuelTankAmounts,
     eggsDelivered:
       extraEggs > 0

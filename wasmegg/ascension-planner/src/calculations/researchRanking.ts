@@ -538,6 +538,7 @@ export function rankResearchByELRImpact(
     if (!rawBackup) return [];
 
     const baselineOptimal = getOptimalELRSetFromSource(rawBackup, {
+      proPermit: startSnapshot.proPermit,
       assumeMaxHabsVehicles: true,
       excludeGusset: false,
       commonResearch: researchLevels,
@@ -596,6 +597,7 @@ export function rankResearchByELRImpact(
 
         const tempLevels = { ...researchLevels, [r.id]: level + 1 };
         const tempOptimal = getOptimalELRSetFromSource(rawBackup, {
+          proPermit: startSnapshot.proPermit,
           assumeMaxHabsVehicles: true,
           excludeGusset: false,
           commonResearch: tempLevels,
@@ -630,6 +632,7 @@ export function rankResearchByELRImpact(
           for (let n = 2; n <= r.levels - level; n++) {
             const laLevels = { ...researchLevels, [r.id]: level + n };
             const laOptimal = getOptimalELRSetFromSource(rawBackup, {
+              proPermit: startSnapshot.proPermit,
               assumeMaxHabsVehicles: true,
               excludeGusset: false,
               commonResearch: laLevels,

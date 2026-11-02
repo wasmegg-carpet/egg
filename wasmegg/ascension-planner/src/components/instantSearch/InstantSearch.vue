@@ -16,6 +16,8 @@
       <h2 class="text-xl font-black text-slate-900 uppercase tracking-tight">Chain Finder</h2>
     </div>
 
+    <StandardPermitWarning tool="Chain Finder" />
+
     <p class="text-xs text-slate-500 mb-6">
       Every ascension a maxed account can make was simulated ahead of time, from every TE at every hour of the week, so
       finding a route is arithmetic: it tries every stop at every TE, with up to {{ MAX_ASCENSIONS }} ascensions. Every
@@ -223,6 +225,7 @@ import InstantSearchFilters from './InstantSearchFilters.vue';
 import AutoLoadoutEditor from '@/components/auto/AutoLoadoutEditor.vue';
 import { loadoutInputsEqual } from '@/auto/loadout';
 import RefreshBackupButton from './RefreshBackupButton.vue';
+import StandardPermitWarning from '@/components/StandardPermitWarning.vue';
 import SegmentedToggle from './SegmentedToggle.vue';
 import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
 import {

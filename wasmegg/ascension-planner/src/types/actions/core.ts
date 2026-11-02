@@ -151,6 +151,8 @@ export interface CalculationsSnapshot {
   siloCount: number;
   siloTimeMinutes: number;
   tankLevel: number;
+  /** false = Standard permit. undefined = Pro (snapshots from before Standard was supported). */
+  proPermit?: boolean;
   fuelTankAmounts: Record<VirtueEgg, number>;
   eggsDelivered: Record<VirtueEgg, number>;
   teEarned: Record<VirtueEgg, number>;

@@ -130,6 +130,8 @@
             </button>
           </div>
         </div>
+
+        <ProPermitToggle :model-value="proPermit" @update:model-value="$emit('set-pro-permit', $event)" />
       </div>
     </div>
 
@@ -279,6 +281,7 @@
           <div class="mb-4">
             <ArtifactSelector
               :model-value="artifactLoadout"
+              :slot-count="artifactSlotCount(proPermit)"
               @update:model-value="$emit('update:artifact-loadout', $event)"
             />
           </div>
@@ -301,12 +304,14 @@
           <div v-if="activeSetTab === 'earnings'">
             <ArtifactSelector
               :model-value="artifactSets.earnings || createEmptyLoadout()"
+              :slot-count="artifactSlotCount(proPermit)"
               @update:model-value="$emit('update-artifact-set', 'earnings', $event)"
             />
           </div>
           <div v-if="activeSetTab === 'elr'">
             <ArtifactSelector
               :model-value="artifactSets.elr || createEmptyLoadout()"
+              :slot-count="artifactSlotCount(proPermit)"
               @update:model-value="$emit('update-artifact-set', 'elr', $event)"
             />
           </div>
@@ -611,8 +616,9 @@ import type { EquippedArtifact } from '@/lib/artifacts';
 import { TANK_CAPACITIES, VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ProPermitToggle from '@/components/ProPermitToggle.vue';
 import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
-import { createEmptyLoadout } from '@/lib/artifacts';
+import { createEmptyLoadout, artifactSlotCount } from '@/lib/artifacts';
 import {
   colleggtibleDefs,
   formatColleggtibleBonus,
@@ -640,6 +646,7 @@ const props = defineProps<{
 
   soulEggs: number;
   assumeDoubleEarnings: boolean;
+  proPermit: boolean;
   artifactSets: Record<import('@/types').ArtifactSetName, EquippedArtifact[] | null>;
   activeArtifactSet: import('@/types').ArtifactSetName | null;
   colleggtibleTiers: import('lib/collegtibles').ColleggtibleTiers;
@@ -671,6 +678,7 @@ const emit = defineEmits<{
 
   'set-soul-eggs': [count: number];
   'set-assume-double-earnings': [enabled: boolean];
+  'set-pro-permit': [enabled: boolean];
   'update-artifact-set': [setName: import('@/types').ArtifactSetName, loadout: EquippedArtifact[]];
   'save-current-to-set': [setName: import('@/types').ArtifactSetName];
   'set-active-artifact-set': [setName: import('@/types').ArtifactSetName];

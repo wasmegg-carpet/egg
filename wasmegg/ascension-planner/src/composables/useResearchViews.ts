@@ -59,7 +59,8 @@ import { ei } from 'lib';
 function computeRealisticDeliverySummary(
   researchLevels: Record<string, number>,
   rawBackup: ei.IBackup | null | undefined,
-  context: SimulationContext
+  context: SimulationContext,
+  proPermit: boolean
 ): { layRate: number; shippingRate: number; elr: number } | null {
   if (!rawBackup) return null;
 
@@ -69,6 +70,7 @@ function computeRealisticDeliverySummary(
     commonResearch: researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit,
   });
   const artifactMods = calculateArtifactModifiers(optimal);
   const stats = computeRealisticELR(
@@ -325,7 +327,8 @@ export function useResearchViews() {
     return computeRealisticDeliverySummary(
       commonResearchStore.researchLevels,
       initialStateStore.rawBackup,
-      getSimulationContext()
+      getSimulationContext(),
+      initialStateStore.proPermit
     );
   });
 
@@ -1176,8 +1179,18 @@ export function useResearchViews() {
   const saleEndsDeliverySummary = computed(() => {
     const rawBackup = initialStateStore.rawBackup;
     const context = getSimulationContext();
-    const before = computeRealisticDeliverySummary(commonResearchStore.researchLevels, rawBackup, context);
-    const after = computeRealisticDeliverySummary(saleEndsPlan.value.endLevels, rawBackup, context);
+    const before = computeRealisticDeliverySummary(
+      commonResearchStore.researchLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
+    const after = computeRealisticDeliverySummary(
+      saleEndsPlan.value.endLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
     if (!before || !after) return null;
     return { before: before.elr, after: after.elr };
   });

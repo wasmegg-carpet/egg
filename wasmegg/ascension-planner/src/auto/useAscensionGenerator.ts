@@ -424,7 +424,7 @@ export function useAscensionGenerator() {
             const optimalEarnings = stepLoadoutInputs
               ? socketEarningsStones(stepLoadoutInputs.earnings, stepLoadoutInputs.stones)
               : initialStateStore.rawBackup
-                ? getOptimalEarningsSet(initialStateStore.rawBackup)
+                ? getOptimalEarningsSet(initialStateStore.rawBackup, initialStateStore.proPermit)
                 : currentBaseState.artifactSets.earnings || null;
 
             const continueState = makeContinueState(
@@ -527,6 +527,7 @@ export function useAscensionGenerator() {
       artifactLoadout: JSON.parse(JSON.stringify(initialStateStore.artifactLoadout)),
       soulEggs: initialStateStore.soulEggs,
       isUltra: initialStateStore.isUltra,
+      proPermit: initialStateStore.proPermit,
       initialTankLevel: initialStateStore.initialTankLevel,
       initialFuelAmounts: { ...initialStateStore.initialFuelAmounts },
       initialEggsDelivered: { ...initialStateStore.initialEggsDelivered },

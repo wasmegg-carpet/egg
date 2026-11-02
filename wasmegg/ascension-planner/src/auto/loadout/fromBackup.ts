@@ -50,11 +50,15 @@ export function stonePoolFromBackup(backup: ei.IBackup): StonePool {
 
 /**
  * The setup form's default inputs: the recommended earnings set, an `auto` delivery set over the
- * inventory's delivery candidates, and the inventory's stone counts.
+ * inventory's delivery candidates, and the inventory's stone counts. `proPermit` defaults to the
+ * backup's own permit; with Standard the earnings set has only 2 artifacts.
  */
-export function buildLoadoutInputsFromBackup(backup: ei.IBackup): AutoLoadoutInputs {
+export function buildLoadoutInputsFromBackup(
+  backup: ei.IBackup,
+  proPermit: boolean = backup.game?.permitLevel === 1
+): AutoLoadoutInputs {
   return {
-    earnings: withEmptyStones(getOptimalEarningsSet(backup)),
+    earnings: withEmptyStones(getOptimalEarningsSet(backup, proPermit)),
     delivery: { mode: 'auto', candidates: buildDeliveryPoolFromBackup(backup).candidates.map(toDeliveryCandidate) },
     stones: stonePoolFromBackup(backup),
   };

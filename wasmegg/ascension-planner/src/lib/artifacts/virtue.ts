@@ -18,7 +18,7 @@ import {
 } from 'lib/artifacts/virtue_effects';
 import { EquippedArtifact } from './types';
 import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from './utils';
-import { calculateArtifactModifiers, createEmptyLoadout } from './calculator';
+import { calculateArtifactModifiers, createEmptyLoadout, artifactSlotCount, activeSlots } from './calculator';
 import { calculateLayRate } from '@/calculations/layRate';
 import {
   calculateShippingCapacity,
@@ -32,9 +32,13 @@ import { InventoryItem } from 'lib/artifacts';
 import { VehicleSlot } from '@/types';
 
 /**
- * Get the optimal artifact set for earnings (Clothed TE).
+ * Get the optimal artifact set for earnings (Clothed TE). With Standard permit only 2 artifacts
+ * are picked. `proPermit` defaults to the backup's own permit.
  */
-export function getOptimalEarningsSet(backup: ei.IBackup): EquippedArtifact[] {
+export function getOptimalEarningsSet(
+  backup: ei.IBackup,
+  proPermit: boolean = backup.game?.permitLevel === 1
+): EquippedArtifact[] {
   if (!backup.artifactsDb) {
     return createEmptyLoadout();
   }
@@ -61,13 +65,15 @@ export function getOptimalEarningsSet(backup: ei.IBackup): EquippedArtifact[] {
   }
   const equipped = new ArtifactSet(libArtifacts, false);
 
-  const strategy =
-    backup.game?.permitLevel === 1 ? Strategy.PRO_PERMIT_VIRTUE_CTE : Strategy.STANDARD_PERMIT_VIRTUE_CTE;
+  const strategy = proPermit ? Strategy.PRO_PERMIT_VIRTUE_CTE : Strategy.STANDARD_PERMIT_VIRTUE_CTE;
 
   const contender = recommendArtifactSet(backup, strategy);
   const { artifactSet } = contenderToArtifactSet(contender, equipped, inventory);
 
-  return artifactSet.artifacts.map(libArtifactToEquippedArtifact);
+  // Standard permit's strategy returns 2 artifacts; pad so every loadout has 4 slots.
+  const loadout = artifactSet.artifacts.map(libArtifactToEquippedArtifact);
+  while (loadout.length < 4) loadout.push({ artifactId: null, stones: [] });
+  return loadout;
 }
 
 /**
@@ -82,12 +88,13 @@ export function calculateClothedTEForSet(
     truthEggs: number;
     colleggtibleModifiers: Modifiers;
     labUpgradeLevel: number;
-    permitLevel?: number | null;
+    proPermit: boolean;
   }
 ): number {
-  const artifacts = equippedArtifactsToLibArtifacts(loadout);
-  // Standard permit halves offline earnings; Pro permit (permitLevel === 1) does not.
-  const permitPenalty = options.permitLevel === 1 ? 0 : multiplierToTE(0.5);
+  // Standard permit only counts the first 2 slots.
+  const artifacts = equippedArtifactsToLibArtifacts(activeSlots(loadout, options.proPermit));
+  // Standard permit halves offline earnings; Pro permit does not.
+  const permitPenalty = options.proPermit ? 0 : multiplierToTE(0.5);
 
   return (
     options.truthEggs +
@@ -232,6 +239,8 @@ export interface OptimalELRSetOptions {
   commonResearch?: Record<string, number>;
   epicResearchLevels?: Record<string, number>;
   colleggtibleModifiers?: Modifiers;
+  /** false = Standard permit: structures of at most 2 artifacts. undefined = Pro (4). */
+  proPermit?: boolean;
   /**
    * Skip the up-to-495-combo artifact STRUCTURE search entirely and evaluate stone placement for
    * exactly this structure instead — one `artifactId` per slot (`null` for an empty slot), same
@@ -358,6 +367,7 @@ export function getOptimalELRSetFromPool(
   const colleggtibles = options.colleggtibleModifiers;
   const commonResearch = options.commonResearch;
   const epicResearchLevels = options.epicResearchLevels;
+  const slotCount = artifactSlotCount(options.proPermit);
 
   // 1. Identify candidate artifact STRUCTURES to search over — skipped entirely when
   // `forcedArtifacts` is given (see that option's own doc comment): the search collapses to the
@@ -371,14 +381,14 @@ export function getOptimalELRSetFromPool(
       stones: new Array(artifactId ? getArtifact(artifactId)?.slots ?? 0 : 0).fill(null),
     }));
     while (forcedLoadout.length < 4) forcedLoadout.push({ artifactId: null, stones: [] });
-    candidateLoadouts = [forcedLoadout];
+    candidateLoadouts = [activeSlots(forcedLoadout, options.proPermit)];
   } else {
     const topCandidates = pool.candidates
       .map(id => getArtifact(id))
       .filter((a): a is NonNullable<typeof a> => !!a)
       .filter(a => !(excludeGusset && a.afxId === ei.ArtifactSpec.Name.ORNATE_GUSSET));
 
-    // Search through combinations of 1 to 4 artifacts
+    // Search through combinations of 1 to `slotCount` artifacts (4 with Pro permit, 2 with Standard)
     // 12C4 = 495, which is small enough.
     function combinations<T>(array: T[], r: number): T[][] {
       const result: T[][] = [];
@@ -395,12 +405,8 @@ export function getOptimalELRSetFromPool(
       return result;
     }
 
-    const combos = [
-      ...combinations(topCandidates, 1),
-      ...combinations(topCandidates, 2),
-      ...combinations(topCandidates, 3),
-      ...combinations(topCandidates, 4),
-    ];
+    const combos: (typeof topCandidates)[] = [];
+    for (let r = 1; r <= slotCount; r++) combos.push(...combinations(topCandidates, r));
 
     candidateLoadouts = combos
       .filter(combo => {

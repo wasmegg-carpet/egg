@@ -15,7 +15,7 @@ import {
   boostTransitionsFrom,
 } from './math';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
+import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
 import { getResearchById, getDiscountedVirtuePrice } from '@/calculations/commonResearch';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';
 import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@/lib/vehicles';
@@ -33,7 +33,9 @@ export function refreshActionPayload(
   if (context) {
     if (action.type === 'buy_research') {
       const payload = action.payload as import('@/types').BuyResearchPayload;
-      const artifactMods = calculateArtifactModifiers(prevSnapshot.artifactLoadout);
+      const artifactMods = calculateArtifactModifiers(
+        activeSlots(prevSnapshot.artifactLoadout, prevSnapshot.proPermit)
+      );
       const modifiers = {
         labUpgradeLevel: context.epicResearchLevels['cheaper_research'] || 0,
         researchCostMultiplier: context.colleggtibleModifiers.researchCost || 1,

@@ -39,6 +39,7 @@ export function useEarnings(): {
       artifactAwayMultiplier: artifactMod.totalMultiplier,
       videoDoublerMultiplier: initialStateStore.assumeDoubleEarnings ? 2 : 1,
       eventMultiplier: salesStore.earningsBoostActive ? salesStore.earningsBoostMultiplier : 1,
+      proPermit: initialStateStore.proPermit,
       artifactEffects: artifactMod.effects,
     };
   });

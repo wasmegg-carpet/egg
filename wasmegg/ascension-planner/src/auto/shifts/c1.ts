@@ -12,7 +12,7 @@ import {
 import { applyDecoratedAction } from './helpers/actionHelpers';
 import { computeSnapshot } from '../../engine/compute';
 import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
-import { getOptimalEarningsSet } from '@/lib/artifacts';
+import { getOptimalEarningsSet, activeSlots } from '@/lib/artifacts';
 import { socketEarningsStones } from '../loadout/resolve';
 
 const FLEET_RESEARCH_IDS = [
@@ -77,7 +77,12 @@ export function runC1(
       earningsSet = socketEarningsStones(context.loadoutInputs.earnings, context.loadoutInputs.stones);
       needsUpdate = true;
     } else if (needsUpdate && context.rawBackup) {
-      earningsSet = getOptimalEarningsSet(context.rawBackup);
+      earningsSet = getOptimalEarningsSet(context.rawBackup, currentState.proPermit !== false);
+    }
+    // Standard permit: the plan's earnings set holds only the 2 artifacts that can be active.
+    if (earningsSet && currentState.proPermit === false && earningsSet.slice(2).some(slot => slot.artifactId)) {
+      earningsSet = activeSlots(earningsSet, false);
+      needsUpdate = true;
     }
     if (earningsSet) {
       if (needsUpdate) {

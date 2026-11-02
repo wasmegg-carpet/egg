@@ -372,6 +372,7 @@ export interface EarningsInput {
   artifactAwayMultiplier: number; // Artifact multiplier for offline earnings (lunar totem/stone - MULTIPLICATIVE)
   videoDoublerMultiplier: number; // 2x multiplier for video doubler
   eventMultiplier: number; // Multiplier from game events (e.g. 2x earnings)
+  proPermit?: boolean; // false = Standard permit, which halves offline earnings. undefined = Pro
   artifactEffects: ArtifactEffectDisplay[]; // Individual effects for display
 }
 
@@ -384,6 +385,7 @@ export interface EarningsOutput {
   earningsMultiplier: number; // From earnings colleggtibles (all earnings)
   awayEarningsMultiplier: number; // From offline-earnings colleggtibles (offline only)
   artifactAwayMultiplier: number; // From lunar totem/stone (offline only, MULTIPLICATIVE)
+  permitAwayMultiplier: number; // 0.5 with Standard permit, 1 with Pro (offline only)
   onlineEarnings: number; // $/second
   offlineEarnings: number; // $/second
   videoDoublerMultiplier: number; // 2x multiplier if enabled

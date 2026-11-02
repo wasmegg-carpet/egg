@@ -122,7 +122,11 @@
       </div>
 
       <div class="p-2">
-        <ArtifactSelector :model-value="localLoadout" @update:model-value="localLoadout = $event" />
+        <ArtifactSelector
+          :model-value="localLoadout"
+          :slot-count="artifactSlotCount(initialStateStore.proPermit)"
+          @update:model-value="localLoadout = $event"
+        />
       </div>
     </div>
 
@@ -167,6 +171,8 @@ import {
   createEmptyLoadout,
   summarizeLoadout,
   calculateArtifactModifiers,
+  activeSlots,
+  artifactSlotCount,
 } from '@/lib/artifacts';
 import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from '@/lib/artifacts/virtue';
 import { useActionExecutor } from '@/composables/useActionExecutor';
@@ -199,7 +205,7 @@ const earningsClothedTe = computed<number | null>(() => {
     truthEggs: actionsStore.effectiveSnapshot.te,
     colleggtibleModifiers: context.colleggtibleModifiers,
     labUpgradeLevel: context.epicResearchLevels['cheaper_research'] ?? 0,
-    permitLevel: initialStateStore.rawBackup?.game?.permitLevel ?? null,
+    proPermit: initialStateStore.proPermit,
   });
 });
 
@@ -215,6 +221,7 @@ const isOptimalELR = computed(() => {
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: initialStateStore.proPermit,
   });
 
   const currentArtifacts = actionsStore.effectiveSnapshot.artifactLoadout;
@@ -234,6 +241,7 @@ function equipOptimalELR() {
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: initialStateStore.proPermit,
   });
 
   // If the optimized set is DIFFERENT from our saved ELR set, update it
@@ -309,7 +317,7 @@ function checkHabCapacityViolation(
   actionName: string
 ): boolean {
   const context = getSimulationContext();
-  const artifactMods = calculateArtifactModifiers(loadout as EquippedArtifact[]);
+  const artifactMods = calculateArtifactModifiers(activeSlots(loadout as EquippedArtifact[], snapshot.proPermit));
   const habCapacityOutput = calculateHabCapacity_Full({
     habIds: snapshot.habIds,
     researchLevels: snapshot.researchLevels,

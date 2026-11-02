@@ -4,7 +4,7 @@
  * base state's permanent progress and egg counts. Shared by the auto planner's first ascension
  * (useAscensionGenerator.ts) and Chain Finder's current ascension (lib/instantSearch/currentAscension.ts).
  */
-import { getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import { getArtifactLoadoutFromBackup, activeSlots } from '@/lib/artifacts';
 import type { EngineState } from '@/engine/types';
 import type { CurrentFarmState, VirtueEgg } from '@/types';
 import type { ei } from 'lib';
@@ -35,10 +35,14 @@ export function makeContinueState(
     researchLevels: { ...farmState.commonResearches },
     siloCount: farmState.numSilos || 1,
     tankLevel: base.tankLevel,
-    artifactLoadout: rawLoadout.map((slot: any) => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    })),
+    proPermit: base.proPermit,
+    artifactLoadout: activeSlots(
+      rawLoadout.map((slot: any) => ({
+        artifactId: slot.artifactId,
+        stones: [...slot.stones],
+      })),
+      base.proPermit
+    ),
     activeArtifactSet: 'elr',
     artifactSets: {
       earnings: earnings ? JSON.parse(JSON.stringify(earnings)) : null,

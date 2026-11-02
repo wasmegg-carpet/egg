@@ -7,23 +7,26 @@ import { getArtifact, getStone, stoneOptions } from './data';
 import { createEmptyLoadout } from './calculator';
 
 /**
- * Summarize an artifact loadout for display in action history.
+ * Summarize an artifact loadout for display in action history. Artifacts past `slotCount` (2 with
+ * Standard permit) are struck through as ignored, and their stones aren't counted.
  */
-export function summarizeLoadout(loadout: EquippedArtifact[]): string {
+export function summarizeLoadout(loadout: EquippedArtifact[], slotCount = 4): string {
   const parts: string[] = [];
-  for (const slot of loadout) {
+  loadout.forEach((slot, i) => {
     const artifact = getArtifact(slot.artifactId);
-    if (artifact) {
-      parts.push(
-        `T${artifact.tier}${artifact.rarityCode} <img src="${iconURL(artifact.iconPath, 32)}" class="h-4 w-4 inline-block align-middle -mt-0.5" title="${artifact.label}" />`
-      );
-    }
-  }
+    if (!artifact) return;
+    const text = `T${artifact.tier}${artifact.rarityCode} <img src="${iconURL(artifact.iconPath, 32)}" class="h-4 w-4 inline-block align-middle -mt-0.5" title="${artifact.label}" />`;
+    parts.push(
+      i < slotCount
+        ? text
+        : `<span class="line-through opacity-50" title="${artifact.label}: Pro Permit only — ignored">${text}</span>`
+    );
+  });
 
   const stoneCounts = new Map<string, { label: string; count: number; order: number; iconPath: string }>();
   const stoneOrderMap = new Map(stoneOptions.map((s, i) => [s.id, i]));
 
-  for (const slot of loadout) {
+  for (const slot of loadout.slice(0, slotCount)) {
     for (const stoneId of slot.stones) {
       if (!stoneId) continue;
       const stone = getStone(stoneId);

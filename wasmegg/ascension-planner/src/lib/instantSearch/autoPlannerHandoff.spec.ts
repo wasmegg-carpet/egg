@@ -46,6 +46,12 @@ describe('routeToHandoff', () => {
     const h = routeToHandoff(answer({ hypothetical: false }), r, 1003 * H);
     expect(h.start).toBe(1003 * H);
   });
+
+  it('starts a route from the save from the backup, a hypothetical one from its TE', () => {
+    const r = route([leg(200, 250, 1000 * H, 1100 * H)]);
+    expect(routeToHandoff(answer({ hypothetical: false }), r, 1000 * H).fromSave).toBe(true);
+    expect(routeToHandoff(answer(), r).fromSave).toBe(false);
+  });
 });
 
 describe('URL', () => {

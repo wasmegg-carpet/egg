@@ -26,6 +26,7 @@ export function runH1(state: EngineState, context: SimulationContext): ShiftResu
     commonResearch: state.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: state.proPermit,
     assumeMaxHabsVehicles: true, // H1 is near the end, we likely have CU and max vehicles
   });
 

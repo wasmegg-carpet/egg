@@ -23,8 +23,12 @@ export interface ChainHandoff {
   /** Unix second the first ascension starts, and the zone the planner shows times in. */
   start: number;
   timezone: string;
-  /** TE per egg the plan starts from (pending TE claimed). */
+  /** TE per egg the plan starts from (pending TE claimed). Only for a hypothetical start. */
   teEarned: Partial<Record<VirtueEgg, number>>;
+  /** The route starts from the save as it is: the planner starts from the backup (claimed and
+   *  pending TE, eggs laid since the last sync) instead of `teEarned`, and from now unless `start`
+   *  is later. */
+  fromSave: boolean;
   /** Ascension index -> unix second it ends at instead of at its target. */
   endTimeOverrides: Record<number, number>;
   /** Ascension index -> the build the route used. */
@@ -78,6 +82,7 @@ export function routeToHandoff(answer: InstantAnswer, route: Route, now = Date.n
     start,
     timezone: answer.timezone,
     teEarned,
+    fromSave: !answer.hypothetical,
     endTimeOverrides,
     variantOverrides,
     siloMode: answer.siloMode,
@@ -103,6 +108,7 @@ export function readHandoff(search: string): ChainHandoff | null {
       start: h.start,
       timezone: h.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
       teEarned: h.teEarned ?? {},
+      fromSave: !!h.fromSave,
       endTimeOverrides: h.endTimeOverrides ?? {},
       variantOverrides: h.variantOverrides ?? {},
       siloMode: !!h.siloMode,

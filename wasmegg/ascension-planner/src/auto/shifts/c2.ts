@@ -2,7 +2,7 @@ import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { getResearchById, isTierUnlocked } from '../../calculations/commonResearch';
 import { rankResearchByROI } from '../../calculations/researchRanking';
 import { computeSnapshot } from '../../engine/compute';
-import { MAX_SILOS } from '@/stores/silos';
+import { maxSilos } from '@/stores/silos';
 import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
 import { buildR1LookaheadNotePayload } from '@/lib/actions/notes';
 import type { DeferralCheckpoint } from './helpers/earningsEventDeferral';
@@ -144,7 +144,7 @@ function isBetterScore(a: ThroughR1Score, b: ThroughR1Score): boolean {
  * before one more makes the next silo affordable. So this never stops at the first purchase that
  * doesn't help — it keeps buying until the budget or the candidates run out, then rewinds to the
  * best stopping point seen (which may be no purchases at all). The one early exit: once the best
- * plan already reaches `MAX_SILOS`, only time can still improve, and the C2 time spent so far is a
+ * plan already reaches the permit's `maxSilos`, only time can still improve, and the C2 time spent so far is a
  * lower bound on any later stopping point's total, so once it reaches the best total nothing later
  * can win.
  *
@@ -168,7 +168,8 @@ export function runR1LookaheadEarningsBuy(
   let purchaseCount = 0;
   let gemsSpent = 0;
 
-  while (!(best.score.siloCount >= MAX_SILOS && helpers.getElapsedSeconds() >= best.score.totalSeconds)) {
+  const siloCap = maxSilos(startState.proPermit);
+  while (!(best.score.siloCount >= siloCap && helpers.getElapsedSeconds() >= best.score.totalSeconds)) {
     const state = helpers.getState();
     const snapshot = computeSnapshot(state, context, { skipGrowth: true });
     const absTime = helpers.getAbsTime();

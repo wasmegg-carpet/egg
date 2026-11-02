@@ -19,6 +19,8 @@ export interface EngineState {
   researchLevels: ResearchLevels;
   siloCount: number;
   tankLevel: number;
+  /** false = Standard permit (offline earnings halved, 2 silos, 2 artifacts). undefined = Pro. */
+  proPermit?: boolean;
 
   // Artifacts
   artifactLoadout: ArtifactSlotPayload[];
