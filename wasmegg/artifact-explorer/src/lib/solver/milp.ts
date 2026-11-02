@@ -1,7 +1,7 @@
 // The mixed-integer program handed to HiGHS: the continuous per-target scale
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
-import { UNBOUNDED_PER_SLOT, maxLaunches, type Model } from './model';
+import { UNBOUNDED_PER_SLOT, boundsFollowFromRows, maxLaunches, type Model } from './model';
 import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
 
@@ -15,6 +15,13 @@ export interface Layout {
   groups: number;
   crafts: number;
   targets: number;
+  // Slot columns are per duration class, not per group: the slot and order rows read only a mission's
+  // duration, so groups of one duration share `slots` columns and a `class_c` row ties their totals to
+  // them. See SPEC.md section 2. `classCap` is the per-slot column bound; `classSeconds` the row coefficient.
+  classes: number;
+  classOf: number[];
+  classSeconds: number[];
+  classCap: number[];
   groupTotalBase: number;
   craftBase: number;
   // Score in units of theta: sigma in the 'oa' variant, and the raw score in 'scale', where theta is 1.
@@ -25,13 +32,43 @@ export interface Layout {
 
 export type Variant = 'scale' | 'oa';
 
+// A group shares a class only when its duration alone bounds its per-slot count (the same test the
+// dominance pass applies): a group on the `UNBOUNDED_PER_SLOT` stand-in has a per-group per-slot cap no
+// shared column can carry, so it keeps a class of its own with exactly the bound it had before.
+function durationClasses(model: Model): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classCap'> {
+  const classOf = new Array<number>(model.groups.length);
+  const classSeconds: number[] = [];
+  const classCap: number[] = [];
+  const shared = new Map<number, number>();
+  model.groups.forEach((grp, g) => {
+    // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
+    const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
+    if (boundsFollowFromRows(grp, model.timeCapacitySeconds)) {
+      let c = shared.get(grp.timeSeconds);
+      if (c === undefined) {
+        c = classSeconds.length;
+        shared.set(grp.timeSeconds, c);
+        classSeconds.push(grp.timeSeconds);
+        classCap.push(byTime);
+      }
+      classOf[g] = c;
+    } else {
+      classOf[g] = classSeconds.length;
+      classSeconds.push(grp.timeSeconds);
+      classCap.push(Math.max(0, Math.min(grp.cap, byTime, UNBOUNDED_PER_SLOT)));
+    }
+  });
+  return { classes: classSeconds.length, classOf, classSeconds, classCap };
+}
+
 export function layoutOf(model: Model, variant: Variant): Layout {
   const withZ = variant === 'oa';
   const slots = model.slots;
   const groups = model.groups.length;
   const crafts = model.craftables.length;
   const targets = model.sortedTargets.length;
-  const groupTotalBase = groups * slots;
+  const classes = durationClasses(model);
+  const groupTotalBase = classes.classes * slots;
   const craftBase = groupTotalBase + groups;
   const scoreBase = craftBase + crafts;
   const envelopeBase = scoreBase + targets;
@@ -40,6 +77,7 @@ export function layoutOf(model: Model, variant: Variant): Layout {
     groups,
     crafts,
     targets,
+    ...classes,
     groupTotalBase,
     craftBase,
     scoreBase,
@@ -48,8 +86,8 @@ export function layoutOf(model: Model, variant: Variant): Layout {
   };
 }
 
-export function nCol(layout: Layout, group: number, slot: number): number {
-  return group * layout.slots + slot;
+export function nCol(layout: Layout, durationClass: number, slot: number): number {
+  return durationClass * layout.slots + slot;
 }
 
 export function effectiveQs(model: Model): number[] {
@@ -157,13 +195,6 @@ class Rows {
   }
 }
 
-function perSlotCap(model: Model, group: number): number {
-  const grp = model.groups[group];
-  // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
-  const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
-  return Math.max(0, Math.min(grp.cap, byTime, UNBOUNDED_PER_SLOT));
-}
-
 interface Core {
   layout: Layout;
   rows: Rows;
@@ -179,14 +210,18 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
   const columnUpper = new Float64Array(layout.columnCount).fill(INF);
   const columnIsInteger = new Uint8Array(layout.columnCount);
 
-  for (let g = 0; g < layout.groups; g++) {
-    const cap = perSlotCap(model, g);
+  for (let c = 0; c < layout.classes; c++) {
     for (let k = 0; k < layout.slots; k++) {
-      const col = nCol(layout, g, k);
-      columnUpper[col] = cap;
+      const col = nCol(layout, c, k);
+      columnUpper[col] = layout.classCap[c];
       columnIsInteger[col] = withZ ? 1 : 0;
     }
+  }
+  // Integer too: a class row only fixes the *sum* of its members' totals, and a whole class count split
+  // fractionally between two groups is not a plan.
+  for (let g = 0; g < layout.groups; g++) {
     columnUpper[layout.groupTotalBase + g] = model.groups[g].cap;
+    columnIsInteger[layout.groupTotalBase + g] = withZ ? 1 : 0;
   }
   for (let p = 0; p < layout.crafts; p++) {
     const cap = model.craftCaps[p];
@@ -202,10 +237,10 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
 
   const rows = new Rows();
 
-  for (let g = 0; g < layout.groups; g++) {
-    rows.begin(`total_g${g}`);
-    rows.add(layout.groupTotalBase + g, 1);
-    for (let k = 0; k < layout.slots; k++) rows.add(nCol(layout, g, k), -1);
+  for (let c = 0; c < layout.classes; c++) {
+    rows.begin(`class_c${c}`);
+    for (let g = 0; g < layout.groups; g++) if (layout.classOf[g] === c) rows.add(layout.groupTotalBase + g, 1);
+    for (let k = 0; k < layout.slots; k++) rows.add(nCol(layout, c, k), -1);
     rows.end(0, 0);
   }
 
@@ -240,16 +275,16 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
   // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`slot_k${k}`);
-    for (let g = 0; g < layout.groups; g++) rows.add(nCol(layout, g, k), model.groups[g].timeSeconds);
+    for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classSeconds[c]);
     rows.end(-INF, model.timeCapacitySeconds);
   }
 
   for (let k = 0; k + 1 < layout.slots; k++) {
     rows.begin(`order_k${k}`);
-    for (let g = 0; g < layout.groups; g++) {
-      const seconds = model.groups[g].timeSeconds;
-      rows.add(nCol(layout, g, k), seconds);
-      rows.add(nCol(layout, g, k + 1), -seconds);
+    for (let c = 0; c < layout.classes; c++) {
+      const seconds = layout.classSeconds[c];
+      rows.add(nCol(layout, c, k), seconds);
+      rows.add(nCol(layout, c, k + 1), -seconds);
     }
     rows.end(0, INF);
   }
@@ -331,12 +366,8 @@ export function buildOaMilp(
 export function decodeCounts(model: Model, layout: Layout, columnValues: Float64Array): number[] {
   const counts = new Array<number>(model.groups.length).fill(0);
   for (let g = 0; g < layout.groups; g++) {
-    let total = 0;
-    for (let k = 0; k < layout.slots; k++) {
-      const v = columnValues[nCol(layout, g, k)];
-      if (Number.isFinite(v) && v > 0) total += Math.round(v);
-    }
-    counts[g] = Math.min(total, model.groups[g].cap);
+    const v = columnValues[layout.groupTotalBase + g];
+    if (Number.isFinite(v) && v > 0) counts[g] = Math.min(Math.round(v), model.groups[g].cap);
   }
   return counts;
 }
