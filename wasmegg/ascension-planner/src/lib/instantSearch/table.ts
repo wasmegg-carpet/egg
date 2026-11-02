@@ -164,14 +164,6 @@ export function shiftedLookup(table: Table, shift: number): BuildLookup {
   return lookup;
 }
 
-/** The bytes of a table, gzipped or not (gzip's magic number decides), as an ArrayBuffer. */
-export async function unpackTableBytes(bytes: ArrayBuffer): Promise<ArrayBuffer> {
-  const head = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength));
-  if (head[0] !== 0x1f || head[1] !== 0x8b) return bytes;
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Response(stream).arrayBuffer();
-}
-
 /**
  * A gear table below a start TE and the maxed table from it, as one table (ported from AutoAutoAP's
  * src/search/precomputedTable.ts): a board gear combination's table covers the TEs where gear shows,

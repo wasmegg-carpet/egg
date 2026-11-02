@@ -13,6 +13,7 @@ import { checkPacked, packTable, type Cell } from '@/buildTable/pack';
 import { allHours, prefixSourceFor, SEED_HOURS, type EventClass } from '@/buildTable/prefixReuse';
 import { cteBonusOf, type K3Record, type TaskResult } from '@/buildTable/task';
 import type { SimulationContext } from '@/auto/types';
+import { gzipBytes } from '@/utils/gzip';
 import { BuildEta } from './eta';
 import { ChainFinderWorkerPool } from './workerPool';
 
@@ -226,13 +227,4 @@ function pack(
   );
   checkPacked(bytes, cells);
   return { bytes, from, to, cells: cells.length, simVersion: __SIM_VERSION__ };
-}
-
-/**
- * Gzip with the browser's CompressionStream. It has no level option, so the output isn't byte-for-byte
- * the CLI's `gzipSync(level 9)`, but it decompresses to the same table.
- */
-export async function gzipBytes(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
 }

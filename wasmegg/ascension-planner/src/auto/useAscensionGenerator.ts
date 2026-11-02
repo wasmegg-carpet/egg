@@ -554,7 +554,7 @@ export function useAscensionGenerator() {
     await nextTick();
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     try {
-      triggerPlanExport(buildExportedPlan());
+      await triggerPlanExport(buildExportedPlan());
     } finally {
       isExporting.value = false;
     }

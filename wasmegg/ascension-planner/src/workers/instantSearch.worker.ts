@@ -20,7 +20,8 @@ import {
   type ChainSpace,
   type LegHours,
 } from '@/lib/instantSearch/chainSpace';
-import { compositeTable, readTable, shiftedLookup, unpackTableBytes, type Table } from '@/lib/instantSearch/table';
+import { compositeTable, readTable, shiftedLookup, type Table } from '@/lib/instantSearch/table';
+import { gunzipBytes } from '@/utils/gzip';
 import type { InstantSearchRequest, InstantSearchResponse } from './instantSearch.protocol';
 
 // `Worker`, not `DedicatedWorkerGlobalScope`: see researchCalc.worker.ts (dom and webworker libs clash).
@@ -82,9 +83,9 @@ ctx.onmessage = async (event: MessageEvent<InstantSearchRequest>) => {
   const msg = event.data;
   try {
     if (msg.kind === 'load') {
-      const low = readTable(await unpackTableBytes(msg.bytes));
+      const low = readTable(await gunzipBytes(msg.bytes));
       table = msg.high
-        ? compositeTable(low, readTable(await unpackTableBytes(msg.high.bytes)), msg.high.split, msg.high.scale)
+        ? compositeTable(low, readTable(await gunzipBytes(msg.high.bytes)), msg.high.split, msg.high.scale)
         : low;
       space = null;
       shifted = null;

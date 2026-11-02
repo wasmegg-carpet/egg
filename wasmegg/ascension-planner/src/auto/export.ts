@@ -1,4 +1,4 @@
-import { downloadFile } from '@/utils/export';
+import { downloadGzipped } from '@/utils/export';
 import type { Action } from '@/types/actions/meta';
 import type { AscensionSummary } from './types';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
@@ -101,9 +101,9 @@ export function migrateExportedPlanV1(old: ExportedPlanV1): ExportedPlan {
 }
 
 /**
- * Triggers a browser download of the ascension plan as a JSON file.
+ * Triggers a browser download of the ascension plan as a gzipped JSON file.
  */
-export function triggerPlanExport(plan: ExportedPlan) {
+export async function triggerPlanExport(plan: ExportedPlan) {
   const dateStr = new Date().toISOString().split('T')[0];
   const x = plan.ascensions.length;
   const firstVariant = Object.values(plan.ascensions[0]?.variants ?? {})[0];
@@ -113,5 +113,5 @@ export function triggerPlanExport(plan: ExportedPlan) {
 
   const filename = `Auto_AP_${dateStr}_${x}-ascensions_${startTE}_to_${endTE}.json`;
   const content = JSON.stringify(plan);
-  downloadFile(filename, content, 'application/json');
+  await downloadGzipped(filename, content);
 }

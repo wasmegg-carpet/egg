@@ -697,7 +697,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     exportPlan() {
-      exportPlanLogic(this.actions, this.initialSnapshot);
+      return exportPlanLogic(this.actions, this.initialSnapshot);
     },
 
     async importPlan(jsonString: string, skipRecalculate = false, preserveId = false) {
