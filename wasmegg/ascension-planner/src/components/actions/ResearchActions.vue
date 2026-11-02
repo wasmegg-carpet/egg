@@ -29,6 +29,7 @@
     <SmartBuyView
       v-if="currentView === 'smart_buy'"
       :auto-buy-always-on="autoBuyState.alwaysOn"
+      :is-research-sale-active="isResearchSaleActive"
       :can-buy-until-sale-warning="canBuyUntilSaleWarning"
       :can-buy-until-sale-deadline="canBuyUntilSaleDeadline"
       :quick-buy-preview="quickBuyPreview"
