@@ -86,6 +86,16 @@ export interface OptimizeOverrides extends Partial<Omit<OptimizeArgs, 'options' 
   launchPeriodSeconds?: number;
 }
 
+// The standard end-to-end run: one 4-star puzzle cube, a tank and a time budget both large enough not to
+// bind, and no low-observation loot. Shared because craft-budget.spec.ts and pipeline.spec.ts both mean *the*
+// default run by it, and two copies drifting apart would leave them silently testing different plans.
+export const CUBE_RUN: OptimizerConfig = {
+  desiredArtifactNodeIds: ['puzzle-cube-4'],
+  includeNotEnoughData: false,
+  fuelTankCapacity: 2_000_000_000,
+  timeBudgetSeconds: 3 * 24 * 3600,
+};
+
 export async function optimize(
   config: OptimizerConfig,
   playerConfig: ShipsConfig,

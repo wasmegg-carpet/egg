@@ -9,7 +9,7 @@ import { loadHighs } from '@/lib/solver/highs';
 import { DEFAULT_TUNING, solveWith } from '@/lib/solver/oa';
 import type { PlanProblem } from '@/lib/solver/types';
 import type { RecipeDAG } from '@/lib/types';
-import { makeNode, makeOpt, optimize } from './spec-helpers';
+import { CUBE_RUN, makeNode, makeOpt, optimize } from './spec-helpers';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;
@@ -58,12 +58,7 @@ describe('computeCraftUnitPrices', () => {
 });
 
 describe('optimize', () => {
-  const config = {
-    desiredArtifactNodeIds: ['puzzle-cube-4'],
-    includeNotEnoughData: false,
-    fuelTankCapacity: 2_000_000_000,
-    timeBudgetSeconds: 3 * 24 * 3600,
-  };
+  const config = CUBE_RUN;
   const cubes = buildRecipeDag(config.desiredArtifactNodeIds, 30);
   const baseYield = computeBaseYield(null, config.desiredArtifactNodeIds, cubes);
   const unitPrices = computeCraftUnitPrices(cubes, null);
