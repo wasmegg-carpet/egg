@@ -34,6 +34,7 @@ import { describeTableArtifacts, tableArtifacts } from '@/lib/instantSearch/tabl
 import { fetchTableBytes, isTableStall } from '@/lib/instantSearch/tableFetch';
 import { backupGearContext, gearChanges, gearStamp, gearTableNames, tableName } from '@/lib/instantSearch/tableGear';
 import { instantDeliveryScale } from '@/lib/instantSearch/deliveryScale';
+import { simChangesSince } from '@/lib/instantSearch/simChanges';
 import { getArtifact, getOptimalEarningsSet } from '@/lib/artifacts';
 import { readCurrentAscension, type CurrentAscension } from '@/lib/instantSearch/currentAscension';
 import {
@@ -236,6 +237,8 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
   const headerWarnings = computed(() =>
     header.value ? tableHeaderWarnings(header.value as unknown as Record<string, unknown>) : []
   );
+  /** Simulator changes the loaded table doesn't have, oldest first (simChanges.ts). */
+  const simChanges = computed(() => (header.value ? simChangesSince(header.value) : []));
   const tableSource = ref('');
   /** Why the table in use is not built for the player's own gear or delivery set; '' when it is. */
   const tableNote = ref('');
@@ -812,6 +815,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     waitsChanged,
     header,
     headerWarnings,
+    simChanges,
     tableSource,
     tableNote,
     tableStatus,

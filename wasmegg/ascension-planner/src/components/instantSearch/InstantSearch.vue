@@ -203,6 +203,21 @@
       </ul>
     </div>
 
+    <div
+      v-if="store.tableStatus === 'ready' && store.header"
+      class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
+    >
+      <div class="font-bold text-slate-800">Changes since this table</div>
+      <ol v-if="store.simChanges.length" class="mt-1 space-y-1">
+        <li v-for="c in store.simChanges" :key="c.commit">
+          <span class="font-bold">{{ showTime(Date.parse(c.date) / 1000) }}</span>
+          <span class="mx-1 font-mono-premium text-slate-400">{{ c.commit }}</span>
+          {{ c.note }}
+        </li>
+      </ol>
+      <p v-else class="mt-1">None: the simulator hasn't changed since this table was built.</p>
+    </div>
+
     <p v-if="store.error" class="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
       {{ store.error }}
     </p>

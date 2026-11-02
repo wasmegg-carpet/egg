@@ -1,0 +1,39 @@
+/**
+ * The simulator changes a table may be missing, written by hand: a commit only belongs here when it
+ * changes what a table's cells would hold, so UI commits never make a table look behind.
+ */
+import type { TableHeader } from './table';
+
+export interface SimChange {
+  /** Short hash, as `simVersion` stamps it (`git rev-parse --short=8 <commit>`). */
+  commit: string;
+  /** When it was committed, with the time: `git log -1 --format=%cI <commit>`. */
+  date: string;
+  /** What changed, for someone deciding whether to trust a table. */
+  note: string;
+}
+
+/** Oldest first: add new changes at the bottom. */
+export const SIM_CHANGES: SimChange[] = [
+  {
+    commit: 'b694b2d0',
+    date: '2026-11-01T20:35:29-06:00',
+    note: 'Corrected a bug where vehicles cost too much. Mostly affected 200 TE and below.',
+  },
+];
+
+/**
+ * The changes a table doesn't have, oldest first: those after its own commit when that is listed,
+ * otherwise those committed after it was built (most tables come from a commit that isn't listed).
+ */
+export function simChangesSince(
+  header: Pick<TableHeader, 'simVersion' | 'builtAt'>,
+  changes: SimChange[] = SIM_CHANGES
+): SimChange[] {
+  const commit = header.simVersion?.replace(/-dirty$/, '');
+  const own = changes.findIndex(c => c.commit === commit);
+  if (own >= 0) return changes.slice(own + 1);
+  const builtAt = Date.parse(header.builtAt);
+  // No usable build time: nothing says the table has any of them.
+  return Number.isNaN(builtAt) ? changes : changes.filter(c => Date.parse(c.date) > builtAt);
+}

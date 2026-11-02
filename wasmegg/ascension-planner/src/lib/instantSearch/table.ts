@@ -186,6 +186,8 @@ export function compositeTable(low: Table, high: Table, split: number, scale: nu
       to: Math.max(high.header.to, low.header.to),
       k3: high.header.k3,
       gearTo: top,
+      // The older half's: what the simulator changed since then may be missing from part of the answer.
+      builtAt: Date.parse(high.header.builtAt) < Date.parse(low.header.builtAt) ? high.header.builtAt : low.header.builtAt,
       simVersion:
         low.header.simVersion && low.header.simVersion === high.header.simVersion ? low.header.simVersion : undefined,
     },
