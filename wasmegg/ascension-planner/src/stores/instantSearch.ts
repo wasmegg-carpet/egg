@@ -129,7 +129,7 @@ export interface ExplorerFilter {
 }
 
 /** Chains are listed once no more than this many match. */
-export const SHOW_LIMIT = 200;
+export const SHOW_LIMIT = 1000;
 /** Days slower than the fastest chain, to start with. */
 export const DEFAULT_SLACK_DAYS = 2;
 

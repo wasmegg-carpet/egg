@@ -40,7 +40,7 @@
           v-model.number="filter.slackDays"
           type="number"
           min="0"
-          step="0.5"
+          step="0.1"
           class="input-premium w-20 py-1.5 px-2 text-sm font-mono-premium font-bold text-slate-900"
         />
         days slower than your plan
@@ -129,7 +129,7 @@
           prestiges to see them all.
         </div>
         <div v-if="tooMany" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600">
-          Narrow the filters to {{ SHOW_LIMIT }} chains or fewer to list them.
+          Narrow the filters to {{ SHOW_LIMIT.toLocaleString() }} chains or fewer to list them.
         </div>
         <template v-else-if="answer.waitForEggs && comparison.matches">
           <div v-if="comparison.waits === 'running'" class="text-slate-500">
