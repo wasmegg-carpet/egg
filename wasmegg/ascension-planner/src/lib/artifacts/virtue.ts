@@ -522,10 +522,15 @@ export function getOptimalELRSetFromPool(
     const remQuantumStones = quantumStones.map(s => ({ ...s }));
     const currentStones: (string | null)[] = new Array(totalStoneSlots).fill(null);
 
-    for (let slotIdx = 0; slotIdx < totalStoneSlots; slotIdx++) {
-      const metrics = evaluateStones(currentStones);
+    // A stone only multiplies lay rate or shipping (`calculateArtifactModifiers`, and both scale
+    // directly with it), so one full evaluation of the empty sockets answers every slot's "which is
+    // behind?" below. This search runs once per research candidate per purchase in a table build.
+    const unstoned = evaluateStones(currentStones);
+    let layRate = unstoned.layRate;
+    let shipRate = unstoned.shipRate;
 
-      if (metrics.layRate < metrics.shipRate) {
+    for (let slotIdx = 0; slotIdx < totalStoneSlots; slotIdx++) {
+      if (layRate < shipRate) {
         const bestTachyon = remTachyonStones.find(s => s.count > 0);
         if (bestTachyon) {
           currentStones[slotIdx] = bestTachyon.id;
@@ -550,6 +555,10 @@ export function getOptimalELRSetFromPool(
           }
         }
       }
+
+      const placed = getStone(currentStones[slotIdx]);
+      if (placed?.effectTarget === 'egg laying rate') layRate *= 1 + placed.effectDelta;
+      else if (placed?.effectTarget === 'shipping rate') shipRate *= 1 + placed.effectDelta;
     }
 
     currentStones.sort((a, b) => {
@@ -567,7 +576,8 @@ export function getOptimalELRSetFromPool(
       return tierB - tierA;
     });
 
-    const finalMetrics = evaluateStones(currentStones);
+    // These metrics only rank structures against each other: a lone (forced) structure skips them.
+    const finalMetrics = candidateLoadouts.length === 1 ? unstoned : evaluateStones(currentStones);
     bestELRForThisLoadout = finalMetrics.elr;
     bestStonesForThisLoadout = currentStones;
     bestMetricsForThisLoadout = finalMetrics;

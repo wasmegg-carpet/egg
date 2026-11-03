@@ -64,6 +64,27 @@ reuses its class's seed when no sale/boost start or end falls within **seed pref
   built both ways: **zero mismatches**, tier-13 builds included. 141–149 of 168 hours reuse a seed.
 - Saves 30–81% of the work depending on TE.
 
+## Build speed work (2026-11-02)
+
+Against a table built at `129f5daa`, three single-worker TEs ran concurrently:
+
+| TE | Before | After | Saved |
+|---|---|---|---|
+| 150 | 106 s | 45 s | 58% |
+| 250 | 129 s | 64 s | 51% |
+| 320 | 92 s | 48 s | 48% |
+
+- Kept (output identical): one full stone evaluation per solve, then multiply (`getOptimalELRSetFromPool`); walk
+  boost transitions in order instead of filtering and sorting per call (`getTimeToSave`, `calculateEarningsForTime`);
+  build the boost list once per `rankResearchByELRImpact`, not per candidate.
+- Checked on 23 start TEs (3,864 cells and the K3 record, against `LLLL`), plus 150 cells across T4E metronome,
+  T4E compass, T2E gusset, silo mode and a short mixed-tier stone pool (against the old code).
+- Rejected: 30 ROI search iterations instead of 60. No measurable speedup, and every compared cell changed (`waitStart`
+  up to 11%, `peakELR` up to 7%). The cause wasn't investigated, so don't assume the iteration count is only precision.
+- Rejected: inferring cells across TEs. In the table, `waitStart` and `delivered` almost never match between adjacent
+  TEs, and equal `peakELR` at both ends of a range doesn't guarantee it in between (up to 37% wrong).
+- The "Measured" timings below predate this work. A CPU profile inflates runtimes about 3.5×: use it for shares only.
+
 ## Measured (M3, 4P + 4E cores, 7 workers)
 
 | Range | Wall time | Source |

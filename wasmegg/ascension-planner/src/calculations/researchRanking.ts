@@ -563,6 +563,7 @@ export function rankResearchByELRImpact(
     // call below force-feeds this same structure via `forcedArtifacts` so it skips straight to
     // re-solving stones, rather than repeating the up-to-495-combo structure search unchanged.
     const baselineArtifactIds = baselineOptimal.map(slot => slot.artifactId);
+    const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
 
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
@@ -572,7 +573,6 @@ export function rankResearchByELRImpact(
         // legitimately disagree about whether waiting for the sale wins, since a bigger bank
         // shortens the "buy now" wait without changing the "wait for sale" one.
         const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
         const noBankPurchase = getSaleAwareTimeToSave(
           r,
           level,
@@ -706,6 +706,7 @@ export function rankResearchByELRImpact(
   } else {
     const currentSlots = calculateMaxVehicleSlots(researchLevels);
     const currentMaxCars = calculateMaxTrainLength(researchLevels);
+    const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
 
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
@@ -715,7 +716,6 @@ export function rankResearchByELRImpact(
         // legitimately disagree about whether waiting for the sale wins, since a bigger bank
         // shortens the "buy now" wait without changing the "wait for sale" one.
         const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
         const noBankPurchase = getSaleAwareTimeToSave(
           r,
           level,
