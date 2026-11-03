@@ -1,3 +1,4 @@
+import type { EngineState } from '@/engine/types';
 import { ref, computed, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
@@ -301,7 +302,7 @@ export function useAscensionGenerator() {
             effectiveTargets.map((_, k) => hashLoadoutInputs(resolveLoadoutInputs(k)))
           );
 
-      let currentBaseState: any;
+      let currentBaseState: EngineState;
       let currentStartTime: number;
       let currentSummary: AscensionSummary | null = null;
       const newChain: ChainedAscension[] = [];
@@ -498,10 +499,11 @@ export function useAscensionGenerator() {
       }
 
       ascensionChain.value = newChain;
-    } catch (err: any) {
-      if (err.message !== 'validation_error') {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message !== 'validation_error') {
         console.error('Simulation error:', err);
-        simulationError.value = err.message || 'An unknown error occurred during simulation.';
+        simulationError.value = message || 'An unknown error occurred during simulation.';
       }
     } finally {
       isGenerating.value = false;
@@ -621,7 +623,7 @@ export function useAscensionGenerator() {
     if (ascensionChain.value.length === 0) return;
 
     const startTE = ascensionChain.value[0].initialParams?.teEarned
-      ? Object.values(ascensionChain.value[0].initialParams.teEarned).reduce((a: number, b: any) => a + b, 0)
+      ? Object.values(ascensionChain.value[0].initialParams.teEarned).reduce((a, b) => a + b, 0)
       : currentTE.value;
 
     const bestPlans = ascensionChain.value

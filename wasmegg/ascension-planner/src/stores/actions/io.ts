@@ -145,7 +145,7 @@ export function importPlanLogic(jsonString: string) {
 
   // Merge simple wait_for_time actions into subsequent purchases to reduce clutter
   if (data.actions && data.actions.length > 0) {
-    const mergedActions: any[] = [];
+    const mergedActions: Action[] = [];
     for (let i = 0; i < data.actions.length; i++) {
       const action = data.actions[i];
       if (action.type === 'wait_for_time') {
@@ -184,7 +184,7 @@ export function importPlanLogic(jsonString: string) {
   }
 
   if (data.actions) {
-    data.actions.forEach((a: any, i: number) => a.index = i);
+    data.actions.forEach((a: Action, i: number) => a.index = i);
   }
 
   return data;

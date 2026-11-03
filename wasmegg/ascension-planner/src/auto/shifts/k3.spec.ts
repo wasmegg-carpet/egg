@@ -1,3 +1,4 @@
+import type { VirtueEgg } from '@/types';
 import { describe, expect, test } from 'vitest';
 import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { runK3 } from './k3';
@@ -51,7 +52,7 @@ function fakeContext(overrides: Partial<SimulationContext> = {}): SimulationCont
 
 describe('runK3 maxWaitSeconds clamp', () => {
   test('unbounded (default): waits exactly to buildPhaseEnd when no TE target is given', () => {
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     const result = runK3(state, context, 1000);
@@ -65,7 +66,7 @@ describe('runK3 maxWaitSeconds clamp', () => {
     // caller that violates the invariant (buildPhaseEnd reachable within maxWaitSeconds) gets a
     // truncated build phase, not an error. Production code never does this — `runC3Variants`
     // filtering guarantees it — but the behavior itself should stay predictable.
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     const result = runK3(state, context, 1000, undefined, 400);
@@ -79,7 +80,7 @@ describe('runK3 maxWaitSeconds clamp', () => {
   // across environments. Deriving buildPhaseEnd from a real probe run keeps these tests honest about
   // what they're actually asserting instead of assuming a magnitude.
   function probePeakELR(): number {
-    const probe = runK3(fakeState({ eggsDelivered: { kindness: 0 } as any }), fakeContext(), 1);
+    const probe = runK3(fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> }), fakeContext(), 1);
     return probe.actions.find(a => a.type === 'shift')?.payload.peakELR as number;
   }
 
@@ -87,7 +88,7 @@ describe('runK3 maxWaitSeconds clamp', () => {
     const peakELR = probePeakELR();
     const buildPhaseEnd = timeToEarnTE(0, peakELR, 1) * 0.5; // deliberately short of TE #1
 
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     const result = runK3(state, context, buildPhaseEnd, undefined, buildPhaseEnd * 10);
 
@@ -100,7 +101,7 @@ describe('runK3 maxWaitSeconds clamp', () => {
     const timeForOneTE = timeToEarnTE(0, peakELR, 1);
     const cap = timeForOneTE * 0.5; // enough to make real progress, not enough to finish TE #1
 
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     // buildPhaseEnd = 1 (negligible) so the mandatory floor never dominates the TE-target extension.
     const result = runK3(state, context, 1, 1, cap);
@@ -111,10 +112,10 @@ describe('runK3 maxWaitSeconds clamp', () => {
   });
 
   test('maxWaitSeconds that fits the TE target exactly matches the unclamped result', () => {
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
-    const unclamped = runK3(fakeState({ eggsDelivered: { kindness: 0 } as any }), context, 10, 1);
+    const unclamped = runK3(fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> }), context, 10, 1);
     const clamped = runK3(state, context, 10, 1, unclamped.elapsedSeconds + 1);
 
     expect(clamped.elapsedSeconds).toBeCloseTo(unclamped.elapsedSeconds, 6);
@@ -128,7 +129,7 @@ describe('runK3 maxWaitSeconds clamp', () => {
 // generous buildPhaseEnd should already be earning some kindness TE passively.
 describe('runK3 sanity: passive TE during the mandatory wait is real, not a fixed constant', () => {
   test('a long enough buildPhaseEnd alone (no TE target) can already cross a TE threshold', () => {
-    const state = fakeState({ eggsDelivered: { kindness: 0 } as any });
+    const state = fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     // Run once to discover this setup's own peakELR, then pick a buildPhaseEnd long enough to cross
@@ -138,7 +139,7 @@ describe('runK3 sanity: passive TE during the mandatory wait is real, not a fixe
     expect(peakELR).toBeGreaterThan(0);
 
     const timeForOneTE = timeToEarnTE(0, peakELR, 1);
-    const result = runK3(fakeState({ eggsDelivered: { kindness: 0 } as any }), context, timeForOneTE + 10);
+    const result = runK3(fakeState({ eggsDelivered: { kindness: 0 } as Record<VirtueEgg, number> }), context, timeForOneTE + 10);
 
     expect(countTEThresholdsPassed(result.endState.eggsDelivered.kindness)).toBe(1);
     const expected = computeTEEarned(0, peakELR, timeForOneTE + 10);

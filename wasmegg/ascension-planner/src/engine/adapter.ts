@@ -29,7 +29,7 @@ export function getSimulationContext(): SimulationContext {
     epicResearchLevels: initialStateStore.epicResearchLevels,
     colleggtibleModifiers: initialStateStore.colleggtibleModifiers,
     ascensionStartTime,
-    planStartOffset: (useActionsStore() as any).planStartOffset || 0,
+    planStartOffset: useActionsStore().planStartOffset || 0,
     assumeDoubleEarnings: initialStateStore.assumeDoubleEarnings,
     rawBackup: initialStateStore.rawBackup || undefined,
     deferForEarningsMode: useAutoPlannerStore().deferForEarningsMode,

@@ -1,4 +1,4 @@
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, type AsyncComponentLoader } from 'vue';
 import { useWarningStore } from '@/stores/warning';
 
 /**
@@ -43,6 +43,6 @@ export async function safeImport<T>(importFn: () => Promise<T>, retries = 2): Pr
 /**
  * A wrapper for defineAsyncComponent that handles failures using safeImport.
  */
-export function safeAsyncComponent(loader: () => Promise<any>) {
+export function safeAsyncComponent(loader: AsyncComponentLoader) {
   return defineAsyncComponent(() => safeImport(loader));
 }

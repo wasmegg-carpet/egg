@@ -1,3 +1,4 @@
+import type { VirtueEgg } from '@/types';
 import { describe, expect, test } from 'vitest';
 import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { deriveNextStartState, runAscensionFromC3Variant, runContinueCurrent, runUntilShift } from './ascension';
@@ -51,7 +52,7 @@ const T1 = timeToEarnTE(0, PEAK_ELR, 1);
 
 describe('runContinueCurrent: targetTE mode (regression — unaffected by the targetEndTime addition)', () => {
   test('reaches the requested whole-TE total', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
 
     const { summary } = runContinueCurrent(state, context, 0, PEAK_ELR, 3);
@@ -63,7 +64,7 @@ describe('runContinueCurrent: targetTE mode (regression — unaffected by the ta
 
 describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   test('never overruns the deadline', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
     const deadline = T1 * 2.5;
 
@@ -73,7 +74,7 @@ describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   });
 
   test('a budget landing mid-egg produces fractional (sub-threshold) progress via the top-up pass', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
     const deadline = T1 * 1.5; // one whole TE, plus half of what a second egg would need
 
@@ -90,7 +91,7 @@ describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   });
 
   test('an exact-boundary budget needs no top-up: lands cleanly on a whole TE', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
 
     const { summary } = runContinueCurrent(state, context, 0, PEAK_ELR, undefined, 'asc_continue', T1);
@@ -100,7 +101,7 @@ describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   });
 
   test('targetTE takes priority over targetEndTime when both are supplied', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
 
     // A deadline far too short for 2 TE, but targetTE should win and ignore it entirely.
@@ -110,7 +111,7 @@ describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   });
 
   test('zero remaining budget after the whole-TE pass: no top-up, no negative time', () => {
-    const state = fakeState({ eggsDelivered: {} as any, lastStepTime: 0 });
+    const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });
     const context = fakeContext();
 
     const { summary } = runContinueCurrent(state, context, 0, PEAK_ELR, undefined, 'asc_continue', 0);

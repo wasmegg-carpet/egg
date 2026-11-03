@@ -157,8 +157,8 @@ export const useActionsStore = defineStore('actions', {
       const isTrivial = (a: Action): boolean => {
         if (a.type === 'shift') return true;
         if (a.type === 'wait_for_full_habs') return true;
-        if (a.type === 'toggle_earnings_boost' && (a.payload as any).active) return true;
-        if (a.type === 'toggle_sale' && (a.payload as any).active) return true;
+        if (a.type === 'toggle_earnings_boost' && a.payload.active) return true;
+        if (a.type === 'toggle_sale' && a.payload.active) return true;
         return false;
       };
 

@@ -11,7 +11,7 @@ export interface PlanData {
     id: string;
     name: string;
     timestamp: number;
-    data: any; // Full exported plan data
+    data: unknown; // Full exported plan data
 }
 
 /**
@@ -110,7 +110,7 @@ export async function deletePlanFromLibrary(partitionHash: string, planId: strin
 /**
  * Save metadata (Active Draft, currentPlanId, etc.) for a partition.
  */
-export async function saveMetadata(partitionHash: string, key: string, value: any): Promise<void> {
+export async function saveMetadata(partitionHash: string, key: string, value: unknown): Promise<void> {
     const db = await openDB();
     const tx = db.transaction('metadata', 'readwrite');
     const store = tx.objectStore('metadata');
@@ -129,7 +129,7 @@ export async function saveMetadata(partitionHash: string, key: string, value: an
 /**
  * Load metadata for a partition.
  */
-export async function loadMetadata(partitionHash: string, key: string): Promise<any> {
+export async function loadMetadata<T>(partitionHash: string, key: string): Promise<T | null> {
     const db = await openDB();
     const tx = db.transaction('metadata', 'readonly');
     const store = tx.objectStore('metadata');

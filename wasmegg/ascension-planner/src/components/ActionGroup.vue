@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, type Component } from 'vue';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
@@ -182,7 +182,7 @@ const HumilitySummary = safeAsyncComponent(() => import('./summaries/HumilitySum
 const ResilienceSummary = safeAsyncComponent(() => import('./summaries/ResilienceSummary.vue'));
 const KindnessSummary = safeAsyncComponent(() => import('./summaries/KindnessSummary.vue'));
 
-const summaryComponents: Record<VirtueEgg, any> = {
+const summaryComponents: Record<VirtueEgg, Component> = {
   curiosity: CuriositySummary,
   integrity: IntegritySummary,
   humility: HumilitySummary,

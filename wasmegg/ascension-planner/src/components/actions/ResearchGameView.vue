@@ -76,11 +76,12 @@ import ResearchItem from './ResearchItem.vue';
 import { formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
+import type { TierSummary } from '@/calculations/commonResearch';
 
 const props = defineProps<{
   tiers: number[];
   researchByTier: Map<number, CommonResearch[]>;
-  tierSummaries: Record<number, any>;
+  tierSummaries: Record<number, TierSummary>;
   viewTimes: {
     tiers: Record<number, string>;
     researches: Record<string, string>;

@@ -1,5 +1,6 @@
 import { downloadGzipped } from '@/utils/export';
 import type { Action } from '@/types/actions/meta';
+import type { ArtifactSlotPayload, VirtueEgg } from '@/types';
 import type { AscensionSummary } from './types';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import type { AutoLoadoutInputs } from './loadout/types';
@@ -14,15 +15,15 @@ interface ExportedPlanGoal {
 interface ExportedInitialState {
   epicResearchLevels: Record<string, number>;
   colleggtibleTiers: Record<string, number>;
-  artifactLoadout: any[];
+  artifactLoadout: ArtifactSlotPayload[];
   soulEggs: number;
   isUltra: boolean;
   /** Absent on exports made before Standard permit was supported; those plans were all Pro. */
   proPermit?: boolean;
   initialTankLevel: number;
   initialFuelAmounts: Record<string, number>;
-  initialEggsDelivered: Record<string, number>;
-  initialTeEarned: Record<string, number>;
+  initialEggsDelivered: Record<VirtueEgg, number>;
+  initialTeEarned: Record<VirtueEgg, number>;
 }
 
 export interface ExportedPlan {

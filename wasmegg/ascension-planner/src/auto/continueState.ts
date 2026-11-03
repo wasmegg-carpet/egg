@@ -37,7 +37,7 @@ export function makeContinueState(
     tankLevel: base.tankLevel,
     proPermit: base.proPermit,
     artifactLoadout: activeSlots(
-      rawLoadout.map((slot: any) => ({
+      rawLoadout.map(slot => ({
         artifactId: slot.artifactId,
         stones: [...slot.stones],
       })),
