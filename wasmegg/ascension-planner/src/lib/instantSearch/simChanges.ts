@@ -25,6 +25,11 @@ export const SIM_CHANGES: SimChange[] = [
     date: '2026-11-02T13:54:14-06:00',
     note: 'Delivery research that needs several levels to help now ranks by its real hr/%, and is only bought if all those levels fit before the sale ends.',
   },
+  {
+    commit: '799a6502',
+    date: '2026-11-04T12:07:21-06:00',
+    note: 'Buy Until Sale Ends and Auto now choose delivery research as a whole set, weighing delivery rate against a later start, and hr/% uses the price actually charged. Against the last table: about 0.24% less total time at +20 to +50 TE.',
+  },
 ];
 
 /**
