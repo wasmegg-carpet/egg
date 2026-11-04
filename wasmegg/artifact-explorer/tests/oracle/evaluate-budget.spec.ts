@@ -33,7 +33,7 @@ function instance(dag: RecipeDAG, targets: string[], owned: number, budget?: Ora
     timeCapacityPerSlot: 1e9,
     // Inventory supplied as base yield, so the allocation is irrelevant and
     // every difference below is the budget's doing.
-    baseYield: new Map([['C1', owned]]),
+    ownedStock: new Map([['C1', owned]]),
     craftBudget: budget,
   } satisfies OracleInstance;
 }

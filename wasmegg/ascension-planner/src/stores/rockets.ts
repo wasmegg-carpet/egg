@@ -9,19 +9,12 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import type { VirtueEgg } from '@/types';
 import { VIRTUE_EGGS } from '@/types';
-import {
-  type Spaceship,
-  type DurationType,
-  ALL_SHIPS,
-  ALL_DURATIONS,
-  VIRTUE_FUEL_REQUIREMENTS,
-  getEffectiveDuration,
-} from '@/lib/missions';
+import { type Spaceship, type DurationType, ALL_SHIPS, ALL_DURATIONS, VIRTUE_FUEL_REQUIREMENTS } from '@/lib/missions';
+import { fuelForLaunches, launchEntries } from '@/lib/rockets/launches';
 import { useFuelTankStore } from './fuelTank';
 import {
   scheduleMissions,
   buildMissionSummary,
-  type MissionEntry,
   type ScheduleResult,
   type MissionSummaryLine,
 } from '@/lib/rockets/scheduler';
@@ -53,36 +46,20 @@ export const useRocketsStore = defineStore('rockets', () => {
     }
   }
 
-  /** All queued missions with count > 0. */
+  /** All queued missions with count > 0, in ship then duration order. */
   const queuedMissions = computed<QueuedMission[]>(() => {
     const result: QueuedMission[] = [];
     for (const ship of ALL_SHIPS) {
-      for (const dur of ALL_DURATIONS) {
-        const count = getCount(ship, dur);
-        if (count > 0) {
-          result.push({ ship, duration: dur, count });
-        }
+      for (const duration of ALL_DURATIONS) {
+        const count = getCount(ship, duration);
+        if (count > 0) result.push({ ship, duration, count });
       }
     }
     return result;
   });
 
   /** Total fuel cost per virtue egg across all queued missions. */
-  const totalFuelCost = computed<Record<VirtueEgg, number>>(() => {
-    const costs: Record<VirtueEgg, number> = {
-      curiosity: 0,
-      integrity: 0,
-      humility: 0,
-      resilience: 0,
-      kindness: 0,
-    };
-    for (const { ship, duration, count } of queuedMissions.value) {
-      for (const req of VIRTUE_FUEL_REQUIREMENTS[ship][duration]) {
-        costs[req.egg] += req.amount * count;
-      }
-    }
-    return costs;
-  });
+  const totalFuelCost = computed<Record<VirtueEgg, number>>(() => fuelForLaunches(queuedMissions.value));
 
   /** Remaining fuel per egg after committed missions. */
   const remainingFuel = computed<Record<VirtueEgg, number>>(() => {
@@ -128,24 +105,12 @@ export const useRocketsStore = defineStore('rockets', () => {
     return Math.max(0, maxCount);
   }
 
-  /** Expand queued missions into individual entries for scheduling. */
-  function expandMissions(ftlLevel: number): MissionEntry[] {
-    const entries: MissionEntry[] = [];
-    for (const { ship, duration, count } of queuedMissions.value) {
-      const durationSeconds = getEffectiveDuration(ship, duration, ftlLevel);
-      for (let i = 0; i < count; i++) {
-        entries.push({ ship, duration, durationSeconds });
-      }
-    }
-    return entries;
-  }
-
   function getSchedule(ftlLevel: number): ScheduleResult {
-    return scheduleMissions(expandMissions(ftlLevel));
+    return scheduleMissions(launchEntries(queuedMissions.value, ftlLevel));
   }
 
   function getSummary(ftlLevel: number): MissionSummaryLine[] {
-    return buildMissionSummary(expandMissions(ftlLevel));
+    return buildMissionSummary(launchEntries(queuedMissions.value, ftlLevel));
   }
 
   function clearAll() {

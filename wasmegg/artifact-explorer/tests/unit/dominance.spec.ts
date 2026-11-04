@@ -15,7 +15,7 @@ function modelOf(options: LaunchOption[]) {
     fuelCapacity: 100,
     timeCapacityPerSlot: 1000,
     slots: 3,
-    baseYield: new Map<string, number>(),
+    ownedStock: new Map<string, number>(),
   } satisfies PlanProblem);
 }
 
