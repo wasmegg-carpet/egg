@@ -29590,5 +29590,23 @@
     "startTimestamp": 1793725200,
     "type": "drone-boost",
     "ultra": true
+  },
+  {
+    "endTimestamp": 1793898000,
+    "id": "event-11-4",
+    "message": "3x FUELING!",
+    "multiplier": 3,
+    "startTimestamp": 1793811600,
+    "type": "mission-fuel",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1793898000,
+    "id": "event-11-4-2",
+    "message": "4x PIGGY GROWTH!",
+    "multiplier": 4,
+    "startTimestamp": 1793811600,
+    "type": "piggy-boost",
+    "ultra": false
   }
 ]
