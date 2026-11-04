@@ -51,7 +51,7 @@ const fleetSizeResearchIds = [
 ];
 
 // Graviton coupling research ID (increases train length)
-const GRAVITON_COUPLING_ID = 'micro_coupling';
+export const GRAVITON_COUPLING_ID = 'micro_coupling';
 
 // Build capacity researches from JSON
 const capacityResearches: ShippingCapacityResearch[] = selectResearches(shippingCapacityResearchIds, r => ({

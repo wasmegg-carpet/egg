@@ -1031,6 +1031,7 @@ export function useResearchViews() {
     endLevels: {},
     endSnapshot: actionsStore.effectiveSnapshot,
     lastPurchaseTimestamp: 0,
+    endDeliveryRate: null,
   });
   let saleEndsPlanGeneration = 0;
 
@@ -1054,6 +1055,7 @@ export function useResearchViews() {
         endLevels: {},
         endSnapshot: actionsStore.effectiveSnapshot,
         lastPurchaseTimestamp: 0,
+        endDeliveryRate: null,
       };
       isComputingSaleEndsPlan.value = false;
       return;

@@ -43,7 +43,7 @@ const ELR_EXCLUDED_CATEGORIES = [
   'hatchery_refill_rate',
   'egg_value',
 ];
-const DELIVERY_IMPACT_CATEGORIES = new Set(['hab_capacity', 'fleet_size', 'egg_laying_rate', 'shipping_capacity']);
+export const DELIVERY_IMPACT_CATEGORIES = new Set(['hab_capacity', 'fleet_size', 'egg_laying_rate', 'shipping_capacity']);
 
 // Evaluation IDs for ELR "potential" mode
 const FLEET_RESEARCH_IDS = [
@@ -568,20 +568,10 @@ export function rankResearchByELRImpact(
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
         const level = researchLevels[r.id] || 0;
-        // Two separate sale-aware decisions: "no bank" is a fair cross-item comparison metric
-        // (hpp/timeRoiSeconds), "with bank" is what actually gets charged/shown — they can
-        // legitimately disagree about whether waiting for the sale wins, since a bigger bank
-        // shortens the "buy now" wait without changing the "wait for sale" one.
+        // The score (hpp/timeRoiSeconds) ignores the bank so items compare fairly, but it's always
+        // at the price actually charged: without the bank, a sale item the bank already covers
+        // could look unaffordable before the sale ends and get scored at full price.
         const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const noBankPurchase = getSaleAwareTimeToSave(
-          r,
-          level,
-          mods,
-          isSale,
-          absoluteSimTime,
-          noBankSnapshot,
-          transitions
-        );
         const withBankPurchase = getSaleAwareTimeToSave(
           r,
           level,
@@ -592,7 +582,7 @@ export function rankResearchByELRImpact(
           transitions
         );
         const price = withBankPurchase.price;
-        const secondsToBuyNoBank = noBankPurchase.waitSeconds;
+        const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
         const secondsToBuyWithBank = withBankPurchase.waitSeconds;
 
         const tempLevels = { ...researchLevels, [r.id]: level + 1 };
@@ -654,7 +644,7 @@ export function rankResearchByELRImpact(
             if (laImpact > 0) {
               let totalPriceForN = 0;
               for (let l = level; l < level + n; l++) {
-                totalPriceForN += getDiscountedVirtuePrice(r, l, mods, isSale);
+                totalPriceForN += getDiscountedVirtuePrice(r, l, mods, withBankPurchase.duringSale);
               }
               const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
               const totalHoursForN = totalSecondsForN / 3600;
@@ -711,20 +701,10 @@ export function rankResearchByELRImpact(
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
         const level = researchLevels[r.id] || 0;
-        // Two separate sale-aware decisions: "no bank" is a fair cross-item comparison metric
-        // (hpp/timeRoiSeconds), "with bank" is what actually gets charged/shown — they can
-        // legitimately disagree about whether waiting for the sale wins, since a bigger bank
-        // shortens the "buy now" wait without changing the "wait for sale" one.
+        // The score (hpp/timeRoiSeconds) ignores the bank so items compare fairly, but it's always
+        // at the price actually charged: without the bank, a sale item the bank already covers
+        // could look unaffordable before the sale ends and get scored at full price.
         const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const noBankPurchase = getSaleAwareTimeToSave(
-          r,
-          level,
-          mods,
-          isSale,
-          absoluteSimTime,
-          noBankSnapshot,
-          transitions
-        );
         const withBankPurchase = getSaleAwareTimeToSave(
           r,
           level,
@@ -735,7 +715,7 @@ export function rankResearchByELRImpact(
           transitions
         );
         const price = withBankPurchase.price;
-        const secondsToBuyNoBank = noBankPurchase.waitSeconds;
+        const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
         const secondsToBuyWithBank = withBankPurchase.waitSeconds;
         const impact = FLEET_RESEARCH_IDS.includes(r.id)
           ? 1 / currentSlots
