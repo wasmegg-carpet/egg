@@ -40,7 +40,7 @@ export interface PlanState {
   ascensionDate: string; // YYYY-MM-DD format
   ascensionTime: string; // HH:MM format
   ascensionTimezone: string; // IANA timezone identifier
-  bankValue: number; // Current boks in bank
+  bankValue: number; // Current bocks in bank
   population: number; // Current chickens on farm
 }
 

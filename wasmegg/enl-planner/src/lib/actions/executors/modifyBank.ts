@@ -22,6 +22,6 @@ export const modifyBankExecutor: ActionExecutor<'modify_bank'> = {
 
   getEffectDescription(payload: ModifyBankPayload): string {
     const sign = payload.delta >= 0 ? '+' : '-';
-    return `${sign}${formatBokPrice(Math.abs(payload.delta))} boks`;
+    return `${sign}${formatBokPrice(Math.abs(payload.delta))} bocks`;
   },
 };

@@ -346,7 +346,7 @@ export function useResearchViews() {
   // unset.
   //
   // `item.duringSale` (from `getSaleAwareTimeToSave`) means "priced at a sale discount, whichever
-  // sale that turns out to be" — correct for the actual boks charged, but not what the "Sale" badge
+  // sale that turns out to be" — correct for the actual bocks charged, but not what the "Sale" badge
   // should mean to a player glancing at the list: a purchase that only becomes worthwhile several
   // sale cycles out is still priced at a discount, but showing the same badge as an item landing in
   // NEXT week's sale is misleading. `isActuallyDuringSale` (already re-derived against calendar
@@ -624,7 +624,7 @@ export function useResearchViews() {
       optimizedSeconds: core.optimizedSeconds!,
       timeSavedSeconds: core.timeSavedSeconds!,
       purchaseCount: core.purchaseCount!,
-      boksSpent: core.boksSpent!,
+      bocksSpent: core.bocksSpent!,
       finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, planStore.ascensionTimezone),
       baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, planStore.ascensionTimezone),
     };
@@ -1046,7 +1046,7 @@ export function useResearchViews() {
     after: saleAwarePlan70.value.endSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / boks spent for the "70% Return" card — the same three
+  // Purchase count / duration spanned / bocks spent for the "70% Return" card — the same three
   // figures its note reports (`buildSaleAwareBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1067,7 +1067,7 @@ export function useResearchViews() {
     return {
       purchaseCount: entries.length,
       seconds: Math.max(0, lastPurchaseTimestamp - absoluteSimTime),
-      boks: entries.reduce((sum, entry) => sum + entry.price, 0),
+      bocks: entries.reduce((sum, entry) => sum + entry.price, 0),
     };
   });
 
@@ -1080,7 +1080,7 @@ export function useResearchViews() {
     after: saleEndsPlan.value.earningsEndSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / boks spent for "Buy Until Sale Ends" — the same three
+  // Purchase count / duration spanned / bocks spent for "Buy Until Sale Ends" — the same three
   // figures its note reports (`buildSaleEndsBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1096,7 +1096,7 @@ export function useResearchViews() {
     return {
       purchaseCount: saleEndsPlan.value.researchIds.length,
       seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
-      boks: saleEndsPlan.value.totalBoksSpent ?? 0,
+      bocks: saleEndsPlan.value.totalBocksSpent ?? 0,
     };
   });
 
@@ -1288,7 +1288,7 @@ export function useResearchViews() {
             buyToHereSeconds: totalSeconds,
             buyToHereTooltip:
               totalSeconds < rawSecondsToBuy
-                ? 'Includes existing boks from your bank. Individual research wait times show the time to save from 0.'
+                ? 'Includes existing bocks from your bank. Individual research wait times show the time to save from 0.'
                 : undefined,
             canBuy: true,
             isMaxed: false,

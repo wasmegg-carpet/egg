@@ -91,7 +91,7 @@ export const useSilosStore = defineStore('silos', {
  * Formula: 100M * n^(3*n+15) where n = current silos owned
  * @param silosOwned Current number of silos owned
  * @param proPermit false for Standard permit, which caps silos at 2
- * @returns Cost of next silo in boks (cash)
+ * @returns Cost of next silo in bocks (cash)
  */
 export function nextSiloCost(silosOwned: number, proPermit?: boolean): number {
   if (silosOwned <= 0) {

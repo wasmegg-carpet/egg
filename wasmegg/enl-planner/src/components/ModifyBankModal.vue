@@ -15,7 +15,7 @@
             <img
               :src="iconURL('egginc/icon_bock.png', 64)"
               class="w-5 h-5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]"
-              alt="Boks"
+              alt="Bocks"
             />
           </div>
           <h3 class="text-xs font-black text-slate-800 uppercase tracking-widest">Modify Bank Value</h3>

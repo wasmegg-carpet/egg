@@ -110,7 +110,7 @@ export function applyAction(
       const newFuelAmounts = { ...state.fuelTankAmounts };
       newFuelAmounts[payload.egg] = (newFuelAmounts[payload.egg] || 0) + payload.amount;
 
-      // Variable-speed fueling: apply boks earned from the eggs shipped meanwhile
+      // Variable-speed fueling: apply bocks earned from the eggs shipped meanwhile
       return {
         ...state,
         fuelTankAmounts: newFuelAmounts,

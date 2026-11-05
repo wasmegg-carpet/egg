@@ -17,8 +17,8 @@ export interface SmartBuyCandidate {
 
 /**
  * Cheapest unpurchased, unlocked research level that can be saved up for in
- * `<= thresholdSeconds` of pure earning time (existing bank/boks are ignored — see
- * `ResearchActions.vue`'s "Smart Buy will never spend boks from your bank" note).
+ * `<= thresholdSeconds` of pure earning time (existing bank/bocks are ignored — see
+ * `ResearchActions.vue`'s "Smart Buy will never spend bocks from your bank" note).
  *
  * `currentAbsoluteTime` is optional and controls sale-awareness: pass it only if the caller will
  * actually simulate the resulting `secondsToSave` wait before buying (e.g. the auto planner's
@@ -40,7 +40,7 @@ export function findSmartBuyCandidate(
 ): SmartBuyCandidate | null {
   if (snapshot.offlineEarnings <= 0) return null;
 
-  // Ignore bank so smart buy never factors in saved boks.
+  // Ignore bank so smart buy never factors in saved bocks.
   const noBankSnapshot = { ...snapshot, bankValue: 0 };
 
   const candidates = getCommonResearches()

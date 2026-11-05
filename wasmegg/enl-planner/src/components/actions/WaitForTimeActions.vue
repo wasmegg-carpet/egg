@@ -57,14 +57,14 @@
           </div>
         </div>
 
-        <!-- Expected Boks Display -->
+        <!-- Expected Bocks Display -->
         <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center transition-all">
-          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected Boks:</span>
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected Bocks:</span>
           <div class="flex items-center gap-2">
             <span class="text-sm font-mono-premium font-black text-slate-900">
-              +{{ formatNumber(expectedBoksEarned, 3) }}
+              +{{ formatNumber(expectedBocksEarned, 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-4 h-4 object-contain" alt="Boks" />
+            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-4 h-4 object-contain" alt="Bocks" />
           </div>
         </div>
       </div>
@@ -142,7 +142,7 @@ const parsedSeconds = computed(() => {
   return isNaN(seconds) ? 0 : seconds;
 });
 
-const expectedBoksEarned = computed(() => {
+const expectedBocksEarned = computed(() => {
   if (parsedSeconds.value <= 0) return 0;
   const snapshot = actionsStore.effectiveSnapshot;
   return calculateEarningsForTime(

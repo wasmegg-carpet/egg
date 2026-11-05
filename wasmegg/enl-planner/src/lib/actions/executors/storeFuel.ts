@@ -33,7 +33,7 @@ export const storeFuelExecutor: ActionExecutor<'store_fuel'> = {
     if (speed < 1.0 && (payload.eggsShippedDuringFuel ?? 0) > 0) {
       desc += ` · Ship ${formatNumber(payload.eggsShippedDuringFuel!, 1)}`;
       if ((payload.cashEarnedDuringFuel ?? 0) > 0) {
-        desc += ` · +${formatNumber(payload.cashEarnedDuringFuel!, 1)} boks`;
+        desc += ` · +${formatNumber(payload.cashEarnedDuringFuel!, 1)} bocks`;
       }
     }
     return desc;

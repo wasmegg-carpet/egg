@@ -26,7 +26,7 @@
       <div class="flex items-center gap-2 shrink-0">
         <div v-if="totalCost > 0" class="flex items-center gap-1">
           <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatBokPrice(totalCost) }}</span>
-          <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-2.5 h-2.5" alt="Boks" />
+          <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-2.5 h-2.5" alt="Bocks" />
         </div>
       </div>
     </button>

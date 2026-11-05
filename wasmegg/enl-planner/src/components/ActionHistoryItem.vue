@@ -201,7 +201,7 @@
             v-if="Math.abs(action.bankDelta) >= 0.5 && (!isPurchaseAction || action.type === 'launch_missions')"
             :class="action.bankDelta >= 0.5 ? 'text-emerald-600' : 'text-slate-400'"
           >
-            Boks {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatBokPrice(action.bankDelta) }}
+            Bocks {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatBokPrice(action.bankDelta) }}
           </span>
         </div>
       </div>
@@ -431,7 +431,7 @@ const effectDescription = computed(() => {
 });
 
 /**
- * Calculate save duration (time spent accumulating boks)
+ * Calculate save duration (time spent accumulating bocks)
  */
 const savingDuration = computed(() => {
   if (props.action.cost <= 0) return 0;

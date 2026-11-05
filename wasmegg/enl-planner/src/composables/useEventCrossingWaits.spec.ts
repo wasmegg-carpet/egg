@@ -188,7 +188,7 @@ describe('2x earnings on purchases outside research', () => {
     expect(end.population).toBe(population);
   });
 
-  test('a boks wait crossing 2x recalculates to the time shown and lands on its target', async () => {
+  test('a bocks wait crossing 2x recalculates to the time shown and lands on its target', async () => {
     const probe = await startPlan(monday - 86400);
     const { cost: targetCash, flatWait } = habCostingSeconds(probe.currentSnapshot, 1800, 6 * 3600);
 

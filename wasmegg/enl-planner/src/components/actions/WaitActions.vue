@@ -96,13 +96,13 @@
       </div>
     </div>
 
-    <!-- Wait for Boks Section -->
+    <!-- Wait for Bocks Section -->
     <div
       class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
     >
       <button
         class="w-full px-5 py-4 bg-slate-50/50 flex justify-between items-center hover:bg-white transition-colors group"
-        @click="boksExpanded = !boksExpanded"
+        @click="bocksExpanded = !bocksExpanded"
       >
         <div class="flex items-center gap-3">
           <div
@@ -110,11 +110,11 @@
           >
             <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" />
           </div>
-          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Wait for Boks</h3>
+          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Wait for Bocks</h3>
         </div>
         <svg
           class="w-5 h-5 text-slate-300 transition-transform duration-300"
-          :class="{ 'rotate-180 text-slate-900': boksExpanded }"
+          :class="{ 'rotate-180 text-slate-900': bocksExpanded }"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -122,8 +122,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      <div v-show="boksExpanded" class="p-6 border-t border-slate-50">
-        <WaitForCashActions ref="boksActionsRef" />
+      <div v-show="bocksExpanded" class="p-6 border-t border-slate-50">
+        <WaitForCashActions ref="bocksActionsRef" />
       </div>
     </div>
 
@@ -245,18 +245,18 @@ import WaitForEventActions from './WaitForEventActions.vue';
 const populationExpanded = ref(false);
 const habsExpanded = ref(false);
 const missionsExpanded = ref(false);
-const boksExpanded = ref(false);
+const bocksExpanded = ref(false);
 const timeExpanded = ref(false);
 const noEarningsExpanded = ref(false);
 const eventsExpanded = ref(false);
 
 const populationActionsRef = ref<InstanceType<typeof WaitForPopulationActions> | null>(null);
-const boksActionsRef = ref<InstanceType<typeof WaitForCashActions> | null>(null);
+const bocksActionsRef = ref<InstanceType<typeof WaitForCashActions> | null>(null);
 const timeActionsRef = ref<InstanceType<typeof WaitForTimeActions> | null>(null);
 const noEarningsActionsRef = ref<InstanceType<typeof WaitWithoutEarningsActions> | null>(null);
 
 watch(populationExpanded, val => { if (val) nextTick(() => populationActionsRef.value?.focus()); });
-watch(boksExpanded, val => { if (val) nextTick(() => boksActionsRef.value?.focus()); });
+watch(bocksExpanded, val => { if (val) nextTick(() => bocksActionsRef.value?.focus()); });
 watch(timeExpanded, val => { if (val) nextTick(() => timeActionsRef.value?.focus()); });
 watch(noEarningsExpanded, val => { if (val) nextTick(() => noEarningsActionsRef.value?.focus()); });
 </script>

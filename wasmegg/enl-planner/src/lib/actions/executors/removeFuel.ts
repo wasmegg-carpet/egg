@@ -2,7 +2,7 @@
  * Remove Fuel Action Executor
  *
  * Removes eggs from the fuel tank.
- * Cost is 0 boks and 0 seconds.
+ * Cost is 0 bocks and 0 seconds.
  */
 
 import type { ActionExecutor, ExecutorContext } from '../executor';

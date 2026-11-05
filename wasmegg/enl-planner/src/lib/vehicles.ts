@@ -3,7 +3,8 @@ import {
   type VehicleType as LibVehicleType,
   isVehicleId,
 } from 'lib/farm/shipping_capacity';
-import { calculateCostMultiplier, applyDiscount } from '@/utils/pricing';
+import { calculateCostMultiplier } from '@/utils/pricing';
+import { VEHICLE_REGULAR_COSTS, HYPERLOOP_CAR_REGULAR_COSTS } from './vehicleCosts';
 
 export type VehicleId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 export { isVehicleId };
@@ -52,21 +53,10 @@ export const BASE_TRAIN_LENGTH = 5;
 export const MAX_TRAIN_LENGTH = 10;
 
 /**
- * Hyperloop train car virtue costs.
+ * Hyperloop train car base costs (regular, not virtue).
  * Index 0 = first car (free, comes with train), Index 1-9 = additional cars.
  */
-export const HYPERLOOP_CAR_VIRTUE_COSTS: readonly number[] = [
-  0, // 1st car (free with train)
-  1.13231e26, // 2nd car
-  6.86482e26, // 3rd car
-  2.518e27, // 4th car
-  6.96e27, // 5th car
-  1.6056e28, // 6th car
-  3.2636e28, // 7th car
-  6.0422e28, // 8th car
-  1.042e29, // 9th car
-  1.69709e29, // 10th car
-];
+export const HYPERLOOP_CAR_COSTS: readonly number[] = HYPERLOOP_CAR_REGULAR_COSTS;
 
 /**
  * Cost modifiers for vehicle purchases.
@@ -118,10 +108,10 @@ export function getDiscountedVehiclePrice(
 ): number {
   const vehicle = getVehicleType(vehicleId);
   if (!vehicle) return 0;
-  if (purchaseIndex < 0 || purchaseIndex >= vehicle.virtueCost.length) return 0;
+  const costs = VEHICLE_REGULAR_COSTS[vehicle.id];
+  if (purchaseIndex < 0 || purchaseIndex >= costs.length) return 0;
 
-  const basePrice = vehicle.virtueCost[purchaseIndex];
-  return applyDiscount(basePrice, getVehicleCostMultiplier(modifiers, isActiveSale));
+  return costs[purchaseIndex] * getVehicleCostMultiplier(modifiers, isActiveSale);
 }
 
 /**
@@ -135,8 +125,7 @@ export function getDiscountedTrainCarPrice(
   modifiers: VehicleCostModifiers,
   isActiveSale: boolean = false
 ): number {
-  if (carIndex < 0 || carIndex >= HYPERLOOP_CAR_VIRTUE_COSTS.length) return 0;
+  if (carIndex < 0 || carIndex >= HYPERLOOP_CAR_COSTS.length) return 0;
 
-  const basePrice = HYPERLOOP_CAR_VIRTUE_COSTS[carIndex];
-  return applyDiscount(basePrice, getVehicleCostMultiplier(modifiers, isActiveSale));
+  return HYPERLOOP_CAR_COSTS[carIndex] * getVehicleCostMultiplier(modifiers, isActiveSale);
 }

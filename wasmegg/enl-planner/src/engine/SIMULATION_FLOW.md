@@ -7,7 +7,7 @@ This document describes the step-by-step transformation of the `EngineState` and
 The simulation tracks the following mutable state:
 - `soulEggs`, `prophecyEggs`, `te`: Earning bonus inputs, fixed for the plan.
 - `population`: Number of chickens on the farm.
-- `bankValue`: Number of boks (accumulated through earnings).
+- `bankValue`: Number of bocks (accumulated through earnings).
 - `lastStepTime`: Running total of seconds passed in the ascension.
 - `researchLevels`: Map of common research IDs to levels.
 - `habIds`: Array of 4 hab slots.
@@ -40,7 +40,7 @@ The farm operates during the action's duration:
 - **Earnings**: Integral of earnings rate over the duration.
   - Phase 1: Laying limited (Population * LayRate < Shipping).
   - Phase 2: Shipping limited (Shipping < Population * LayRate).
-- **Bank**: `bankValue += earnedBoks`.
+- **Bank**: `bankValue += earnedBocks`.
 
 ### 4. Snapshot Derivation (`computeSnapshot`)
 After state changes, a full snapshot is computed using the logic in `src/calculations/`.

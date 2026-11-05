@@ -2,7 +2,7 @@
  * Wait for Time Action Executor
  *
  * Account for a fixed amount of time spent waiting.
- * Cost is 0 boks.
+ * Cost is 0 bocks.
  */
 
 import type { ActionExecutor, ExecutorContext } from '../executor';

@@ -44,7 +44,7 @@
         <SmartBuyStats
           :purchase-count="saleAwareStats70.purchaseCount"
           :seconds="saleAwareStats70.seconds"
-          :boks="saleAwareStats70.boks"
+          :bocks="saleAwareStats70.bocks"
         />
         <RatePreviewDelta
           label="Earnings"
@@ -81,7 +81,7 @@
       <SmartBuyStats
         :purchase-count="saleEndsStats.purchaseCount"
         :seconds="saleEndsStats.seconds"
-        :boks="saleEndsStats.boks"
+        :bocks="saleEndsStats.bocks"
       />
       <ResearchPurchasePreview
         :items="saleEndsEarningsPreview"
@@ -130,7 +130,7 @@ interface RateSummary {
 interface BuyStats {
   purchaseCount: number;
   seconds: number;
-  boks: number;
+  bocks: number;
 }
 
 defineProps<{

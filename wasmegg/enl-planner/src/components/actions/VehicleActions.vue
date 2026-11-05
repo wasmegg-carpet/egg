@@ -1,10 +1,5 @@
 <template>
   <div class="space-y-6">
-    <!-- Remove once lib/farm/shipping_capacity.ts has regular vehicle prices. -->
-    <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-medium text-amber-800">
-      Vehicle and train car prices are the virtue prices for now, until "joo" can provide the regular costs.
-    </div>
-
     <!-- Sale Protocol -->
     <div
       class="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 rounded-2xl p-5 border border-indigo-100/50 shadow-sm relative overflow-hidden transition-all duration-300"

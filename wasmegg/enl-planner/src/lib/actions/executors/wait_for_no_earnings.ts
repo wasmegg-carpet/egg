@@ -2,7 +2,7 @@
  * Wait for No Earnings Action Executor
  *
  * Account for a fixed amount of time spent waiting without any growth.
- * Cost is 0 boks.
+ * Cost is 0 bocks.
  */
 
 import type { ActionExecutor, ExecutorContext } from '../executor';
@@ -20,6 +20,6 @@ export const waitForNoEarningsExecutor: ActionExecutor<'wait_for_no_earnings'> =
     },
 
     getEffectDescription(payload: WaitWithoutEarningsPayload): string {
-        return `Wait period WITHOUT growth, boks, or eggs — ${formatDuration(payload.totalTimeSeconds)}`;
+        return `Wait period WITHOUT growth, bocks, or eggs — ${formatDuration(payload.totalTimeSeconds)}`;
     },
 };

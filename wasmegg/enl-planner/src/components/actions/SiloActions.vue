@@ -73,7 +73,7 @@
                   >Buy Silo #{{ siloOutput.siloCount + 1 }}</span
                 >
                 <span class="text-[9px] font-mono-premium font-black text-indigo-500 mt-0.5">
-                  {{ formatBokPrice(siloOutput.nextSiloCost) }} boks<template v-if="timeToBuy">
+                  {{ formatBokPrice(siloOutput.nextSiloCost) }} bocks<template v-if="timeToBuy">
                     · Ready in {{ timeToBuy }}</template
                   >
                 </span>
@@ -228,7 +228,7 @@ const timeToBuy = computed(() => {
   return formatDuration(seconds);
 });
 
-// Simulate buying silos back-to-back (waiting to save up boks between purchases)
+// Simulate buying silos back-to-back (waiting to save up bocks between purchases)
 // to see how many fit within a 1-hour window.
 const maxSilosIn1Hour = computed<{ count: number; seconds: number }>(() => {
   const snapshot = actionsStore.effectiveSnapshot;

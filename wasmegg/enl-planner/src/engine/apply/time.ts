@@ -3,7 +3,7 @@ import type { EngineState } from '../types';
 import { calculateEarningsForTime, type EarningsRateTransition } from './math';
 
 /**
- * Advance the simulation time in the engine state and add earned boks to the bank.
+ * Advance the simulation time in the engine state and add earned bocks to the bank.
  */
 export function applyTime(
   state: EngineState,
@@ -28,15 +28,15 @@ export function applyTime(
 
   const newPop = Math.min(maxPop, P0 + I * seconds);
 
-  let earnedBoks = 0;
+  let earnedBocks = 0;
   if (!options.skipEarnings) {
     const V = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
     if (V > 0) {
-      earnedBoks = calculateEarningsForTime(seconds, prevSnapshot, options.transitions);
+      earnedBocks = calculateEarningsForTime(seconds, prevSnapshot, options.transitions);
     }
   }
 
-  let newBankValue = (state.bankValue || 0) + earnedBoks;
+  let newBankValue = (state.bankValue || 0) + earnedBocks;
   if (!options.skipEarnings && prevSnapshot.offlineEarnings > 0) {
     if (Math.abs(newBankValue) < prevSnapshot.offlineEarnings * 1e-6) {
       newBankValue = 0;

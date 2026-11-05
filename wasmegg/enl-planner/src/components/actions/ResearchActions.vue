@@ -127,10 +127,10 @@
             </div>
             <div class="flex flex-col border-l border-gray-200 pl-6">
               <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
-                >Boks Spent</span
+                >Bocks Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
-                {{ formatBokPrice(milestoneSummary.boksSpent) }}
+                {{ formatBokPrice(milestoneSummary.bocksSpent) }}
               </span>
             </div>
           </div>
@@ -431,13 +431,13 @@ const quickBuyEarningsSummary = computed(() => ({
   after: quickBuyPlan.value.endSnapshot.offlineEarnings * 3600,
 }));
 
-// Purchase count / time-saved / boks spent for the Quick Buy card — the same three figures its note
+// Purchase count / time-saved / bocks spent for the Quick Buy card — the same three figures its note
 // reports (`buildQuickBuyNotePayload` in `src/lib/actions/notes.ts`), shown live in the card itself
 // before the button is clicked.
 const quickBuyStats = computed(() => ({
   purchaseCount: quickBuyPlan.value.researchIds.length,
   seconds: quickBuyPlan.value.totalSecondsToSave ?? 0,
-  boks: quickBuyPlan.value.totalBoksSpent ?? 0,
+  bocks: quickBuyPlan.value.totalBocksSpent ?? 0,
 }));
 
 // The same resolver the action itself is charged and timed by, so what's shown is what's paid.
@@ -927,7 +927,7 @@ async function handleBuyUntilSaleDeadline() {
       const notePayload = buildSaleEndsBuyNotePayload(
         plan.length,
         saleEndsPlan.value.lastPurchaseTimestamp - startAbsoluteTime,
-        saleEndsPlan.value.totalBoksSpent ?? 0
+        saleEndsPlan.value.totalBocksSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();
@@ -994,7 +994,7 @@ async function handleThresholdBuy(threshold: number) {
         threshold,
         plan.researchIds.length,
         plan.totalSecondsToSave ?? 0,
-        plan.totalBoksSpent ?? 0
+        plan.totalBocksSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();

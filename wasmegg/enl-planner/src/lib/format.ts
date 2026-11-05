@@ -189,7 +189,7 @@ export function formatDuration(seconds: number): string {
   // Round to the nearest whole second up front — every branch below floors seconds into minutes,
   // then minutes into hours, then hours into days, and this function never shows sub-second
   // precision anyway. Without this, a value that's THEORETICALLY exact (e.g. a duration
-  // back-derived as `boks / boksPerSecond` from a delta that was itself `boksPerSecond * exactSeconds`)
+  // back-derived as `bocks / bocksPerSecond` from a delta that was itself `bocksPerSecond * exactSeconds`)
   // but lands a sub-microsecond epsilon under a whole unit due to the two floating-point ops not
   // perfectly inverting each other gets floored down a full unit at every level it cascades through
   // — confirmed in the wild: a 27h-exact silo credit displaying as "1d 2h" (26h) instead of "1d 3h"

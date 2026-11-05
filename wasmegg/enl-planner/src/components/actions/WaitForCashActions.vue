@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-6 leading-relaxed">
-      Wait until you have accumulated a target amount of boks.
+      Wait until you have accumulated a target amount of bocks.
     </p>
 
     <!-- Current State -->
@@ -10,13 +10,13 @@
         <div
           class="w-12 h-12 rounded-2xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-2"
         >
-          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Boks" />
+          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Bocks" />
         </div>
         <div>
           <div class="text-sm font-bold text-slate-800">
             {{ formatNumber(planStore.bankValue, 3) }}
           </div>
-          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Boks in Bank</div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Bocks in Bank</div>
         </div>
       </div>
     </div>
@@ -27,7 +27,7 @@
         <div
           class="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center p-1.5 shadow-lg border border-slate-800"
         >
-          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Boks" />
+          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Bocks" />
         </div>
         <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Bok Count </span>
       </div>
@@ -89,9 +89,9 @@
         <img
           :src="iconURL('egginc/icon_bock.png', 64)"
           class="w-5 h-5 object-contain group-hover:scale-110 transition-transform"
-          alt="Boks"
+          alt="Bocks"
         />
-        <span>Wait for Boks</span>
+        <span>Wait for Bocks</span>
       </button>
     </div>
   </div>
@@ -165,14 +165,14 @@ function handleWaitForCash() {
     prepareExecution();
     insertBoostCrossingWaits(targetCash);
     if (isEditingPastGroup.value) await settled();
-    addBoksWait(targetCash);
+    addBocksWait(targetCash);
   });
 
   targetInput.value = '';
 }
 
 // After any 2x waits, so everything is measured from where those leave the plan.
-function addBoksWait(targetCash: number) {
+function addBocksWait(targetCash: number) {
   const beforeSnapshot = prepareExecution();
 
   const payload = {

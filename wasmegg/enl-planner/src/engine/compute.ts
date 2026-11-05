@@ -77,7 +77,7 @@ export function computeSnapshot(
     population = habCapacityOutput.totalFinalCapacity;
     bankValue = state.bankValue || 0;
   } else if (options.freezePopulation) {
-    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no boks.
+    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no bocks.
     population = state.population || 0;
     bankValue = state.bankValue || 0;
   } else {

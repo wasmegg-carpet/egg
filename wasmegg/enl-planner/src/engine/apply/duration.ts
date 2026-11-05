@@ -111,7 +111,7 @@ export function refreshActionPayload(
       prevSnapshot.habCapacity
     );
 
-    // Variable-speed: boks earned from the eggs shipped meanwhile
+    // Variable-speed: bocks earned from the eggs shipped meanwhile
     if (fuelSpeed < 1.0 && payload.timeSeconds > 0) {
       const remainingR = prevSnapshot.ratePerChickenPerSecond * (1 - fuelSpeed);
       payload.eggsShippedDuringFuel = integrateRate(

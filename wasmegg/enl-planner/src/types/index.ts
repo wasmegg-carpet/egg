@@ -379,7 +379,7 @@ export interface EarningsInput {
  * Output from Earnings calculation
  */
 export interface EarningsOutput {
-  baseEarnings: number; // boks/second (eggValue × ELR × (1 + earning bonus))
+  baseEarnings: number; // bocks/second (eggValue × ELR × (1 + earning bonus))
   earningBonus: number; // Earnings are multiplied by 1 + this
   earningsMultiplier: number; // From earnings colleggtibles (all earnings)
   awayEarningsMultiplier: number; // From offline-earnings colleggtibles (offline only)

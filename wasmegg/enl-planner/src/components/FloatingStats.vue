@@ -150,7 +150,7 @@
             <span class="font-mono-premium text-[11px] font-bold text-slate-700">
               {{ formatNumber(Math.max(0, snapshot.bankValue), 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-3 h-3" alt="Boks" />
+            <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-3 h-3" alt="Bocks" />
           </div>
         </div>
       </div>

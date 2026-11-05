@@ -15,7 +15,7 @@ export interface SiloPlanResult {
 }
 
 /**
- * Simulate buying silos back-to-back (waiting to save up boks between purchases)
+ * Simulate buying silos back-to-back (waiting to save up bocks between purchases)
  * within a `budgetSeconds` window, using the growth-aware `getTimeToSave` for each
  * purchase's wait and hand-advancing population/layRate/elr/offlineEarnings toward
  * hab capacity for the next iteration.

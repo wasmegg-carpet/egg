@@ -166,8 +166,8 @@
             <span class="text-sm font-mono-premium font-bold text-emerald-600">{{ formatNumber(estimatedEggsShipped, 1) }}</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Boks Earned</span>
-            <span class="text-sm font-mono-premium font-bold text-emerald-600">+{{ formatNumber(estimatedBoksEarned, 1) }}</span>
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bocks Earned</span>
+            <span class="text-sm font-mono-premium font-bold text-emerald-600">+{{ formatNumber(estimatedBocksEarned, 1) }}</span>
           </div>
         </template>
         <div
@@ -396,7 +396,7 @@ const estimatedEggsShipped = computed(() => {
   return integrateRate(timeToStoreSeconds.value, P0, I, remainingR, S, H);
 });
 
-const estimatedBoksEarned = computed(() => {
+const estimatedBocksEarned = computed(() => {
   if (estimatedEggsShipped.value <= 0) return 0;
   const snapshot = actionsStore.effectiveSnapshot;
   const valuePerEgg = snapshot.elr > 0 ? snapshot.offlineEarnings / snapshot.elr : 0;
@@ -443,7 +443,7 @@ function handleStoreFuel() {
     timeSeconds: timeToStoreSeconds.value,
     fuelSpeed: fuelSpeed.value,
     eggsShippedDuringFuel: estimatedEggsShipped.value,
-    cashEarnedDuringFuel: estimatedBoksEarned.value,
+    cashEarnedDuringFuel: estimatedBocksEarned.value,
   };
 
   const dependencies = computeDependencies(

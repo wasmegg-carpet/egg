@@ -43,7 +43,7 @@ export interface StoreFuelPayload {
   timeSeconds: number; // Time required (for display)
   fuelSpeed?: number; // 0.1 | 0.5 | 0.9 | 1.0 — default 1.0
   eggsShippedDuringFuel?: number; // eggs shipped at (1-speed) rate during fueling
-  cashEarnedDuringFuel?: number; // boks earned from shipped eggs during fueling
+  cashEarnedDuringFuel?: number; // bocks earned from shipped eggs during fueling
 }
 
 /**
