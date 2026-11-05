@@ -28,7 +28,7 @@
           class="text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1"
           :class="selectedTab === setName ? 'text-blue-700' : 'text-gray-400'"
         >
-          {{ setName }}
+          {{ setName === 'earnings' ? 'Set 1' : 'Set 2' }}
         </span>
       </button>
     </div>
