@@ -8,6 +8,7 @@ import { useActionsStore } from '@/stores/actions';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
 import { activeSlots } from '@/lib/artifacts/calculator';
 import { getLocalTimestampInTimezone } from '@/lib/events';
+import { researchCubeOverride } from '@/lib/artifacts/researchCube';
 
 /**
  * Get the current simulation context from Pinia stores.
@@ -30,6 +31,7 @@ export function getSimulationContext(): SimulationContext {
     ascensionStartTime,
     planStartOffset: useActionsStore().planStartOffset || 0,
     assumeDoubleEarnings: initialStateStore.assumeDoubleEarnings,
+    researchCubeMultiplier: researchCubeOverride(initialStateStore.researchCube),
     rawBackup: initialStateStore.rawBackup || undefined,
   };
 }

@@ -200,7 +200,7 @@ export function absoluteSimTimeFor(prevSnapshot: CalculationsSnapshot, context: 
   return context.ascensionStartTime + (prevSnapshot.lastStepTime - context.planStartOffset);
 }
 
-/** The wait a bok-costing action is actually charged: `getTimeToSave` across 2x earnings' real boundaries. */
+/** The wait a bock-costing action is actually charged: `getTimeToSave` across 2x earnings' real boundaries. */
 export function getBoostAwareTimeToSave(
   cost: number,
   snapshot: CalculationsSnapshot,
@@ -212,7 +212,7 @@ export function getBoostAwareTimeToSave(
 /**
  * Calculate the duration of an action in seconds.
  *
- * `context`, when provided, makes bok-costing actions boundary-aware: the wait is split at the
+ * `context`, when provided, makes bock-costing actions boundary-aware: the wait is split at the
  * earnings boost's real next start/end (via `boostTransitionsFrom`) instead of assuming
  * `prevSnapshot.earningsBoost.active` holds flat for the whole wait — without it, a wait that
  * starts just before the boost turns on (or off) is mis-priced in time, since `prevSnapshot`'s own

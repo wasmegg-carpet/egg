@@ -73,7 +73,7 @@
                   >Buy Silo #{{ siloOutput.siloCount + 1 }}</span
                 >
                 <span class="text-[9px] font-mono-premium font-black text-indigo-500 mt-0.5">
-                  {{ formatBokPrice(siloOutput.nextSiloCost) }} bocks<template v-if="timeToBuy">
+                  {{ formatBockPrice(siloOutput.nextSiloCost) }} bocks<template v-if="timeToBuy">
                     · Ready in {{ timeToBuy }}</template
                   >
                 </span>
@@ -200,7 +200,7 @@ import { useSiloTime } from '@/composables/useSiloTime';
 import { useSilosStore } from '@/stores/silos';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
-import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
 import { getResearchIconPath } from '@/lib/assets';
 import { iconURL } from 'lib';
 import { generateActionId } from '@/types';

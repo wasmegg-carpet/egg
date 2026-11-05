@@ -24,6 +24,7 @@ import {
   getArtifactLoadoutFromBackup,
 } from '@/lib/artifacts';
 import { parseEnlightenmentFarm } from '@/lib/backupFarm';
+import { defaultResearchCube, type ResearchCubeSetting } from '@/lib/artifacts/researchCube';
 import { createEmptyFuelAmounts, eiEggToFuelEgg } from '@/types';
 import { useFuelTankStore } from './fuelTank';
 
@@ -59,6 +60,9 @@ export interface InitialStateStoreState {
 
   // Assume double earnings (video doubler)
   assumeDoubleEarnings: boolean;
+
+  // Research is priced as if this puzzle cube (with its clarity stones) is swapped in for each purchase
+  researchCube: ResearchCubeSetting;
 
   // Pro permit (vs. Standard): Standard halves offline earnings, caps silos at 2 and active artifacts at 2
   proPermit: boolean;
@@ -109,6 +113,7 @@ export const useInitialStateStore = defineStore('initialState', {
     prophecyEggs: 0,
     truthEggs: 0,
     assumeDoubleEarnings: true,
+    researchCube: defaultResearchCube(),
     proPermit: true,
     initialTankLevel: 0,
     initialFuelAmounts: createEmptyFuelAmounts(),
@@ -339,6 +344,13 @@ export const useInitialStateStore = defineStore('initialState', {
     },
 
     /**
+     * Turn the research puzzle cube on or off, or change which cube and clarity stones it is
+     */
+    setResearchCube(setting: Partial<ResearchCubeSetting>) {
+      this.researchCube = { ...this.researchCube, ...setting };
+    },
+
+    /**
      * Set assume double earnings
      */
     setAssumeDoubleEarnings(enabled: boolean) {
@@ -393,6 +405,7 @@ export const useInitialStateStore = defineStore('initialState', {
       if (this.activeArtifactSet === null && this.artifactLoadout.some(s => s.artifactId)) {
         this.activeArtifactSet = 'earnings';
       }
+      this.researchCube = data.researchCube ? { ...data.researchCube } : defaultResearchCube();
       if (data.assumeDoubleEarnings !== undefined) {
         this.assumeDoubleEarnings = data.assumeDoubleEarnings;
       } else {
@@ -447,6 +460,7 @@ export const useInitialStateStore = defineStore('initialState', {
       this.prophecyEggs = 0;
       this.truthEggs = 0;
       this.assumeDoubleEarnings = true;
+      this.researchCube = defaultResearchCube();
       this.proPermit = true;
       this.initialTankLevel = 0;
       this.initialFuelAmounts = createEmptyFuelAmounts();

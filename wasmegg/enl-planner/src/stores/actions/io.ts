@@ -51,6 +51,7 @@ export function exportPlanData(actions: Action[], initialSnapshot?: Calculations
       activeArtifactSet: baseActiveSet,
       currentFarmState: initialStateStore.currentFarmState,
       assumeDoubleEarnings: initialStateStore.assumeDoubleEarnings,
+      researchCube: initialStateStore.researchCube,
       proPermit: initialStateStore.proPermit,
       initialSiloCount: baseSiloCount,
       initialTankLevel: baseTankLevel,

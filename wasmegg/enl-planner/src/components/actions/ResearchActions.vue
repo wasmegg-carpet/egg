@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-4">
+    <ResearchCubeToggle />
+
     <ResearchSaleToggle
       :is-active="isResearchSaleActive"
       :seconds-until-change="isResearchSaleActive ? secondsUntilSaleEnd : secondsUntilNextSale"
@@ -130,7 +132,7 @@
                 >Bocks Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
-                {{ formatBokPrice(milestoneSummary.bocksSpent) }}
+                {{ formatBockPrice(milestoneSummary.bocksSpent) }}
               </span>
             </div>
           </div>
@@ -234,7 +236,7 @@ import { getResearchById, type CommonResearch } from '@/calculations/commonResea
 import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from '@/calculations/researchROI';
-import { formatDuration, formatNumber, formatBokPrice, formatAbsoluteTime } from '@/lib/format';
+import { formatDuration, formatNumber, formatBockPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
@@ -270,6 +272,7 @@ import InlineSpinner from '@/components/InlineSpinner.vue';
 
 // Sub-components
 import ResearchSaleToggle from './ResearchSaleToggle.vue';
+import ResearchCubeToggle from './ResearchCubeToggle.vue';
 import ResearchViewSelector from './ResearchViewSelector.vue';
 import ResearchGameView from './ResearchGameView.vue';
 import ResearchFlatView from './ResearchFlatView.vue';

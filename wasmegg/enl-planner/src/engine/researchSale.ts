@@ -71,8 +71,11 @@ export function researchCostModifiersAt(
   return {
     labUpgradeLevel: context.epicResearchLevels['cheaper_research'] || 0,
     researchCostMultiplier: context.colleggtibleModifiers.researchCost || 1,
-    puzzleCubeMultiplier: calculateArtifactModifiers(activeSlots(snapshot.artifactLoadout, snapshot.proPermit))
-      .researchCost.totalMultiplier,
+    // The research cube setting stands in for whatever the set has, since it's swapped in to buy.
+    puzzleCubeMultiplier:
+      context.researchCubeMultiplier ??
+      calculateArtifactModifiers(activeSlots(snapshot.artifactLoadout, snapshot.proPermit)).researchCost
+        .totalMultiplier,
   };
 }
 

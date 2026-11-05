@@ -59,7 +59,7 @@ export interface WaitForEarningsBoostEndPayload {
 }
 
 /**
- * Payload for waiting to reach a target bok count.
+ * Payload for waiting to reach a target bock count.
  */
 export interface WaitForCashPayload {
   targetCash: number;

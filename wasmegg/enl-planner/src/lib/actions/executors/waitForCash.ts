@@ -1,7 +1,7 @@
 /**
  * Wait for Bocks Action Executor
  *
- * Account for time spent waiting to reach a target bok count.
+ * Account for time spent waiting to reach a target bock count.
  * Cost is 0 bocks.
  */
 

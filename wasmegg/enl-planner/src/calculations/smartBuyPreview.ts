@@ -497,7 +497,7 @@ export function runDeliveryBuyLoop(
   return { purchases, endLevels: simState.researchLevels, endSnapshot: simSnapshot };
 }
 
-/** Whichever next level adds the most earnings per bok, or the cheapest if none adds any. */
+/** Whichever next level adds the most earnings per bock, or the cheapest if none adds any. */
 function nextDeliveryLevel(
   available: CommonResearch[],
   state: EngineState,
@@ -507,12 +507,12 @@ function nextDeliveryLevel(
   isSale: boolean
 ): CommonResearch {
   const priceOf = (r: CommonResearch) => getDiscountedResearchPrice(r, state.researchLevels[r.id] || 0, mods, isSale);
-  const earningsPerBok = (r: CommonResearch) => {
+  const earningsPerBock = (r: CommonResearch) => {
     const levels = { ...state.researchLevels, [r.id]: (state.researchLevels[r.id] || 0) + 1 };
     const next = computeSnapshot({ ...state, researchLevels: levels }, context, { skipEpochConversion: true });
     return (next.offlineEarnings - snapshot.offlineEarnings) / priceOf(r);
   };
-  const scored = available.map(r => ({ r, value: earningsPerBok(r), price: priceOf(r) }));
+  const scored = available.map(r => ({ r, value: earningsPerBock(r), price: priceOf(r) }));
   return scored.reduce((a, b) => (b.value > a.value || (b.value === a.value && b.price < a.price) ? b : a)).r;
 }
 

@@ -9,11 +9,11 @@
 
 import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { ModifyBankPayload } from '@/types';
-import { formatBokPrice } from '@/lib/format';
+import { formatBockPrice } from '@/lib/format';
 
 export const modifyBankExecutor: ActionExecutor<'modify_bank'> = {
   execute(payload: ModifyBankPayload, context: ExecutorContext): number {
-    return 0; // No time or bok cost; the bank delta itself is reflected in bankDelta.
+    return 0; // No time or bock cost; the bank delta itself is reflected in bankDelta.
   },
 
   getDisplayName(): string {
@@ -22,6 +22,6 @@ export const modifyBankExecutor: ActionExecutor<'modify_bank'> = {
 
   getEffectDescription(payload: ModifyBankPayload): string {
     const sign = payload.delta >= 0 ? '+' : '-';
-    return `${sign}${formatBokPrice(Math.abs(payload.delta))} bocks`;
+    return `${sign}${formatBockPrice(Math.abs(payload.delta))} bocks`;
   },
 };

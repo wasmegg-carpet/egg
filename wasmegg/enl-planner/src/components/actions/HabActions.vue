@@ -134,7 +134,7 @@ import {
   isHabId,
   type HabCostModifiers,
 } from '@/lib/habs';
-import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';

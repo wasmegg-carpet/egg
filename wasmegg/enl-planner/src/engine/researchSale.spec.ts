@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { useInitialStateStore } from '@/stores/initialState';
 import {
   getNextEarningsBoostStart,
   getNextSaleEnd,
@@ -170,6 +171,8 @@ describe('a research purchase crossing a sale boundary', () => {
 
   // A plan earning from its first second, starting at `absoluteStart`.
   async function startEarningPlan(absoluteStart: number, population = 100, researchLevels: Record<string, number> = {}) {
+    // These tests pick purchases by how long they take to save for; the research cube would change which.
+    useInitialStateStore().setResearchCube({ enabled: false });
     const planStore = usePlanStore();
     planStore.setAscensionTimezone('UTC');
     const iso = new Date(absoluteStart * 1000).toISOString();
@@ -178,7 +181,7 @@ describe('a research purchase crossing a sale boundary', () => {
     const store = useActionsStore();
     const base = {
       ...createBaseEngineState(null),
-      // Earnings of about 1 bok per egg, so these purchases take the hours the tests are about.
+      // Earnings of about 1 bock per egg, so these purchases take the hours the tests are about.
       soulEggs: 1e8,
       prophecyEggs: 0,
       habIds: [0, null, null, null],

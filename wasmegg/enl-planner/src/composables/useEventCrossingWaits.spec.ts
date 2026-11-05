@@ -43,7 +43,7 @@ async function startPlan(absoluteStart: number) {
   const store = useActionsStore();
   const base = {
     ...createBaseEngineState(null),
-    // Earnings of about 1 bok per egg, so these purchases take the hours the tests are about.
+    // Earnings of about 1 bock per egg, so these purchases take the hours the tests are about.
     soulEggs: 1e8,
     prophecyEggs: 0,
     habIds: [0, null, null, null],

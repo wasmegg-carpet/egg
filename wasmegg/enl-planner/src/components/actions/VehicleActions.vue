@@ -135,7 +135,7 @@
                 @click="handleAddTrainCar(index)"
               >
                 <span class="text-[10px] font-black text-blue-700 uppercase tracking-tight group-hover:text-blue-800"
-                  >+1 Car ({{ formatBokPrice(getNextCarCost(slot)) }})</span
+                  >+1 Car ({{ formatBockPrice(getNextCarCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getCarTimeToBuy(slot) }}</span>
               </button>
@@ -148,7 +148,7 @@
               >
                 <span
                   class="text-[10px] font-black text-indigo-700 uppercase tracking-tight group-hover:text-indigo-800"
-                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatBokPrice(getTotalCarsCost(slot)) }})</span
+                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatBockPrice(getTotalCarsCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getMaxCarsTimeToBuy(slot) }}</span>
               </button>
@@ -189,7 +189,7 @@ import {
   type VehicleCostModifiers,
   type VehicleType,
 } from '@/lib/vehicles';
-import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';

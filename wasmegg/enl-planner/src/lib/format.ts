@@ -132,11 +132,11 @@ export function formatWithReference(value: number, reference: number, decimals: 
 }
 
 /**
- * Format a bok price.
+ * Format a bock price.
  * If the cost is under 1,000, don't show any decimals.
  * If the cost is 1,000 or more, show with 3 decimal places.
  */
-export function formatBokPrice(price: number): string {
+export function formatBockPrice(price: number): string {
   return formatNumber(price, price < 1000 ? 0 : 3);
 }
 

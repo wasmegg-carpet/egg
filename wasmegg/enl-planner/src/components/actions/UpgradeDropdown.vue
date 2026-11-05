@@ -17,7 +17,7 @@
             <span v-if="selectedOption.capacity && selectedOption.price !== undefined" class="mx-1.5">•</span>
             
             <template v-if="selectedOption.price !== undefined">
-              <span>{{ formatBokPrice(selectedOption.price) }}</span>
+              <span>{{ formatBockPrice(selectedOption.price) }}</span>
               <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
             </template>
             
@@ -73,7 +73,7 @@
               <span v-if="opt.capacity && opt.price !== undefined" class="mx-1.5">•</span>
               
               <template v-if="opt.price !== undefined">
-                <span>{{ formatBokPrice(opt.price) }}</span>
+                <span>{{ formatBockPrice(opt.price) }}</span>
                 <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
               </template>
               
@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { iconURL } from 'lib';
-import { formatBokPrice } from '@/lib/format';
+import { formatBockPrice } from '@/lib/format';
 
 export interface UpgradeDropdownOption {
   id: string;

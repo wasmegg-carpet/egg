@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Description, Bok Cost -->
+    <!-- Row 2: Description, Bock Cost -->
     <div class="flex items-start justify-between w-full pl-[38px] gap-4">
       <!-- Description -->
       <div class="text-[10px] text-gray-500 leading-snug">
@@ -55,12 +55,12 @@
         </div>
       </div>
 
-      <!-- Bok Cost -->
+      <!-- Bock Cost -->
       <div class="text-right shrink-0">
         <template v-if="!isMaxed">
           <div class="flex items-center justify-end gap-1 text-[11px] font-mono text-amber-600 font-bold">
-            {{ formatBokPrice(price) }}
-            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Bok" />
+            {{ formatBockPrice(price) }}
+            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Bock" />
           </div>
           <div v-if="duringSale || duringEarningsBoost" class="flex items-center justify-end gap-1 mt-0.5">
             <span
@@ -277,7 +277,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { CommonResearch } from '@/calculations/commonResearch';
-import { formatNumber, formatBokPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
+import { formatNumber, formatBockPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
 import { getResearchIconPath } from '@/lib/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';

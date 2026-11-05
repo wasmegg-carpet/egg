@@ -19,6 +19,11 @@ export function clarityMultiplier(slot: EquippedArtifact): number {
   }, 0);
 }
 
+/** One puzzle cube's research price multiplier: `delta` is its listed effect (−0.6 for T4L). */
+export function puzzleCubeFactor(delta: number, clarity: number): number {
+  return clarity <= 1 ? 1 + delta * clarity : (1 + delta) / clarity;
+}
+
 /**
  * Calculate all artifact modifiers from an equipped loadout, as they work on an enlightenment farm.
  */
@@ -81,6 +86,20 @@ export function calculateArtifactModifiers(loadout: EquippedArtifact[]): Artifac
     };
   }
 
+  /**
+   * Research cost, Artifact Sandbox's rule: past 100% clarity a puzzle cube divides by the clarity
+   * instead of scaling its discount (T4L −60% with three T4 clarity stones is 0.4 / 3, not 1 − 1.8).
+   */
+  function calcResearchCost(): ArtifactModifier {
+    const effects = effectsByTarget['research cost'] || [];
+    return {
+      effectTarget: 'research cost',
+      effects,
+      totalMultiplier: effects.reduce((acc, e) => acc * puzzleCubeFactor(e.effectDelta / e.clarity, e.clarity), 1),
+      isMultiplicative: true,
+    };
+  }
+
   return {
     // Light of Eggendil's target is its own, but it's egg value all the same.
     eggValue: calcModifier(['egg value', 'enlightenment egg value']),
@@ -89,7 +108,7 @@ export function calculateArtifactModifiers(loadout: EquippedArtifact[]): Artifac
     awayEarnings: calcModifier('away earnings'),
     eggLayingRate: calcModifier('egg laying rate'),
     internalHatcheryRate: calcModifier('internal hatchery rate'),
-    researchCost: calcModifier('research cost'),
+    researchCost: calcResearchCost(),
     soulEggBonus: calcAdditive('bonus per Soul Egg'),
     prophecyEggBonus: calcAdditive('Egg of Prophecy bonus'),
   };

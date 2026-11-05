@@ -1,6 +1,6 @@
 import type { DraftAction, NotificationPayload } from '@/types';
 import { generateActionId } from '@/types';
-import { formatDuration, formatBokPrice } from '@/lib/format';
+import { formatDuration, formatBockPrice } from '@/lib/format';
 
 /**
  * Builds a ready-to-push `DraftAction` for an inline note — the 'notification' action type. A note
@@ -31,7 +31,7 @@ export function createNoteAction(payload: NotificationPayload, dependsOn: string
 function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalBocksSpent: number): string {
   return `${purchaseCount} purchase${purchaseCount === 1 ? '' : 's'} over ${formatDuration(
     seconds
-  )}, ${formatBokPrice(totalBocksSpent)} bocks spent`;
+  )}, ${formatBockPrice(totalBocksSpent)} bocks spent`;
 }
 
 /**

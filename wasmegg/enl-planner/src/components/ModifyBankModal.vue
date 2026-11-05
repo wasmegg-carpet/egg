@@ -238,7 +238,7 @@ const parsedTimeAmount = computed(() => {
   return sign * magnitude;
 });
 
-// The signed bok amount to add/subtract for 'delta' and 'time' modes.
+// The signed bock amount to add/subtract for 'delta' and 'time' modes.
 const effectiveDeltaAmount = computed(() => {
   if (mode.value === 'time') return parsedTimeAmount.value ?? 0;
   return parsedDeltaAmount.value ?? 0;
@@ -285,7 +285,7 @@ async function handleConfirm() {
   const targetValue =
     mode.value === 'set' ? (parsedSetValue.value as number) : previousValue + effectiveDeltaAmount.value;
 
-  // 'time' mode computes a one-off bok amount from the current earnings rate, then
+  // 'time' mode computes a one-off bock amount from the current earnings rate, then
   // behaves exactly like a manually-typed delta from here on.
   const payload: ModifyBankPayload = {
     mode: mode.value === 'set' ? 'set' : 'delta',

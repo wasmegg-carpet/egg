@@ -29,7 +29,7 @@
         >
           <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Bocks" />
         </div>
-        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Bok Count </span>
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Bock Count </span>
       </div>
 
       <!-- Target input -->

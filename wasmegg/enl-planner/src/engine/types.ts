@@ -54,6 +54,8 @@ export interface SimulationContext {
   ascensionStartTime: number; // Unix timestamp in seconds
   planStartOffset: number; // Seconds since ascension start at which planning begins
   assumeDoubleEarnings: boolean;
+  /** Research puzzle cube multiplier that replaces the equipped set's, or null/absent to use the set. */
+  researchCubeMultiplier?: number | null;
   rawBackup?: any; // ei.IBackup
   // TODO: Add any other global context needed (e.g. events?)
 }

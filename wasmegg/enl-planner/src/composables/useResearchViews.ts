@@ -18,6 +18,7 @@ import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
 import { researchPurchaseAt } from '@/engine/researchSale';
+import { researchCubeOverride } from '@/lib/artifacts/researchCube';
 import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
 import {
   getNextPacificTime,
@@ -292,7 +293,9 @@ export function useResearchViews() {
   const costModifiers = computed(() => ({
     labUpgradeLevel: initialStateStore.epicResearchLevels['cheaper_research'] || 0,
     researchCostMultiplier: initialStateStore.colleggtibleModifiers.researchCost,
-    puzzleCubeMultiplier: initialStateStore.artifactModifiers.researchCost.totalMultiplier,
+    puzzleCubeMultiplier:
+      researchCubeOverride(initialStateStore.researchCube) ??
+      initialStateStore.artifactModifiers.researchCost.totalMultiplier,
   }));
 
   const isResearchSaleActive = computed(() => actionsStore.effectiveSnapshot.activeSales.research);
