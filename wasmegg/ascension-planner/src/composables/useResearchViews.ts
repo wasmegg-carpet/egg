@@ -143,7 +143,7 @@ export interface ResearchViewItem {
   impact?: number;
   hpp?: number;
   timeRoiSeconds?: number;
-  lookahead?: { levels: number; helpsAlone: boolean; impact: number; hpp: number };
+  lookahead?: { levels: number; partner?: { name: string; level: number }; helpsAlone: boolean; impact: number; hpp: number };
 
   // Cheapest specific / generic
   buyToHereTime?: string;
@@ -541,7 +541,9 @@ export function useResearchViews() {
       hpp: la ? la.hpp : item.hpp,
       timeRoiSeconds: la ? la.timeRoiSeconds : item.timeRoiSeconds,
       realisticStats: la ? la.realisticStats : item.realisticStats,
-      lookahead: la ? { levels: la.levels, helpsAlone: item.impact! > 0, impact: la.impact, hpp: la.hpp } : undefined,
+      lookahead: la
+        ? { levels: la.levels, partner: la.partner, helpsAlone: item.impact! > 0, impact: la.impact, hpp: la.hpp }
+        : undefined,
       showDeadlineWarning: item.showDeadlineWarning,
       duringSale: item.duringSale,
       duringEarningsBoost: item.duringEarningsBoost,

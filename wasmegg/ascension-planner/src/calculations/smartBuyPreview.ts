@@ -439,14 +439,15 @@ export function runDeliveryBuyLoop(
   let simSnapshot = snapshot;
   let simTime = absoluteSimTime;
   const purchases: DeliveryPurchase[] = [];
-  // A candidate ranked on several levels (`lookahead`) stays committed until they're all bought:
-  // its first levels do little or nothing alone, so another candidate taking the time in between
-  // could strand them. `showDeadlineWarning` already confirmed all of them fit before the deadline.
-  let committed: { researchId: string; levelsLeft: number } | null = null;
+  // A candidate that does nothing until its lookahead's levels are all bought stays committed to
+  // them, since another candidate taking the time in between could strand them;
+  // `showDeadlineWarning` already confirmed they fit before the deadline. One that helps alone is
+  // re-ranked after each level instead, since a cheaper level may do what its next one would.
+  const committed: string[] = [];
 
   buyWhilePassingCheck(
     () => {
-      if (committed) return { researchId: committed.researchId };
+      if (committed.length > 0) return { researchId: committed[0] };
       // Explicit stop condition, NOT delegated to `showDeadlineWarning` alone (unlike a plain
       // candidate filter — this loop needs a hard bound `buyWhilePassingCheck` itself has no concept
       // of). `showDeadlineWarning` is gated behind `isResearchSaleActive(simTime)`, correct for its
@@ -475,15 +476,20 @@ export function runDeliveryBuyLoop(
         elrSortMode
       );
       const candidate = ranked.find(item => item.canBuy && !item.showDeadlineWarning);
-      if (candidate?.lookahead) {
-        committed = { researchId: candidate.research.id, levelsLeft: candidate.lookahead.levels };
+      const lookahead = candidate?.lookahead;
+      if (candidate && lookahead && !(candidate.impact! > 0)) {
+        committed.push(
+          ...(lookahead.partner
+            ? [candidate.research.id, lookahead.partner.id]
+            : Array<string>(lookahead.levels).fill(candidate.research.id))
+        );
       }
       return candidate ? { researchId: candidate.research.id } : undefined;
     },
     researchId => {
       const research = getResearchById(researchId);
       if (!research) return false;
-      if (committed && --committed.levelsLeft === 0) committed = null;
+      committed.shift();
       const level = simState.researchLevels[researchId] || 0;
       const isSale = isResearchSaleActive(simTime);
       const transitions = boostTransitionsFrom(simSnapshot, simTime);

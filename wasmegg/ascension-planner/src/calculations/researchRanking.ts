@@ -115,7 +115,10 @@ export interface ResearchRankingItem {
   timeRoiSeconds?: number;
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
   lookahead?: {
+    /** Levels bought in all, counting `partner`'s. */
     levels: number;
+    /** Another research's next level to buy with this one, instead of more levels of this one. */
+    partner?: { id: string; name: string; level: number };
     impact: number;
     hpp: number;
     timeRoiSeconds: number;
@@ -581,6 +584,20 @@ export function rankResearchByELRImpact(
         context.colleggtibleModifiers
       );
     };
+    const nextLevelStats = new Map<string, ReturnType<typeof statsAt>>();
+    const statsAfterNextLevel = (r: CommonResearch) => {
+      let stats = nextLevelStats.get(r.id);
+      if (!stats) {
+        stats = statsAt({ ...researchLevels, [r.id]: (researchLevels[r.id] || 0) + 1 });
+        nextLevelStats.set(r.id, stats);
+      }
+      return stats;
+    };
+    const buyableDeliveryResearch = uniqueUnpurchased.filter(
+      r =>
+        isTierUnlocked(researchLevels, r.tier) &&
+        r.categories.split(',').some(category => DELIVERY_IMPACT_CATEGORIES.has(category))
+    );
 
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
@@ -602,7 +619,7 @@ export function rankResearchByELRImpact(
         const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
         const secondsToBuyWithBank = withBankPurchase.waitSeconds;
 
-        const stats = statsAt({ ...researchLevels, [r.id]: level + 1 });
+        const stats = statsAfterNextLevel(r);
         const impact = (stats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
 
         const hoursToBuy = secondsToBuyNoBank / 3600;
@@ -616,6 +633,7 @@ export function rankResearchByELRImpact(
         let lookahead:
           | {
               levels: number;
+              partner?: { id: string; name: string; level: number };
               impact: number;
               hpp: number;
               timeRoiSeconds: number;
@@ -657,6 +675,53 @@ export function rankResearchByELRImpact(
               impact: laImpact,
               hpp: laHpp,
               timeRoiSeconds: totalSecondsForN / laImpact,
+              realisticStats: {
+                layRate: laStats.layRate * 3600,
+                shippingRate: laStats.shippingRate * 3600,
+                elr: laStats.effectiveRate * 3600,
+                elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
+              },
+            };
+          }
+        }
+
+        // The same, pairing this level with another research's next level: once a stone has moved,
+        // a much cheaper level of another research can do what this one's next level would. A pair
+        // only counts when it beats the other research bought alone, or that research's own value
+        // would carry this one up the list.
+        if (buyableDeliveryResearch.includes(r)) {
+          for (const other of buyableDeliveryResearch) {
+            if (other === r) continue;
+            const otherLevel = researchLevels[other.id] || 0;
+            const otherPrice = getDiscountedVirtuePrice(other, otherLevel, mods, withBankPurchase.duringSale);
+            const laStats = statsAt({ ...researchLevels, [r.id]: level + 1, [other.id]: otherLevel + 1 });
+            const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
+            if (laImpact <= 0) continue;
+
+            const pairPrice = price + otherPrice;
+            const pairSeconds = getTimeToSave(pairPrice, noBankSnapshot, transitions);
+            const pairHpp = pairSeconds / 3600 / (laImpact * 100);
+            const otherImpact =
+              (statsAfterNextLevel(other).effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
+            const otherHpp =
+              otherImpact > 0 ? getTimeToSave(otherPrice, noBankSnapshot, transitions) / 3600 / (otherImpact * 100) : Infinity;
+            if (pairHpp >= otherHpp) continue;
+
+            const helps = impact > 0 || lookahead !== undefined;
+            if (helps && pairHpp >= bestHpp) continue;
+            const secondsWithBank = getTimeToSave(pairPrice, startSnapshot, transitions);
+            if (helps && isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsWithBank > researchSaleDeadline) {
+              continue;
+            }
+
+            bestHpp = pairHpp;
+            secondsUntilUseful = secondsWithBank;
+            lookahead = {
+              levels: 2,
+              partner: { id: other.id, name: other.name, level: otherLevel + 1 },
+              impact: laImpact,
+              hpp: pairHpp,
+              timeRoiSeconds: pairSeconds / laImpact,
               realisticStats: {
                 layRate: laStats.layRate * 3600,
                 shippingRate: laStats.shippingRate * 3600,
@@ -751,7 +816,7 @@ export function rankResearchByELRImpact(
   }
 
   // A candidate with a lookahead ranks on what those levels achieve together, the same figures the
-  // caller displays for it.
+  // caller displays for it. Both halves of a pair score the same, so whichever helps alone goes first.
   const rankHpp = (c: ResearchRankingItem) => c.lookahead?.hpp ?? c.hpp!;
   const rankImpact = (c: ResearchRankingItem) => c.lookahead?.impact ?? c.impact!;
 
@@ -761,13 +826,15 @@ export function rankResearchByELRImpact(
       if (isFinite(rankHpp(a)) || isFinite(rankHpp(b))) {
         if (rankHpp(a) !== rankHpp(b)) return rankHpp(a) - rankHpp(b);
       }
-      return rankImpact(b) - rankImpact(a);
+      if (rankImpact(a) !== rankImpact(b)) return rankImpact(b) - rankImpact(a);
+      return (b.impact ?? 0) - (a.impact ?? 0);
     });
   } else {
     candidates.sort((a, b) => {
       if (a.canBuy !== b.canBuy) return a.canBuy ? -1 : 1;
       if (rankImpact(a) !== rankImpact(b)) return rankImpact(b) - rankImpact(a);
-      return rankHpp(a) - rankHpp(b);
+      if (rankHpp(a) !== rankHpp(b)) return rankHpp(a) - rankHpp(b);
+      return (b.impact ?? 0) - (a.impact ?? 0);
     });
   }
 
