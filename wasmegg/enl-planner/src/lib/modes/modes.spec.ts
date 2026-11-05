@@ -79,7 +79,11 @@ describe('planning a new farm from a backup', () => {
     expect(store.prophecyEggs).toBe(150);
     expect(store.truthEggs).toBe(105);
     expect(store.initialTankLevel).toBe(3);
-    expect(store.artifactLoadout[0].artifactId).toBe('demeters-necklace-4-3');
+    // Starts with the max offline earnings set, not what the backup has equipped
+    const ids = store.artifactLoadout.map(s => s.artifactId);
+    expect(ids).toContain('lunar-totem-4-3');
+    expect(ids).toContain('light-of-eggendil-4-3');
+    expect(store.activeArtifactSet).toBe('earnings');
     expect(store.currentFarmState).toBeNull();
 
     const first = useActionsStore().currentSnapshot;

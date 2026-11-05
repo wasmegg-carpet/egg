@@ -13,12 +13,10 @@ export const equipArtifactSetExecutor: ActionExecutor<'equip_artifact_set'> = {
   },
 
   getDisplayName(payload) {
-    const name = payload.setName === 'earnings' ? '1' : '2';
-    return `Equip Set ${name}`;
+    return payload.setName === 'earnings' ? 'Equip Artifacts' : 'Equip Set 2';
   },
 
   getEffectDescription(payload) {
-    const name = payload.setName === 'earnings' ? '1' : '2';
-    return `Switched to artifact set ${name}.`;
+    return payload.setName === 'earnings' ? 'Equipped the artifact set.' : 'Switched to artifact set 2.';
   },
 };

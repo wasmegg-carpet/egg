@@ -6,6 +6,8 @@ import type { ei } from 'lib';
 import { getSavedPlayerID } from 'lib';
 import { PlayerIdSchema } from 'lib/schema';
 import { fetchPlayerBackup } from './fetchBackup';
+import { optimizeOfflineEarnings } from '@/lib/artifacts/optimizeArtifacts';
+import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import type { PlanData } from '@/lib/storage/db';
 
 /**
@@ -125,4 +127,17 @@ export async function backfillMissingBackup(plan: PlanData): Promise<void> {
   } catch (err) {
     console.warn('[backfillMissingBackup] Could not fetch/save backup for plan', plan.id, err);
   }
+}
+
+/**
+ * A new plan starts with the max offline earnings artifact set equipped (the one set an
+ * enlightenment plan uses). Call after the stores are set up and before the initial snapshot.
+ */
+export function equipMaxEarningsSet(): void {
+  const store = useInitialStateStore();
+  const result = optimizeOfflineEarnings(createBaseEngineState(null), getSimulationContext());
+  if (!result.ok) return;
+  store.updateArtifactSet('earnings', result.loadout);
+  store.artifactSets.elr = null;
+  store.setActiveArtifactSet('earnings');
 }

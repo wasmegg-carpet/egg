@@ -127,86 +127,6 @@
       </div>
     </div>
 
-    <!-- Artifact Loadout -->
-    <div class="section-premium overflow-visible">
-      <div class="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
-        <h3 class="style-guide-label mb-0">Artifact Sets</h3>
-        <div v-if="hasArtifactSets" class="flex gap-1 bg-slate-200/50 p-1 rounded-xl">
-          <button
-            v-for="setName in ['earnings', 'elr'] as const"
-            :key="setName"
-            class="px-4 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all"
-            :class="[
-              activeSetTab === setName
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50',
-            ]"
-            @click="activeSetTab = setName"
-          >
-            {{ setName === 'earnings' ? 'Set 1' : 'Set 2' }}
-          </button>
-        </div>
-      </div>
-      <div class="p-4">
-        <template v-if="!hasArtifactSets">
-          <div class="mb-4">
-            <ArtifactSelector
-              :model-value="artifactLoadout"
-              :slot-count="artifactSlotCount(proPermit)"
-              @update:model-value="$emit('update:artifact-loadout', $event)"
-            />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <button
-              class="btn-premium btn-primary py-2 text-[10px] font-black uppercase tracking-widest"
-              @click="$emit('save-current-to-set', 'earnings')"
-            >
-              Save as Earnings
-            </button>
-            <button
-              class="btn-premium btn-primary py-2 text-[10px] font-black uppercase tracking-widest"
-              @click="$emit('save-current-to-set', 'elr')"
-            >
-              Save as Delivery
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <div v-if="activeSetTab === 'earnings'">
-            <ArtifactSelector
-              :model-value="artifactSets.earnings || createEmptyLoadout()"
-              :slot-count="artifactSlotCount(proPermit)"
-              @update:model-value="$emit('update-artifact-set', 'earnings', $event)"
-            />
-          </div>
-          <div v-if="activeSetTab === 'elr'">
-            <ArtifactSelector
-              :model-value="artifactSets.elr || createEmptyLoadout()"
-              :slot-count="artifactSlotCount(proPermit)"
-              @update:model-value="$emit('update-artifact-set', 'elr', $event)"
-            />
-          </div>
-          <div v-if="activeArtifactSet !== activeSetTab" class="mt-4 flex justify-end">
-            <button
-              class="btn-premium btn-secondary py-1.5 px-4 text-[10px] font-black uppercase tracking-widest"
-              @click="$emit('set-active-artifact-set', activeSetTab)"
-            >
-              Equip as Active
-            </button>
-          </div>
-          <div
-            v-else
-            class="mt-4 flex justify-end items-center gap-3 bg-brand-primary/5 p-2 rounded-xl border border-brand-primary/10"
-          >
-            <div class="w-2 h-2 rounded-full bg-brand-primary animate-pulse"></div>
-            <span class="text-[10px] font-black text-slate-900 uppercase tracking-widest"
-              >Currently Active Loadout</span
-            >
-          </div>
-        </template>
-      </div>
-    </div>
-
     <!-- Fuel Tank (collapsible) -->
     <div class="section-premium overflow-hidden">
       <button
@@ -484,13 +404,10 @@ import type { ResearchLevels, FuelEgg } from '@/types';
 import { FUEL_EGG_NAMES } from '@/types';
 import { fuelEggIconPath } from '@/lib/missions';
 import { epicResearchDefs } from '@/lib/epicResearch';
-import type { EquippedArtifact } from '@/lib/artifacts';
 import { TANK_CAPACITIES, FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import ProPermitToggle from '@/components/ProPermitToggle.vue';
 import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
-import { createEmptyLoadout, artifactSlotCount } from '@/lib/artifacts';
 import {
   colleggtibleDefs,
   formatColleggtibleBonus,
@@ -501,7 +418,6 @@ import {
 const props = defineProps<{
   hasData: boolean;
   epicResearchLevels: ResearchLevels;
-  artifactLoadout: EquippedArtifact[];
   te: number;
   prophecyEggs: number;
   ascensionDate: string;
@@ -514,14 +430,11 @@ const props = defineProps<{
   soulEggs: number;
   assumeDoubleEarnings: boolean;
   proPermit: boolean;
-  artifactSets: Record<import('@/types').ArtifactSetName, EquippedArtifact[] | null>;
-  activeArtifactSet: import('@/types').ArtifactSetName | null;
   colleggtibleTiers: import('lib/collegtibles').ColleggtibleTiers;
 }>();
 
 const emit = defineEmits<{
   'set-epic-research-level': [researchId: string, level: number];
-  'update:artifact-loadout': [loadout: EquippedArtifact[]];
   'set-te': [value: number];
   'set-prophecy-eggs': [value: number];
   'set-ascension-date': [value: string];
@@ -534,9 +447,6 @@ const emit = defineEmits<{
   'set-soul-eggs': [count: number];
   'set-assume-double-earnings': [enabled: boolean];
   'set-pro-permit': [enabled: boolean];
-  'update-artifact-set': [setName: import('@/types').ArtifactSetName, loadout: EquippedArtifact[]];
-  'save-current-to-set': [setName: import('@/types').ArtifactSetName];
-  'set-active-artifact-set': [setName: import('@/types').ArtifactSetName];
   'set-colleggtible-tier': [id: string, tierIndex: number];
 }>();
 
@@ -572,19 +482,6 @@ const epicResearchExpanded = ref(false);
 const colleggtiblesExpanded = ref(false);
 const fuelTankExpanded = ref(false);
 
-const activeSetTab = ref<import('@/types').ArtifactSetName>(props.activeArtifactSet || 'earnings');
-
-// Keep tab in sync with active set (important for imports)
-watch(
-  () => props.activeArtifactSet,
-  newVal => {
-    if (newVal) {
-      activeSetTab.value = newVal;
-    }
-  }
-);
-
-const hasArtifactSets = computed(() => props.artifactSets.earnings || props.artifactSets.elr);
 
 // Total fuel in tank
 const totalFuel = computed(() => Object.values(props.fuelAmounts).reduce((sum, amt) => sum + amt, 0));

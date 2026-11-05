@@ -7,7 +7,7 @@
  * - Farm-specific stores ZEROED (research, habs, vehicles, silos, bank)
  * - Start action: no farm state, no quick continue
  * - Start date/time = now
- * - Artifacts: what's equipped in the backup
+ * - Artifacts: the max offline earnings set
  * - "Wait for Full Habs" auto-added by setInitialSnapshot
  *
  * Key invariant: currentFarmState is populated by loadFromBackup but NOT used
@@ -16,7 +16,7 @@
 
 import { resetAllStores } from './reset';
 import { fetchPlayerBackup } from './fetchBackup';
-import { loadAndSyncBackup } from './utils';
+import { loadAndSyncBackup, equipMaxEarningsSet } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
@@ -44,6 +44,9 @@ export async function initPlanFuture(playerId: string): Promise<void> {
     startAction.payload.initialFarmState = undefined;
     startAction.payload.isQuickContinue = false;
   }
+
+  // Start with the max offline earnings artifact set
+  equipMaxEarningsSet();
 
   // 7. Compute and set initial snapshot
   const context = getSimulationContext();

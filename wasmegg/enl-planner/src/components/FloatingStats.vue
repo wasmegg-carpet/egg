@@ -39,11 +39,6 @@
 
     <!-- Collapsible Content -->
     <div v-if="!isCollapsed" class="flex flex-col items-center w-full transition-all">
-      <!-- Active Set Badge -->
-      <div v-if="activeSet" class="badge-premium badge-brand py-0.5 mb-3 scale-90">
-        {{ activeSet === 'earnings' ? 'Set 1' : 'Set 2' }}
-      </div>
-      <div v-else class="badge-premium py-0.5 mb-3 scale-90 bg-slate-100 text-slate-500">No Active Set</div>
 
       <!-- Plan Timing & Duration -->
       <div
@@ -180,7 +175,6 @@ const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 
 const snapshot = computed(() => actionsStore.effectiveSnapshot);
 
 // Basic properties from snapshot
-const activeSet = computed(() => snapshot.value.activeArtifactSet);
 const habCapacity = computed(() => snapshot.value.habCapacity);
 const population = computed(() => snapshot.value.population);
 

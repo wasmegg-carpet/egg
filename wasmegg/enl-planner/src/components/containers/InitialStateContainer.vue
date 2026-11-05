@@ -3,7 +3,6 @@
     ref="displayRef"
     :has-data="store.hasData"
     :epic-research-levels="store.epicResearchLevels"
-    :artifact-loadout="store.artifactLoadout"
     :te="store.truthEggs"
     :prophecy-eggs="store.prophecyEggs"
     :ascension-date="planStore.ascensionDate"
@@ -15,11 +14,8 @@
     :soul-eggs="store.soulEggs"
     :assume-double-earnings="store.assumeDoubleEarnings"
     :pro-permit="store.proPermit"
-    :artifact-sets="store.artifactSets"
-    :active-artifact-set="store.activeArtifactSet"
     :colleggtible-tiers="store.colleggtibleTiers"
     @set-epic-research-level="handleSetEpicResearchLevel"
-    @update:artifact-loadout="handleArtifactLoadout"
     @set-te="handleSetTE"
     @set-prophecy-eggs="handleSetProphecyEggs"
     @set-ascension-date="handleSetAscensionDate"
@@ -31,9 +27,6 @@
     @set-soul-eggs="handleSetSoulEggs"
     @set-assume-double-earnings="handleSetAssumeDoubleEarnings"
     @set-pro-permit="handleSetProPermit"
-    @save-current-to-set="handleSaveCurrentToSet"
-    @update-artifact-set="handleUpdateArtifactSet"
-    @set-active-artifact-set="handleSetActiveArtifactSet"
     @set-colleggtible-tier="handleSetColleggtibleTier"
   />
 </template>
@@ -53,8 +46,7 @@ import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
 import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
-import type { FuelEgg, ArtifactSetName } from '@/types';
-import type { EquippedArtifact } from '@/lib/artifacts';
+import type { FuelEgg } from '@/types';
 
 const store = useInitialStateStore();
 const planStore = usePlanStore();
@@ -84,11 +76,6 @@ function handleSetEpicResearchLevel(id: string, level: number) {
 
 function handleSetColleggtibleTier(id: string, tierIndex: number) {
   store.setColleggtibleTier(id, tierIndex);
-  updateInitialSnapshotAndRecalculate();
-}
-
-function handleArtifactLoadout(loadout: EquippedArtifact[]) {
-  store.setArtifactLoadout(loadout);
   updateInitialSnapshotAndRecalculate();
 }
 
@@ -146,21 +133,6 @@ function handleSetAssumeDoubleEarnings(enabled: boolean) {
 
 function handleSetProPermit(enabled: boolean) {
   store.setProPermit(enabled);
-  updateInitialSnapshotAndRecalculate();
-}
-
-function handleSaveCurrentToSet(setName: ArtifactSetName) {
-  store.saveCurrentToSet(setName);
-  updateInitialSnapshotAndRecalculate();
-}
-
-function handleUpdateArtifactSet(setName: ArtifactSetName, loadout: EquippedArtifact[]) {
-  store.updateArtifactSet(setName, loadout);
-  updateInitialSnapshotAndRecalculate();
-}
-
-function handleSetActiveArtifactSet(setName: ArtifactSetName) {
-  store.setActiveArtifactSet(setName);
   updateInitialSnapshotAndRecalculate();
 }
 

@@ -10,6 +10,7 @@
  */
 
 import { resetAllStores } from './reset';
+import { equipMaxEarningsSet } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
@@ -17,6 +18,9 @@ import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 export async function initStartFromScratch(): Promise<void> {
   // 1. Clean slate — all stores to defaults
   await resetAllStores();
+
+  // Start with the max offline earnings artifact set
+  equipMaxEarningsSet();
 
   // 2. Compute initial snapshot from default stores
   //    (curiosity egg, no research, no farm state, population=0)

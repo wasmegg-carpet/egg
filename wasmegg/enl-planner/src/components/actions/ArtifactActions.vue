@@ -1,54 +1,22 @@
 <template>
   <div class="space-y-3">
 
-    <!-- Set Selector Tabs -->
-    <div class="flex gap-2">
-      <button
-        v-for="setName in ['earnings', 'elr'] as const"
-        :key="setName"
-        class="flex-1 py-1.5 px-2 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center shadow-sm"
-        :class="[
-          selectedTab === setName ? 'border-blue-600 bg-blue-50/30' : 'border-gray-100 bg-white hover:border-gray-200',
-        ]"
-        @click="selectedTab = setName"
-      >
-        <!-- Equipped Indicator Space -->
-        <div class="h-3.5 flex items-center justify-center w-full mb-0.5">
-          <div
-            v-if="activeArtifactSet === setName"
-            class="flex items-center gap-1"
-            v-tippy="'This set is currently equipped'"
-          >
-            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-            <span class="text-[8px] font-black uppercase tracking-tighter text-emerald-600 leading-none">Equipped</span>
-          </div>
-        </div>
-
-        <span
-          class="text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1"
-          :class="selectedTab === setName ? 'text-blue-700' : 'text-gray-400'"
-        >
-          {{ setName === 'earnings' ? 'Set 1' : 'Set 2' }}
-        </span>
-      </button>
-    </div>
-
-    <!-- Active Set Editor -->
+    <!-- Artifact set editor (one set on an enlightenment farm) -->
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
       <div class="px-3 py-2 bg-gray-50/50 border-b border-gray-100 flex flex-col gap-2.5">
         <div class="flex justify-between items-center">
 
           <div class="flex items-center gap-2">
             <button
-              class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
-              v-tippy="'Fill this set with the artifacts and stones that earn the most while offline right now, save it, and equip it'"
+              class="px-3 py-1 bg-white border border-blue-200 hover:bg-blue-50 hover:border-blue-300 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
+              v-tippy="'Equip the artifacts and stones that earn the most while offline right now'"
               @click="applyBest('offlineEarnings')"
             >
               Max Offline Earnings
             </button>
             <button
-              class="px-3 py-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
-              v-tippy="'Fill this set with the highest offline internal hatchery rate (the slots IHR can\'t use go to offline earnings), save it, and equip it'"
+              class="px-3 py-1 bg-white border border-blue-200 hover:bg-blue-50 hover:border-blue-300 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
+              v-tippy="'Equip the highest offline internal hatchery rate (the slots IHR can\'t use go to offline earnings)'"
               @click="applyBest('ihr')"
             >
               Max IHR
@@ -56,15 +24,6 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <template v-if="activeArtifactSet !== selectedTab">
-              <button
-                class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
-                @click="equipSet"
-              >
-                Equip Set
-              </button>
-            </template>
-
             <template v-if="isDirty">
               <button
                 class="text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-wider"
@@ -150,6 +109,7 @@ const { prepareExecution, completeExecution } = useActionExecutor();
 const activeArtifactSet = computed(() => actionsStore.effectiveSnapshot.activeArtifactSet);
 const artifactSets = computed(() => actionsStore.effectiveSnapshot.artifactSets);
 
+// One set on an enlightenment farm; the second set the plan model has goes unused.
 const selectedTab = ref<ArtifactSetName>('earnings');
 
 // Local state for the selected set (allows unsaved changes)
@@ -277,6 +237,7 @@ function saveChanges() {
     beforeSnapshot
   );
   insertWaitForFullHabsIfCapacityIncreased(beforeSnapshot);
+  if (activeArtifactSet.value !== selectedTab.value) equipSet();
 }
 
 // One click: the best loadout for the goal at this point in the plan, saved to this set and equipped.
@@ -292,7 +253,7 @@ function applyBest(goal: ArtifactGoal) {
   }
   localLoadout.value = result.loadout;
   if (isDirty.value) saveChanges();
-  if (activeArtifactSet.value !== selectedTab.value) equipSet();
+  else if (activeArtifactSet.value !== selectedTab.value) equipSet();
 }
 
 function equipSet() {
