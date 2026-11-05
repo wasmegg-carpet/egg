@@ -20,10 +20,9 @@ one enlightenment farm with no shifts, so every action is available at any time.
 - Types: /src/types/actions/
 - Earning bonus (SE, PE, TE): /src/calculations/earnings.ts
 - Clarity stones: /src/lib/artifacts/calculator.ts
+- "Max Offline Earnings" artifact button: /src/lib/artifacts/optimizeOffline.ts (beam search over
+  every artifact, since the planner doesn't keep the player's inventory)
+- Regular vehicle prices: /src/lib/vehicleCosts.ts (from the "price of virtue" sheet)
 - Goals (trophies, NAH, ACRE): /src/calculations/goals.ts
 - Snapshot system: /src/lib/actions/snapshot.ts
 - Formatting: /src/lib/format.ts
-
-## Known gaps
-- Vehicle and train car prices are the virtue prices until the regular ones are available
-  (`virtueCost` in lib/farm/shipping_capacity.ts). The Vehicles tab says so.
