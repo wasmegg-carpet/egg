@@ -34,14 +34,24 @@
     <!-- Tab content -->
     <div class="min-h-[200px]">
       <InitialStateContainer v-if="activeTab === 'initial'" ref="initialStateContainerRef" />
-      <VehicleActions v-if="activeTab === 'vehicles'" />
-      <HabActions v-if="activeTab === 'habs'" />
       <ResearchActions v-if="activeTab === 'research'" @refresh-backup="$emit('refresh-backup')" />
+
+      <template v-if="activeTab === 'farm'">
+        <SectionSwitch v-model="farmSection" :sections="FARM_SECTIONS" />
+        <HabActions v-if="farmSection === 'habs'" />
+        <VehicleActions v-if="farmSection === 'vehicles'" />
+        <SiloActions v-if="farmSection === 'silos'" />
+      </template>
+
       <ArtifactActions v-if="activeTab === 'artifacts'" />
-      <SiloActions v-if="activeTab === 'silos'" />
-      <FuelTankActions v-if="activeTab === 'fuel'" />
+
+      <template v-if="activeTab === 'rockets'">
+        <SectionSwitch v-model="rocketSection" :sections="ROCKET_SECTIONS" />
+        <FuelTankActions v-if="rocketSection === 'fuel'" />
+        <RocketActions v-if="rocketSection === 'launch'" />
+      </template>
+
       <WaitActions v-if="activeTab === 'wait'" />
-      <RocketActions v-if="activeTab === 'rockets'" />
     </div>
   </div>
 </template>
@@ -57,6 +67,7 @@ import FuelTankActions from './actions/FuelTankActions.vue';
 import WaitActions from './actions/WaitActions.vue';
 import RocketActions from './actions/RocketActions.vue';
 import InitialStateContainer from './containers/InitialStateContainer.vue';
+import SectionSwitch from './SectionSwitch.vue';
 
 const tabsContainer = ref<HTMLElement | null>(null);
 const initialStateContainerRef = ref<InstanceType<typeof InitialStateContainer> | null>(null);
@@ -85,23 +96,34 @@ defineEmits<{
 }>();
 
 // An enlightenment farm has no shifts: every action is available at any time.
+// Habs, vehicles and silos share the Farm tab, and the fuel tank shares Rockets, so the tabs fit
+// without scrolling. Each remembers its last section.
 const availableTabs = [
-  { id: 'initial', label: 'Initial State' },
+  { id: 'initial', label: 'Setup' },
   { id: 'research', label: 'Research' },
-  { id: 'habs', label: 'Habs' },
-  { id: 'vehicles', label: 'Vehicles' },
-  { id: 'silos', label: 'Silos' },
+  { id: 'farm', label: 'Farm' },
   { id: 'artifacts', label: 'Artifacts' },
-  { id: 'fuel', label: 'Tank' },
   { id: 'rockets', label: 'Rockets' },
   { id: 'wait', label: 'Wait' },
 ] as const;
+
+const FARM_SECTIONS = [
+  { id: 'habs', label: 'Habs' },
+  { id: 'vehicles', label: 'Vehicles' },
+  { id: 'silos', label: 'Silos' },
+];
+const ROCKET_SECTIONS = [
+  { id: 'fuel', label: 'Fuel' },
+  { id: 'launch', label: 'Launch' },
+];
+const farmSection = ref('habs');
+const rocketSection = ref('fuel');
 
 type TabId = (typeof availableTabs)[number]['id'];
 
 const activeTab = ref<TabId>('initial');
 
-// Auto-apply any staged start time changes before navigating away from the Initial State tab
+// Auto-apply any staged start time changes before navigating away from the Setup tab
 watch(activeTab, (newTab, oldTab) => {
   if (oldTab === 'initial' && newTab !== oldTab) {
     initialStateContainerRef.value?.applyPendingAscensionChanges();
