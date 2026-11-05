@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import {
@@ -35,15 +35,17 @@ const VEHICLE_MULTIPLIERS = {
 };
 
 async function startPlan(absoluteStart: number) {
-  const virtueStore = useVirtueStore();
-  virtueStore.setAscensionTimezone('UTC');
+  const planStore = usePlanStore();
+  planStore.setAscensionTimezone('UTC');
   const iso = new Date(absoluteStart * 1000).toISOString();
-  virtueStore.setAscensionDate(iso.slice(0, 10));
-  virtueStore.setAscensionTime(iso.slice(11, 16));
+  planStore.setAscensionDate(iso.slice(0, 10));
+  planStore.setAscensionTime(iso.slice(11, 16));
   const store = useActionsStore();
   const base = {
     ...createBaseEngineState(null),
-    currentEgg: 'curiosity' as const,
+    // Earnings of about 1 bok per egg, so these purchases take the hours the tests are about.
+    soulEggs: 1e8,
+    prophecyEggs: 0,
     habIds: [0, null, null, null],
     vehicles: [{ vehicleId: 0, trainLength: 1 }],
     population: 100,
@@ -186,27 +188,27 @@ describe('2x earnings on purchases outside research', () => {
     expect(end.population).toBe(population);
   });
 
-  test('a gems wait crossing 2x recalculates to the time shown and lands on its target', async () => {
+  test('a boks wait crossing 2x recalculates to the time shown and lands on its target', async () => {
     const probe = await startPlan(monday - 86400);
-    const { cost: targetGems, flatWait } = habCostingSeconds(probe.currentSnapshot, 1800, 6 * 3600);
+    const { cost: targetCash, flatWait } = habCostingSeconds(probe.currentSnapshot, 1800, 6 * 3600);
 
     setActivePinia(createPinia());
     const store = await startPlan(monday - flatWait / 2);
     const startedAt = store.currentSnapshot.lastStepTime;
-    const shown = getBoostAwareTimeToSave(targetGems, store.currentSnapshot, getSimulationContext());
+    const shown = getBoostAwareTimeToSave(targetCash, store.currentSnapshot, getSimulationContext());
     expect(shown).toBeLessThan(flatWait * 0.9);
     store.pushAction({
       id: generateActionId(),
       timestamp: Date.now(),
-      type: 'wait_for_gems',
-      payload: { targetGems, currentGems: 0, requiredGems: targetGems, earningsPerSecond: 0, timeSeconds: flatWait },
+      type: 'wait_for_cash',
+      payload: { targetCash, currentCash: 0, requiredCash: targetCash, earningsPerSecond: 0, timeSeconds: flatWait },
       cost: 0,
       dependsOn: [],
     } as never);
     await store.recalculateFrom(0);
 
     expect(store.currentSnapshot.lastStepTime - startedAt).toBeCloseTo(shown, 0);
-    expect(store.currentSnapshot.bankValue / targetGems).toBeCloseTo(1, 6);
+    expect(store.currentSnapshot.bankValue / targetCash).toBeCloseTo(1, 6);
   });
 
   test('multi-step plans count 2x only when given a start time', async () => {

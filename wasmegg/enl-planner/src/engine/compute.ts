@@ -11,16 +11,14 @@ import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
 import { totalAwayTime } from '@/stores/silos';
 import { integrateRate } from './apply/math';
 
-import { calculateEggValue } from '@/calculations/eggValue';
+import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
 import { calculateHabCapacity_Full as calculateHabCapacity } from '@/calculations/habCapacity';
 import { calculateLayRate } from '@/calculations/layRate';
 import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
 import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
-import { calculateEarnings } from '@/calculations/earnings';
+import { calculateEarningBonus, calculateEarnings } from '@/calculations/earnings';
 import { calculateIHR } from '@/calculations/internalHatcheryRate';
 
-// Base egg value is always 1 for virtue eggs
-const BASE_EGG_VALUE = 1;
 
 /**
  * Purely compute the full snapshot from engine state and context.
@@ -38,7 +36,7 @@ export function computeSnapshot(
 
   // 2. Egg Value
   const eggValueInput: EggValueInput = {
-    baseValue: BASE_EGG_VALUE,
+    baseValue: ENLIGHTENMENT_EGG_VALUE,
     researchLevels: state.researchLevels,
     artifactMultiplier: artifactMods.eggValue.totalMultiplier,
     artifactEffects: artifactMods.eggValue.effects,
@@ -79,7 +77,7 @@ export function computeSnapshot(
     population = habCapacityOutput.totalFinalCapacity;
     bankValue = state.bankValue || 0;
   } else if (options.freezePopulation) {
-    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no gems.
+    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no boks.
     population = state.population || 0;
     bankValue = state.bankValue || 0;
   } else {
@@ -133,7 +131,15 @@ export function computeSnapshot(
   const earningsInput: EarningsInput = {
     eggValue: eggValueOutput.finalValue,
     effectiveLayRate: elrOutput.effectiveLayRate,
-    te: state.te,
+    earningBonus: calculateEarningBonus({
+      soulEggs: state.soulEggs,
+      prophecyEggs: state.prophecyEggs,
+      te: state.te,
+      soulFoodLevel: epicResearchLevels['soul_eggs'] || 0,
+      prophecyBonusLevel: epicResearchLevels['prophecy_bonus'] || 0,
+      artifactSoulEggBonus: artifactMods.soulEggBonus.totalMultiplier,
+      artifactProphecyEggBonus: artifactMods.prophecyEggBonus.totalMultiplier,
+    }),
     earningsMultiplier: colleggtibleModifiers.earnings,
     awayEarningsMultiplier: colleggtibleModifiers.awayEarnings,
     artifactAwayMultiplier: artifactMods.awayEarnings.totalMultiplier,
@@ -144,11 +150,10 @@ export function computeSnapshot(
   };
   const earningsOutput = calculateEarnings(earningsInput);
 
-  // Apply catch-up earnings and eggs to bank/delivered if this is the start of the ascension
+  // Apply catch-up earnings to the bank if this is the start of the plan
   // and we were offline.
   // We use 1e9 as a threshold to distinguish between 0-based simulation time
   // and absolute Unix timestamps from a backup.
-  let extraEggs = 0;
   if (
     state.lastStepTime > 1e9 &&
     context.ascensionStartTime > state.lastStepTime &&
@@ -158,7 +163,7 @@ export function computeSnapshot(
     const elapsedSeconds = context.ascensionStartTime - state.lastStepTime;
 
     // Accurate catch-up using integrated rate (accounts for population growth)
-    extraEggs = integrateRate(
+    const extraEggs = integrateRate(
       elapsedSeconds,
       startPopulation,
       ihrOutput.offlineRate / 60,
@@ -198,20 +203,14 @@ export function computeSnapshot(
     bankValue,
 
     // State (Pass through inputs for UI reconstruction)
-    currentEgg: state.currentEgg,
-    shiftCount: state.shiftCount,
     te: state.te,
     soulEggs: state.soulEggs,
+    prophecyEggs: state.prophecyEggs,
     siloCount: state.siloCount,
     siloTimeMinutes,
     tankLevel: state.tankLevel,
     proPermit: state.proPermit,
     fuelTankAmounts: state.fuelTankAmounts,
-    eggsDelivered:
-      extraEggs > 0
-        ? { ...state.eggsDelivered, [state.currentEgg]: (state.eggsDelivered[state.currentEgg] || 0) + extraEggs }
-        : state.eggsDelivered,
-    teEarned: state.teEarned,
     vehicles: state.vehicles,
     habIds: state.habIds,
     researchLevels: state.researchLevels,

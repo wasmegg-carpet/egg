@@ -2,12 +2,12 @@
  * Remove Fuel Action Executor
  *
  * Removes eggs from the fuel tank.
- * Cost is 0 gems and 0 seconds.
+ * Cost is 0 boks and 0 seconds.
  */
 
 import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { RemoveFuelPayload } from '@/types';
-import { VIRTUE_EGG_NAMES } from '@/types';
+import { FUEL_EGG_NAMES } from '@/types';
 import { formatNumber } from '@/lib/format';
 
 export const removeFuelExecutor: ActionExecutor<'remove_fuel'> = {
@@ -22,7 +22,7 @@ export const removeFuelExecutor: ActionExecutor<'remove_fuel'> = {
   },
 
   getDisplayName(payload: RemoveFuelPayload): string {
-    return `Remove ${formatNumber(payload.amount, 1)} ${VIRTUE_EGG_NAMES[payload.egg]}`;
+    return `Remove ${formatNumber(payload.amount, 1)} ${FUEL_EGG_NAMES[payload.egg]}`;
   },
 
   getEffectDescription(payload: RemoveFuelPayload): string {

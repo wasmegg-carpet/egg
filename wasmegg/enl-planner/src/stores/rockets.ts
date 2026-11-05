@@ -7,14 +7,14 @@
 
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import type { VirtueEgg } from '@/types';
-import { VIRTUE_EGGS } from '@/types';
+import type { FuelEgg } from '@/types';
+import { FUEL_EGGS, createEmptyFuelAmounts } from '@/types';
 import {
   type Spaceship,
   type DurationType,
   ALL_SHIPS,
   ALL_DURATIONS,
-  VIRTUE_FUEL_REQUIREMENTS,
+  FUEL_REQUIREMENTS,
   getEffectiveDuration,
 } from '@/lib/missions';
 import { useFuelTankStore } from './fuelTank';
@@ -68,16 +68,10 @@ export const useRocketsStore = defineStore('rockets', () => {
   });
 
   /** Total fuel cost per virtue egg across all queued missions. */
-  const totalFuelCost = computed<Record<VirtueEgg, number>>(() => {
-    const costs: Record<VirtueEgg, number> = {
-      curiosity: 0,
-      integrity: 0,
-      humility: 0,
-      resilience: 0,
-      kindness: 0,
-    };
+  const totalFuelCost = computed<Record<FuelEgg, number>>(() => {
+    const costs = createEmptyFuelAmounts();
     for (const { ship, duration, count } of queuedMissions.value) {
-      for (const req of VIRTUE_FUEL_REQUIREMENTS[ship][duration]) {
+      for (const req of FUEL_REQUIREMENTS[ship][duration]) {
         costs[req.egg] += req.amount * count;
       }
     }
@@ -85,10 +79,10 @@ export const useRocketsStore = defineStore('rockets', () => {
   });
 
   /** Remaining fuel per egg after committed missions. */
-  const remainingFuel = computed<Record<VirtueEgg, number>>(() => {
+  const remainingFuel = computed<Record<FuelEgg, number>>(() => {
     const fuelTank = useFuelTankStore();
-    const remaining: Record<VirtueEgg, number> = { ...fuelTank.fuelAmounts };
-    for (const egg of VIRTUE_EGGS) {
+    const remaining: Record<FuelEgg, number> = { ...fuelTank.fuelAmounts };
+    for (const egg of FUEL_EGGS) {
       remaining[egg] = Math.max(0, remaining[egg] - totalFuelCost.value[egg]);
     }
     return remaining;
@@ -97,8 +91,7 @@ export const useRocketsStore = defineStore('rockets', () => {
   /** Whether the current queue is over budget for any egg. */
   const isOverBudget = computed<boolean>(() => {
     const fuelTank = useFuelTankStore();
-    for (const egg of VIRTUE_EGGS) {
-      if (egg === 'humility') continue;
+    for (const egg of FUEL_EGGS) {
       if (totalFuelCost.value[egg] > fuelTank.fuelAmounts[egg]) return true;
     }
     return false;
@@ -109,15 +102,13 @@ export const useRocketsStore = defineStore('rockets', () => {
    */
   function maxForMission(ship: Spaceship, duration: DurationType): number {
     const fuelTank = useFuelTankStore();
-    const fuels = VIRTUE_FUEL_REQUIREMENTS[ship][duration];
+    const fuels = FUEL_REQUIREMENTS[ship][duration];
     if (fuels.length === 0) return Infinity;
 
     const currentCount = getCount(ship, duration);
 
     let maxCount = Infinity;
     for (const req of fuels) {
-      if (req.egg === 'humility') continue;
-
       // Budget = tank amount - (total committed for this egg EXCEPT this mission's own commitment)
       const othersCommitted = totalFuelCost.value[req.egg] - req.amount * currentCount;
       const available = fuelTank.fuelAmounts[req.egg] - othersCommitted;

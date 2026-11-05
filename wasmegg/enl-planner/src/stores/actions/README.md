@@ -1,6 +1,6 @@
 # Actions Store
 
-The central source of truth for the ascension plan history and current simulation state.
+The central source of truth for the plan history and current simulation state.
 
 ## Structure
 

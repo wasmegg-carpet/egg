@@ -1,14 +1,13 @@
 /**
  * @module initPlanFuture
- * @description Mode B: Plan Future Ascension
+ * @description Mode B: Plan a new enlightenment farm
  *
  * Contract:
- * - Fresh backup loaded for global progress (epic research, artifacts, TE, fuel)
- * - Pending TE rolled into earned TE (claimed at ascension)
+ * - Fresh backup loaded for global progress (epic research, artifacts, SE, PE, TE, fuel)
  * - Farm-specific stores ZEROED (research, habs, vehicles, silos, bank)
- * - Start action: egg=curiosity, no farm state, no quick continue
- * - Ascension date/time = now
- * - Artifacts: optimal earnings set
+ * - Start action: no farm state, no quick continue
+ * - Start date/time = now
+ * - Artifacts: what's equipped in the backup
  * - "Wait for Full Habs" auto-added by setInitialSnapshot
  *
  * Key invariant: currentFarmState is populated by loadFromBackup but NOT used
@@ -17,9 +16,9 @@
 
 import { resetAllStores } from './reset';
 import { fetchPlayerBackup } from './fetchBackup';
-import { loadAndSyncBackup, rollUpPendingTE } from './utils';
+import { loadAndSyncBackup } from './utils';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 
@@ -33,14 +32,10 @@ export async function initPlanFuture(playerId: string): Promise<void> {
   // 3. Load global progress from backup and sync stores
   loadAndSyncBackup(playerId, backup, 'plan_next');
 
-  // 4. Roll pending TE into earned (they'll be claimed at ascension)
-  rollUpPendingTE();
-
   // 5. Plan-specific setup
-  const virtueStore = useVirtueStore();
-  virtueStore.resetToCurrentDateTime();
-  virtueStore.setBankValue(0);
-  virtueStore.setCurrentEgg('curiosity');
+  const planStore = usePlanStore();
+  planStore.resetToCurrentDateTime();
+  planStore.setBankValue(0);
 
   // 6. Ensure start action is clean (resetAllStores already did this, but explicit)
   const actionsStore = useActionsStore();
@@ -48,7 +43,6 @@ export async function initPlanFuture(playerId: string): Promise<void> {
   if (startAction) {
     startAction.payload.initialFarmState = undefined;
     startAction.payload.isQuickContinue = false;
-    startAction.payload.initialEgg = 'curiosity';
   }
 
   // 7. Compute and set initial snapshot

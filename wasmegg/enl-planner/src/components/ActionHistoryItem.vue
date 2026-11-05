@@ -44,7 +44,7 @@
         :class="[compact ? 'text-[10px]' : 'text-xs sm:text-sm', isStartAction ? 'text-slate-800' : 'text-slate-700']"
       >
         <span v-if="eggType" class="text-[9px] uppercase font-black text-slate-400 tracking-widest">
-          {{ action.type === 'start_ascension' ? 'Start:' : 'Egg:' }}
+          Start:
         </span>
         <span :class="{ 'text-slate-900': eggType }">
           {{ eggName || displayName }}{{ isContinued ? ' (continued)' : '' }}
@@ -201,20 +201,14 @@
             v-if="Math.abs(action.bankDelta) >= 0.5 && (!isPurchaseAction || action.type === 'launch_missions')"
             :class="action.bankDelta >= 0.5 ? 'text-emerald-600' : 'text-slate-400'"
           >
-            Gems {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatGemPrice(action.bankDelta) }}
+            Boks {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatBokPrice(action.bankDelta) }}
           </span>
         </div>
       </div>
 
       <!-- Cost Section -->
       <div v-if="!isStartAction" class="shrink-0 text-right">
-        <template v-if="action.type === 'shift'">
-          <div class="flex items-center gap-1 justify-end mt-0.5">
-            <span class="text-xs font-bold text-slate-700 font-mono-premium">{{ formatNumber(action.cost, 3) }}</span>
-            <img :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3" alt="SE" />
-          </div>
-        </template>
-        <template v-else-if="action.type === 'modify_bank'">
+        <template v-if="action.type === 'modify_bank'">
           <div class="flex items-center gap-0.5 justify-end mt-0.5">
             <span
               class="text-xs font-bold font-mono-premium"
@@ -227,11 +221,11 @@
               "
             >
               {{ action.bankDelta >= 0.5 ? '+' : action.bankDelta <= -0.5 ? '-' : ''
-              }}{{ formatGemPrice(Math.abs(action.bankDelta)) }}
+              }}{{ formatBokPrice(Math.abs(action.bankDelta)) }}
             </span>
             <img
               v-if="Math.abs(action.bankDelta) >= 0.5"
-              :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+              :src="iconURL('egginc/icon_bock.png', 64)"
               class="w-2.5 h-2.5 opacity-60"
             />
           </div>
@@ -249,11 +243,11 @@
               ]"
             >
               {{ action.bankDelta >= 0.5 && action.cost < 0.5 ? '+' : ''
-              }}{{ formatGemPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
+              }}{{ formatBokPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
             </span>
             <img
               v-if="action.cost >= 0.5 || action.bankDelta >= 0.5"
-              :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+              :src="iconURL('egginc/icon_bock.png', 64)"
               class="w-2.5 h-2.5 opacity-60"
             />
           </div>
@@ -268,27 +262,26 @@ import { computed } from 'vue';
 import { iconURL } from 'lib';
 import type {
   Action,
-  StartAscensionPayload,
-  ShiftPayload,
   BuyHabPayload,
   BuyVehiclePayload,
   StoreFuelPayload,
-  WaitForTEPayload,
+  StartAscensionPayload,
   BuyResearchPayload,
   ToggleSalePayload,
   EquipArtifactSetPayload,
   UpdateArtifactSetPayload,
   WaitForFullHabsPayload,
 } from '@/types';
-import { VIRTUE_EGG_NAMES } from '@/types';
+import { FARM_EGG, FUEL_EGG_NAMES } from '@/types';
+import { fuelEggIconPath } from '@/lib/missions';
 import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { getExecutor } from '@/lib/actions';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
 import { getResearchIconPath } from '@/lib/assets';
 import { getResearchById } from '@/calculations/commonResearch';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 
 const props = defineProps<{
   action: Action;
@@ -300,7 +293,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const isStartAction = computed(() => props.action.type === 'start_ascension');
 const isContinued = computed(() => {
@@ -322,13 +315,7 @@ const isPurchaseAction = computed(() =>
 );
 
 const eggType = computed(() => {
-  if (props.action.type === 'start_ascension') {
-    return (props.action.payload as StartAscensionPayload).initialEgg;
-  }
-  if (props.action.type === 'shift') {
-    return (props.action.payload as ShiftPayload).toEgg;
-  }
-  return null;
+  return props.action.type === 'start_ascension' ? FARM_EGG : null;
 });
 
 const actionIconPath = computed(() => {
@@ -355,11 +342,10 @@ const actionIconPath = computed(() => {
   }
   if (props.action.type === 'store_fuel') {
     const payload = props.action.payload as StoreFuelPayload;
-    return `egginc/egg_${payload.egg}.png`;
+    return fuelEggIconPath(payload.egg);
   }
-  if (props.action.type === 'wait_for_te') {
-    // Show truth egg icon for wait_for_te actions
-    return 'egginc/egg_truth.png';
+  if (props.action.type === 'wait_for_population') {
+    return 'egginc/ei_hab_icon_chicken_universe.png';
   }
   if (props.action.type === 'toggle_sale') {
     const payload = props.action.payload as ToggleSalePayload;
@@ -401,14 +387,14 @@ const actionIconPath = computed(() => {
     return 'egginc/tiny_indicator_waiting.png';
   }
   if (props.action.type === 'modify_bank') {
-    return 'egginc/icon_virtue_gem.png';
+    return 'egginc/icon_bock.png';
   }
   return null;
 });
 
 const eggName = computed(() => {
   if (eggType.value) {
-    return VIRTUE_EGG_NAMES[eggType.value];
+    return FUEL_EGG_NAMES[eggType.value];
   }
   return null;
 });
@@ -445,7 +431,7 @@ const effectDescription = computed(() => {
 });
 
 /**
- * Calculate save duration (time spent accumulating gems)
+ * Calculate save duration (time spent accumulating boks)
  */
 const savingDuration = computed(() => {
   if (props.action.cost <= 0) return 0;
@@ -470,7 +456,7 @@ const waitDurationFormatted = computed(() => formatDuration(waitDuration.value))
  * The absolute end time of this action, calculated from the ascension start time.
  */
 const absoluteEndTime = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const simTime = props.action.endState.lastStepTime || 0;
 

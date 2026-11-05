@@ -16,7 +16,7 @@ const GAP_BETWEEN_SALES_SECONDS = WEEK_SECONDS - SALE_DURATION_SECONDS;
 
 const mods: ResearchCostModifiers = { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 };
 
-function fakeResearch(virtuePrice: number): CommonResearch {
+function fakeResearch(researchPrice: number): CommonResearch {
   return {
     serial_id: 0,
     id: 'test_research',
@@ -29,8 +29,7 @@ function fakeResearch(virtuePrice: number): CommonResearch {
     levels: 5,
     per_level: 1,
     levels_compound: 'additive',
-    prices: [0, 0, 0, 0, 0],
-    virtue_prices: [virtuePrice],
+    prices: [researchPrice],
   };
 }
 
@@ -51,16 +50,13 @@ function fakeSnapshot(bankValue = 0): CalculationsSnapshot {
     offlineIHR: 0,
     ratePerChickenPerSecond: 1e18,
     bankValue,
-    currentEgg: 'edible' as CalculationsSnapshot['currentEgg'],
-    shiftCount: 0,
     te: 0,
     soulEggs: 0,
+    prophecyEggs: 0,
     siloCount: 0,
     siloTimeMinutes: 0,
     tankLevel: 0,
     fuelTankAmounts: {} as CalculationsSnapshot['fuelTankAmounts'],
-    eggsDelivered: {} as CalculationsSnapshot['eggsDelivered'],
-    teEarned: {} as CalculationsSnapshot['teEarned'],
     population: 1e18,
     lastStepTime: 0,
     vehicles: [],
@@ -92,7 +88,7 @@ describe('getSaleAwareTimeToSave', () => {
 
     expect(result.duringSale).toBe(true);
     // Cheaper than paying full, undiscounted price with no sale at all.
-    const fullPriceWait = research.virtue_prices[0];
+    const fullPriceWait = research.prices[0];
     expect(result.waitSeconds).toBeLessThan(fullPriceWait);
     // Actually completes during a real sale window...
     const completesAt = currentAbsoluteTime + result.waitSeconds;
@@ -146,7 +142,7 @@ describe('getSaleAwareTimeToSave', () => {
     const result = getSaleAwareTimeToSave(research, 0, mods, true, currentAbsoluteTime, snapshot, []);
 
     expect(result.duringSale).toBe(true);
-    const fullPriceWait = research.virtue_prices[0];
+    const fullPriceWait = research.prices[0];
     expect(result.waitSeconds).toBeLessThan(fullPriceWait);
     const completesAt = currentAbsoluteTime + result.waitSeconds;
     expect(isResearchSaleActive(completesAt)).toBe(true);

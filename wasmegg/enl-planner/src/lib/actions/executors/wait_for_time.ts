@@ -2,7 +2,7 @@
  * Wait for Time Action Executor
  *
  * Account for a fixed amount of time spent waiting.
- * Cost is 0 gems.
+ * Cost is 0 boks.
  */
 
 import type { ActionExecutor, ExecutorContext } from '../executor';

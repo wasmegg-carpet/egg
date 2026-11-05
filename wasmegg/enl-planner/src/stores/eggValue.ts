@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia';
 import type { ResearchLevels, Research } from '@/types';
 import { allResearches } from 'lib';
+import { ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
 
 // Filter to only egg value researches
 const eggValueResearches = (allResearches as Research[]).filter(r => r.categories.split(',').includes('egg_value'));
 
 export interface EggValueState {
-  // Base egg value (1 gem for virtue eggs)
+  // Base egg value of the Enlightenment egg
   baseValue: number;
 
   // Research levels for egg value researches
@@ -15,7 +16,7 @@ export interface EggValueState {
 
 export const useEggValueStore = defineStore('eggValue', {
   state: (): EggValueState => ({
-    baseValue: 1,
+    baseValue: ENLIGHTENMENT_EGG_VALUE,
     researchLevels: initializeResearchLevels(),
   }),
 

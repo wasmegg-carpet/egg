@@ -17,8 +17,8 @@
             <span v-if="selectedOption.capacity && selectedOption.price !== undefined" class="mx-1.5">•</span>
             
             <template v-if="selectedOption.price !== undefined">
-              <span>{{ formatGemPrice(selectedOption.price) }}</span>
-              <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
+              <span>{{ formatBokPrice(selectedOption.price) }}</span>
+              <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
             </template>
             
             <span v-if="(selectedOption.capacity || selectedOption.price !== undefined) && selectedOption.time" class="mx-1.5">•</span>
@@ -73,8 +73,8 @@
               <span v-if="opt.capacity && opt.price !== undefined" class="mx-1.5">•</span>
               
               <template v-if="opt.price !== undefined">
-                <span>{{ formatGemPrice(opt.price) }}</span>
-                <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
+                <span>{{ formatBokPrice(opt.price) }}</span>
+                <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
               </template>
               
               <span v-if="(opt.capacity || opt.price !== undefined) && opt.time" class="mx-1.5">•</span>
@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { iconURL } from 'lib';
-import { formatGemPrice } from '@/lib/format';
+import { formatBokPrice } from '@/lib/format';
 
 export interface UpgradeDropdownOption {
   id: string;

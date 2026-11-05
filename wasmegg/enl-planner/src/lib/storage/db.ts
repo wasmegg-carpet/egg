@@ -1,10 +1,10 @@
 /**
  * @module StorageDB
- * @description Native IndexedDB wrapper for Ascension Planner.
+ * @description Native IndexedDB wrapper for Enlightenment Planner.
  * Supports partitioned storage using SHA-256 hashes of Player IDs.
  */
 
-const DB_NAME = 'AscensionPlannerDB';
+const DB_NAME = 'EnlightenmentPlannerDB';
 const DB_VERSION = 1;
 
 export interface PlanData {

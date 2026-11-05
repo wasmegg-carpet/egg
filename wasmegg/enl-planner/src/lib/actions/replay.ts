@@ -2,7 +2,7 @@
  * Replay Utility
  *
  * Provides functionality to replay actions after inserting a new action in the middle
- * of the action history. This is needed when editing past shifts.
+ * of the action history.
  */
 
 import type {
@@ -11,17 +11,15 @@ import type {
   BuyVehiclePayload,
   BuyHabPayload,
   BuyResearchPayload,
-  ShiftPayload,
   BuyTrainCarPayload,
   ChangeArtifactsPayload,
   BuySiloPayload,
   StoreFuelPayload,
-  WaitForTEPayload,
   LaunchMissionsPayload,
   ToggleSalePayload,
   EquipArtifactSetPayload,
   UpdateArtifactSetPayload,
-  VirtueEgg,
+  FuelEgg,
   RemoveFuelPayload,
   ModifyBankPayload,
 } from '@/types';
@@ -53,11 +51,10 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useSalesStore } from '@/stores/sales';
 
 /**
@@ -110,14 +107,6 @@ function applyActionEffect(action: Action): void {
       break;
     }
 
-    case 'shift': {
-      const payload = action.payload as ShiftPayload;
-      const virtueStore = useVirtueStore();
-      virtueStore.setCurrentEgg(payload.toEgg);
-      virtueStore.setShiftCount(payload.newShiftCount);
-      break;
-    }
-
     case 'buy_train_car': {
       const payload = action.payload as BuyTrainCarPayload;
       const shippingStore = useShippingCapacityStore();
@@ -159,25 +148,14 @@ function applyActionEffect(action: Action): void {
       break;
     }
 
-    case 'wait_for_te': {
-      const payload = action.payload as WaitForTEPayload;
-      const truthEggsStore = useTruthEggsStore();
-      const virtueStore = useVirtueStore();
-      // Add eggs delivered
-      truthEggsStore.addEggsDelivered(payload.egg, payload.eggsToLay);
-      // Update TE
-      virtueStore.setTE(virtueStore.te + payload.teGained);
-      break;
-    }
-
     case 'launch_missions': {
       const payload = action.payload as LaunchMissionsPayload;
       const fuelTankStore = useFuelTankStore();
       // Deduct fuel consumed from tank
       for (const [egg, amount] of Object.entries(payload.fuelConsumed)) {
         if (amount > 0) {
-          const current = fuelTankStore.fuelAmounts[egg as VirtueEgg];
-          fuelTankStore.setFuelAmount(egg as VirtueEgg, Math.max(0, current - amount));
+          const current = fuelTankStore.fuelAmounts[egg as FuelEgg];
+          fuelTankStore.setFuelAmount(egg as FuelEgg, Math.max(0, current - amount));
         }
       }
       break;
@@ -212,9 +190,9 @@ function applyActionEffect(action: Action): void {
 
     case 'modify_bank': {
       const payload = action.payload as ModifyBankPayload;
-      const virtueStore = useVirtueStore();
-      const newValue = payload.mode === 'set' ? payload.amount : virtueStore.bankValue + payload.amount;
-      virtueStore.setBankValue(newValue);
+      const planStore = usePlanStore();
+      const newValue = payload.mode === 'set' ? payload.amount : planStore.bankValue + payload.amount;
+      planStore.setBankValue(newValue);
       break;
     }
 

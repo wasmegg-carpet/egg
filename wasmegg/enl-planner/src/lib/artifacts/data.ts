@@ -2,8 +2,8 @@ import { allPossibleTiers } from 'lib/artifacts/data';
 import { ei } from 'lib/proto';
 import { ArtifactOption, StoneOption, RARITY_CODES } from './types';
 
-// Stones to exclude (not useful for ascension planning)
-const EXCLUDED_STONES = ['prophecy-stone', 'clarity-stone', 'dilithium-stone', 'soul-stone'];
+// Stones to exclude (boosts aren't planned, so dilithium does nothing here)
+const EXCLUDED_STONES = ['dilithium-stone'];
 
 /**
  * Parse artifact families and generate all artifact options

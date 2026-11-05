@@ -8,7 +8,6 @@ Handles artifact and stone data, lookup, and modifier calculations.
 - `data.ts`: Parsing and metadata lookup (artifact/stone maps).
 - `calculator.ts`: Core logic for `calculateArtifactModifiers`.
 - `utils.ts`: Helper functions for backup parsing and loadout summarization.
-- `virtue.ts`: Specialized calculations for Clothed TE and optimal sets.
 
 ## Calculation Logic
 

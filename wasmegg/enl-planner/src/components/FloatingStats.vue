@@ -29,27 +29,23 @@
         :class="[isCollapsed ? 'w-9 h-9 p-1' : 'w-12 h-12 p-1.5 mb-2 group-hover/toggle:scale-105']"
       >
         <img
-          :src="iconURL(`egginc/egg_${currentEgg}.png`, 64)"
+          :src="iconURL('egginc/egg_enlightenment.png', 64)"
           class="w-full h-full object-contain"
-          :alt="currentEgg"
+          alt="Enlightenment"
         />
       </div>
 
-      <!-- Shift Name -->
-      <div v-if="!isCollapsed" class="text-lg font-bold text-slate-800 tracking-tight leading-none mb-1 shadow-sm">
-        {{ shiftName }}
-      </div>
     </button>
 
     <!-- Collapsible Content -->
     <div v-if="!isCollapsed" class="flex flex-col items-center w-full transition-all">
       <!-- Active Set Badge -->
       <div v-if="activeSet" class="badge-premium badge-brand py-0.5 mb-3 scale-90">
-        {{ activeSet === 'earnings' ? 'Earnings' : 'Delivery Rate' }} Set
+        {{ activeSet === 'earnings' ? 'Set 1' : 'Set 2' }}
       </div>
       <div v-else class="badge-premium py-0.5 mb-3 scale-90 bg-slate-100 text-slate-500">No Active Set</div>
 
-      <!-- Shift Timing & Duration -->
+      <!-- Plan Timing & Duration -->
       <div
         v-if="dates"
         class="w-full bg-white/30 rounded-xl border border-white/40 p-2.5 mb-3 flex flex-col items-center shadow-inner"
@@ -58,7 +54,7 @@
           {{ formatDateTime(dates.start) }}
         </div>
         <div class="text-xs font-mono-premium font-bold text-slate-900 my-1 tracking-tight">
-          {{ formatShiftDuration(dates.duration) }}
+          {{ formatPlanDuration(dates.duration) }}
         </div>
         <div class="text-[9px] font-black text-slate-900 uppercase tracking-widest text-center">
           {{ formatDateTime(dates.end) }}
@@ -154,7 +150,7 @@
             <span class="font-mono-premium text-[11px] font-bold text-slate-700">
               {{ formatNumber(Math.max(0, snapshot.bankValue), 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-3 h-3" alt="Gems" />
+            <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-3 h-3" alt="Boks" />
           </div>
         </div>
       </div>
@@ -168,25 +164,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { iconURL } from 'lib';
 import { formatNumber } from '@/lib/format';
-import { VIRTUE_EGG_NAMES } from '@/types';
-import type { VirtueEgg, Action, StartAscensionPayload, ShiftPayload } from '@/types';
 import ModifyBankModal from './ModifyBankModal.vue';
 
 const showModifyBankModal = ref(false);
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 
-// Get the effective snapshot (state at the end of the edited/current shift)
+// The plan's latest state
 const snapshot = computed(() => actionsStore.effectiveSnapshot);
 
 // Basic properties from snapshot
-const currentEgg = computed(() => snapshot.value.currentEgg);
 const activeSet = computed(() => snapshot.value.activeArtifactSet);
 const habCapacity = computed(() => snapshot.value.habCapacity);
 const population = computed(() => snapshot.value.population);
@@ -223,97 +216,29 @@ function formatMoney(amount: number): string {
 }
 
 /**
- * Calculate the shift name (e.g. C1, H2) for the current state.
- */
-const shiftName = computed(() => {
-  const egg = currentEgg.value;
-  const eggName = VIRTUE_EGG_NAMES[egg];
-  const letter = eggName.charAt(0).toUpperCase();
-
-  // Find the 'header' action for the current group
-  let headerAction: Action | undefined;
-
-  if (actionsStore.editingGroupId) {
-    headerAction = actionsStore.getAction(actionsStore.editingGroupId);
-  } else {
-    // If not editing, find the last group header in the entire list
-    const actions = actionsStore.actions;
-    for (let i = actions.length - 1; i >= 0; i--) {
-      if (actions[i].type === 'shift' || actions[i].type === 'start_ascension') {
-        headerAction = actions[i];
-        break;
-      }
-    }
-  }
-
-  if (!headerAction) return `${letter}1`; // Fallback
-
-  // Count how many times we visited this egg up to (and including) this header action
-  // We iterate through all actions, counting visits to 'egg'
-  // A visit starts at 'start_ascension' (if initialEgg matches) or 'shift' (if toEgg matches)
-  let count = 0;
-  for (const action of actionsStore.actions) {
-    if (action.type === 'start_ascension') {
-      const payload = action.payload as StartAscensionPayload;
-      if (payload.initialEgg === egg) count++;
-    } else if (action.type === 'shift') {
-      const payload = action.payload as ShiftPayload;
-      if (payload.toEgg === egg) count++;
-    }
-
-    // Stop when we reach our target header
-    if (action.id === headerAction.id) break;
-  }
-
-  return `${letter}${count || 1}`;
-});
-
-/**
- * Calculate the timing and duration for the current shift.
+ * Calculate the timing and duration of the plan.
  */
 const dates = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const actions = actionsStore.actions;
+  const headerAction = actions.find(a => a.type === 'start_ascension');
+  if (!headerAction) return null;
 
-  // Find the 'header' action for the current group
-  let headerIndex = -1;
-  if (actionsStore.editingGroupId) {
-    headerIndex = actions.findIndex(a => a.id === actionsStore.editingGroupId);
-  } else {
-    for (let i = actions.length - 1; i >= 0; i--) {
-      if (actions[i].type === 'shift' || actions[i].type === 'start_ascension') {
-        headerIndex = i;
-        break;
-      }
-    }
-  }
+  // Time before the plan = header end simulation time - header duration - start offset
+  const headerStartSimTime = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0);
+  const timeBeforePlan = headerStartSimTime - offset;
+  const planDuration = (actions[actions.length - 1].endState.lastStepTime || 0) - headerStartSimTime;
 
-  if (headerIndex === -1) return null;
-
-  const headerAction = actions[headerIndex];
-
-  // Find the end of this shift
-  const nextShiftIndex = actions.findIndex((a, idx) => idx > headerIndex && a.type === 'shift');
-  const endActionIndex = nextShiftIndex === -1 ? actions.length - 1 : nextShiftIndex - 1;
-
-  // Time before shift = header end simulation time - header duration - start offset
-  const timeBeforeShift = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0) - offset;
-
-  // Total duration of shift group = end action end simulation time - (header end sim time - header duration)
-  const shiftGroupEndSimTime = actions[endActionIndex].endState.lastStepTime || 0;
-  const shiftGroupStartSimTime = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0);
-  const shiftDuration = shiftGroupEndSimTime - shiftGroupStartSimTime;
-
-  const startMs = startTime + timeBeforeShift * 1000;
-  const endMs = startMs + shiftDuration * 1000;
+  const startMs = startTime + timeBeforePlan * 1000;
+  const endMs = startMs + planDuration * 1000;
 
   // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
   // these routinely land a sub-microsecond residue short of a whole second.
   return {
     start: new Date(Math.round(startMs)),
     end: new Date(Math.round(endMs)),
-    duration: shiftDuration,
+    duration: planDuration,
   };
 });
 
@@ -335,7 +260,7 @@ function formatDateTime(date: Date): string {
 /**
  * Format duration as: 12d22h or 5h30m
  */
-function formatShiftDuration(seconds: number): string {
+function formatPlanDuration(seconds: number): string {
   if (seconds <= 0) return '0m';
 
   const totalMinutes = Math.floor(seconds / 60);

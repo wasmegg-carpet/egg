@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Description, Gem Cost -->
+    <!-- Row 2: Description, Bok Cost -->
     <div class="flex items-start justify-between w-full pl-[38px] gap-4">
       <!-- Description -->
       <div class="text-[10px] text-gray-500 leading-snug">
@@ -55,12 +55,12 @@
         </div>
       </div>
 
-      <!-- Gem Cost -->
+      <!-- Bok Cost -->
       <div class="text-right shrink-0">
         <template v-if="!isMaxed">
           <div class="flex items-center justify-end gap-1 text-[11px] font-mono text-amber-600 font-bold">
-            {{ formatGemPrice(price) }}
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Gem" />
+            {{ formatBokPrice(price) }}
+            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Bok" />
           </div>
           <div v-if="duringSale || duringEarningsBoost" class="flex items-center justify-end gap-1 mt-0.5">
             <span
@@ -128,7 +128,7 @@
               :class="{ 'cursor-help': extraSeconds !== undefined }"
               v-tippy="
                 extraSeconds !== undefined
-                  ? formatAbsoluteTime(extraSeconds, baseTimestamp, virtueStore.ascensionTimezone)
+                  ? formatAbsoluteTime(extraSeconds, baseTimestamp, planStore.ascensionTimezone)
                   : undefined
               "
             >
@@ -162,7 +162,7 @@
           :class="{ 'cursor-help': timeCostTooltipSeconds !== undefined }"
           v-tippy="
             timeCostTooltipSeconds !== undefined
-              ? formatAbsoluteTime(timeCostTooltipSeconds, baseTimestamp, virtueStore.ascensionTimezone)
+              ? formatAbsoluteTime(timeCostTooltipSeconds, baseTimestamp, planStore.ascensionTimezone)
               : undefined
           "
         >
@@ -277,11 +277,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { CommonResearch } from '@/calculations/commonResearch';
-import { formatNumber, formatGemPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
+import { formatNumber, formatBokPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
 import { getResearchIconPath } from '@/lib/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { type PurchaseEventCrossings } from '@/calculations/researchROI';
 
 const props = defineProps<{
@@ -324,10 +324,10 @@ const props = defineProps<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
@@ -344,7 +344,7 @@ function crossingTooltip(eventLabel: string, crossing: { waitSeconds: number; to
 
 function deadlineWarningTooltip(seconds?: number, extraText?: string) {
   if (seconds === undefined) return extraText || '';
-  const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
+  const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, planStore.ascensionTimezone);
   const warning = props.showDeadlineWarning
     ? `${timeStr} is after this sale ends (Saturday at +0). The price shown is what it will cost by then.`
     : timeStr;

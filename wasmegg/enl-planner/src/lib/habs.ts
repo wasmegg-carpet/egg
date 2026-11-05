@@ -1,20 +1,20 @@
 import { habTypes as libHabTypes, type Hab as LibHab, isHabId } from 'lib/farm/hab_space';
-import { calculateCostMultiplier, applyDiscount } from '@/utils/pricing';
+import { calculateCostMultiplier } from '@/utils/pricing';
 
 export type HabId = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
 export { isHabId };
 
-export interface Hab extends Omit<LibHab, 'virtueCost'> {
+export interface Hab extends Omit<LibHab, 'normalCost'> {
   // Alias for baseHabSpace to maintain compatibility
   baseCapacity: number;
-  // Enforce virtueCost presence (ascension planner needs it)
-  virtueCost: [number, number, number, number];
+  // Enforce normalCost presence (an enlightenment farm pays regular prices)
+  normalCost: [number, number, number, number];
 }
 
 export const habTypes: Hab[] = libHabTypes.map(h => ({
   ...h,
   baseCapacity: h.baseHabSpace,
-  virtueCost: (h.virtueCost as [number, number, number, number]) || [0, 0, 0, 0],
+  normalCost: (h.normalCost as [number, number, number, number]) || [0, 0, 0, 0],
 }));
 
 /**
@@ -62,8 +62,9 @@ export function getDiscountedHabPrice(
   isActiveSale: boolean = false
 ): number {
   if (purchaseIndex < 0 || purchaseIndex > 3) return 0;
-  const basePrice = hab.virtueCost[purchaseIndex];
-  return applyDiscount(basePrice, getHabCostMultiplier(modifiers, isActiveSale));
+  const basePrice = hab.normalCost[purchaseIndex];
+  // Regular prices aren't whole numbers (the second Coop costs 29.12), so no rounding.
+  return basePrice * getHabCostMultiplier(modifiers, isActiveSale);
 }
 
 /**

@@ -17,6 +17,6 @@ export const waitForMissionsExecutor: ActionExecutor<'wait_for_missions'> = {
   getEffectDescription(payload: WaitForMissionsPayload): string {
     const inFlightMissions = payload.missions.filter(m => !m.statusIsFueling);
     const missionCount = inFlightMissions.length;
-    return `Waiting for ${missionCount} active virtue mission${missionCount === 1 ? '' : 's'} to return — ${formatDuration(payload.totalTimeSeconds)}.`;
+    return `Waiting for ${missionCount} active mission${missionCount === 1 ? '' : 's'} to return — ${formatDuration(payload.totalTimeSeconds)}.`;
   },
 };

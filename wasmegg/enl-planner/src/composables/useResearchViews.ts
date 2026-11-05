@@ -4,7 +4,7 @@ import {
   getTiers,
   getResearchByTier,
   getTierSummary,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   TIER_UNLOCK_THRESHOLDS,
   type CommonResearch,
@@ -13,7 +13,7 @@ import { formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
@@ -26,12 +26,10 @@ import {
   isResearchSaleActive as isRealSaleActiveAt,
 } from '@/lib/events';
 import { type CalculationsSnapshot } from '@/types';
-import { getOptimalELRSet } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { calculateLayRate } from '@/calculations/layRate';
 import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
-import { computeRealisticELR } from '@/calculations/realisticELR';
 import {
   type MilestoneTarget,
   type MilestoneChainItem,
@@ -51,47 +49,9 @@ import { useResearchCalcWorker } from '@/composables/useResearchCalcWorker';
 import type { SimulationContext } from '@/engine/types';
 import { ei } from 'lib';
 
-/**
- * Shared by `realisticSummary` (current research levels) and the Smart Buy tab's before/after
- * delivery-rate comparisons (simulated post-purchase levels) — same "optimal artifacts + max
- * habs/vehicles" pipeline, just parameterized over which research levels to evaluate instead of
- * always reading the live store, so both callers stay in sync by construction.
- */
-function computeRealisticDeliverySummary(
-  researchLevels: Record<string, number>,
-  rawBackup: ei.IBackup | null | undefined,
-  context: SimulationContext,
-  proPermit: boolean
-): { layRate: number; shippingRate: number; elr: number } | null {
-  if (!rawBackup) return null;
-
-  const optimal = getOptimalELRSet(rawBackup, {
-    assumeMaxHabsVehicles: true,
-    excludeGusset: false,
-    commonResearch: researchLevels,
-    epicResearchLevels: context.epicResearchLevels,
-    colleggtibleModifiers: context.colleggtibleModifiers,
-    proPermit,
-  });
-  const artifactMods = calculateArtifactModifiers(optimal);
-  const stats = computeRealisticELR(
-    researchLevels,
-    artifactMods,
-    context.epicResearchLevels,
-    context.colleggtibleModifiers
-  );
-
-  return {
-    layRate: stats.layRate * 3600,
-    shippingRate: stats.shippingRate * 3600,
-    elr: stats.effectiveRate * 3600,
-  };
-}
-
 export type { MilestoneTarget } from '@/calculations/milestoneChain';
 
 export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'smart_buy';
-export type ElrViewMode = 'realistic' | 'potential';
 export type ElrSortMode = 'efficiency' | 'impact';
 export type ElrRoiDisplayMode = 'hpp' | 'time';
 export type RoiMode = 'immediate' | 'maxed_vehicles';
@@ -171,14 +131,13 @@ export const VIEWS = [
   },
 ] as const;
 
-const RESEARCH_VIEW_STORAGE_KEY = 'ascension_research_view';
-const ELR_VIEW_MODE_STORAGE_KEY = 'ascension_research_elr_view_mode';
-const ELR_SORT_MODE_STORAGE_KEY = 'ascension_research_elr_sort_mode';
-const ELR_ROI_DISPLAY_MODE_STORAGE_KEY = 'ascension_research_elr_roi_display_mode';
-const DELIVERY_IMPACT_ONLY_STORAGE_KEY = 'ascension_research_delivery_impact_only';
-const ROI_MODE_STORAGE_KEY = 'ascension_research_roi_mode';
-const MILESTONE_TARGET_STORAGE_KEY = 'ascension_research_milestone_target';
-const SMART_BUY_SALE_TARGET_END_STORAGE_KEY = 'ascension_smart_buy_sale_target_end';
+const RESEARCH_VIEW_STORAGE_KEY = 'enl_research_view';
+const ELR_SORT_MODE_STORAGE_KEY = 'enl_research_elr_sort_mode';
+const ELR_ROI_DISPLAY_MODE_STORAGE_KEY = 'enl_research_elr_roi_display_mode';
+const DELIVERY_IMPACT_ONLY_STORAGE_KEY = 'enl_research_delivery_impact_only';
+const ROI_MODE_STORAGE_KEY = 'enl_research_roi_mode';
+const MILESTONE_TARGET_STORAGE_KEY = 'enl_research_milestone_target';
+const SMART_BUY_SALE_TARGET_END_STORAGE_KEY = 'enl_smart_buy_sale_target_end';
 
 const DEFAULT_RESEARCH_VIEW: ViewType = 'smart_buy';
 
@@ -190,19 +149,6 @@ export const SMART_BUY_SALE_COUNT_CAP = 3;
 function loadStoredResearchView(): ViewType {
   const stored = localStorage.getItem(RESEARCH_VIEW_STORAGE_KEY);
   return VIEWS.some(v => v.id === stored) ? (stored as ViewType) : DEFAULT_RESEARCH_VIEW;
-}
-
-/**
- * Called when the player shifts into Curiosity so the research tab greets them with Smart Buy
- * again, rather than leaving them on whatever view they last happened to be looking at.
- */
-export function resetResearchViewForCuriosityShift(): void {
-  localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, DEFAULT_RESEARCH_VIEW);
-}
-
-function loadStoredElrViewMode(): ElrViewMode {
-  const stored = localStorage.getItem(ELR_VIEW_MODE_STORAGE_KEY);
-  return stored === 'realistic' || stored === 'potential' ? stored : 'realistic';
 }
 
 function loadStoredElrSortMode(): ElrSortMode {
@@ -262,7 +208,7 @@ export function useResearchViews() {
   const commonResearchStore = useCommonResearchStore();
   const initialStateStore = useInitialStateStore();
   const actionsStore = useActionsStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   // Owns the one Web Worker all four heavy research-plan simulations below run on — see
   // useResearchCalcWorker.ts's doc comment for why (keeps a large computation from tripping
   // Chrome's main-thread-only "Page Unresponsive" hang detector). `computeThresholdBuy` is unused
@@ -273,8 +219,6 @@ export function useResearchViews() {
 
   const currentView = ref<ViewType>(loadStoredResearchView());
   watch(currentView, v => localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, v));
-  const elrViewMode = ref<ElrViewMode>(loadStoredElrViewMode());
-  watch(elrViewMode, v => localStorage.setItem(ELR_VIEW_MODE_STORAGE_KEY, v));
   const elrSortMode = ref<ElrSortMode>(loadStoredElrSortMode());
   watch(elrSortMode, v => localStorage.setItem(ELR_SORT_MODE_STORAGE_KEY, v));
   const elrRoiDisplayMode = ref<ElrRoiDisplayMode>(loadStoredElrRoiDisplayMode());
@@ -323,16 +267,6 @@ export function useResearchViews() {
     }
   );
 
-  const realisticSummary = computed(() => {
-    if (elrViewMode.value !== 'realistic') return null;
-    return computeRealisticDeliverySummary(
-      commonResearchStore.researchLevels,
-      initialStateStore.rawBackup,
-      getSimulationContext(),
-      initialStateStore.proPermit
-    );
-  });
-
   const viewDescription = computed(() => {
     switch (currentView.value) {
       case 'game':
@@ -342,17 +276,9 @@ export function useResearchViews() {
       case 'roi':
         return 'Prioritizes upgrades that pay for themselves fastest based on your current earnings.';
       case 'elr': {
-        const view = elrViewMode.value;
-        const sort = elrSortMode.value;
-        if (view === 'potential' && sort === 'efficiency') {
-          return 'Theoretical max impact to Delivery Rate, sorted by time efficiency.';
-        } else if (view === 'potential' && sort === 'impact') {
-          return 'Theoretical max impact to Delivery Rate, sorted by total impact.';
-        } else if (view === 'realistic' && sort === 'efficiency') {
-          return 'True Delivery Rate impact with optimal artifacts and max habs/vehicles, sorted by time efficiency.';
-        } else {
-          return 'True Delivery Rate impact with optimal artifacts and max habs/vehicles, sorted by total impact.';
-        }
+        return elrSortMode.value === 'efficiency'
+          ? 'Theoretical max impact to Delivery Rate, sorted by time efficiency.'
+          : 'Theoretical max impact to Delivery Rate, sorted by total impact.';
       }
       case 'milestones':
         return 'Pick a tier unlock or a specific research level, and see the fastest ROI-optimal path to it.';
@@ -400,14 +326,14 @@ export function useResearchViews() {
   });
 
   const researchSaleDeadline = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return getNextPacificTime(6, 9, absoluteSimTime);
   });
 
   const nextSaleStart = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return getNextPacificTime(5, 9, absoluteSimTime);
@@ -420,7 +346,7 @@ export function useResearchViews() {
   // unset.
   //
   // `item.duringSale` (from `getSaleAwareTimeToSave`) means "priced at a sale discount, whichever
-  // sale that turns out to be" — correct for the actual gems charged, but not what the "Sale" badge
+  // sale that turns out to be" — correct for the actual boks charged, but not what the "Sale" badge
   // should mean to a player glancing at the list: a purchase that only becomes worthwhile several
   // sale cycles out is still priced at a discount, but showing the same badge as an item landing in
   // NEXT week's sale is misleading. `isActuallyDuringSale` (already re-derived against calendar
@@ -579,7 +505,7 @@ export function useResearchViews() {
   watchEffect(async () => {
     // Must be the first read so Vue tracks it and re-runs this effect once mode-init settles.
     // While a mode switch (start from scratch / plan future / reconcile / load plan / etc.) is
-    // resetting stores, they briefly disagree with each other (e.g. virtueStore already reset while
+    // resetting stores, they briefly disagree with each other (e.g. planStore already reset while
     // actionsStore still holds the previous plan's snapshot) — computing a milestone chain against
     // that transitional mix has produced nonsensical absolute timestamps and hung the tab.
     if (actionsStore.isPlanInitializing) {
@@ -612,7 +538,7 @@ export function useResearchViews() {
     const startSnapshot = actionsStore.effectiveSnapshot;
     const mods = costModifiers.value;
     const deadline = researchSaleDeadline.value;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -656,7 +582,7 @@ export function useResearchViews() {
 
     const context = getSimulationContext();
     const startSnapshot = actionsStore.effectiveSnapshot;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
     return computeMilestoneBaseline(target, startSnapshot, context, costModifiers.value, absoluteSimTime);
@@ -689,7 +615,7 @@ export function useResearchViews() {
     }
 
     const baseTimestamp =
-      virtueStore.planStartTime.getTime() +
+      planStore.planStartTime.getTime() +
       (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset) * 1000;
 
     return {
@@ -698,9 +624,9 @@ export function useResearchViews() {
       optimizedSeconds: core.optimizedSeconds!,
       timeSavedSeconds: core.timeSavedSeconds!,
       purchaseCount: core.purchaseCount!,
-      gemsSpent: core.gemsSpent!,
-      finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
-      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
+      boksSpent: core.boksSpent!,
+      finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, planStore.ascensionTimezone),
+      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, planStore.ascensionTimezone),
     };
   });
 
@@ -809,7 +735,7 @@ export function useResearchViews() {
     const context = getSimulationContext();
     const effectiveSnapshot = actionsStore.effectiveSnapshot;
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (effectiveSnapshot.lastStepTime - offset);
 
@@ -836,20 +762,18 @@ export function useResearchViews() {
     const mods = costModifiers.value;
     const context = getSimulationContext();
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
 
     const ranked = rankResearchByELRImpact(
       researchLevels,
-      initialStateStore.rawBackup,
       actionsStore.effectiveSnapshot,
       context,
       mods,
       isSale,
       absoluteSimTime,
       researchSaleDeadline.value,
-      elrViewMode.value,
       elrSortMode.value
     );
 
@@ -860,7 +784,7 @@ export function useResearchViews() {
   // file already repeats inline (`nextSaleStart`/`researchSaleDeadline` above, etc.); kept as its own
   // small helper here since the sale-count stepper logic below reads it from three separate places.
   function smartBuyAbsoluteSimTime(): number {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     return baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
   }
@@ -967,7 +891,7 @@ export function useResearchViews() {
     const deadline = researchSaleDeadline.value;
     const saleStart = smartBuyStructuralDeadline.value;
     const fullRoiDeadline = smartBuyFullRoiDeadline.value;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -1068,10 +992,8 @@ export function useResearchViews() {
     const context = getSimulationContext();
     const mods = costModifiers.value;
     const deadline = researchSaleDeadline.value;
-    const mode = elrViewMode.value;
     const sort = elrSortMode.value;
-    const rawBackup = initialStateStore.rawBackup;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -1086,9 +1008,7 @@ export function useResearchViews() {
         mods,
         absoluteSimTime,
         deadline,
-        elrViewMode: mode,
         elrSortMode: sort,
-        rawBackup,
       });
 
       if (generation === saleEndsPlanGeneration) {
@@ -1126,7 +1046,7 @@ export function useResearchViews() {
     after: saleAwarePlan70.value.endSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / gems spent for the "70% Return" card — the same three
+  // Purchase count / duration spanned / boks spent for the "70% Return" card — the same three
   // figures its note reports (`buildSaleAwareBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1139,7 +1059,7 @@ export function useResearchViews() {
   // "6d 22h" every single time regardless of what was actually bought. Falls back to `0` when the
   // plan is empty (nothing to span).
   const saleAwareStats70 = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     const entries = saleAwarePlan70.value.entries;
@@ -1147,7 +1067,7 @@ export function useResearchViews() {
     return {
       purchaseCount: entries.length,
       seconds: Math.max(0, lastPurchaseTimestamp - absoluteSimTime),
-      gems: entries.reduce((sum, entry) => sum + entry.price, 0),
+      boks: entries.reduce((sum, entry) => sum + entry.price, 0),
     };
   });
 
@@ -1160,7 +1080,7 @@ export function useResearchViews() {
     after: saleEndsPlan.value.earningsEndSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / gems spent for "Buy Until Sale Ends" — the same three
+  // Purchase count / duration spanned / boks spent for "Buy Until Sale Ends" — the same three
   // figures its note reports (`buildSaleEndsBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1170,36 +1090,14 @@ export function useResearchViews() {
   // before the sale ends, and should say so (same fix as `saleAwareStats70` above, for the same
   // reason — see that computed's own comment).
   const saleEndsStats = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return {
       purchaseCount: saleEndsPlan.value.researchIds.length,
       seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
-      gems: saleEndsPlan.value.totalGemsSpent ?? 0,
+      boks: saleEndsPlan.value.totalBoksSpent ?? 0,
     };
-  });
-
-  // Current vs. simulated-post-purchase Delivery Rate for "Buy Until Sale Ends" — same "realistic"
-  // (optimal artifacts + max habs/vehicles) calculation `realisticSummary` uses, just evaluated
-  // against the plan's simulated end levels instead of the live research levels.
-  const saleEndsDeliverySummary = computed(() => {
-    const rawBackup = initialStateStore.rawBackup;
-    const context = getSimulationContext();
-    const before = computeRealisticDeliverySummary(
-      commonResearchStore.researchLevels,
-      rawBackup,
-      context,
-      initialStateStore.proPermit
-    );
-    const after = computeRealisticDeliverySummary(
-      saleEndsPlan.value.endLevels,
-      rawBackup,
-      context,
-      initialStateStore.proPermit
-    );
-    if (!before || !after) return null;
-    return { before: before.elr, after: after.elr };
   });
 
   const sortedResearches = computed(() => {
@@ -1217,7 +1115,7 @@ export function useResearchViews() {
     const isSale = isResearchSaleActive.value;
     const mods = costModifiers.value;
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
 
@@ -1237,7 +1135,7 @@ export function useResearchViews() {
           unpurchased.push({
             research: r,
             targetLevel: lvl + 1,
-            price: getDiscountedVirtuePrice(r, lvl, mods, isSale),
+            price: getDiscountedResearchPrice(r, lvl, mods, isSale),
           });
         }
       });
@@ -1390,7 +1288,7 @@ export function useResearchViews() {
             buyToHereSeconds: totalSeconds,
             buyToHereTooltip:
               totalSeconds < rawSecondsToBuy
-                ? 'Includes existing gems from your bank. Individual research wait times show the time to save from 0.'
+                ? 'Includes existing boks from your bank. Individual research wait times show the time to save from 0.'
                 : undefined,
             canBuy: true,
             isMaxed: false,
@@ -1419,7 +1317,6 @@ export function useResearchViews() {
 
   return {
     currentView,
-    elrViewMode,
     elrSortMode,
     elrRoiDisplayMode,
     deliveryImpactOnly,
@@ -1456,9 +1353,7 @@ export function useResearchViews() {
     saleEndsEarningsPreview,
     saleEndsEarningsSummary,
     saleAwareEarningsSummary70,
-    saleEndsDeliverySummary,
     saleEndsStats,
-    realisticSummary,
     researchSaleDeadline,
     nextSaleStart,
     // Not used within this composable — returned so ResearchActions.vue's own `quickBuyPlan`

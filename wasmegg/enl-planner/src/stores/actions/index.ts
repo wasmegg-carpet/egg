@@ -4,22 +4,21 @@ import {
   Action,
   CalculationsSnapshot,
   UndoValidation,
-  VirtueEgg,
+  FuelEgg,
   ToggleSalePayload,
   ToggleEarningsBoostPayload,
   UpdateArtifactSetPayload,
   VehicleSlot,
-  VIRTUE_EGGS,
+  FUEL_EGGS,
   createEmptySnapshot,
   createEmptyUndoValidation,
   generateActionId,
 } from '@/types';
 import { evaluateAction } from '@/lib/actions/reconciliation';
 import { type HabId } from '@/lib/habs';
-import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeDeltas } from '@/lib/actions/snapshot';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useSilosStore } from '@/stores/silos';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
@@ -54,13 +53,11 @@ export const useActionsStore = defineStore('actions', {
       isReconciling: false,
       reconciledBackupTime: 0,
       reconcileFarmState: null,
-      reconcileEggsDelivered: null,
-      reconcileTeEarned: null,
       showIncompleteOnly: true,
       activePlanId: null,
       lastSavedActionsJson: JSON.stringify([startAction]),
       libraryUpdateTick: 0,
-      manualOverrides: JSON.parse(localStorage.getItem('ascension_manual_overrides') || '{}') as Record<string, Record<string, boolean>>,
+      manualOverrides: JSON.parse(localStorage.getItem('enl_manual_overrides') || '{}') as Record<string, Record<string, boolean>>,
     };
   },
 
@@ -89,20 +86,12 @@ export const useActionsStore = defineStore('actions', {
     },
 
     effectiveSnapshot(): CalculationsSnapshot {
-      if (!this.editingGroupId) return this.currentSnapshot;
-      const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
-      if (headerIndex === -1) return this.currentSnapshot;
-      const nextShiftIndex = this.actions.findIndex((a, idx) => idx > headerIndex && a.type === 'shift');
-      if (nextShiftIndex === -1) return this.currentSnapshot;
-      return this.actions[nextShiftIndex - 1].endState;
+      return this.currentSnapshot;
     },
 
+    // A plan is one long group, so new actions always land at the end.
     editingInsertIndex(): number {
-      if (!this.editingGroupId) return -1;
-      const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
-      if (headerIndex === -1) return -1;
-      const nextShiftIndex = this.actions.findIndex((a, idx) => idx > headerIndex && a.type === 'shift');
-      return nextShiftIndex === -1 ? -1 : nextShiftIndex;
+      return -1;
     },
 
     actionsBeforeInsertion(): Action[] {
@@ -117,7 +106,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     ascensionStartTime(): number {
-      const vStore = useVirtueStore();
+      const vStore = usePlanStore();
       return vStore.planStartTime.getTime() / 1000;
     },
 
@@ -132,7 +121,7 @@ export const useActionsStore = defineStore('actions', {
 
         const initialStateStore = useInitialStateStore();
         const eventsStore = useEventsStore();
-        const vStore = useVirtueStore();
+        const vStore = usePlanStore();
 
         return evaluateAction(action, {
           farm: this.reconcileFarmState,
@@ -143,10 +132,10 @@ export const useActionsStore = defineStore('actions', {
       };
     },
 
-    getShiftReconciliationStatus() {
-      return (shiftActions: Action[]): 'completed' | 'pending' | 'na' => {
+    getGroupReconciliationStatus() {
+      return (groupActions: Action[]): 'completed' | 'pending' | 'na' => {
         if (!this.isReconciling) return 'na';
-        const statuses = shiftActions.map(a => this.getActionReconciliationStatus(a));
+        const statuses = groupActions.map(a => this.getActionReconciliationStatus(a));
         if (statuses.some(s => s === 'pending')) return 'pending';
         if (statuses.every(s => s === 'na')) return 'na';
         return 'completed';
@@ -155,7 +144,6 @@ export const useActionsStore = defineStore('actions', {
 
     isDirty(): boolean {
       const isTrivial = (a: Action): boolean => {
-        if (a.type === 'shift') return true;
         if (a.type === 'wait_for_full_habs') return true;
         if (a.type === 'toggle_earnings_boost' && a.payload.active) return true;
         if (a.type === 'toggle_sale' && a.payload.active) return true;
@@ -336,7 +324,7 @@ export const useActionsStore = defineStore('actions', {
       }
 
       this.actions.push(finalAction);
-      if (finalAction.type === 'shift' || finalAction.type === 'start_ascension') {
+      if (finalAction.type === 'start_ascension') {
         this.expandedGroupIds.clear();
         this.expandedGroupIds.add(finalAction.id);
       }
@@ -356,13 +344,12 @@ export const useActionsStore = defineStore('actions', {
       return { valid: true, action, dependentActions: dependents, needsRecursiveUndo: dependents.length > 0 };
     },
 
-    prepareUndoUntilShift(actionId: string): UndoValidation {
+    prepareUndoToEnd(actionId: string): UndoValidation {
       const action = this.actions.find(a => a.id === actionId);
       if (!action || action.type === 'start_ascension') return createEmptyUndoValidation();
       const index = this.actions.findIndex(a => a.id === actionId);
       const initialToRemove = new Set<string>();
       for (let i = index; i < this.actions.length; i++) {
-        if (i > index && this.actions[i].type === 'shift') break;
         initialToRemove.add(this.actions[i].id);
       }
       const toRemove = getActionsRequiringRemovalLogic(
@@ -379,7 +366,7 @@ export const useActionsStore = defineStore('actions', {
       mode: 'dependents' | 'truncate' = 'dependents',
       restoreCallback?: (snapshot: CalculationsSnapshot) => void
     ) {
-      const validation = mode === 'dependents' ? this.prepareUndo(actionId) : this.prepareUndoUntilShift(actionId);
+      const validation = mode === 'dependents' ? this.prepareUndo(actionId) : this.prepareUndoToEnd(actionId);
       if (!validation.valid) return;
       const toRemove = new Set<string>([actionId]);
       if (validation.dependentActions) validation.dependentActions.forEach(dep => toRemove.add(dep.id));
@@ -389,19 +376,6 @@ export const useActionsStore = defineStore('actions', {
         a.dependents = a.dependents.filter(depId => !toRemove.has(depId));
       });
       this.actions = newActions;
-
-      // If we're editing a shift and it's now the last shift in the plan (because a later
-      // shift and its actions were just undone), stop editing it. Editing exists to modify a
-      // past shift; once it's the last shift, it's already the default edit target.
-      if (this.editingGroupId) {
-        const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
-        if (headerIndex !== -1) {
-          const hasLaterShift = this.actions.some((a, idx) => idx > headerIndex && a.type === 'shift');
-          if (!hasLaterShift) {
-            this.editingGroupId = null;
-          }
-        }
-      }
 
       await this.recalculateFrom(minIndex === Infinity ? 0 : minIndex);
       if (restoreCallback) restoreCallback(this.effectiveSnapshot);
@@ -427,11 +401,8 @@ export const useActionsStore = defineStore('actions', {
       this.isReconciling = false;
       this.editingGroupId = null;
       this.reconcileFarmState = null;
-      this.reconcileEggsDelivered = null;
-      this.reconcileTeEarned = null;
       let startAction = this.getStartAction();
       if (startAction) {
-        startAction.payload.initialEgg = startAction.payload.initialEgg || 'curiosity';
         this.actions = [startAction];
       } else {
         startAction = createDefaultStartAction();
@@ -455,51 +426,6 @@ export const useActionsStore = defineStore('actions', {
       return this.actions.find(a => a.id === actionId);
     },
 
-    async setInitialEgg(egg: VirtueEgg) {
-      const startAction = this.getStartAction();
-      if (!startAction) return;
-
-      startAction.payload.initialEgg = egg;
-
-      const keptActions: Action[] = [startAction];
-      let foundWait = false;
-
-      for (let i = 1; i < this.actions.length; i++) {
-        const a = this.actions[i];
-        if (a.type === 'wait_for_full_habs' && !foundWait) {
-          keptActions.push(a);
-          foundWait = true;
-        } else if (a.type === 'shift') {
-          // As soon as we see the first shift, we stop considering any waits
-          break;
-        }
-      }
-
-      keptActions.forEach((a, idx) => {
-        a.index = idx;
-        a.dependents = [];
-      });
-      
-      for (let i = 1; i < keptActions.length; i++) {
-        keptActions[i].dependsOn = [keptActions[i - 1].id];
-        keptActions[i - 1].dependents.push(keptActions[i].id);
-      }
-
-      this.actions = keptActions;
-
-      const keptIds = new Set(keptActions.map(a => a.id));
-      if (this.editingGroupId && !keptIds.has(this.editingGroupId)) {
-        this.editingGroupId = null;
-      }
-      for (const id of Array.from(this.expandedGroupIds)) {
-        if (!keptIds.has(id)) {
-          this.expandedGroupIds.delete(id);
-        }
-      }
-
-      await this.recalculateFrom(0);
-    },
-
     setEditingGroup(groupId: string | null) {
       this.editingGroupId = groupId;
       if (groupId) this.expandedGroupIds.add(groupId);
@@ -508,7 +434,7 @@ export const useActionsStore = defineStore('actions', {
 
     async continueFromBackup(applyEvents = false) {
       const initialStateStore = useInitialStateStore();
-      const virtueStore = useVirtueStore();
+      const planStore = usePlanStore();
       const silosStore = useSilosStore();
       const commonResearchStore = useCommonResearchStore();
       const habCapacityStore = useHabCapacityStore();
@@ -519,14 +445,11 @@ export const useActionsStore = defineStore('actions', {
       // if (initialStateStore.artifactSets.elr) initialStateStore.setActiveArtifactSet('elr');
 
       const farm = initialStateStore.currentFarmState;
-      const egg = VIRTUE_EGGS[farm.eggType - 50];
       const startAction = this.getStartAction();
       if (startAction) {
-        startAction.payload.initialEgg = egg;
         startAction.payload.initialFarmState = farm;
         startAction.payload.isQuickContinue = applyEvents;
       }
-      virtueStore.setCurrentEgg(egg);
       silosStore.setSiloCount(farm.numSilos);
       commonResearchStore.resetAll();
       for (const [id, level] of Object.entries(farm.commonResearches)) commonResearchStore.setResearchLevel(id, level);
@@ -540,11 +463,11 @@ export const useActionsStore = defineStore('actions', {
       const initialSnapshot = computeSnapshot(createBaseEngineState(null), context);
       await this.setInitialSnapshot(initialSnapshot);
       if (applyEvents) {
-        this.pushRelevantEvents(egg, true);
+        this.pushRelevantEvents(true);
       }
     },
 
-    pushRelevantEvents(egg: string, includeGlobal = false) {
+    pushRelevantEvents(includeGlobal = false) {
       const initialStateStore = useInitialStateStore();
       const eventsStore = useEventsStore();
       const activeEvents = eventsStore.getActiveEvents(initialStateStore.isUltra);
@@ -560,14 +483,13 @@ export const useActionsStore = defineStore('actions', {
             payload: { active: true, multiplier: event.multiplier, eventId: event.id },
           });
         }
-        const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle'; egg: string }> = {
-          'hab-sale': { type: 'hab', egg: 'integrity' },
-          'vehicle-sale': { type: 'vehicle', egg: 'kindness' },
+        const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle' }> = {
+          'hab-sale': { type: 'hab' },
+          'vehicle-sale': { type: 'vehicle' },
         };
         const s = saleMap[event.type];
         if (
           s &&
-          egg === s.egg &&
           !this.effectiveSnapshot.activeSales[s.type as keyof typeof this.effectiveSnapshot.activeSales]
         ) {
           this.pushAction({
@@ -609,11 +531,6 @@ export const useActionsStore = defineStore('actions', {
       }
 
       this.actions.splice(insertIndex, 0, fullAction);
-      if (fullAction.type === 'shift') {
-        this.expandedGroupIds.clear();
-        this.expandedGroupIds.add(fullAction.id);
-      }
-
       if (this.batchMode) {
         this.minBatchIndex = Math.min(this.minBatchIndex, insertIndex + 1);
         const prevAction = this.actions[insertIndex - 1];
@@ -622,7 +539,7 @@ export const useActionsStore = defineStore('actions', {
         const { newSnapshot, durationSeconds } = calculateActionResult(fullAction, prevSnapshot, prevState);
         const deltas = computeDeltas(prevSnapshot, newSnapshot);
         Object.assign(fullAction, { ...deltas, totalTimeSeconds: durationSeconds, endState: markRaw(newSnapshot) });
-        useVirtueStore().setBankValue(newSnapshot.bankValue);
+        usePlanStore().setBankValue(newSnapshot.bankValue);
       } else {
         await this.recalculateFrom(insertIndex);
       }
@@ -730,13 +647,11 @@ export const useActionsStore = defineStore('actions', {
       // Reset editing state when importing.
       this.editingGroupId = null;
 
-      // Clear expanded groups when importing. The user wants the initial shift
-      // collapsed when loading from the library or reconciling.
+      // Clear expanded groups when importing.
       this.expandedGroupIds.clear();
 
-      // But we DO want the last shift (or the start action if no shifts) expanded
-      // so the user is "editing" it by default.
-      const lastGroupAction = [...this.actions].reverse().find(a => a.type === 'shift' || a.type === 'start_ascension');
+      // But we DO want the start action expanded so the plan shows by default.
+      const lastGroupAction = [...this.actions].reverse().find(a => a.type === 'start_ascension');
       if (lastGroupAction) {
         this.expandedGroupIds.add(lastGroupAction.id);
       }
@@ -792,7 +707,7 @@ export const useActionsStore = defineStore('actions', {
           [actionId]: !currentOverrides[actionId],
         },
       };
-      localStorage.setItem('ascension_manual_overrides', JSON.stringify(this.manualOverrides));
+      localStorage.setItem('enl_manual_overrides', JSON.stringify(this.manualOverrides));
     },
   },
 });

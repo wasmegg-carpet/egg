@@ -2,35 +2,25 @@
  * Fuel Tank Store
  *
  * Manages fuel tank state during ascension planning.
- * Tank stores eggs for space missions. Virtue eggs can be stored in the virtue tank.
+ * Tank stores eggs for space missions: the regular (non-virtue) tank, shared by all 19 regular eggs.
  * Total eggs across all types cannot exceed tank capacity.
  */
 
 import { defineStore } from 'pinia';
-import type { VirtueEgg } from '@/types';
+import { FUEL_EGGS, createEmptyFuelAmounts, type FuelEgg } from '@/types';
 
 // Tank capacities by level (0-7)
 export const TANK_CAPACITIES = [2e9, 200e9, 10e12, 100e12, 200e12, 300e12, 400e12, 500e12];
 
-// Order of virtue eggs in tankFuels array (indices 20-24)
-export const VIRTUE_FUEL_ORDER: VirtueEgg[] = ['curiosity', 'integrity', 'humility', 'resilience', 'kindness'];
+// Order of eggs in the backup's artifacts.tankFuels array
+export const FUEL_ORDER: FuelEgg[] = FUEL_EGGS;
 
 export interface FuelTankState {
   // Tank level (0-7) - determines max capacity
   tankLevel: number;
 
-  // Stored fuel amounts per virtue egg type
-  fuelAmounts: Record<VirtueEgg, number>;
-}
-
-function createEmptyFuelAmounts(): Record<VirtueEgg, number> {
-  return {
-    curiosity: 0,
-    integrity: 0,
-    humility: 0,
-    resilience: 0,
-    kindness: 0,
-  };
+  // Stored fuel amounts per egg type
+  fuelAmounts: Record<FuelEgg, number>;
 }
 
 export const useFuelTankStore = defineStore('fuelTank', {
@@ -89,7 +79,7 @@ export const useFuelTankStore = defineStore('fuelTank', {
     /**
      * Set fuel amount for a specific egg type
      */
-    setFuelAmount(egg: VirtueEgg, amount: number) {
+    setFuelAmount(egg: FuelEgg, amount: number) {
       this.fuelAmounts[egg] = Math.max(0, amount);
     },
 
@@ -97,7 +87,7 @@ export const useFuelTankStore = defineStore('fuelTank', {
      * Add fuel for a specific egg type.
      * Returns true if successful, false if would exceed capacity.
      */
-    addFuel(egg: VirtueEgg, amount: number): boolean {
+    addFuel(egg: FuelEgg, amount: number): boolean {
       const newTotal = this.totalFuel + amount;
       if (newTotal > this.tankCapacity) {
         return false;
@@ -109,7 +99,7 @@ export const useFuelTankStore = defineStore('fuelTank', {
     /**
      * Remove fuel for a specific egg type.
      */
-    removeFuel(egg: VirtueEgg, amount: number) {
+    removeFuel(egg: FuelEgg, amount: number) {
       this.fuelAmounts[egg] = Math.max(0, this.fuelAmounts[egg] - amount);
     },
 

@@ -34,7 +34,7 @@
               <PlanLibrary @plan-loaded="handlePlanLoaded" />
             </div>
 
-            <!-- Ascension Action Buttons -->
+            <!-- Mode Buttons -->
             <div
               class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-6xl mx-auto"
             >
@@ -69,7 +69,7 @@
                 </div>
               </div>
 
-              <!-- Plan Next Ascension -->
+              <!-- Plan New Farm -->
               <div
                 class="section-premium p-5 flex flex-col items-center text-center group relative overflow-hidden border-brand-primary/30"
               >
@@ -88,22 +88,22 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="text-sm font-bold text-slate-800">Plan Future Ascension</div>
+                    <div class="text-sm font-bold text-slate-800">Plan New Enlightenment Farm</div>
                     <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1.5 leading-relaxed">
-                      Load your latest backup, include pending TE, reset the clock, and start planning fresh
+                      Load your latest backup, reset the clock, and plan a new enlightenment farm from nothing
                     </p>
                   </div>
                   <button
                     class="btn-premium btn-primary px-5 py-2 mt-auto w-full"
                     :disabled="loading || !playerId"
-                    @click="confirmUnsavedChanges(planNextAscension)"
+                    @click="confirmUnsavedChanges(planNewFarm)"
                   >
                     Plan
                   </button>
                 </div>
               </div>
 
-              <!-- Continue Current Ascension -->
+              <!-- Continue Enlightenment Farm -->
               <div class="section-premium p-5 flex flex-col items-center text-center group relative overflow-hidden">
                 <div
                   class="absolute -right-6 -top-6 w-20 h-20 bg-blue-500/5 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"
@@ -120,9 +120,9 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="text-sm font-bold text-slate-800">Continue Current Ascension</div>
+                    <div class="text-sm font-bold text-slate-800">Continue Enlightenment Farm</div>
                     <p class="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1.5 leading-relaxed">
-                      Resume from your current in-game farm with all events applied
+                      Resume from your enlightenment farm in-game with all events applied
                     </p>
                   </div>
                   <button
@@ -306,6 +306,9 @@
         {{ error }}
       </div>
 
+      <!-- Goals -->
+      <PlanGoals class="mt-6" />
+
       <div>
         <!-- Action History and Available Actions side-by-side -->
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -405,35 +408,6 @@
         @cancel="showReconcileLibraryModal = false"
       />
 
-      <!-- Artifact Set Selection Dialog -->
-      <div v-if="showArtifactSetConfirm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div
-          class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-        >
-          <div class="px-6 py-5 border-b border-slate-100">
-            <h3 class="text-lg font-bold text-slate-800">Current Artifact Set</h3>
-            <p class="mt-2 text-sm text-slate-500">Which artifact set do you currently have equipped in game?</p>
-          </div>
-          <div class="px-6 py-4 bg-slate-50 flex justify-end gap-3 rounded-b-2xl">
-            <button
-              class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-              @click="handleArtifactSetSelection('elr')"
-            >
-              Delivery Rate Set
-            </button>
-            <button
-              class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-              @click="handleArtifactSetSelection('earnings')"
-            >
-              Earnings Set
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Continuity Check Dialog -->
-      <ContinuityDialog />
-
       <WarningDialog />
 
       <RecalculationOverlay />
@@ -463,10 +437,9 @@ import { getSavedPlayerID, savePlayerID, requestFirstContact, resolveColleggtibl
 import ThePlayerIdForm from 'ui/components/PlayerIdForm.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useUIStore } from '@/stores/ui';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useEventsStore } from '@/stores/events';
 
 import { useNotesStore } from '@/stores/notes';
@@ -475,13 +448,13 @@ import ActionHistory from '@/components/ActionHistory.vue';
 import AvailableActions from '@/components/AvailableActions.vue';
 import UndoConfirmationDialog from '@/components/UndoConfirmationDialog.vue';
 import PlanFinalSummary from '@/components/PlanFinalSummary.vue';
-import ContinuityDialog from '@/components/ContinuityDialog.vue';
 import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
 import FloatingStats from '@/components/FloatingStats.vue';
 import FloatingNotes from '@/components/FloatingNotes.vue';
 import WarningDialog from '@/components/WarningDialog.vue';
 import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
 import LoadingOverlay from '@/components/LoadingOverlay.vue';
+import PlanGoals from '@/components/PlanGoals.vue';
 import PlanLibrary from '@/components/PlanLibrary.vue';
 import PlanSelectionDialog from '@/components/PlanSelectionDialog.vue';
 import { useSalesStore } from '@/stores/sales';
@@ -494,9 +467,7 @@ import { computeDependencies } from '@/lib/actions/executor';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import type { Action, VirtueEgg } from '@/types';
-import { countTEThresholdsPassed } from '@/lib/truthEggs';
-import { getArtifact, getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import type { Action, FuelEgg } from '@/types';
 import {
   initStartFromScratch,
   initPlanFuture,
@@ -516,9 +487,8 @@ const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const uiStore = useUIStore();
 const { isHeaderCollapsed, isFooterCollapsed, loading, error } = storeToRefs(uiStore);
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
-const truthEggsStore = useTruthEggsStore();
 const eventsStore = useEventsStore();
 const salesStore = useSalesStore();
 
@@ -560,7 +530,7 @@ const lastBackupAge = computed(() => {
 
 const pageTitle = computed(() => {
   const name = initialStateStore.rawBackup?.userName;
-  return name ? `Ascension Planner ${name}` : 'Ascension Planner';
+  return name ? `Enlightenment Planner ${name}` : 'Enlightenment Planner';
 });
 
 watch(
@@ -677,8 +647,8 @@ const loadedPlanName = ref('');
 
 const plannerModeLabel = computed(() => {
   if (plannerMode.value === 'scratch') return 'Start from Scratch';
-  if (plannerMode.value === 'future') return 'Plan Future Ascension';
-  if (plannerMode.value === 'continue') return 'Continue Current Ascension';
+  if (plannerMode.value === 'future') return 'Plan New Enlightenment Farm';
+  if (plannerMode.value === 'continue') return 'Continue Enlightenment Farm';
   if (plannerMode.value === 'library') return loadedPlanName.value;
   if (plannerMode.value === 'reconcile') return `Reconciling ${loadedPlanName.value}`;
   return null;
@@ -704,7 +674,6 @@ const showClearAllConfirmation = ref(false);
 
 const showReconcileLibraryModal = ref(false);
 const showUnsavedConfirm = ref(false);
-const showArtifactSetConfirm = ref(false);
 const pendingAction = ref<(() => void) | null>(null);
 
 /**
@@ -725,7 +694,7 @@ function scrollToTop() {
 
 function showUndoConfirmation(action: Action, options?: { skipConfirmation: boolean }) {
   const validationA = actionsStore.prepareUndo(action.id);
-  const validationB = actionsStore.prepareUndoUntilShift(action.id);
+  const validationB = actionsStore.prepareUndoToEnd(action.id);
 
   undoAction.value = action;
   undoDependentsA.value = validationA.dependentActions;
@@ -854,7 +823,7 @@ async function submitPlayerId(id: string) {
     }
 
     // Load into state store and sync global stores
-    const { teEarnedPerEgg } = loadAndSyncBackup(id, backup, 'default');
+    loadAndSyncBackup(id, backup, 'default');
 
     // Catch-up calculations (eggs, earnings, population) are now handled
     // automatically by computeSnapshot in the engine.
@@ -862,8 +831,8 @@ async function submitPlayerId(id: string) {
     const baseState = createBaseEngineState(null);
     const initialSnapshot = computeSnapshot(baseState, context);
 
-    // Sync farm state and Truth Eggs with caught-up values
-    catchUpFarmState(initialSnapshot, baseState.bankValue, context.ascensionStartTime, teEarnedPerEgg);
+    // Sync farm state with caught-up values
+    catchUpFarmState(initialSnapshot, baseState.bankValue, context.ascensionStartTime);
 
     // Initialize initial state in actions store
     await actionsStore.setInitialSnapshot(initialSnapshot);
@@ -876,86 +845,7 @@ async function submitPlayerId(id: string) {
   }
 }
 
-/**
- * Try to determine which artifact set they have on based on stones.
- */
-function detectArtifactSet(loadout: import('@/lib/artifacts').EquippedArtifact[]): 'earnings' | 'elr' | null {
-  let totalSlots = 0;
-  const allStones: string[] = [];
-
-  for (const slot of loadout) {
-    if (slot.artifactId) {
-      const artifact = getArtifact(slot.artifactId);
-      if (artifact) {
-        totalSlots += artifact.slots;
-      }
-    }
-    for (const stoneId of slot.stones) {
-      if (stoneId) {
-        allStones.push(stoneId);
-      }
-    }
-  }
-
-  // 1. If their artifact set has at least 3 stone slots, we can try to determine which set it is
-  if (totalSlots < 3) {
-    return null;
-  }
-
-  // If no stones are equipped, we can't reliably determine the set
-  if (allStones.length === 0) {
-    return null;
-  }
-
-  const isLunar = (id: string) => id.startsWith('lunar-stone-');
-  const isELR = (id: string) => id.startsWith('quantum-stone-') || id.startsWith('tachyon-stone-');
-
-  // 2. If all the stones are lunar stones, it's the earnings set
-  if (allStones.every(isLunar)) {
-    return 'earnings';
-  }
-
-  // 3. If all the stones are either quantum or tachyon, it's the elr set
-  if (allStones.every(isELR)) {
-    return 'elr';
-  }
-
-  return null;
-}
-
 async function triggerQuickContinue() {
-  if (!playerId.value) return;
-  loading.value = true;
-  error.value = '';
-
-  try {
-    const data = await requestFirstContact(playerId.value);
-    if (!data.backup) throw new Error('Could not fetch player backup');
-    const backup = data.backup;
-    resolveColleggtibleContracts(backup);
-
-    const loadout = getArtifactLoadoutFromBackup(backup);
-    const detectedSet = detectArtifactSet(loadout);
-
-    if (detectedSet) {
-      handleArtifactSetSelection(detectedSet);
-    } else {
-      loading.value = false;
-      showArtifactSetConfirm.value = true;
-    }
-  } catch (e) {
-    loading.value = false;
-    error.value = e instanceof Error ? e.message : 'Quick Continue failed';
-    console.error('Quick Continue error:', e);
-  }
-}
-
-function handleArtifactSetSelection(selection: 'earnings' | 'elr') {
-  showArtifactSetConfirm.value = false;
-  quickContinueAscension(selection);
-}
-
-async function quickContinueAscension(selection: 'earnings' | 'elr') {
   if (!playerId.value) return;
 
   error.value = '';
@@ -964,10 +854,10 @@ async function quickContinueAscension(selection: 'earnings' | 'elr') {
   try {
     plannerMode.value = 'continue';
     savePlayerID(playerId.value);
-    await initContinueCurrent(playerId.value, selection);
+    await initContinueCurrent(playerId.value);
     isHeaderCollapsed.value = true;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Quick Continue failed';
+    error.value = e instanceof Error ? e.message : 'Continue failed';
     console.error('Quick Continue error:', e);
   } finally {
     loading.value = false;
@@ -975,10 +865,10 @@ async function quickContinueAscension(selection: 'earnings' | 'elr') {
 }
 
 /**
- * Plan Next Ascension:
+ * Plan a new enlightenment farm:
  * Delegates to initPlanFuture mode initializer.
  */
-async function planNextAscension() {
+async function planNewFarm() {
   if (!playerId.value) return;
 
   error.value = '';
@@ -990,8 +880,8 @@ async function planNextAscension() {
     await initPlanFuture(playerId.value);
     isHeaderCollapsed.value = true;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Plan Next failed';
-    console.error('Plan Next Ascension error:', e);
+    error.value = e instanceof Error ? e.message : 'Plan new farm failed';
+    console.error('Plan new farm error:', e);
   } finally {
     loading.value = false;
   }

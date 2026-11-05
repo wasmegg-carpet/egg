@@ -108,18 +108,8 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
           mods,
           absoluteSimTime,
           deadline,
-          elrViewMode,
           elrSortMode,
-          rawBackup,
         } = msg;
-        // Defense-in-depth against the postMessage/structuredClone boundary this message itself
-        // just crossed: protobufjs Long-typed int64 fields on `rawBackup` (e.g. artifact item ids,
-        // read by the realistic-ELR sort this feeds) silently lose their `Long` prototype through
-        // structuredClone, becoming plain `{low,high,unsigned}` objects with none of Long's methods.
-        // `sanitizeLongs`'s duck-typed check works identically whether it's handed a live Long or
-        // that already-stripped equivalent, so this is correct regardless of whether the caller
-        // (useResearchCalcWorker.ts) also happens to sanitize before sending.
-        const sanitizedBackup = rawBackup ? sanitizeLongs(rawBackup) : rawBackup;
         const result = simulateSaleEndsBuy(
           researchLevels,
           startSnapshot,
@@ -127,9 +117,7 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
           mods,
           absoluteSimTime,
           deadline,
-          elrViewMode,
           elrSortMode,
-          sanitizedBackup
         );
         post({ type: 'result', requestId: msg.requestId, result });
         break;

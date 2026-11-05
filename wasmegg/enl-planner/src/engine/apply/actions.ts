@@ -5,16 +5,14 @@ import {
   BuyVehiclePayload,
   BuyHabPayload,
   BuyResearchPayload,
-  ShiftPayload,
   BuyTrainCarPayload,
   ChangeArtifactsPayload,
   BuySiloPayload,
   StoreFuelPayload,
-  WaitForTEPayload,
   LaunchMissionsPayload,
   StartAscensionPayload,
   ToggleSalePayload,
-  VirtueEgg,
+  FuelEgg,
 } from '@/types';
 import type { EngineState } from '../types';
 import { activeSlots } from '@/lib/artifacts/calculator';
@@ -29,7 +27,7 @@ export function applyAction(
   switch (action.type) {
     case 'start_ascension': {
       const payload = action.payload as StartAscensionPayload;
-      const newState = { ...state, currentEgg: payload.initialEgg };
+      const newState = { ...state };
       if (payload.initialFarmState) {
         const farm = payload.initialFarmState;
         newState.researchLevels = { ...farm.commonResearches };
@@ -39,16 +37,9 @@ export function applyAction(
         newState.population = farm.population;
         newState.lastStepTime = farm.lastStepTime;
         newState.bankValue = farm.cashEarned - farm.cashSpent;
-        // Progress state should already be in state from createBaseEngineState, 
-        // but we ensure it's explicitly carried over here if needed.
-        newState.teEarned = { ...state.teEarned };
-        newState.eggsDelivered = { ...state.eggsDelivered };
       } else {
         newState.bankValue = 0;
         newState.population = 1;
-        // Preserve lifetime metadata (teEarned and eggsDelivered) from prior ascensions/backup
-        newState.teEarned = { ...state.teEarned };
-        newState.eggsDelivered = { ...state.eggsDelivered };
       }
       return newState;
     }
@@ -80,18 +71,6 @@ export function applyAction(
         ...state,
         researchLevels: { ...state.researchLevels, [payload.researchId]: payload.toLevel },
         bankValue: (state.bankValue || 0) - action.cost,
-      };
-    }
-
-    case 'shift': {
-      const payload = action.payload as ShiftPayload;
-      return {
-        ...state,
-        currentEgg: payload.toEgg,
-        shiftCount: payload.newShiftCount,
-        soulEggs: Math.max(0, state.soulEggs - action.cost),
-        bankValue: 0,
-        population: 1,
       };
     }
 
@@ -131,19 +110,11 @@ export function applyAction(
       const newFuelAmounts = { ...state.fuelTankAmounts };
       newFuelAmounts[payload.egg] = (newFuelAmounts[payload.egg] || 0) + payload.amount;
 
-      // Variable-speed fueling: apply shipped eggs and gems earned
-      const shippedEggs = payload.eggsShippedDuringFuel ?? 0;
-      const gemsEarned = payload.gemsEarnedDuringFuel ?? 0;
-
-      const newEggsDelivered = shippedEggs > 0
-        ? { ...state.eggsDelivered, [payload.egg]: (state.eggsDelivered[payload.egg] || 0) + shippedEggs }
-        : state.eggsDelivered;
-
+      // Variable-speed fueling: apply boks earned from the eggs shipped meanwhile
       return {
         ...state,
         fuelTankAmounts: newFuelAmounts,
-        eggsDelivered: newEggsDelivered,
-        bankValue: (state.bankValue || 0) + gemsEarned,
+        bankValue: (state.bankValue || 0) + (payload.cashEarnedDuringFuel ?? 0),
       };
     }
 
@@ -154,19 +125,12 @@ export function applyAction(
       return { ...state, fuelTankAmounts: newFuelAmounts };
     }
 
-    case 'wait_for_te': {
-      const payload = action.payload as WaitForTEPayload;
-      const newEggsDelivered = { ...state.eggsDelivered };
-      newEggsDelivered[payload.egg] = (newEggsDelivered[payload.egg] || 0) + payload.eggsToLay;
-      return { ...state, eggsDelivered: newEggsDelivered };
-    }
-
     case 'launch_missions': {
       const payload = action.payload as LaunchMissionsPayload;
       const newFuelAmounts = { ...state.fuelTankAmounts };
       for (const [egg, amount] of Object.entries(payload.fuelConsumed)) {
         if (amount > 0) {
-          newFuelAmounts[egg as VirtueEgg] = Math.max(0, (newFuelAmounts[egg as VirtueEgg] || 0) - amount);
+          newFuelAmounts[egg as FuelEgg] = Math.max(0, (newFuelAmounts[egg as FuelEgg] || 0) - amount);
         }
       }
       return { ...state, fuelTankAmounts: newFuelAmounts, bankValue: (state.bankValue || 0) - action.cost };
@@ -234,8 +198,9 @@ export function applyAction(
     }
 
     case 'wait_for_time':
+    case 'wait_for_population':
     case 'wait_for_full_habs':
-    case 'wait_for_gems':
+    case 'wait_for_cash':
     case 'wait_for_research_sale':
     case 'wait_for_research_sale_end':
     case 'wait_for_earnings_boost':

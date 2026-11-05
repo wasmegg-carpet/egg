@@ -13,9 +13,9 @@
         >
           <div class="p-1.5 bg-slate-100 rounded-lg text-slate-600">
             <img
-              :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+              :src="iconURL('egginc/icon_bock.png', 64)"
               class="w-5 h-5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]"
-              alt="Gems"
+              alt="Boks"
             />
           </div>
           <h3 class="text-xs font-black text-slate-800 uppercase tracking-widest">Modify Bank Value</h3>
@@ -172,7 +172,7 @@ import { iconURL } from 'lib';
 import { formatNumber, formatDuration, parseNumber, parseDuration } from '@/lib/format';
 import { generateActionId } from '@/types';
 import type { ModifyBankPayload } from '@/types';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
@@ -181,7 +181,7 @@ import { calculateEarningsForTime } from '@/engine/apply/math';
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 
@@ -238,7 +238,7 @@ const parsedTimeAmount = computed(() => {
   return sign * magnitude;
 });
 
-// The signed gem amount to add/subtract for 'delta' and 'time' modes.
+// The signed bok amount to add/subtract for 'delta' and 'time' modes.
 const effectiveDeltaAmount = computed(() => {
   if (mode.value === 'time') return parsedTimeAmount.value ?? 0;
   return parsedDeltaAmount.value ?? 0;
@@ -285,7 +285,7 @@ async function handleConfirm() {
   const targetValue =
     mode.value === 'set' ? (parsedSetValue.value as number) : previousValue + effectiveDeltaAmount.value;
 
-  // 'time' mode computes a one-off gem amount from the current earnings rate, then
+  // 'time' mode computes a one-off bok amount from the current earnings rate, then
   // behaves exactly like a manually-typed delta from here on.
   const payload: ModifyBankPayload = {
     mode: mode.value === 'set' ? 'set' : 'delta',
@@ -302,7 +302,7 @@ async function handleConfirm() {
   );
 
   // Apply to store
-  virtueStore.setBankValue(targetValue);
+  planStore.setBankValue(targetValue);
 
   // Complete execution
   await completeExecution(

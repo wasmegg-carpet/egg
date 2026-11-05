@@ -61,10 +61,7 @@ export interface SaleEndsBuyRequest {
   mods: ResearchCostModifiers;
   absoluteSimTime: number;
   deadline: number;
-  elrViewMode: 'realistic' | 'potential';
   elrSortMode: 'efficiency' | 'impact';
-  /** protobufjs-decoded — see researchCalc.worker.ts for why this gets Long-sanitized on receipt. */
-  rawBackup: ei.IBackup | null | undefined;
 }
 
 export interface ThresholdBuyRequest {

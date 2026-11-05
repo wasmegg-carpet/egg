@@ -73,7 +73,7 @@
                   >Buy Silo #{{ siloOutput.siloCount + 1 }}</span
                 >
                 <span class="text-[9px] font-mono-premium font-black text-indigo-500 mt-0.5">
-                  {{ formatGemPrice(siloOutput.nextSiloCost) }} gems<template v-if="timeToBuy">
+                  {{ formatBokPrice(siloOutput.nextSiloCost) }} boks<template v-if="timeToBuy">
                     · Ready in {{ timeToBuy }}</template
                   >
                 </span>
@@ -200,7 +200,7 @@ import { useSiloTime } from '@/composables/useSiloTime';
 import { useSilosStore } from '@/stores/silos';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
 import { getResearchIconPath } from '@/lib/assets';
 import { iconURL } from 'lib';
 import { generateActionId } from '@/types';
@@ -228,7 +228,7 @@ const timeToBuy = computed(() => {
   return formatDuration(seconds);
 });
 
-// Simulate buying silos back-to-back (waiting to save up gems between purchases)
+// Simulate buying silos back-to-back (waiting to save up boks between purchases)
 // to see how many fit within a 1-hour window.
 const maxSilosIn1Hour = computed<{ count: number; seconds: number }>(() => {
   const snapshot = actionsStore.effectiveSnapshot;

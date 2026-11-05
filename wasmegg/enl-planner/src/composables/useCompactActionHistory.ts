@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue';
 
-const STORAGE_KEY = 'ascension_compact_action_history';
+const STORAGE_KEY = 'enl_compact_action_history';
 
 function loadStoredCompactActionHistory(): boolean {
   const stored = localStorage.getItem(STORAGE_KEY);

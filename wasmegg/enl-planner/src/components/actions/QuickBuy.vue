@@ -1,5 +1,5 @@
 <template>
-  <SmartBuyCard title="Quick Buy" note="Quick Buy will never spend gems from your bank." :loading="loading">
+  <SmartBuyCard title="Quick Buy" note="Quick Buy will never spend boks from your bank." :loading="loading">
     <template #icon>
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -39,7 +39,7 @@
       </button>
 
       <ResearchPurchasePreview :items="previewItems" empty-text="Nothing to buy right now" />
-      <SmartBuyStats :purchase-count="stats.purchaseCount" :seconds="stats.seconds" :gems="stats.gems" />
+      <SmartBuyStats :purchase-count="stats.purchaseCount" :seconds="stats.seconds" :boks="stats.boks" />
       <RatePreviewDelta label="Earnings" :before="earningsSummary.before" :after="earningsSummary.after" unit="/hr" />
     </div>
   </SmartBuyCard>
@@ -58,7 +58,7 @@ import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 defineProps<{
   previewItems: ResearchSummaryItem[];
   earningsSummary: { before: number; after: number };
-  stats: { purchaseCount: number; seconds: number; gems: number };
+  stats: { purchaseCount: number; seconds: number; boks: number };
   /** Whether the preview plan above is currently being (re)computed. */
   loading?: boolean;
   /** Whether a Buy Now click is still being applied. */

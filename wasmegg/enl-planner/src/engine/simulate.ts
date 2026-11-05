@@ -2,8 +2,6 @@ import type { Action, CalculationsSnapshot } from '@/types';
 import type { EngineState, SimulationContext } from './types';
 import {
   applyAction,
-  computePassiveEggsDelivered,
-  applyPassiveEggs,
   applyTime,
   getActionDuration,
   refreshActionPayload,
@@ -18,14 +16,14 @@ import { yieldForOverlayPaint } from '@/lib/yieldForOverlayPaint';
  * Simulate a list of actions to produce a timeline of states.
  * @param actions The list of actions to simulate (including start_ascension)
  * @param context Global context (epic research, colleggtibles)
- * @param baseState The specific starting state (TE, shift count, empty farm)
+ * @param baseState The specific starting state (SE, PE, TE, empty farm)
  * @returns The list of actions with updated endState and deltas
  */
 /**
  * Simulate a list of actions to produce a timeline of states.
  * @param actions The list of actions to simulate (including start_ascension)
  * @param context Global context (epic research, colleggtibles)
- * @param baseState The specific starting state (TE, shift count, empty farm)
+ * @param baseState The specific starting state (SE, PE, TE, empty farm)
  * @param startIndex The index offset for the first action in the list (default 0)
  * @returns The list of actions with updated endState and deltas
  */
@@ -54,7 +52,7 @@ export function simulate(
     const actualIndex = startIndex + i;
     const stepContext = { ...context, planStartOffset };
 
-    // 0. Refresh dynamic payloads (e.g. wait_for_te duration based on new ELR)
+    // 0. Refresh dynamic payloads (e.g. wait_for_population duration based on new IHR)
     action = refreshActionPayload(action, currentSnapshot, stepContext);
 
     // 1. Apply action to get new pure state
@@ -63,8 +61,6 @@ export function simulate(
     // 1b. Add passively delivered eggs during this action's duration
     // Uses the PREVIOUS snapshot's ELR (eggs are shipped at the old rate while saving for the action)
     const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
-    currentState = applyPassiveEggs(currentState, passiveEggs);
 
     const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
@@ -112,7 +108,6 @@ export function simulate(
       bankValue: newSnapshot.bankValue,
       lastStepTime: newSnapshot.lastStepTime,
       // Also ensure cumulative lifecycle eggs/fuel are preserved from computeSnapshot if they changed
-      eggsDelivered: { ...newSnapshot.eggsDelivered },
       fuelTankAmounts: { ...newSnapshot.fuelTankAmounts },
     };
 
@@ -159,8 +154,6 @@ export async function simulateAsync(
     action = refreshActionPayload(action, currentSnapshot, stepContext);
     currentState = applyAction(currentState, action);
     const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
-    currentState = applyPassiveEggs(currentState, passiveEggs);
 
     const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     const transitions = boostTransitionsFrom(currentSnapshot, absoluteSimTime);
@@ -193,7 +186,6 @@ export async function simulateAsync(
       population: newSnapshot.population,
       bankValue: newSnapshot.bankValue,
       lastStepTime: newSnapshot.lastStepTime,
-      eggsDelivered: { ...newSnapshot.eggsDelivered },
       fuelTankAmounts: { ...newSnapshot.fuelTankAmounts },
     };
     previousSnapshot = newSnapshot;

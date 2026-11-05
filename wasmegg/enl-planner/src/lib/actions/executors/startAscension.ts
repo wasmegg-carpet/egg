@@ -1,14 +1,13 @@
 /**
- * Start Ascension Executor
+ * Start Plan Executor
  *
- * This is a special action that represents the initial state of an ascension.
+ * This is a special action that represents the initial state of a plan.
  * It is created automatically and cannot be undone.
  * Cost is always 0 - it represents the starting point.
  */
 
 import type { ActionExecutor } from '../executor';
 import type { StartAscensionPayload } from '@/types';
-import { VIRTUE_EGG_NAMES } from '@/types';
 
 export const startAscensionExecutor: ActionExecutor<'start_ascension'> = {
   execute(_payload: StartAscensionPayload, _context) {
@@ -17,12 +16,11 @@ export const startAscensionExecutor: ActionExecutor<'start_ascension'> = {
     return 0;
   },
 
-  getDisplayName(payload: StartAscensionPayload) {
-    const eggName = VIRTUE_EGG_NAMES[payload.initialEgg];
-    return `Start Ascension (${eggName})`;
+  getDisplayName() {
+    return 'Start Enlightenment';
   },
 
   getEffectDescription(_payload: StartAscensionPayload) {
-    return 'Initial state for this ascension plan';
+    return 'Initial state for this enlightenment plan';
   },
 };

@@ -2,7 +2,7 @@ import {
   type CommonResearch,
   type ResearchCostModifiers,
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   getResearchById,
   getResearchByTier,
   isTierUnlocked,
@@ -15,13 +15,6 @@ import {
 } from './researchRanking';
 import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
 import { findSmartBuyCandidate } from './smartBuyCandidate';
-import {
-  type DeliveryLevelSet,
-  deliveryPlanCost,
-  createDeliveryLevelSearch,
-  deliveryRateScorer,
-  dropLevelsNotWorthTheirTime,
-} from './deliveryLevelSearch';
 import type { CalculationsSnapshot } from '@/types';
 import type { SimulationContext, EngineState } from '@/engine/types';
 import { createBaseEngineState } from '@/engine/adapter';
@@ -30,7 +23,6 @@ import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime,
 import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
 import { DEBUG_SALE_AWARE_BUY } from '@/lib/debugFlags';
 import { ei } from 'lib';
-import type { DeliverySource } from '@/lib/artifacts/virtue';
 
 /**
  * Safety-net cap shared by every dry run below — protects against a runaway loop, not a real
@@ -95,9 +87,9 @@ export interface SimpleBuyPlan {
    *  isn't real elapsed time; it's just the figure the Quick Buy note reports as time saved. Only
    *  populated by `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
   totalSecondsToSave?: number;
-  /** Sum of each purchase's price — the Quick Buy note's "gems spent" figure. Only populated by
+  /** Sum of each purchase's price — the Quick Buy note's "boks spent" figure. Only populated by
    *  `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
-  totalGemsSpent?: number;
+  totalBoksSpent?: number;
 }
 
 /**
@@ -430,9 +422,7 @@ export function runDeliveryBuyLoop(
   mods: ResearchCostModifiers,
   absoluteSimTime: number,
   researchSaleDeadline: number,
-  elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: DeliverySource | null | undefined,
   maxIterations: number = MAX_SIMULATED_PURCHASES
 ): DeliveryLoopResult {
   let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...researchLevels } };
@@ -465,14 +455,12 @@ export function runDeliveryBuyLoop(
       const isSale = isResearchSaleActive(simTime);
       const ranked = rankResearchByELRImpact(
         simState.researchLevels,
-        rawBackup,
         simSnapshot,
         context,
         mods,
         isSale,
         simTime,
         researchSaleDeadline,
-        elrViewMode,
         elrSortMode
       );
       const candidate = ranked.find(item => item.canBuy && !item.showDeadlineWarning);
@@ -509,7 +497,7 @@ export function runDeliveryBuyLoop(
   return { purchases, endLevels: simState.researchLevels, endSnapshot: simSnapshot };
 }
 
-/** Whichever next level adds the most earnings per gem, or the cheapest if none adds any. */
+/** Whichever next level adds the most earnings per bok, or the cheapest if none adds any. */
 function nextDeliveryLevel(
   available: CommonResearch[],
   state: EngineState,
@@ -518,13 +506,13 @@ function nextDeliveryLevel(
   mods: ResearchCostModifiers,
   isSale: boolean
 ): CommonResearch {
-  const priceOf = (r: CommonResearch) => getDiscountedVirtuePrice(r, state.researchLevels[r.id] || 0, mods, isSale);
-  const earningsPerGem = (r: CommonResearch) => {
+  const priceOf = (r: CommonResearch) => getDiscountedResearchPrice(r, state.researchLevels[r.id] || 0, mods, isSale);
+  const earningsPerBok = (r: CommonResearch) => {
     const levels = { ...state.researchLevels, [r.id]: (state.researchLevels[r.id] || 0) + 1 };
     const next = computeSnapshot({ ...state, researchLevels: levels }, context, { skipEpochConversion: true });
     return (next.offlineEarnings - snapshot.offlineEarnings) / priceOf(r);
   };
-  const scored = available.map(r => ({ r, value: earningsPerGem(r), price: priceOf(r) }));
+  const scored = available.map(r => ({ r, value: earningsPerBok(r), price: priceOf(r) }));
   return scored.reduce((a, b) => (b.value > a.value || (b.value === a.value && b.price < a.price) ? b : a)).r;
 }
 
@@ -589,89 +577,6 @@ const SETS_SIMULATED = 3;
  * for can't be found at all.
  */
 const BUDGET_MARGIN = 1.03;
-
-/**
- * Buys the delivery research with the lowest `deliveryPlanCost` by `deadline`. The best set for a
- * smaller budget usually isn't part of the best set for a larger one, so the level search
- * runs at a range of budgets, from what the bank buys right now up to everything earned by the
- * deadline, rather than trimming down from the largest. Delivery research can raise earnings, so a
- * second pass budgets from what the best plan really had by the deadline. Returns null when the
- * search is too large or nothing fits, so the caller can use the greedy loop.
- */
-function runBestDeliveryPlan(
-  researchLevels: Record<string, number>,
-  snapshot: CalculationsSnapshot,
-  context: SimulationContext,
-  mods: ResearchCostModifiers,
-  absoluteSimTime: number,
-  deadline: number,
-  rawBackup: DeliverySource
-): DeliveryLoopResult | null {
-  const transitions = boostTransitionsFrom(snapshot, absoluteSimTime);
-  const isSale = isResearchSaleActive(deadline - 1);
-  const scoreRate = deliveryRateScorer(rawBackup, researchLevels, snapshot.proPermit, context);
-  const rates = new Map<string, number>();
-  const rateOf = (levels: Record<string, number>) => {
-    const key = getCommonResearches()
-      .map(r => levels[r.id] || 0)
-      .join();
-    let rate = rates.get(key);
-    if (rate === undefined) rates.set(key, (rate = scoreRate(levels)));
-    return rate;
-  };
-  const referenceRate = rateOf(researchLevels);
-  const secondsToAfford = (gems: number) => getTimeToSave(gems, snapshot, transitions);
-  const finishOf = (run: DeliveryLoopResult) => run.purchases.at(-1)?.purchaseTimestamp ?? absoluteSimTime;
-
-  const bank = snapshot.bankValue || 0;
-  let best: DeliveryLoopResult | null = null;
-  let bestCost = Infinity;
-  let topBudget = bank + calculateEarningsForTime(deadline - absoluteSimTime, snapshot, transitions);
-  const tried = new Set<string>();
-
-  for (let pass = 0; pass < 2; pass++) {
-    const candidates: DeliveryLevelSet[] = [];
-    const largestBudget = topBudget * BUDGET_MARGIN;
-    const search = createDeliveryLevelSearch(researchLevels, largestBudget, mods, isSale, rateOf);
-    for (let step = 0; step <= BUDGET_STEPS; step++) {
-      const budget = step === BUDGET_STEPS ? largestBudget : bank + ((topBudget - bank) * step) / BUDGET_STEPS;
-      const sets = search(budget, SETS_PER_BUDGET);
-      if (!sets) return best;
-      for (const set of sets) {
-        candidates.push(dropLevelsNotWorthTheirTime(set, researchLevels, mods, isSale, rateOf, secondsToAfford));
-      }
-    }
-
-    const estimate = (set: DeliveryLevelSet) =>
-      deliveryPlanCost(absoluteSimTime + secondsToAfford(set.gems), set.rate, referenceRate);
-    candidates.sort((a, b) => estimate(a) - estimate(b));
-
-    let simulated = 0;
-    for (const set of candidates) {
-      const key = JSON.stringify(set.levels);
-      if (tried.has(key)) continue;
-      tried.add(key);
-      const run = buyDeliveryLevels(researchLevels, set.levels, snapshot, context, mods, absoluteSimTime, deadline, isSale);
-      if (!run) continue;
-      const cost = deliveryPlanCost(finishOf(run), set.rate, referenceRate);
-      if (cost < bestCost) {
-        best = run;
-        bestCost = cost;
-      }
-      if (++simulated === SETS_SIMULATED) break;
-    }
-
-    if (!best) return null;
-    const spent = best.purchases.reduce((sum, p) => sum + p.price, 0);
-    const moneyByDeadline =
-      spent +
-      (best.endSnapshot.bankValue || 0) +
-      calculateEarningsForTime(deadline - finishOf(best), best.endSnapshot, boostTransitionsFrom(best.endSnapshot, finishOf(best)));
-    if (moneyByDeadline <= topBudget * (1 + 1e-9)) break;
-    topBudget = moneyByDeadline;
-  }
-  return best;
-}
 
 /** Whether every research/level pair in `target` has been reached in `endLevels`. */
 function achievesTarget(endLevels: Record<string, number>, target: Map<string, number>): boolean {
@@ -768,9 +673,7 @@ export function simulateSaleEndsBuy(
   mods: ResearchCostModifiers,
   absoluteSimTime: number,
   researchSaleDeadline: number,
-  elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: DeliverySource | null | undefined
 ): SaleEndsPlan {
   const checkpoints = simulateEarningsPreludeForSaleEnd(
     researchLevels,
@@ -782,24 +685,7 @@ export function simulateSaleEndsBuy(
   );
   const n = checkpoints.length - 1;
 
-  const deliverySource = elrViewMode === 'realistic' ? rawBackup : null;
-  const rateOf = deliverySource
-    ? deliveryRateScorer(deliverySource, researchLevels, snapshot.proPermit, context)
-    : null;
-  const searchLevels = deliverySource && elrSortMode === 'efficiency' ? deliverySource : null;
-
   const runDeliveryFromCheckpoint = (k: number) =>
-    (searchLevels
-      ? runBestDeliveryPlan(
-          checkpoints[k].researchLevels,
-          checkpoints[k].snapshot,
-          context,
-          mods,
-          checkpoints[k].simTime,
-          researchSaleDeadline,
-          searchLevels
-        )
-      : null) ??
     runDeliveryBuyLoop(
       checkpoints[k].researchLevels,
       checkpoints[k].snapshot,
@@ -807,9 +693,7 @@ export function simulateSaleEndsBuy(
       mods,
       checkpoints[k].simTime,
       researchSaleDeadline,
-      elrViewMode,
-      elrSortMode,
-      rawBackup
+      elrSortMode
     );
 
   let bestK = n;
@@ -828,24 +712,7 @@ export function simulateSaleEndsBuy(
       ? checkpoints[n].simTime
       : findTargetCompletionTime(bestRun, target, checkpoints[n].researchLevels);
 
-  // Compared directly when searching: `target` is only a stand-in for what the plan is worth.
-  if (searchLevels && rateOf) {
-    const referenceRate = rateOf(bestRun.endLevels);
-    const costOf = (run: DeliveryLoopResult, k: number) =>
-      deliveryPlanCost(run.purchases.at(-1)?.purchaseTimestamp ?? checkpoints[k].simTime, rateOf(run.endLevels), referenceRate);
-    let bestCost = costOf(bestRun, n);
-    for (let k = n - 1; k >= 0; k--) {
-      const run = runDeliveryFromCheckpoint(k);
-      const cost = costOf(run, k);
-      if (cost < bestCost) {
-        bestK = k;
-        bestRun = run;
-        bestCost = cost;
-      }
-    }
-  }
-
-  for (let k = n - 1; !searchLevels && k >= 0; k--) {
+  for (let k = n - 1; k >= 0; k--) {
     const run = runDeliveryFromCheckpoint(k);
     if (!achievesTarget(run.endLevels, target)) break;
     const completionTime =
@@ -858,7 +725,7 @@ export function simulateSaleEndsBuy(
 
   const earningsResearchIds = checkpoints[bestK].purchases.map(p => p.researchId);
   const deliveryResearchIds = bestRun.purchases.map(p => p.researchId);
-  const totalGemsSpent =
+  const totalBoksSpent =
     checkpoints[bestK].purchases.reduce((sum, p) => sum + p.price, 0) +
     bestRun.purchases.reduce((sum, p) => sum + p.price, 0);
   // The delivery run's own last purchase if it bought anything, else wherever the (possibly-trimmed)
@@ -878,9 +745,9 @@ export function simulateSaleEndsBuy(
     earningsEndSnapshot: checkpoints[bestK].snapshot,
     endLevels: bestRun.endLevels,
     endSnapshot: bestRun.endSnapshot,
-    totalGemsSpent,
+    totalBoksSpent,
     lastPurchaseTimestamp,
-    endDeliveryRate: rateOf ? rateOf(bestRun.endLevels) : null,
+    endDeliveryRate: null,
   };
 }
 
@@ -963,9 +830,7 @@ export function simulateFinalSaleGapBuy(
   absoluteSimTime: number,
   finalSaleStart: number,
   buildPhaseEnd: number,
-  elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: DeliverySource | null | undefined
 ): FinalSaleGapPlan {
   if (absoluteSimTime >= finalSaleStart) {
     return { purchases: [], endLevels: researchLevels, endSnapshot: snapshot };
@@ -998,18 +863,14 @@ export function simulateFinalSaleGapBuy(
       mods,
       finalSaleStart,
       buildPhaseEnd,
-      elrViewMode,
       elrSortMode,
-      rawBackup
     );
   };
 
   // `earlierEggs`: what the purchase delivers before the sale that it otherwise wouldn't. Those eggs
   // count toward TE, so they offset a later finish, valued at how long they'd take at the plan's rate.
-  const isWorseOutcome = (plan: SaleEndsPlan, base: SaleEndsPlan, earlierEggs: number) => {
-    if (plan.endDeliveryRate === null || base.endDeliveryRate === null) return plan.endSnapshot.elr < base.endSnapshot.elr;
-    const cost = (p: SaleEndsPlan) => deliveryPlanCost(p.lastPurchaseTimestamp, p.endDeliveryRate!, base.endDeliveryRate!);
-    return cost(plan) - earlierEggs / plan.endDeliveryRate > cost(base);
+  const isWorseOutcome = (plan: SaleEndsPlan, base: SaleEndsPlan) => {
+    return plan.endSnapshot.elr < base.endSnapshot.elr;
   };
 
   let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...researchLevels } };
@@ -1084,10 +945,7 @@ export function simulateFinalSaleGapBuy(
       candidateSnapshot,
       simTime + timeToBuySeconds
     );
-
-    const earlierEggs =
-      (candidateSnapshot.elr - simSnapshot.elr) * Math.max(0, finalSaleStart - (simTime + timeToBuySeconds));
-    if (isWorseOutcome(candidateResult, baseline, earlierEggs)) {
+    if (isWorseOutcome(candidateResult, baseline)) {
       rejectedIds.add(candidate.research.id);
       continue;
     }
@@ -1126,7 +984,7 @@ export function simulateThresholdBuy(
   let simSnapshot = snapshot;
   const researchIds: string[] = [];
   let totalSecondsToSave = 0;
-  let totalGemsSpent = 0;
+  let totalBoksSpent = 0;
 
   for (let i = 0; i < MAX_SIMULATED_PURCHASES; i++) {
     const candidate = findSmartBuyCandidate(simState.researchLevels, mods, isSale, simSnapshot, thresholdSeconds);
@@ -1138,7 +996,7 @@ export function simulateThresholdBuy(
     simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
     researchIds.push(candidate.research.id);
     totalSecondsToSave += candidate.secondsToSave;
-    totalGemsSpent += candidate.price;
+    totalBoksSpent += candidate.price;
   }
 
   return {
@@ -1146,7 +1004,7 @@ export function simulateThresholdBuy(
     endLevels: simState.researchLevels,
     endSnapshot: simSnapshot,
     totalSecondsToSave,
-    totalGemsSpent,
+    totalBoksSpent,
   };
 }
 

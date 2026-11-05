@@ -1,4 +1,4 @@
-import type { Action, CalculationsSnapshot, CurrentFarmState, VirtueEgg } from '@/types';
+import type { Action, CalculationsSnapshot, CurrentFarmState, FuelEgg } from '@/types';
 
 export interface ActionsState {
   actions: Action[];
@@ -10,7 +10,7 @@ export interface ActionsState {
   isRecalculating: boolean;
   // True from the start of resetAllStores() through the end of setInitialSnapshot() — i.e. the
   // whole "switching to a new mode" window during which stores are mutated in several separate,
-  // individually-observable steps and can briefly disagree with each other (e.g. virtueStore
+  // individually-observable steps and can briefly disagree with each other (e.g. planStore
   // already reset while actionsStore still holds the previous plan's snapshot). Reactive consumers
   // that derive absolute timestamps from multiple stores (like the milestone chain watchEffect in
   // useResearchViews.ts) must not compute against that transitional state — doing so has produced
@@ -23,8 +23,6 @@ export interface ActionsState {
   isReconciling: boolean;
   reconciledBackupTime: number;
   reconcileFarmState: CurrentFarmState | null;
-  reconcileEggsDelivered: Record<VirtueEgg, number> | null;
-  reconcileTeEarned: Record<VirtueEgg, number> | null;
   showIncompleteOnly: boolean;
   // ID of the library plan currently being edited, or null if it's a new draft
   activePlanId: string | null;

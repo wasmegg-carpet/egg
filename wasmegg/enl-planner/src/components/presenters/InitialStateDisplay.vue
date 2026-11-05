@@ -1,14 +1,14 @@
 <template>
   <div class="space-y-4">
-    <!-- Ascension Settings -->
+    <!-- Plan Settings -->
     <div class="section-premium p-5 overflow-hidden">
-      <h3 class="style-guide-label mb-6">Ascension Settings</h3>
+      <h3 class="style-guide-label mb-6">Plan Settings</h3>
 
       <div class="space-y-6">
-        <!-- Ascension Start Time -->
+        <!-- Plan Start Time -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:flex-wrap">
           <div>
-            <div class="text-sm font-bold text-slate-700">Ascension Start</div>
+            <div class="text-sm font-bold text-slate-700">Plan Start</div>
             <div class="hidden md:block text-[10px] uppercase font-black text-slate-400 tracking-wider">When this journey begins</div>
           </div>
           <div class="flex flex-col md:flex-row md:items-center md:flex-wrap md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0">
@@ -27,58 +27,6 @@
           </div>
         </div>
 
-        <!-- Starting Egg -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
-          <div>
-            <div class="text-sm font-bold text-slate-700">Starting Egg</div>
-            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">Initial Egg</div>
-          </div>
-          <div class="flex gap-2 justify-between w-full sm:w-auto mt-1 sm:mt-0">
-            <button
-              v-for="egg in VIRTUE_EGGS"
-              :key="egg"
-              class="group relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm border-2 overflow-visible"
-              :class="[
-                initialEgg === egg
-                  ? 'border-brand-primary scale-110 shadow-lg shadow-brand-primary/20 bg-white'
-                  : 'border-slate-100 bg-slate-50 opacity-60 hover:opacity-100 hover:border-slate-200',
-              ]"
-              v-tippy="VIRTUE_EGG_NAMES[egg]"
-              @click="handleInitialEggClick(egg)"
-            >
-              <img
-                :src="iconURL(`egginc/egg_${egg}.png`, 64)"
-                class="w-8 h-8 object-contain transition-transform"
-                :class="{ 'scale-110 drop-shadow-sm': initialEgg === egg }"
-                :alt="egg"
-              />
-
-              <!-- Active indicator dot -->
-              <div
-                v-if="initialEgg === egg"
-                class="absolute -top-1 -right-1 w-3 h-3 bg-slate-900 rounded-full border-2 border-white shadow-sm pointer-events-none"
-              ></div>
-            </button>
-          </div>
-        </div>
-
-        <!-- Previous Shifts (editable) -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
-          <div>
-            <div class="text-sm font-bold text-slate-700">Previous Shifts</div>
-            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">Experience baseline</div>
-          </div>
-          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-            <input
-              type="number"
-              :value="initialShiftCount"
-              :min="0"
-              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
-              @change="$emit('set-initial-shift-count', parseInt(($event.target as HTMLInputElement).value) || 0)"
-            />
-          </div>
-        </div>
-
         <!-- Soul Eggs -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
           <div>
@@ -87,7 +35,7 @@
               <img :src="iconURL('egginc/egg_soul.png', 32)" class="w-4 h-4 mb-0.5" alt="SE" />
             </div>
             <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
-              Earnings potential multiplier
+              Earning bonus on this farm
             </div>
           </div>
           <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
@@ -97,6 +45,50 @@
               class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
               @blur="handleSoulEggsChange(($event.target as HTMLInputElement).value)"
               @keydown.enter="($event.target as HTMLInputElement).blur()"
+            />
+          </div>
+        </div>
+
+        <!-- Eggs of Prophecy -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <div class="text-sm font-bold text-slate-700">Eggs of Prophecy (PE)</div>
+              <img :src="iconURL('egginc/egg_of_prophecy.png', 32)" class="w-4 h-4 mb-0.5" alt="PE" />
+            </div>
+            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
+              Compound the Soul Egg bonus
+            </div>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+            <input
+              type="number"
+              :value="prophecyEggs"
+              :min="0"
+              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
+              @change="$emit('set-prophecy-eggs', parseInt(($event.target as HTMLInputElement).value) || 0)"
+            />
+          </div>
+        </div>
+
+        <!-- Truth Eggs -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
+          <div>
+            <div class="flex items-center gap-1.5">
+              <div class="text-sm font-bold text-slate-700">Eggs of Truth (TE)</div>
+              <img :src="iconURL('egginc/egg_truth.png', 32)" class="w-4 h-4 mb-0.5" alt="TE" />
+            </div>
+            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
+              Multiply IHR &amp; Earnings by 1.01^TE
+            </div>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
+            <input
+              type="number"
+              :value="te"
+              :min="0"
+              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
+              @change="$emit('set-te', parseInt(($event.target as HTMLInputElement).value) || 0)"
             />
           </div>
         </div>
@@ -135,123 +127,6 @@
       </div>
     </div>
 
-    <!-- Virtue Progress (collapsible) -->
-    <div class="section-premium overflow-hidden">
-      <button
-        class="w-full px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center hover:bg-slate-100 transition-colors group"
-        @click="truthEggsExpanded = !truthEggsExpanded"
-      >
-        <div class="flex items-center gap-3">
-          <div class="p-1.5 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
-            <img :src="iconURL('egginc/egg_truth.png', 64)" class="w-5 h-5 object-contain" alt="Truth Egg" />
-          </div>
-          <h3 class="style-guide-label mb-0">Virtue Progress</h3>
-        </div>
-        <div class="flex items-center gap-4">
-          <div class="px-2 py-0.5 bg-brand-primary/10 rounded-full">
-            <span class="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">
-              {{ totalTe }} <span class="opacity-50">/ 490</span> TE
-            </span>
-          </div>
-          <svg
-            class="w-4 h-4 text-slate-400 transition-transform duration-300"
-            :class="{ 'rotate-180': truthEggsExpanded }"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </button>
-      <div v-if="truthEggsExpanded" class="p-5 space-y-6">
-        <!-- Eggs of Truth (Total display) -->
-        <div class="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-bold text-slate-700">Total Eggs of Truth</div>
-            <div class="text-[10px] uppercase font-black text-slate-400 tracking-wider">
-              Multiplies IHR & Earnings by 1.1^TE
-            </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="relative">
-              <div class="text-lg font-mono-premium font-bold text-slate-900 px-3">{{ totalTe }}</div>
-            </div>
-            <span class="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Max: 490</span>
-          </div>
-        </div>
-
-        <!-- Per-Egg TE Progress -->
-        <div class="grid grid-cols-1 gap-3">
-          <div
-            v-for="egg in VIRTUE_FUEL_ORDER"
-            :key="egg"
-            class="flex flex-col gap-3 p-3 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl transition-all group"
-          >
-            <div class="flex items-center gap-3">
-              <div
-                class="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 group-hover:bg-white group-hover:shadow-inner transition-all"
-              >
-                <img
-                  :src="iconURL(`egginc/egg_${egg}.png`, 64)"
-                  class="w-full h-full object-contain drop-shadow-sm"
-                  :alt="egg"
-                />
-              </div>
-              <div class="text-xs font-bold text-slate-800 uppercase tracking-tight">
-                {{ VIRTUE_EGG_NAMES[egg] }}
-              </div>
-            </div>
-            <div class="flex-1 w-full">
-              <div class="grid grid-cols-2 gap-3 w-full">
-                <!-- Delivered -->
-                <div class="flex flex-col gap-1">
-                  <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Delivered</span>
-                  <input
-                    type="text"
-                    :value="formatNumber(eggsDelivered[egg], 3)"
-                    class="input-premium w-full text-right text-sm font-mono-premium font-bold text-slate-900"
-                    placeholder="0"
-                    @change="handleEggsDeliveredChange(egg, ($event.target as HTMLInputElement).value)"
-                    @keydown.enter="($event.target as HTMLInputElement).blur()"
-                  />
-                </div>
-                <!-- TE -->
-                <div class="flex flex-col gap-1">
-                  <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">TE <span class="text-slate-300 font-bold ml-0.5">/ 98</span></span>
-                  <input
-                    type="number"
-                    :value="teEarned[egg]"
-                    :min="0"
-                    :max="98"
-                    class="input-premium w-full text-right text-sm font-mono-premium font-bold text-slate-900"
-                    @change="handleTEEarnedChange(egg, ($event.target as HTMLInputElement).value)"
-                    @keydown.enter="($event.target as HTMLInputElement).blur()"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Include Pending TE Button -->
-        <div class="mt-4 flex justify-end">
-          <button
-            class="btn-premium btn-primary px-4 py-2 flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            :disabled="!hasData || totalPendingTe === 0"
-            @click="$emit('include-pending-te')"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            <span
-              >Include Pending TE <span v-if="totalPendingTe > 0">({{ totalPendingTe }})</span></span
-            >
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Artifact Loadout -->
     <div class="section-premium overflow-visible">
       <div class="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
@@ -268,15 +143,11 @@
             ]"
             @click="activeSetTab = setName"
           >
-            {{ setName }}
+            {{ setName === 'earnings' ? 'Set 1' : 'Set 2' }}
           </button>
         </div>
       </div>
       <div class="p-4">
-        <div v-if="activeSetTab === 'earnings' && clothedTe !== null" class="mt-4 flex justify-between items-center px-1">
-          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Clothed TE</span>
-          <span class="text-sm font-mono-premium font-bold text-slate-900">{{ Math.round(clothedTe) }}</span>
-        </div>
         <template v-if="!hasArtifactSets">
           <div class="mb-4">
             <ArtifactSelector
@@ -414,7 +285,7 @@
           <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Stored Inventory</h4>
           <div class="grid grid-cols-1 gap-2">
             <div
-              v-for="egg in VIRTUE_FUEL_ORDER"
+              v-for="egg in FUEL_ORDER"
               :key="egg"
               class="flex items-center gap-4 p-3 bg-white hover:bg-slate-50 border border-slate-50 rounded-2xl transition-all group"
             >
@@ -422,13 +293,13 @@
                 class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 group-hover:bg-white group-hover:shadow-sm transition-all"
               >
                 <img
-                  :src="iconURL(`egginc/egg_${egg}.png`, 64)"
+                  :src="iconURL(fuelEggIconPath(egg), 64)"
                   class="w-full h-full object-contain drop-shadow-sm"
                   :alt="egg"
                 />
               </div>
               <div class="flex-1">
-                <div class="text-xs font-bold text-slate-700 uppercase tracking-tight">{{ VIRTUE_EGG_NAMES[egg] }}</div>
+                <div class="text-xs font-bold text-slate-700 uppercase tracking-tight">{{ FUEL_EGG_NAMES[egg] }}</div>
               </div>
               <div class="flex flex-col items-end">
                 <div class="flex items-center gap-2">
@@ -609,11 +480,12 @@
 import { computed, ref, watch } from 'vue';
 import { iconURL } from 'lib';
 import { getResearchIconPath, getColleggtibleIconPath } from '@/lib/assets';
-import type { ResearchLevels, VirtueEgg } from '@/types';
-import { VIRTUE_EGGS, VIRTUE_EGG_NAMES } from '@/types';
+import type { ResearchLevels, FuelEgg } from '@/types';
+import { FUEL_EGG_NAMES } from '@/types';
+import { fuelEggIconPath } from '@/lib/missions';
 import { epicResearchDefs } from '@/lib/epicResearch';
 import type { EquippedArtifact } from '@/lib/artifacts';
-import { TANK_CAPACITIES, VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
+import { TANK_CAPACITIES, FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import ProPermitToggle from '@/components/ProPermitToggle.vue';
@@ -630,19 +502,14 @@ const props = defineProps<{
   hasData: boolean;
   epicResearchLevels: ResearchLevels;
   artifactLoadout: EquippedArtifact[];
-  initialShiftCount: number;
-  initialEgg: VirtueEgg;
   te: number;
+  prophecyEggs: number;
   ascensionDate: string;
   ascensionTime: string;
   ascensionTimezone: string;
   tankLevel: number;
-  fuelAmounts: Record<VirtueEgg, number>;
+  fuelAmounts: Record<FuelEgg, number>;
   tankCapacity: number;
-  eggsDelivered: Record<VirtueEgg, number>;
-  teEarned: Record<VirtueEgg, number>;
-  tePending: Record<VirtueEgg, number>;
-  totalTe: number;
 
   soulEggs: number;
   assumeDoubleEarnings: boolean;
@@ -650,31 +517,19 @@ const props = defineProps<{
   artifactSets: Record<import('@/types').ArtifactSetName, EquippedArtifact[] | null>;
   activeArtifactSet: import('@/types').ArtifactSetName | null;
   colleggtibleTiers: import('lib/collegtibles').ColleggtibleTiers;
-  clothedTe: number | null;
 }>();
-
-function handleInitialEggClick(egg: VirtueEgg) {
-  if (props.initialEgg === egg) return;
-  if (confirm('Changing the initial egg will reset your entire plan. Are you sure you want to continue?')) {
-    emit('set-initial-egg', egg);
-  }
-}
 
 const emit = defineEmits<{
   'set-epic-research-level': [researchId: string, level: number];
   'update:artifact-loadout': [loadout: EquippedArtifact[]];
-  'set-initial-egg': [egg: VirtueEgg];
   'set-te': [value: number];
-  'set-initial-shift-count': [value: number];
+  'set-prophecy-eggs': [value: number];
   'set-ascension-date': [value: string];
   'set-ascension-time': [value: string];
   'set-ascension-timezone': [value: string];
   'apply-ascension-settings': [date: string, time: string, timezone: string];
   'set-tank-level': [level: number];
-  'set-fuel-amount': [egg: VirtueEgg, amount: number];
-  'set-eggs-delivered': [egg: VirtueEgg, amount: number];
-  'set-te-earned': [egg: VirtueEgg, count: number];
-  'include-pending-te': [];
+  'set-fuel-amount': [egg: FuelEgg, amount: number];
 
   'set-soul-eggs': [count: number];
   'set-assume-double-earnings': [enabled: boolean];
@@ -685,7 +540,7 @@ const emit = defineEmits<{
   'set-colleggtible-tier': [id: string, tierIndex: number];
 }>();
 
-// Ascension Start local state for staged updates
+// Plan start local state for staged updates
 const localAscensionDate = ref(props.ascensionDate);
 const localAscensionTime = ref(props.ascensionTime);
 const localAscensionTimezone = ref(props.ascensionTimezone);
@@ -716,7 +571,6 @@ defineExpose({ hasAscensionChanges, applyAscensionChanges });
 const epicResearchExpanded = ref(false);
 const colleggtiblesExpanded = ref(false);
 const fuelTankExpanded = ref(false);
-const truthEggsExpanded = ref(true);
 
 const activeSetTab = ref<import('@/types').ArtifactSetName>(props.activeArtifactSet || 'earnings');
 
@@ -735,9 +589,6 @@ const hasArtifactSets = computed(() => props.artifactSets.earnings || props.arti
 // Total fuel in tank
 const totalFuel = computed(() => Object.values(props.fuelAmounts).reduce((sum, amt) => sum + amt, 0));
 
-// Total pending TE
-const totalPendingTe = computed(() => Object.values(props.tePending).reduce((sum, val) => sum + val, 0));
-
 // Fill percentage for visual bar
 const fillPercent = computed(() => {
   if (props.tankCapacity === 0) return 0;
@@ -752,26 +603,10 @@ const tankLevelOptions = TANK_CAPACITIES.map((capacity, index) => ({
 }));
 
 // Handle fuel amount input change
-function handleFuelAmountChange(egg: VirtueEgg, inputValue: string) {
+function handleFuelAmountChange(egg: FuelEgg, inputValue: string) {
   const parsed = parseNumber(inputValue);
   if (parsed !== null && !isNaN(parsed)) {
     emit('set-fuel-amount', egg, parsed);
-  }
-}
-
-// Handle eggs delivered input change
-function handleEggsDeliveredChange(egg: VirtueEgg, inputValue: string) {
-  const parsed = parseNumber(inputValue);
-  if (parsed !== null && !isNaN(parsed)) {
-    emit('set-eggs-delivered', egg, parsed);
-  }
-}
-
-// Handle TE earned input change
-function handleTEEarnedChange(egg: VirtueEgg, inputValue: string) {
-  const value = parseInt(inputValue);
-  if (!isNaN(value)) {
-    emit('set-te-earned', egg, value);
   }
 }
 

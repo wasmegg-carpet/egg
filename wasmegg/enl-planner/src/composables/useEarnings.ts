@@ -6,11 +6,11 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useEggValue } from './useEggValue';
 import { useEffectiveLayRate } from './useEffectiveLayRate';
 import { useSalesStore } from '@/stores/sales';
-import { calculateEarnings } from '@/calculations/earnings';
+import { calculateEarningBonus, calculateEarnings } from '@/calculations/earnings';
 import type { EarningsInput, EarningsOutput } from '@/types';
 
 /**
@@ -21,19 +21,26 @@ export function useEarnings(): {
   output: ComputedRef<EarningsOutput>;
 } {
   const initialStateStore = useInitialStateStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const salesStore = useSalesStore();
   const { output: eggValueOutput } = useEggValue();
   const { output: elrOutput } = useEffectiveLayRate();
 
-  const { te } = storeToRefs(virtueStore);
 
   const input = computed<EarningsInput>(() => {
     const artifactMod = initialStateStore.artifactModifiers.awayEarnings;
     return {
       eggValue: eggValueOutput.value.finalValue,
       effectiveLayRate: elrOutput.value.effectiveLayRate,
-      te: te.value,
+      earningBonus: calculateEarningBonus({
+        soulEggs: initialStateStore.soulEggs,
+        prophecyEggs: initialStateStore.prophecyEggs,
+        te: initialStateStore.truthEggs,
+        soulFoodLevel: initialStateStore.epicResearchLevels['soul_eggs'] || 0,
+        prophecyBonusLevel: initialStateStore.epicResearchLevels['prophecy_bonus'] || 0,
+        artifactSoulEggBonus: initialStateStore.artifactModifiers.soulEggBonus.totalMultiplier,
+        artifactProphecyEggBonus: initialStateStore.artifactModifiers.prophecyEggBonus.totalMultiplier,
+      }),
       earningsMultiplier: initialStateStore.colleggtibleModifiers.earnings,
       awayEarningsMultiplier: initialStateStore.colleggtibleModifiers.awayEarnings,
       artifactAwayMultiplier: artifactMod.totalMultiplier,

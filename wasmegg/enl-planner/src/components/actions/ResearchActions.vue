@@ -22,10 +22,8 @@
 
     <ElrViewControls
       v-if="currentView === 'elr'"
-      :view-mode="elrViewMode"
       :sort-mode="elrSortMode"
       :roi-display-mode="elrRoiDisplayMode"
-      @update:view-mode="elrViewMode = $event"
       @update:sort-mode="elrSortMode = $event"
       @update:roi-display-mode="elrRoiDisplayMode = $event"
     />
@@ -48,7 +46,6 @@
       :sale-ends-earnings-preview="saleEndsEarningsPreview"
       :sale-ends-earnings-summary="saleEndsEarningsSummary"
       :sale-aware-earnings-summary70="saleAwareEarningsSummary70"
-      :sale-ends-delivery-summary="saleEndsDeliverySummary"
       :sale-ends-stats="saleEndsStats"
       :quick-buy-loading="isComputingQuickBuyPlan"
       :quick-buy-applying="isThresholdBuying"
@@ -130,10 +127,10 @@
             </div>
             <div class="flex flex-col border-l border-gray-200 pl-6">
               <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
-                >Gems Spent</span
+                >Boks Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
-                {{ formatGemPrice(milestoneSummary.gemsSpent) }}
+                {{ formatBokPrice(milestoneSummary.boksSpent) }}
               </span>
             </div>
           </div>
@@ -180,48 +177,6 @@
       </div>
     </div>
 
-    <!-- Realistic Mode Summary -->
-    <div
-      v-if="currentView === 'elr' && elrViewMode === 'realistic' && realisticSummary"
-      class="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm"
-    >
-      <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-center">
-        <div class="flex flex-col">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none mb-1">Lay Rate</span>
-          <span
-            v-tippy="'Optimal artifacts applied, max population assumed'"
-            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
-          >
-            {{ formatNumber(realisticSummary.layRate) }}/hr
-          </span>
-        </div>
-        <div class="flex flex-col">
-          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none mb-1"
-            >Shipping Cap</span
-          >
-          <span
-            v-tippy="'Optimal artifacts applied, max vehicles assumed'"
-            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
-          >
-            {{ formatNumber(realisticSummary.shippingRate) }}/hr
-          </span>
-        </div>
-        <div class="flex flex-col border-l border-gray-200 pl-6">
-          <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
-            >Delivery Rate</span
-          >
-          <span
-            v-tippy="'The lower of the two rates'"
-            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
-          >
-            {{ formatNumber(realisticSummary.elr) }}/hr
-          </span>
-        </div>
-      </div>
-      <p class="mt-2 text-[10px] text-gray-400 text-center italic leading-tight px-2">
-        Note: These stats reflect performance after maxing habs, vehicles, and equipping optimal stone layout.
-      </p>
-    </div>
 
     <!-- Wrapped (same as the summary area above) so the milestones-view "computing" spinner dims
          just the list instead of the whole page. Harmless no-op wrapper for every other view. -->
@@ -279,11 +234,11 @@ import { getResearchById, type CommonResearch } from '@/calculations/commonResea
 import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from '@/calculations/researchROI';
-import { formatDuration, formatNumber, formatGemPrice, formatAbsoluteTime } from '@/lib/format';
+import { formatDuration, formatNumber, formatBokPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, type Action } from '@/types';
 import {
@@ -326,7 +281,7 @@ import MilestoneTargetPicker from './MilestoneTargetPicker.vue';
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const { secondsUntilNextSale, secondsUntilSaleEnd, waitForNextSale, waitForSaleEnd } = useResearchSaleWaits();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const {
   prepareExecution,
   completeExecution,
@@ -354,7 +309,6 @@ const isApplyingSaleEndsBuy = ref(false);
 
 const {
   currentView,
-  elrViewMode,
   elrSortMode,
   elrRoiDisplayMode,
   deliveryImpactOnly,
@@ -390,9 +344,7 @@ const {
   saleEndsEarningsPreview,
   saleEndsEarningsSummary,
   saleAwareEarningsSummary70,
-  saleEndsDeliverySummary,
   saleEndsStats,
-  realisticSummary,
   researchSaleDeadline,
   computeThresholdBuy,
   TIER_THRESHOLDS,
@@ -404,7 +356,7 @@ const {
 // (it already works from an elapsed-seconds/base-timestamp pair) but is the natural way to format an
 // already-absolute value with this helper.
 const smartBuyDeadlineLabel = computed(() =>
-  formatAbsoluteTime(0, smartBuyFullRoiDeadline.value * 1000, virtueStore.ascensionTimezone)
+  formatAbsoluteTime(0, smartBuyFullRoiDeadline.value * 1000, planStore.ascensionTimezone)
 );
 
 // Quick Buy's own live threshold (separate from Auto Buy's) — fed up from QuickBuy.vue's input so
@@ -479,13 +431,13 @@ const quickBuyEarningsSummary = computed(() => ({
   after: quickBuyPlan.value.endSnapshot.offlineEarnings * 3600,
 }));
 
-// Purchase count / time-saved / gems spent for the Quick Buy card — the same three figures its note
+// Purchase count / time-saved / boks spent for the Quick Buy card — the same three figures its note
 // reports (`buildQuickBuyNotePayload` in `src/lib/actions/notes.ts`), shown live in the card itself
 // before the button is clicked.
 const quickBuyStats = computed(() => ({
   purchaseCount: quickBuyPlan.value.researchIds.length,
   seconds: quickBuyPlan.value.totalSecondsToSave ?? 0,
-  gems: quickBuyPlan.value.totalGemsSpent ?? 0,
+  boks: quickBuyPlan.value.totalBoksSpent ?? 0,
 }));
 
 // The same resolver the action itself is charged and timed by, so what's shown is what's paid.
@@ -589,7 +541,7 @@ function buyOneLevel(research: CommonResearch): boolean {
  * corresponds to — same formula `WaitForEventActions.vue`/`useResearchViews.ts` use everywhere else.
  */
 function absoluteSimTimeAt(lastStepTime: number): number {
-  const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+  const baseTimestamp = planStore.planStartTime.getTime() / 1000;
   return baseTimestamp + (lastStepTime - actionsStore.planStartOffset);
 }
 
@@ -975,7 +927,7 @@ async function handleBuyUntilSaleDeadline() {
       const notePayload = buildSaleEndsBuyNotePayload(
         plan.length,
         saleEndsPlan.value.lastPurchaseTimestamp - startAbsoluteTime,
-        saleEndsPlan.value.totalGemsSpent ?? 0
+        saleEndsPlan.value.totalBoksSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();
@@ -1042,7 +994,7 @@ async function handleThresholdBuy(threshold: number) {
         threshold,
         plan.researchIds.length,
         plan.totalSecondsToSave ?? 0,
-        plan.totalGemsSpent ?? 0
+        plan.totalBoksSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();

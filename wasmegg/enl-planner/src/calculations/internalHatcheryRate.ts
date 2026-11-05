@@ -94,9 +94,9 @@ export function calculateIHR(input: IHRInput): IHROutput {
     baseRatePerHab += calculateResearchContribution(research, level);
   }
 
-  // Calculate TE multiplier (1.1^TE)
+  // Calculate TE multiplier (1.01^TE on an enlightenment farm)
   const clampedTE = Math.max(0, Math.min(490, Math.round(te)));
-  const teMultiplier = Math.pow(1.1, clampedTE);
+  const teMultiplier = Math.pow(1.01, clampedTE);
 
   // Calculate epic multiplier (Epic Int. Hatcheries)
   const epicMultiplier = 1 + epicResearchLevels.epicInternalIncubators * 0.05;

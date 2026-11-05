@@ -35,7 +35,7 @@
 import { computed } from 'vue';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useSalesStore } from '@/stores/sales';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId } from '@/types';
@@ -45,7 +45,7 @@ import { getNextPacificTime } from '@/lib/events';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const salesStore = useSalesStore();
 const { prepareExecution, completeExecution, batch } = useActionExecutor();
 
@@ -55,7 +55,7 @@ const { prepareExecution, completeExecution, batch } = useActionExecutor();
  * The offset ensures that T=0 in the plan maps to the date/time the user entered.
  */
 const absoluteSimTime = computed(() => {
-  const startSeconds = virtueStore.planStartTime.getTime() / 1000;
+  const startSeconds = planStore.planStartTime.getTime() / 1000;
   const elapsedSeconds = actionsStore.effectiveSnapshot.lastStepTime;
   const offsetSeconds = actionsStore.planStartOffset;
   return startSeconds + (elapsedSeconds - offsetSeconds);

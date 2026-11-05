@@ -1,4 +1,4 @@
-import type { VirtueEgg } from './virtue';
+import type { FuelEgg } from './eggs';
 
 /**
  * A single mission type entry in a launch_missions payload.
@@ -16,7 +16,7 @@ export interface LaunchMissionsPayload {
   missions: LaunchMissionEntry[];
   totalTimeSeconds: number;
   totalMissions: number;
-  fuelConsumed: Record<VirtueEgg, number>;
+  fuelConsumed: Record<FuelEgg, number>;
   isZeroTime?: boolean;
 }
 

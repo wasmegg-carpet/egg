@@ -1,5 +1,5 @@
 import type { ActionPayloadMap, ActionType, CalculationsSnapshot } from './core';
-import type { VirtueEgg } from './virtue';
+import { createEmptyFuelAmounts } from './eggs';
 import type { ArtifactSlotPayload } from './artifacts';
 import type { VehicleSlot, ResearchLevels } from '../index';
 
@@ -173,34 +173,13 @@ export function createEmptySnapshot(): CalculationsSnapshot {
     offlineIHR: 0,
     ratePerChickenPerSecond: 0,
     bankValue: 0,
-    currentEgg: 'curiosity',
-    shiftCount: 0,
     te: 0,
     soulEggs: 0,
+    prophecyEggs: 0,
     siloCount: 1,
     siloTimeMinutes: 60,
     tankLevel: 0,
-    fuelTankAmounts: {
-      curiosity: 0,
-      integrity: 0,
-      humility: 0,
-      resilience: 0,
-      kindness: 0,
-    },
-    eggsDelivered: {
-      curiosity: 0,
-      integrity: 0,
-      humility: 0,
-      resilience: 0,
-      kindness: 0,
-    },
-    teEarned: {
-      curiosity: 0,
-      integrity: 0,
-      humility: 0,
-      resilience: 0,
-      kindness: 0,
-    },
+    fuelTankAmounts: createEmptyFuelAmounts(),
     population: 1,
     lastStepTime: 0,
     vehicles: [{ vehicleId: 0, trainLength: 1 }],

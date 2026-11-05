@@ -44,6 +44,9 @@ export interface ArtifactEffect {
   effect: string;
   effectDelta: number;
   effectTarget: string;
+  /** How much of the listed effect counts on an enlightenment farm: 1 for Light of Eggendil, otherwise
+   *  the host's clarity stones added up. `effectDelta` is already scaled by it. */
+  clarity: number;
 }
 
 export interface ArtifactModifier {
@@ -61,4 +64,6 @@ export interface ArtifactModifiers {
   eggLayingRate: ArtifactModifier;
   internalHatcheryRate: ArtifactModifier;
   researchCost: ArtifactModifier;
+  soulEggBonus: ArtifactModifier;
+  prophecyEggBonus: ArtifactModifier;
 }

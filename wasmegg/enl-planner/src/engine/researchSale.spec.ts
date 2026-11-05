@@ -17,12 +17,12 @@ import {
   eventCrossingsForPurchase,
 } from './researchSale';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from './compute';
 import { boostTransitionsFrom, getTimeToSave } from './apply';
 import {
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   type CommonResearch,
 } from '@/calculations/commonResearch';
 import { useResearchViews } from '@/composables/useResearchViews';
@@ -62,10 +62,10 @@ describe('the planner timeline', () => {
 
   // A fresh plan with no wait for habs, starting at the given Pacific wall-clock time.
   async function startPlan(date: string, time: string) {
-    const virtueStore = useVirtueStore();
-    virtueStore.setAscensionTimezone('America/Los_Angeles');
-    virtueStore.setAscensionDate(date);
-    virtueStore.setAscensionTime(time);
+    const planStore = usePlanStore();
+    planStore.setAscensionTimezone('America/Los_Angeles');
+    planStore.setAscensionDate(date);
+    planStore.setAscensionTime(time);
     const actionsStore = useActionsStore();
     const snapshot = computeSnapshot(createBaseEngineState(null), getSimulationContext());
     await actionsStore.setInitialSnapshot(snapshot);
@@ -170,15 +170,17 @@ describe('a research purchase crossing a sale boundary', () => {
 
   // A plan earning from its first second, starting at `absoluteStart`.
   async function startEarningPlan(absoluteStart: number, population = 100, researchLevels: Record<string, number> = {}) {
-    const virtueStore = useVirtueStore();
-    virtueStore.setAscensionTimezone('UTC');
+    const planStore = usePlanStore();
+    planStore.setAscensionTimezone('UTC');
     const iso = new Date(absoluteStart * 1000).toISOString();
-    virtueStore.setAscensionDate(iso.slice(0, 10));
-    virtueStore.setAscensionTime(iso.slice(11, 19));
+    planStore.setAscensionDate(iso.slice(0, 10));
+    planStore.setAscensionTime(iso.slice(11, 19));
     const store = useActionsStore();
     const base = {
       ...createBaseEngineState(null),
-      currentEgg: 'curiosity' as const,
+      // Earnings of about 1 bok per egg, so these purchases take the hours the tests are about.
+      soulEggs: 1e8,
+      prophecyEggs: 0,
       habIds: [0, null, null, null],
       vehicles: [{ vehicleId: 0, trainLength: 1 }],
       population,
@@ -197,10 +199,10 @@ describe('a research purchase crossing a sale boundary', () => {
     const transitions = boostTransitionsFrom(snapshot, start);
     for (const research of getCommonResearches()) {
       for (let level = 0; level < research.levels; level++) {
-        const fullPrice = getDiscountedVirtuePrice(research, level, mods, false);
+        const fullPrice = getDiscountedResearchPrice(research, level, mods, false);
         const fullWait = getTimeToSave(fullPrice, snapshot, transitions);
         if (fullWait < minSeconds || fullWait > maxSeconds) continue;
-        const salePrice = getDiscountedVirtuePrice(research, level, mods, true);
+        const salePrice = getDiscountedResearchPrice(research, level, mods, true);
         return { research, level, fullPrice, salePrice, fullWait, saleWait: getTimeToSave(salePrice, snapshot, transitions) };
       }
     }
@@ -346,8 +348,8 @@ describe('a research purchase crossing a sale boundary', () => {
     const snapshot = measured.currentSnapshot;
     const mods = researchCostModifiersAt(snapshot, context);
     const transitions = boostTransitionsFrom(snapshot, probeAt);
-    const fullPrice = getDiscountedVirtuePrice(research, level, mods, false);
-    const salePrice = getDiscountedVirtuePrice(research, level, mods, true);
+    const fullPrice = getDiscountedResearchPrice(research, level, mods, false);
+    const salePrice = getDiscountedResearchPrice(research, level, mods, true);
     setActivePinia(createPinia());
     return {
       research,
@@ -428,7 +430,7 @@ describe('a research purchase crossing a sale boundary', () => {
           setActivePinia(createPinia());
           const measured = await startEarningPlan(start, 100, { [research.id]: level });
           const snapshot = measured.currentSnapshot;
-          const salePrice = getDiscountedVirtuePrice(
+          const salePrice = getDiscountedResearchPrice(
             research,
             level,
             researchCostModifiersAt(snapshot, getSimulationContext()),
@@ -522,7 +524,7 @@ describe('a research purchase crossing a sale boundary', () => {
           setActivePinia(createPinia());
           const measured = await startEarningPlan(start, 100, { [research.id]: level });
           const snapshot = measured.currentSnapshot;
-          const price = getDiscountedVirtuePrice(research, level, researchCostModifiersAt(snapshot, getSimulationContext()), true);
+          const price = getDiscountedResearchPrice(research, level, researchCostModifiersAt(snapshot, getSimulationContext()), true);
           const wait = getTimeToSave(price, snapshot, boostTransitionsFrom(snapshot, start));
           if (wait > 7 * 86400 && wait < 60 * 86400) return { research, level };
         }
@@ -558,7 +560,7 @@ describe('a research purchase crossing a sale boundary', () => {
     setActivePinia(createPinia());
     const measured = await startEarningPlan(monday - 86400, 100, { [research.id]: level });
     const measuredSnapshot = measured.currentSnapshot;
-    const price = getDiscountedVirtuePrice(research, level, researchCostModifiersAt(measuredSnapshot, getSimulationContext()), false);
+    const price = getDiscountedResearchPrice(research, level, researchCostModifiersAt(measuredSnapshot, getSimulationContext()), false);
     const flatWait = getTimeToSave(price, measuredSnapshot);
     expect(flatWait).toBeGreaterThan(600);
 

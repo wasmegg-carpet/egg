@@ -1,6 +1,6 @@
-# Ascension Planner Source Architecture
+# Enlightenment Planner Source Architecture
 
-Welcome to the Ascension Planner codebase. This project is structured to support high-fidelity simulation of Egg Inc. ascensions.
+Welcome to the Enlightenment Planner codebase. This project is structured to support high-fidelity simulation of Egg Inc. ascensions.
 
 ## Core Directories
 
@@ -10,7 +10,7 @@ Welcome to the Ascension Planner codebase. This project is structured to support
   - `compute/`: Derived metrics calculation.
   - `simulate.ts`: History traversal.
 - `src/calculations/`: Pure mathematical formulas for game mechanics (Earnings, IHR, etc.).
-- `src/lib/`: Unified wrappers for data and complex logic (Artifacts, Truth Eggs).
+- `src/lib/`: Unified wrappers for data and complex logic (Artifacts, Missions).
 - `src/types/`: TypeScript definitions. `types/actions/` contains the action system schema.
 - `src/components/`: Vue components.
   - `actions/`: UI for triggering simulation actions.

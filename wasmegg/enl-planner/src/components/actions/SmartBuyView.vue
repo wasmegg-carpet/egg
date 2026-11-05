@@ -44,7 +44,7 @@
         <SmartBuyStats
           :purchase-count="saleAwareStats70.purchaseCount"
           :seconds="saleAwareStats70.seconds"
-          :gems="saleAwareStats70.gems"
+          :boks="saleAwareStats70.boks"
         />
         <RatePreviewDelta
           label="Earnings"
@@ -81,7 +81,7 @@
       <SmartBuyStats
         :purchase-count="saleEndsStats.purchaseCount"
         :seconds="saleEndsStats.seconds"
-        :gems="saleEndsStats.gems"
+        :boks="saleEndsStats.boks"
       />
       <ResearchPurchasePreview
         :items="saleEndsEarningsPreview"
@@ -98,13 +98,6 @@
         :items="saleEndsPreview"
         label="Most efficient delivery research until sale ends"
         empty-text="Nothing to buy right now"
-      />
-      <RatePreviewDelta
-        v-if="saleEndsDeliverySummary"
-        label="Delivery Rate"
-        :before="saleEndsDeliverySummary.before"
-        :after="saleEndsDeliverySummary.after"
-        unit="/hr"
       />
     </SmartBuyCard>
 
@@ -137,7 +130,7 @@ interface RateSummary {
 interface BuyStats {
   purchaseCount: number;
   seconds: number;
-  gems: number;
+  boks: number;
 }
 
 defineProps<{
@@ -160,7 +153,6 @@ defineProps<{
   saleEndsEarningsPreview: ResearchSummaryItem[];
   saleEndsEarningsSummary: RateSummary;
   saleAwareEarningsSummary70: RateSummary;
-  saleEndsDeliverySummary: RateSummary | null;
   saleEndsStats: BuyStats;
   /** Whether each card's own plan is currently being (re)computed — dims that card only. */
   quickBuyLoading?: boolean;

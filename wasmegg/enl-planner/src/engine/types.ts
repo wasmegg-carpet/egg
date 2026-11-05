@@ -1,4 +1,4 @@
-import type { CalculationsSnapshot, VehicleSlot, ResearchLevels, ArtifactSlotPayload, VirtueEgg } from '@/types';
+import type { CalculationsSnapshot, VehicleSlot, ResearchLevels, ArtifactSlotPayload, FuelEgg } from '@/types';
 import type { Modifiers as ColleggtibleModifiers } from 'lib/collegtibles';
 
 /**
@@ -6,11 +6,11 @@ import type { Modifiers as ColleggtibleModifiers } from 'lib/collegtibles';
  * This corresponds to the "input" fields of CalculationsSnapshot.
  */
 export interface EngineState {
-  // Virtue State
-  currentEgg: VirtueEgg;
-  shiftCount: number;
+  // Earning bonus inputs: all fixed for the length of a plan
   te: number;
   soulEggs: number;
+  prophecyEggs: number;
+
   bankValue: number;
 
   // Farm State
@@ -28,9 +28,7 @@ export interface EngineState {
   artifactSets: Record<import('@/types').ArtifactSetName, ArtifactSlotPayload[] | null>;
 
   // Progress State
-  fuelTankAmounts: Record<VirtueEgg, number>;
-  eggsDelivered: Record<VirtueEgg, number>;
-  teEarned: Record<VirtueEgg, number>;
+  fuelTankAmounts: Record<FuelEgg, number>;
 
   population: number;
   lastStepTime: number;

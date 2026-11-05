@@ -2,7 +2,7 @@ import {
   type CommonResearch,
   getCommonResearches,
   getResearchById,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
 } from './commonResearch';
@@ -171,7 +171,7 @@ function sweepUntilNextSale(
   // for) turned out, once accumulated earnings actually caught up purchase-by-purchase, to be
   // cheaper bought immediately at full price instead, well before the sale even started. Trusting
   // the batch numbers meant the preview didn't just show a slightly-off ETA, it showed a wrong
-  // `duringSale` flag and an understated gems-spent total for those purchases. Re-deriving each
+  // `duringSale` flag and an understated boks-spent total for those purchases. Re-deriving each
   // number from THIS function's own accumulating `resultState`/`resultSnapshot` — the same one the
   // milestone chain actually returns — keeps the preview and the eventual live execution answering
   // the identical question at each step, instead of two independent (and occasionally
@@ -671,7 +671,7 @@ export function simulateCheapestFirstTierChain(
       .filter(r => (levels[r.id] || 0) < r.levels && isTierUnlocked(levels, r.tier))
       .map(r => {
         const level = levels[r.id] || 0;
-        return { research: r, level, price: getDiscountedVirtuePrice(r, level, mods, isSale) };
+        return { research: r, level, price: getDiscountedResearchPrice(r, level, mods, isSale) };
       });
 
     if (candidates.length === 0) break;
@@ -763,7 +763,7 @@ export function isCheapestTierPurchaseAffordable(
     .filter(r => (researchLevels[r.id] || 0) < r.levels && isTierUnlocked(researchLevels, r.tier))
     .map(r => {
       const level = researchLevels[r.id] || 0;
-      return { research: r, level, price: getDiscountedVirtuePrice(r, level, mods, isSale) };
+      return { research: r, level, price: getDiscountedResearchPrice(r, level, mods, isSale) };
     });
 
   if (candidates.length === 0) return false;
@@ -924,7 +924,7 @@ export interface MilestoneSummaryCore {
   optimizedSeconds?: number;
   timeSavedSeconds?: number;
   purchaseCount?: number;
-  gemsSpent?: number;
+  boksSpent?: number;
   // Only set when truncated. However far the optimized chain actually got before giving up —
   // either it hit MILESTONE_MAX_STEPS with real progress still being made (the common "this
   // milestone is just very far away" case, where these are genuinely useful lower bounds: "at
@@ -953,6 +953,6 @@ export function computeMilestoneSummaryCore(
     optimizedSeconds: chain.totalSeconds,
     timeSavedSeconds: baseline.totalSeconds - chain.totalSeconds,
     purchaseCount: chain.items.length,
-    gemsSpent: chain.items.reduce((sum, item) => sum + item.price, 0),
+    boksSpent: chain.items.reduce((sum, item) => sum + item.price, 0),
   };
 }

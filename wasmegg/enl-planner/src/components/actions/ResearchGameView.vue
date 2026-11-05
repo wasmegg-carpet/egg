@@ -75,7 +75,7 @@ import { type CommonResearch } from '@/calculations/commonResearch';
 import ResearchItem from './ResearchItem.vue';
 import { formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import type { TierSummary } from '@/calculations/commonResearch';
 
 const props = defineProps<{
@@ -99,7 +99,7 @@ const props = defineProps<{
 
 defineEmits(['buy', 'max', 'max-tier']);
 
-const EXPANDED_TIERS_STORAGE_KEY = 'ascension_research_expanded_tiers';
+const EXPANDED_TIERS_STORAGE_KEY = 'enl_research_expanded_tiers';
 
 function loadStoredExpandedTiers(): Set<number> | null {
   const stored = localStorage.getItem(EXPANDED_TIERS_STORAGE_KEY);
@@ -126,10 +126,10 @@ watch(
 );
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
@@ -183,7 +183,7 @@ function getResearchesForTier(tier: number): CommonResearch[] {
 
 function deadlineWarningTooltip(seconds?: number) {
   if (seconds === undefined) return '';
-  const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
+  const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, planStore.ascensionTimezone);
   if (props.isResearchSaleActive && (baseTimestamp.value / 1000 + seconds > props.researchSaleDeadline)) {
     return `${timeStr} is after this sale ends (Saturday at +0). The price shown is what it will cost by then.`;
   }

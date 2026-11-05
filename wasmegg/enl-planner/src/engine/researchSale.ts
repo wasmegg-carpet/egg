@@ -2,7 +2,7 @@ import type { Action, BuyResearchPayload, CalculationsSnapshot } from '@/types';
 import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive, isResearchSaleActive } from '@/lib/events';
 import { activeSlots, calculateArtifactModifiers } from '@/lib/artifacts';
 import {
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   getResearchById,
   type CommonResearch,
   type ResearchCostModifiers,
@@ -149,8 +149,8 @@ export function hasStaleResearchPurchasePrices(actions: Action[], context: Simul
     const mods = researchCostModifiersAt(prev, context);
     const onSale = a.endState.activeSales.research;
     return (
-      close(a.cost, getDiscountedVirtuePrice(research, payload.fromLevel, mods, !onSale)) &&
-      !close(a.cost, getDiscountedVirtuePrice(research, payload.fromLevel, mods, onSale))
+      close(a.cost, getDiscountedResearchPrice(research, payload.fromLevel, mods, !onSale)) &&
+      !close(a.cost, getDiscountedResearchPrice(research, payload.fromLevel, mods, onSale))
     );
   });
 }

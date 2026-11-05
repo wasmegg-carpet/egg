@@ -24,26 +24,15 @@
         </span>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <span v-if="eggsDelivered > 0" class="text-[9px] font-black text-slate-400 tracking-tight">
-          {{ formatNumber(eggsDelivered, 2) }} Eggs
-        </span>
         <div v-if="totalCost > 0" class="flex items-center gap-1">
-          <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatGemPrice(totalCost) }}</span>
-          <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-2.5 h-2.5" alt="Gems" />
+          <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatBokPrice(totalCost) }}</span>
+          <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-2.5 h-2.5" alt="Boks" />
         </div>
       </div>
     </button>
 
-    <!-- Details: full egg summary + raw action rows, only when expanded -->
+    <!-- Details: raw action rows, only when expanded -->
     <template v-if="props.expanded">
-      <component
-        :is="summaryComponent"
-        v-if="summaryComponent"
-        :header-action="summaryHeaderAction"
-        :actions="actions"
-        compact
-        hide-header
-      />
       <ActionHistoryItem
         v-for="action in actions"
         :key="action.id"
@@ -59,19 +48,14 @@
 import { computed } from 'vue';
 import { iconURL } from 'lib';
 import type { Action } from '@/types';
-import { formatNumber, formatGemPrice } from '@/lib/format';
+import { formatBokPrice } from '@/lib/format';
 import ActionHistoryItem from './ActionHistoryItem.vue';
 
 const props = defineProps<{
   label: string;
   actions: Action[];
-  summaryHeaderAction: Action;
-  summaryComponent?: unknown;
   totalCost: number;
-  eggsDelivered: number;
   // Collapsed by default — the header row above is the "daily summary" this consolidates down to.
-  // Owned by the parent ActionGroup so it can force a specific day open (e.g. when a curiosity
-  // summary link is clicked for an action that lives inside this day).
   expanded: boolean;
 }>();
 

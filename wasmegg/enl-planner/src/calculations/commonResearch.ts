@@ -4,13 +4,13 @@
 
 import type { Research, ResearchLevels } from '@/types';
 import { allResearches } from 'lib';
-import { calculateCostMultiplier as calculateBaseCostMultiplier, applyDiscountCeil } from '@/utils/pricing';
+import { calculateCostMultiplier as calculateBaseCostMultiplier } from '@/utils/pricing';
 
 /**
  * Common research entry with full data
  */
 export interface CommonResearch extends Research {
-  // Inherited: id, name, description, tier, levels, per_level, prices, virtue_prices, etc.
+  // Inherited: id, name, description, tier, levels, per_level, prices, prices, etc.
 }
 
 /**
@@ -171,28 +171,29 @@ export function calculateCostMultiplier(modifiers: ResearchCostModifiers, isActi
  * Get the base virtue price for a research at a specific level (0-indexed).
  * Returns the price to buy level (currentLevel + 1).
  */
-export function getBaseVirtuePrice(research: CommonResearch, currentLevel: number): number {
+export function getBaseResearchPrice(research: CommonResearch, currentLevel: number): number {
   if (currentLevel >= research.levels) return Infinity;
-  if (currentLevel < 0) return research.virtue_prices[0] || 0;
-  return research.virtue_prices[currentLevel] || 0;
+  if (currentLevel < 0) return research.prices[0] || 0;
+  return research.prices[currentLevel] || 0;
 }
 
 /**
  * Get the discounted virtue price for a research at a specific level.
  */
-export function getDiscountedVirtuePrice(
+export function getDiscountedResearchPrice(
   research: CommonResearch,
   currentLevel: number,
   modifiers: ResearchCostModifiers,
   isActiveSale: boolean = false
 ): number {
-  const basePrice = getBaseVirtuePrice(research, currentLevel);
+  const basePrice = getBaseResearchPrice(research, currentLevel);
   if (!isFinite(basePrice)) return Infinity;
-  return applyDiscountCeil(basePrice, calculateCostMultiplier(modifiers, isActiveSale));
+  // Regular prices aren't whole numbers (the first level of Comfortable Nests costs 0.5), so no rounding.
+  return basePrice * calculateCostMultiplier(modifiers, isActiveSale);
 }
 
 /**
- * Calculate total virtue cost to max out a research from current level.
+ * Calculate total cost to max out a research from current level.
  */
 export function getTotalCostToMax(
   research: CommonResearch,
@@ -204,15 +205,15 @@ export function getTotalCostToMax(
   const multiplier = calculateCostMultiplier(modifiers, isActiveSale);
 
   for (let level = currentLevel; level < research.levels; level++) {
-    const basePrice = research.virtue_prices[level] || 0;
-    total += applyDiscountCeil(basePrice, multiplier);
+    const basePrice = research.prices[level] || 0;
+    total += basePrice * multiplier;
   }
 
   return total;
 }
 
 /**
- * Calculate total virtue cost to max out an entire tier.
+ * Calculate total cost to max out an entire tier.
  */
 export function getTotalCostToMaxTier(
   tier: number,
@@ -241,7 +242,7 @@ export interface TierSummary {
   purchasedLevels: number; // Current purchased levels
   isUnlocked: boolean;
   purchasesNeeded: number; // Purchases still needed to unlock (0 if unlocked)
-  costToMax: number; // Discounted virtue cost to max all research in tier
+  costToMax: number; // Discounted cost to max all research in tier
 }
 
 export function getTierSummary(

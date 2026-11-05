@@ -1,7 +1,7 @@
 import {
   type CommonResearch,
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
 } from './commonResearch';
@@ -17,9 +17,7 @@ import {
   type PurchaseEventCrossings,
 } from './researchROI';
 import { calculateMaxVehicleSlots, calculateMaxTrainLength } from './shippingCapacity';
-import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { computeRealisticELR } from './realisticELR';
 import type { SimulationContext, EngineState } from '@/engine/types';
 import type { CalculationsSnapshot } from '@/types';
 import { computeSnapshot } from '@/engine/compute';
@@ -506,28 +504,17 @@ export function rankResearchByROI(
 }
 
 /**
- * Ranks unpurchased research by Delivery Rate impact. `realistic` mode runs the full pipeline
- * (optimal artifacts + max habs/vehicles via `getOptimalELRSet`/`computeRealisticELR`), with a
- * lookahead search for research where buying several levels at once beats buying one. `potential` mode
- * uses a cheaper formula-based estimate instead. Both compute `hpp` (hours per impact-percentage-
- * point) and can be sorted by it (`efficiency`) or by raw impact (`impact`).
- *
- * `realistic` mode's `getOptimalELRSet` calls (one baseline call, then one per candidate, then up
- * to `r.levels - level` more per candidate inside the lookahead search) all reuse the baseline
- * call's own artifact structure via `forcedArtifacts` rather than each re-running their own
- * up-to-495-combo search — see that option's own doc comment in virtue.ts for why the structure is
- * safe to hold fixed across every one of these calls even though stone placement isn't.
+ * Ranks unpurchased research by Delivery Rate impact, using a formula-based estimate. Computes `hpp`
+ * (hours per impact-percentage-point) and can be sorted by it (`efficiency`) or by raw impact (`impact`).
  */
 export function rankResearchByELRImpact(
   researchLevels: Record<string, number>,
-  rawBackup: DeliverySource | null | undefined,
   startSnapshot: CalculationsSnapshot,
   context: SimulationContext,
   mods: ResearchCostModifiers,
   isSale: boolean,
   absoluteSimTime: number,
   researchSaleDeadline: number,
-  viewMode: 'realistic' | 'potential',
   sortMode: 'efficiency' | 'impact'
 ): ResearchRankingItem[] {
   const unpurchased = getCommonResearches().filter(
@@ -537,283 +524,60 @@ export function rankResearchByELRImpact(
 
   let candidates: ResearchRankingItem[];
 
-  if (viewMode === 'realistic') {
-    if (!rawBackup) return [];
+  const currentSlots = calculateMaxVehicleSlots(researchLevels);
+  const currentMaxCars = calculateMaxTrainLength(researchLevels);
+  const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
 
-    const baselineOptimal = getOptimalELRSetFromSource(rawBackup, {
-      proPermit: startSnapshot.proPermit,
-      assumeMaxHabsVehicles: true,
-      excludeGusset: false,
-      commonResearch: researchLevels,
-      epicResearchLevels: context.epicResearchLevels,
-      colleggtibleModifiers: context.colleggtibleModifiers,
-    });
-    const baselineArtifactMods = calculateArtifactModifiers(baselineOptimal);
-    const baseline = computeRealisticELR(
-      researchLevels,
-      baselineArtifactMods,
-      context.epicResearchLevels,
-      context.colleggtibleModifiers
-    );
-
-    if (baseline.effectiveRate <= 0) return [];
-
-    // Which ARTIFACTS are worth equipping is driven by owned inventory and target-artifact tiers —
-    // nothing a research purchase changes — so the structure this baseline call already searched
-    // for stays optimal for every candidate/lookahead evaluation below too; only stone placement
-    // (tachyon vs. quantum per slot) actually depends on the research state, since that's decided
-    // by which of lay rate/shipping capacity is the current bottleneck. Every `getOptimalELRSet`
-    // call below force-feeds this same structure via `forcedArtifacts` so it skips straight to
-    // re-solving stones, rather than repeating the up-to-495-combo structure search unchanged.
-    const baselineArtifactIds = baselineOptimal.map(slot => slot.artifactId);
-    const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
-    const statsAt = (levels: Record<string, number>) => {
-      const optimal = getOptimalELRSetFromSource(rawBackup, {
-        proPermit: startSnapshot.proPermit,
-        assumeMaxHabsVehicles: true,
-        excludeGusset: false,
-        commonResearch: levels,
-        epicResearchLevels: context.epicResearchLevels,
-        colleggtibleModifiers: context.colleggtibleModifiers,
-        forcedArtifacts: baselineArtifactIds,
-      });
-      return computeRealisticELR(
-        levels,
-        calculateArtifactModifiers(optimal),
-        context.epicResearchLevels,
-        context.colleggtibleModifiers
+  candidates = uniqueUnpurchased
+    .map((r): ResearchRankingItem => {
+      const level = researchLevels[r.id] || 0;
+      // The score (hpp/timeRoiSeconds) ignores the bank so items compare fairly, but it's always
+      // at the price actually charged: without the bank, a sale item the bank already covers
+      // could look unaffordable before the sale ends and get scored at full price.
+      const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
+      const withBankPurchase = getSaleAwareTimeToSave(
+        r,
+        level,
+        mods,
+        isSale,
+        absoluteSimTime,
+        startSnapshot,
+        transitions
       );
-    };
-    const nextLevelStats = new Map<string, ReturnType<typeof statsAt>>();
-    const statsAfterNextLevel = (r: CommonResearch) => {
-      let stats = nextLevelStats.get(r.id);
-      if (!stats) {
-        stats = statsAt({ ...researchLevels, [r.id]: (researchLevels[r.id] || 0) + 1 });
-        nextLevelStats.set(r.id, stats);
-      }
-      return stats;
-    };
-    const buyableDeliveryResearch = uniqueUnpurchased.filter(
-      r =>
-        isTierUnlocked(researchLevels, r.tier) &&
-        r.categories.split(',').some(category => DELIVERY_IMPACT_CATEGORIES.has(category))
-    );
+      const price = withBankPurchase.price;
+      const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
+      const secondsToBuyWithBank = withBankPurchase.waitSeconds;
+      const impact = FLEET_RESEARCH_IDS.includes(r.id)
+        ? 1 / currentSlots
+        : r.id === TRAIN_CAR_RESEARCH_ID
+          ? 1 / currentMaxCars
+          : r.per_level / (1 + level * r.per_level);
 
-    candidates = uniqueUnpurchased
-      .map((r): ResearchRankingItem => {
-        const level = researchLevels[r.id] || 0;
-        // The score (hpp/timeRoiSeconds) ignores the bank so items compare fairly, but it's always
-        // at the price actually charged: without the bank, a sale item the bank already covers
-        // could look unaffordable before the sale ends and get scored at full price.
-        const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const withBankPurchase = getSaleAwareTimeToSave(
-          r,
-          level,
-          mods,
-          isSale,
-          absoluteSimTime,
-          startSnapshot,
-          transitions
-        );
-        const price = withBankPurchase.price;
-        const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
-        const secondsToBuyWithBank = withBankPurchase.waitSeconds;
+      const hoursToBuy = secondsToBuyNoBank / 3600;
+      const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
+      const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
 
-        const stats = statsAfterNextLevel(r);
-        const impact = (stats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
+      return {
+        research: r,
+        price,
+        currentLevel: level,
+        targetLevel: level + 1,
+        canBuy: isTierUnlocked(researchLevels, r.tier),
+        impact,
+        hpp,
+        timeRoiSeconds,
+        showDeadlineWarning:
+          isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsToBuyWithBank > researchSaleDeadline,
+        duringSale: isActuallyDuringSale(
+          withBankPurchase.duringSale,
+          absoluteSimTime + secondsToBuyWithBank,
+          absoluteSimTime
+        ),
+        duringEarningsBoost: isEarningsBoostActive(absoluteSimTime + secondsToBuyWithBank),
+      };
+    })
+    .filter(c => (c.impact ?? 0) > 0);
 
-        const hoursToBuy = secondsToBuyNoBank / 3600;
-        const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
-        const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
-
-        // Lookahead: the number of levels with the best hr/%. A stone only moves once a side has
-        // enough spare rate, so one level can add almost nothing and the next add far more. Levels
-        // that help but can't finish before the sale ends don't count, unless nothing else helps,
-        // when the deadline warning below says so.
-        let lookahead:
-          | {
-              levels: number;
-              partner?: { id: string; name: string; level: number };
-              impact: number;
-              hpp: number;
-              timeRoiSeconds: number;
-              realisticStats: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-            }
-          | undefined;
-        // What the deadline check below judges: normally just the next level, but a candidate that
-        // needs N levels is only worth starting if all N can finish in time.
-        let secondsUntilUseful = secondsToBuyWithBank;
-        let bestHpp = hpp;
-        if (level + 1 < r.levels) {
-          // No level can beat what the last one reaches, so this bounds how far the search goes.
-          const highestImpact =
-            (statsAt({ ...researchLevels, [r.id]: r.levels }).effectiveRate - baseline.effectiveRate) /
-            baseline.effectiveRate;
-          let totalPriceForN = getDiscountedVirtuePrice(r, level, mods, withBankPurchase.duringSale);
-          for (let n = 2; n <= r.levels - level && highestImpact > 0; n++) {
-            totalPriceForN += getDiscountedVirtuePrice(r, level + n - 1, mods, withBankPurchase.duringSale);
-            const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
-            const totalHoursForN = totalSecondsForN / 3600;
-            const helps = impact > 0 || lookahead !== undefined;
-            if (helps && totalHoursForN / (highestImpact * 100) >= bestHpp) break;
-
-            const secondsWithBank = getTimeToSave(totalPriceForN, startSnapshot, transitions);
-            if (helps && isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsWithBank > researchSaleDeadline) {
-              break;
-            }
-
-            const laStats = statsAt({ ...researchLevels, [r.id]: level + n });
-            const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-            if (laImpact <= 0) continue;
-            const laHpp = totalHoursForN / (laImpact * 100);
-            if (helps && laHpp >= bestHpp) continue;
-
-            bestHpp = laHpp;
-            secondsUntilUseful = secondsWithBank;
-            lookahead = {
-              levels: n,
-              impact: laImpact,
-              hpp: laHpp,
-              timeRoiSeconds: totalSecondsForN / laImpact,
-              realisticStats: {
-                layRate: laStats.layRate * 3600,
-                shippingRate: laStats.shippingRate * 3600,
-                elr: laStats.effectiveRate * 3600,
-                elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
-              },
-            };
-          }
-        }
-
-        // The same, pairing this level with another research's next level: once a stone has moved,
-        // a much cheaper level of another research can do what this one's next level would. A pair
-        // only counts when it beats the other research bought alone, or that research's own value
-        // would carry this one up the list.
-        if (buyableDeliveryResearch.includes(r)) {
-          for (const other of buyableDeliveryResearch) {
-            if (other === r) continue;
-            const otherLevel = researchLevels[other.id] || 0;
-            const otherPrice = getDiscountedVirtuePrice(other, otherLevel, mods, withBankPurchase.duringSale);
-            const laStats = statsAt({ ...researchLevels, [r.id]: level + 1, [other.id]: otherLevel + 1 });
-            const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-            if (laImpact <= 0) continue;
-
-            const pairPrice = price + otherPrice;
-            const pairSeconds = getTimeToSave(pairPrice, noBankSnapshot, transitions);
-            const pairHpp = pairSeconds / 3600 / (laImpact * 100);
-            const otherImpact =
-              (statsAfterNextLevel(other).effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-            const otherHpp =
-              otherImpact > 0 ? getTimeToSave(otherPrice, noBankSnapshot, transitions) / 3600 / (otherImpact * 100) : Infinity;
-            if (pairHpp >= otherHpp) continue;
-
-            const helps = impact > 0 || lookahead !== undefined;
-            if (helps && pairHpp >= bestHpp) continue;
-            const secondsWithBank = getTimeToSave(pairPrice, startSnapshot, transitions);
-            if (helps && isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsWithBank > researchSaleDeadline) {
-              continue;
-            }
-
-            bestHpp = pairHpp;
-            secondsUntilUseful = secondsWithBank;
-            lookahead = {
-              levels: 2,
-              partner: { id: other.id, name: other.name, level: otherLevel + 1 },
-              impact: laImpact,
-              hpp: pairHpp,
-              timeRoiSeconds: pairSeconds / laImpact,
-              realisticStats: {
-                layRate: laStats.layRate * 3600,
-                shippingRate: laStats.shippingRate * 3600,
-                elr: laStats.effectiveRate * 3600,
-                elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
-              },
-            };
-          }
-        }
-
-        return {
-          research: r,
-          price,
-          currentLevel: level,
-          targetLevel: level + 1,
-          canBuy: isTierUnlocked(researchLevels, r.tier),
-          impact,
-          hpp,
-          timeRoiSeconds,
-          lookahead,
-          realisticStats: {
-            layRate: stats.layRate * 3600,
-            shippingRate: stats.shippingRate * 3600,
-            elr: stats.effectiveRate * 3600,
-            elrDelta: (stats.effectiveRate - baseline.effectiveRate) * 3600,
-          },
-          showDeadlineWarning:
-            isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsUntilUseful > researchSaleDeadline,
-          duringSale: isActuallyDuringSale(
-            withBankPurchase.duringSale,
-            absoluteSimTime + secondsToBuyWithBank,
-            absoluteSimTime
-          ),
-          duringEarningsBoost: isEarningsBoostActive(absoluteSimTime + secondsToBuyWithBank),
-        };
-      })
-      .filter(c => (c.impact ?? 0) > 0 || c.lookahead !== undefined);
-  } else {
-    const currentSlots = calculateMaxVehicleSlots(researchLevels);
-    const currentMaxCars = calculateMaxTrainLength(researchLevels);
-    const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
-
-    candidates = uniqueUnpurchased
-      .map((r): ResearchRankingItem => {
-        const level = researchLevels[r.id] || 0;
-        // The score (hpp/timeRoiSeconds) ignores the bank so items compare fairly, but it's always
-        // at the price actually charged: without the bank, a sale item the bank already covers
-        // could look unaffordable before the sale ends and get scored at full price.
-        const noBankSnapshot = { ...startSnapshot, bankValue: 0 };
-        const withBankPurchase = getSaleAwareTimeToSave(
-          r,
-          level,
-          mods,
-          isSale,
-          absoluteSimTime,
-          startSnapshot,
-          transitions
-        );
-        const price = withBankPurchase.price;
-        const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
-        const secondsToBuyWithBank = withBankPurchase.waitSeconds;
-        const impact = FLEET_RESEARCH_IDS.includes(r.id)
-          ? 1 / currentSlots
-          : r.id === TRAIN_CAR_RESEARCH_ID
-            ? 1 / currentMaxCars
-            : r.per_level / (1 + level * r.per_level);
-
-        const hoursToBuy = secondsToBuyNoBank / 3600;
-        const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
-        const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
-
-        return {
-          research: r,
-          price,
-          currentLevel: level,
-          targetLevel: level + 1,
-          canBuy: isTierUnlocked(researchLevels, r.tier),
-          impact,
-          hpp,
-          timeRoiSeconds,
-          showDeadlineWarning:
-            isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsToBuyWithBank > researchSaleDeadline,
-          duringSale: isActuallyDuringSale(
-            withBankPurchase.duringSale,
-            absoluteSimTime + secondsToBuyWithBank,
-            absoluteSimTime
-          ),
-          duringEarningsBoost: isEarningsBoostActive(absoluteSimTime + secondsToBuyWithBank),
-        };
-      })
-      .filter(c => (c.impact ?? 0) > 0);
-  }
 
   // A candidate with a lookahead ranks on what those levels achieve together, the same figures the
   // caller displays for it. Both halves of a pair score the same, so whichever helps alone goes first.

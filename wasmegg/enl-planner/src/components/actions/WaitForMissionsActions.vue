@@ -17,21 +17,21 @@
         <p class="text-[11px] font-medium text-blue-700 leading-relaxed">
           <span class="font-black uppercase tracking-widest text-[9px] block mb-1">Info:</span>
           This tab displays missions that were in progress when your backup was taken. You can "Wait" for them to return
-          to account for their duration in your ascension plan.
+          to account for their duration in your plan.
         </p>
       </div>
     </div>
 
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <ActiveMissionsDisplay
-        :missions="initialStateStore.virtueMissions"
+        :missions="initialStateStore.regularMissions"
         :current-time-seconds="currentTimeSeconds"
         @wait-missions="handleWaitMissions"
       />
     </div>
 
     <div
-      v-if="initialStateStore.virtueMissions.length === 0"
+      v-if="initialStateStore.regularMissions.length === 0"
       class="flex flex-col items-center justify-center py-16 px-6 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200"
     >
       <div
@@ -53,7 +53,7 @@
       </div>
       <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Active Missions</h3>
       <p class="text-[11px] text-slate-500 max-w-xs leading-relaxed font-medium">
-        There are no active virtue missions found in your last backup. Once missions return, use the "Rockets" tab to
+        There are no active missions found in your last backup. Once missions return, use the "Rockets" tab to
         plan new launches.
       </p>
     </div>
@@ -67,12 +67,12 @@ import { useActionsStore } from '@/stores/actions';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId, type ActiveMissionInfo } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import ActiveMissionsDisplay from './rockets/ActiveMissionsDisplay.vue';
 
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 
 const currentTimeSeconds = computed(() => actionsStore.effectiveSnapshot.lastStepTime);

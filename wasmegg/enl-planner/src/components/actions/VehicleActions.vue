@@ -1,5 +1,10 @@
 <template>
   <div class="space-y-6">
+    <!-- Remove once lib/farm/shipping_capacity.ts has regular vehicle prices. -->
+    <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-medium text-amber-800">
+      Vehicle and train car prices are the virtue prices for now, until "joo" can provide the regular costs.
+    </div>
+
     <!-- Sale Protocol -->
     <div
       class="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 rounded-2xl p-5 border border-indigo-100/50 shadow-sm relative overflow-hidden transition-all duration-300"
@@ -135,7 +140,7 @@
                 @click="handleAddTrainCar(index)"
               >
                 <span class="text-[10px] font-black text-blue-700 uppercase tracking-tight group-hover:text-blue-800"
-                  >+1 Car ({{ formatGemPrice(getNextCarCost(slot)) }})</span
+                  >+1 Car ({{ formatBokPrice(getNextCarCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getCarTimeToBuy(slot) }}</span>
               </button>
@@ -148,7 +153,7 @@
               >
                 <span
                   class="text-[10px] font-black text-indigo-700 uppercase tracking-tight group-hover:text-indigo-800"
-                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatGemPrice(getTotalCarsCost(slot)) }})</span
+                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatBokPrice(getTotalCarsCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getMaxCarsTimeToBuy(slot) }}</span>
               </button>
@@ -189,7 +194,7 @@ import {
   type VehicleCostModifiers,
   type VehicleType,
 } from '@/lib/vehicles';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';

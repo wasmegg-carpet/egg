@@ -9,7 +9,7 @@
  * After this function returns, every store is at its Pinia default:
  * - actionsStore: single start_ascension action (curiosity, no farm, no quick continue)
  * - initialStateStore: hasData=false, no backup, no farm state
- * - virtueStore: curiosity, 0 shifts, 0 TE, date=today, bank=0
+ * - planStore: curiosity, 0 shifts, 0 TE, date=today, bank=0
  * - commonResearchStore: all research at level 0
  * - habCapacityStore: [hab_0, null, null, null]
  * - shippingCapacityStore: [{vehicleId: 0, trainLength: 1}]
@@ -25,9 +25,8 @@
 
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
@@ -61,7 +60,6 @@ export async function resetAllStores(): Promise<void> {
   if (startAction) {
     startAction.payload.initialFarmState = undefined;
     startAction.payload.isQuickContinue = false;
-    startAction.payload.initialEgg = 'curiosity';
   }
 
   // 2. Clear flags that clearAll() does NOT touch
@@ -73,9 +71,8 @@ export async function resetAllStores(): Promise<void> {
 
   // 4. Reset every store to Pinia defaults
   useInitialStateStore().$reset();
-  useVirtueStore().$reset();
+  usePlanStore().$reset();
   useFuelTankStore().$reset();
-  useTruthEggsStore().$reset();
   useCommonResearchStore().$reset();
   useHabCapacityStore().$reset();
   useShippingCapacityStore().$reset();

@@ -1,16 +1,16 @@
-import type { VirtueEgg } from './virtue';
-
 /**
- * Payload for waiting to accumulate Truth Eggs (TE).
+ * Payload for waiting until the farm holds a target population (a trophy, NAH, or any number).
  */
-export interface WaitForTEPayload {
-  egg: VirtueEgg; // Which virtue egg
-  targetTE: number; // Target TE number (1-98)
-  teGained: number; // How many TE gained in this action
-  eggsToLay: number; // Eggs to lay to reach target
-  timeSeconds: number; // Time required
-  startEggsDelivered: number; // Eggs delivered before this action
-  startTE: number; // TE thresholds passed before this action
+export interface WaitForPopulationPayload {
+  targetPopulation: number;
+  /** What the target is for, shown in the action history (e.g. 'Diamond'). */
+  label?: string;
+  currentPopulation: number;
+  /** Offline internal hatchery rate, chickens per minute. */
+  ihr: number;
+  /** False when the habs can't hold the target: the wait then stops at full habs. */
+  reachable: boolean;
+  totalTimeSeconds: number;
 }
 
 /**
@@ -59,12 +59,12 @@ export interface WaitForEarningsBoostEndPayload {
 }
 
 /**
- * Payload for waiting to reach a target gem count.
+ * Payload for waiting to reach a target bok count.
  */
-export interface WaitForGemsPayload {
-  targetGems: number;
-  currentGems: number;
-  requiredGems: number;
+export interface WaitForCashPayload {
+  targetCash: number;
+  currentCash: number;
+  requiredCash: number;
   earningsPerSecond: number;
   timeSeconds: number;
 }

@@ -11,7 +11,7 @@
     <div class="space-y-2">
       <div v-for="egg in visibleEggs" :key="egg" class="flex items-center gap-2">
         <div class="w-5 h-5 flex-shrink-0">
-          <img :src="iconURL(`egginc/egg_${egg}.png`, 64)" class="w-full h-full object-contain" :alt="egg" />
+          <img :src="iconURL(fuelEggIconPath(egg), 64)" class="w-full h-full object-contain" :alt="egg" />
         </div>
         <div class="flex-1 h-4 bg-gray-200 rounded-full overflow-hidden">
           <div
@@ -30,31 +30,32 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { iconURL } from 'lib';
-import type { VirtueEgg } from '@/types';
-import { VIRTUE_EGGS } from '@/types';
+import type { FuelEgg } from '@/types';
+import { FUEL_EGGS } from '@/types';
 import { formatNumber } from '@/lib/format';
+import { fuelEggIconPath } from '@/lib/missions';
 
 const props = defineProps<{
-  fuelAmounts: Record<VirtueEgg, number>;
-  committed: Record<VirtueEgg, number>;
+  fuelAmounts: Record<FuelEgg, number>;
+  committed: Record<FuelEgg, number>;
   capacity: number;
   tankLevel: number;
 }>();
 
-const remaining = computed<Record<VirtueEgg, number>>(() => {
+const remaining = computed<Record<FuelEgg, number>>(() => {
   const r: Record<string, number> = {};
-  for (const egg of VIRTUE_EGGS) {
+  for (const egg of FUEL_EGGS) {
     r[egg] = Math.max(0, props.fuelAmounts[egg] - props.committed[egg]);
   }
-  return r as Record<VirtueEgg, number>;
+  return r as Record<FuelEgg, number>;
 });
 
-const totalRemaining = computed(() => VIRTUE_EGGS.reduce((sum, egg) => sum + remaining.value[egg], 0));
+const totalRemaining = computed(() => FUEL_EGGS.reduce((sum, egg) => sum + remaining.value[egg], 0));
 
 /** Only show eggs that have a non-zero amount in the tank. */
-const visibleEggs = computed(() => VIRTUE_EGGS.filter(egg => props.fuelAmounts[egg] > 0));
+const visibleEggs = computed(() => FUEL_EGGS.filter(egg => props.fuelAmounts[egg] > 0));
 
-function barPercent(egg: VirtueEgg): number {
+function barPercent(egg: FuelEgg): number {
   if (props.capacity <= 0) return 0;
   return Math.min(100, (remaining.value[egg] / props.capacity) * 100);
 }

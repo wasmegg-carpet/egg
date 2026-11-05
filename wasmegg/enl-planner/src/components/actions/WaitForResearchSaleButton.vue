@@ -1,6 +1,6 @@
 <template>
   <!-- Wait for Research Sale (Only on Curiosity) -->
-  <div v-if="isCuriosity" class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2">
     <button
       class="group relative overflow-hidden bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-2xl p-5 text-left transition-all hover:border-slate-200 hover:shadow-md active:scale-[0.98]"
       @click="handleWaitResearchSale"
@@ -38,8 +38,6 @@ import { formatDuration } from '@/lib/format';
 // between the Earnings and Delivery cards while no research sale is active) so both run the exact
 // same wait sequence.
 
-const actionsStore = useActionsStore();
 const { secondsUntilNextSale: researchSaleWait, waitForNextSale: handleWaitResearchSale } = useResearchSaleWaits();
 
-const isCuriosity = computed(() => actionsStore.effectiveSnapshot.currentEgg === 'curiosity');
 </script>

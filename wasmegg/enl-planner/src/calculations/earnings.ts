@@ -1,10 +1,38 @@
 /**
  * Earnings calculation.
- * Earnings = egg value × ELR × TE multiplier, with colleggtible bonuses.
+ * Earnings = egg value × ELR × (1 + earning bonus), with colleggtible bonuses.
+ * On an enlightenment farm Soul Eggs, Eggs of Prophecy and Truth Eggs all feed the earning bonus.
  * Online and offline earnings differ due to offline-only bonuses.
  */
 
 import type { EarningsInput, EarningsOutput } from '@/types';
+
+/** Bonus per Soul Egg before Soul Food and artifacts. */
+export const BASE_SOUL_EGG_BONUS = 0.1;
+/** Bonus per Egg of Prophecy before Prophecy Bonus and artifacts. */
+export const BASE_PROPHECY_EGG_BONUS = 0.05;
+/** Per Truth Egg on a non-virtue farm (virtue farms get 1.1). */
+export const TRUTH_EGG_MULTIPLIER = 1.01;
+
+/**
+ * The earning bonus: SE × SE bonus × (1 + PE bonus)^PE × 1.01^TE. Same formula as
+ * lib/earning_bonus.ts and artifact-sandbox; the artifact parts are additive to the per-egg bonuses.
+ */
+export function calculateEarningBonus(input: {
+  soulEggs: number;
+  prophecyEggs: number;
+  te: number;
+  soulFoodLevel: number;
+  prophecyBonusLevel: number;
+  artifactSoulEggBonus: number;
+  artifactProphecyEggBonus: number;
+}): number {
+  const soulEggBonus = BASE_SOUL_EGG_BONUS + input.soulFoodLevel * 0.01 + input.artifactSoulEggBonus;
+  const prophecyEggBonus = BASE_PROPHECY_EGG_BONUS + input.prophecyBonusLevel * 0.01 + input.artifactProphecyEggBonus;
+  return (
+    input.soulEggs * soulEggBonus * Math.pow(1 + prophecyEggBonus, input.prophecyEggs) * Math.pow(TRUTH_EGG_MULTIPLIER, input.te)
+  );
+}
 
 /**
  * Calculate earnings (online and offline).
@@ -13,7 +41,7 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
   const {
     eggValue,
     effectiveLayRate,
-    te,
+    earningBonus,
     earningsMultiplier,
     awayEarningsMultiplier,
     artifactAwayMultiplier,
@@ -23,12 +51,8 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
     artifactEffects,
   } = input;
 
-  // TE multiplier: 1.1^TE (clamped to 0-490)
-  const clampedTE = Math.max(0, Math.min(490, Math.round(te)));
-  const teMultiplier = Math.pow(1.1, clampedTE);
-
-  // Base earnings = egg value × ELR × TE multiplier
-  const baseEarnings = eggValue * effectiveLayRate * teMultiplier;
+  // Base earnings = egg value × ELR × (1 + earning bonus)
+  const baseEarnings = eggValue * effectiveLayRate * (1 + earningBonus);
 
   // Final multiplier = earnings colleggtibles × video doubler × event boost
   const finalMultiplier = earningsMultiplier * videoDoublerMultiplier * eventMultiplier;
@@ -44,7 +68,7 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
 
   return {
     baseEarnings,
-    teMultiplier,
+    earningBonus,
     earningsMultiplier,
     awayEarningsMultiplier,
     artifactAwayMultiplier,

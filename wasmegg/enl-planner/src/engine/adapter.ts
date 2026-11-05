@@ -1,7 +1,7 @@
 import type { EngineState, SimulationContext } from './types';
-import { CalculationsSnapshot, VIRTUE_EGGS, VirtueEgg } from '@/types';
+import type { CalculationsSnapshot } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
@@ -15,13 +15,13 @@ import { getLocalTimestampInTimezone } from '@/lib/events';
  */
 export function getSimulationContext(): SimulationContext {
   const initialStateStore = useInitialStateStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
 
   // Convert ascension date/time/timezone to Unix timestamp (seconds)
   const ascensionStartTime = getLocalTimestampInTimezone(
-    virtueStore.ascensionDate,
-    virtueStore.ascensionTime,
-    virtueStore.ascensionTimezone
+    planStore.ascensionDate,
+    planStore.ascensionTime,
+    planStore.ascensionTimezone
   );
 
   return {
@@ -48,10 +48,9 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
   // active Pinia app, even though this branch's return value never depends on any store.
   if (initialSnapshot) {
     return {
-      currentEgg: initialSnapshot.currentEgg,
-      shiftCount: initialSnapshot.shiftCount,
       te: initialSnapshot.te,
       soulEggs: initialSnapshot.soulEggs,
+      prophecyEggs: initialSnapshot.prophecyEggs,
       vehicles: [...initialSnapshot.vehicles],
       habIds: [...initialSnapshot.habIds],
       researchLevels: { ...initialSnapshot.researchLevels },
@@ -63,8 +62,6 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
         stones: [...slot.stones],
       })),
       fuelTankAmounts: { ...initialSnapshot.fuelTankAmounts },
-      eggsDelivered: { ...initialSnapshot.eggsDelivered },
-      teEarned: { ...initialSnapshot.teEarned },
       activeArtifactSet: initialSnapshot.activeArtifactSet,
       artifactSets: JSON.parse(JSON.stringify(initialSnapshot.artifactSets)),
       population: initialSnapshot.population,
@@ -75,7 +72,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
     };
   }
 
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
@@ -84,12 +81,9 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
   // Fallback state
   return {
-    currentEgg: (isContinuing && initialStateStore.currentFarmState?.eggType
-      ? VIRTUE_EGGS[initialStateStore.currentFarmState.eggType - 50]
-      : 'curiosity') as VirtueEgg,
-    shiftCount: virtueStore.initialShiftCount,
-    te: virtueStore.initialTE,
+    te: initialStateStore.truthEggs,
     soulEggs: initialStateStore.soulEggs,
+    prophecyEggs: initialStateStore.prophecyEggs,
 
     vehicles: (isContinuing && initialStateStore.currentFarmState?.vehicles) || [{ vehicleId: 0, trainLength: 1 }],
     habIds: (isContinuing && initialStateStore.currentFarmState?.habs) || [0, null, null, null],
@@ -108,14 +102,12 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
     // Progress state starts from what was in the backup
     fuelTankAmounts: { ...initialStateStore.initialFuelAmounts },
-    eggsDelivered: { ...initialStateStore.initialEggsDelivered },
-    teEarned: { ...initialStateStore.initialTeEarned },
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
 
     population: (isContinuing && initialStateStore.currentFarmState?.population) || 0,
     lastStepTime: (isContinuing && initialStateStore.currentFarmState?.lastStepTime) || 0,
-    bankValue: (isContinuing && initialStateStore.currentFarmState?.cash) || virtueStore.bankValue || 0,
+    bankValue: (isContinuing && initialStateStore.currentFarmState?.cash) || planStore.bankValue || 0,
     activeSales: {
       research: false,
       hab: false,

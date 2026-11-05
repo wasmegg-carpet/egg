@@ -1,61 +1,97 @@
 import { ArtifactEffect, ArtifactModifier, ArtifactModifiers, EquippedArtifact } from './types';
 import { getArtifact, getStone } from './data';
 
+const CLARITY_STONE_FAMILY = 'clarity-stone';
+const LIGHT_OF_EGGENDIL_FAMILY = 'light-of-eggendil';
+
 /**
- * Calculate all artifact modifiers from an equipped loadout
+ * How much of an artifact's effects (its stones' too) count on an enlightenment farm: artifacts
+ * do nothing there without clarity stones, each adding its share (stacking), and Light of Eggendil
+ * always counts in full. Same rule as lib/artifacts/effects.ts and artifact-sandbox.
+ */
+export function clarityMultiplier(slot: EquippedArtifact): number {
+  const artifact = getArtifact(slot.artifactId);
+  if (!artifact) return 0;
+  if (artifact.familyId === LIGHT_OF_EGGENDIL_FAMILY) return 1;
+  return slot.stones.reduce((total, stoneId) => {
+    const stone = getStone(stoneId);
+    return stone?.familyId === CLARITY_STONE_FAMILY ? total + stone.effectDelta : total;
+  }, 0);
+}
+
+/**
+ * Calculate all artifact modifiers from an equipped loadout, as they work on an enlightenment farm.
  */
 export function calculateArtifactModifiers(loadout: EquippedArtifact[]): ArtifactModifiers {
   const effectsByTarget: Record<string, ArtifactEffect[]> = {};
+  const add = (target: string, effect: ArtifactEffect) => {
+    if (!effectsByTarget[target]) effectsByTarget[target] = [];
+    effectsByTarget[target].push(effect);
+  };
 
   for (const slot of loadout) {
     const artifact = getArtifact(slot.artifactId);
-    if (artifact) {
-      const target = artifact.effectTarget;
-      if (!effectsByTarget[target]) effectsByTarget[target] = [];
-      effectsByTarget[target].push({
-        source: 'artifact',
-        label: artifact.label,
-        effect: artifact.effect,
-        effectDelta: artifact.effectDelta,
-        effectTarget: target,
-      });
+    if (!artifact) continue;
 
-      for (const stoneId of slot.stones) {
-        const stone = getStone(stoneId);
-        if (stone) {
-          const stoneTarget = stone.effectTarget;
-          if (!effectsByTarget[stoneTarget]) effectsByTarget[stoneTarget] = [];
-          effectsByTarget[stoneTarget].push({
-            source: 'stone',
-            label: stone.label,
-            effect: stone.effect,
-            effectDelta: stone.effectDelta,
-            effectTarget: stoneTarget,
-          });
-        }
-      }
+    const clarity = clarityMultiplier(slot);
+    if (clarity === 0) continue;
+
+    add(artifact.effectTarget, {
+      source: 'artifact',
+      label: artifact.label,
+      effect: artifact.effect,
+      effectDelta: artifact.effectDelta * clarity,
+      effectTarget: artifact.effectTarget,
+      clarity,
+    });
+
+    for (const stoneId of slot.stones) {
+      const stone = getStone(stoneId);
+      if (!stone || stone.familyId === CLARITY_STONE_FAMILY) continue;
+      add(stone.effectTarget, {
+        source: 'stone',
+        label: stone.label,
+        effect: stone.effect,
+        effectDelta: stone.effectDelta * clarity,
+        effectTarget: stone.effectTarget,
+        clarity,
+      });
     }
   }
 
-  function calcModifier(target: string): ArtifactModifier {
-    const effects = effectsByTarget[target] || [];
-    const totalMultiplier = effects.reduce((acc, e) => acc * (1 + e.effectDelta), 1);
+  function calcModifier(targets: string | string[]): ArtifactModifier {
+    const list = Array.isArray(targets) ? targets : [targets];
+    const effects = list.flatMap(target => effectsByTarget[target] || []);
     return {
-      effectTarget: target,
+      effectTarget: list[0],
       effects,
-      totalMultiplier,
+      totalMultiplier: effects.reduce((acc, e) => acc * (1 + e.effectDelta), 1),
       isMultiplicative: true,
     };
   }
 
+  /** Added to a base bonus rather than multiplied: `totalMultiplier` holds the sum here. */
+  function calcAdditive(target: string): ArtifactModifier {
+    const effects = effectsByTarget[target] || [];
+    return {
+      effectTarget: target,
+      effects,
+      totalMultiplier: effects.reduce((acc, e) => acc + e.effectDelta, 0),
+      isMultiplicative: false,
+    };
+  }
+
   return {
-    eggValue: calcModifier('egg value'),
+    // Light of Eggendil's target is its own, but it's egg value all the same.
+    eggValue: calcModifier(['egg value', 'enlightenment egg value']),
     habCapacity: calcModifier('hab capacity'),
     shippingRate: calcModifier('shipping rate'),
     awayEarnings: calcModifier('away earnings'),
     eggLayingRate: calcModifier('egg laying rate'),
     internalHatcheryRate: calcModifier('internal hatchery rate'),
     researchCost: calcModifier('research cost'),
+    soulEggBonus: calcAdditive('bonus per Soul Egg'),
+    prophecyEggBonus: calcAdditive('Egg of Prophecy bonus'),
   };
 }
 
@@ -78,6 +114,8 @@ export function createEmptyArtifactModifiers(): ArtifactModifiers {
     eggLayingRate: emptyModifier('egg laying rate'),
     internalHatcheryRate: emptyModifier('internal hatchery rate'),
     researchCost: emptyModifier('research cost'),
+    soulEggBonus: { ...emptyModifier('bonus per Soul Egg'), totalMultiplier: 0 },
+    prophecyEggBonus: { ...emptyModifier('Egg of Prophecy bonus'), totalMultiplier: 0 },
   };
 }
 

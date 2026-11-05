@@ -6,6 +6,9 @@
 import type { Research, ResearchLevels, EggValueInput, EggValueOutput } from '@/types';
 import { allResearches } from 'lib';
 
+/** Base value of an Enlightenment egg (lib/eggs.ts). */
+export const ENLIGHTENMENT_EGG_VALUE = 1e-7;
+
 // Filter to only egg value researches
 const eggValueResearches = (allResearches as Research[]).filter(r => r.categories.split(',').includes('egg_value'));
 

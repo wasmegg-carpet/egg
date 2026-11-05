@@ -7,7 +7,7 @@ This directory contains the core type definitions for the Ascension Planner acti
 - `index.ts`: Main entry point, re-exports all types.
 - `core.ts`: Fundamental types like `ActionType`, `ActionPayloadMap`, and `CalculationsSnapshot`.
 - `meta.ts`: Base interfaces for actions (`BaseAction`, `Action`) and undo validation.
-- `virtue.ts`: Types for Virtue Eggs.
+- `eggs.ts`: Types for the eggs the fuel tank holds.
 - `infrastructure.ts`: Payloads for vehicles, habs, silos, and fuel.
 - `research.ts`: Payloads for research and sales.
 - `missions.ts`: Payloads for rocket missions.

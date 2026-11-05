@@ -8,7 +8,6 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
 import { calculateIHR } from '@/calculations/internalHatcheryRate';
 import type { IHRInput, IHROutput } from '@/types';
 
@@ -22,9 +21,7 @@ export function useInternalHatcheryRate(): {
 } {
   const initialStateStore = useInitialStateStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
 
-  const { te } = storeToRefs(virtueStore);
   const { researchLevels } = storeToRefs(commonResearchStore);
   const { epicResearchLevels } = storeToRefs(initialStateStore);
 
@@ -32,7 +29,7 @@ export function useInternalHatcheryRate(): {
   const input = computed<IHRInput>(() => {
     const artifactMod = initialStateStore.artifactModifiers.internalHatcheryRate;
     return {
-      te: te.value,
+      te: initialStateStore.truthEggs,
       researchLevels: researchLevels.value,
       epicResearchLevels: {
         epicInternalIncubators: epicResearchLevels.value['epic_internal_incubators'] || 0,

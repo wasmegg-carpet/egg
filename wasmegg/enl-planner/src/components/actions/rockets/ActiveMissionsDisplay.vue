@@ -5,7 +5,7 @@
         <div class="w-4 h-4 bg-black rounded-full flex items-center justify-center p-0.5 overflow-hidden">
           <img :src="iconURL('egginc/icon_afx_mission.png', 64)" class="w-full h-full object-contain" />
         </div>
-        Active Virtue Missions
+        Active Missions
       </h3>
       <span class="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
         {{ missions.filter(m => !m.statusIsFueling).length }} In-flight
@@ -29,11 +29,6 @@
             :alt="mission.shipName"
           />
           <div class="absolute inset-0 bg-slate-50 rounded-full scale-110 opacity-50"></div>
-
-          <!-- Virtue Badge -->
-          <div class="absolute -top-1 -right-1 z-20">
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-4 h-4 shadow-sm" />
-          </div>
         </div>
 
         <!-- Mission Details -->

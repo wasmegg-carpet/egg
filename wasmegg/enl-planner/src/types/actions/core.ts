@@ -1,29 +1,12 @@
-import type { VirtueEgg } from './virtue';
+import type { FuelEgg } from './eggs';
 import type { ArtifactSlotPayload, ArtifactSetName } from './artifacts';
 
 /**
- * Payload for starting an ascension (initial state).
+ * Payload for starting the enlightenment plan (initial state).
  */
 export interface StartAscensionPayload {
-  initialEgg: VirtueEgg;
   initialFarmState?: import('../index').CurrentFarmState;
   isQuickContinue?: boolean;
-}
-
-/**
- * Payload for shifting to a different virtue egg.
- */
-export interface ShiftPayload {
-  fromEgg: VirtueEgg;
-  toEgg: VirtueEgg;
-  newShiftCount: number;
-  /** The auto planner's name for the shift this action starts (e.g. 'K1', 'C3'). The opening's
-   * C1/K1/I1 rounds repeat and K1 can be skipped, so a shift's name can't be derived from its
-   * position in the plan. Used to find planner phases (e.g. C3/K3 for the comparison charts);
-   * shift headers in the UI are numbered by egg visit instead. */
-  autoShiftName?: string;
-  eggsLaid?: number;
-  peakELR?: number;
 }
 
 /**
@@ -57,7 +40,7 @@ import type {
 } from './infrastructure';
 import type { BuyResearchPayload, ToggleSalePayload, ToggleEarningsBoostPayload } from './research';
 import type { LaunchMissionsPayload, WaitForMissionsPayload } from './missions';
-import type { WaitForTEPayload, WaitForTimePayload, WaitForFullHabsPayload, WaitForGemsPayload } from './wait';
+import type { WaitForPopulationPayload, WaitForTimePayload, WaitForFullHabsPayload, WaitForCashPayload } from './wait';
 import type {
   EggValueOutput,
   HabCapacityOutput,
@@ -76,13 +59,12 @@ export type ActionType =
   | 'buy_vehicle'
   | 'buy_hab'
   | 'buy_research'
-  | 'shift'
   | 'buy_train_car'
   | 'change_artifacts'
   | 'buy_silo'
   | 'store_fuel'
   | 'remove_fuel'
-  | 'wait_for_te'
+  | 'wait_for_population'
   | 'launch_missions'
   | 'toggle_sale'
   | 'equip_artifact_set'
@@ -90,7 +72,7 @@ export type ActionType =
   | 'wait_for_missions'
   | 'wait_for_time'
   | 'wait_for_full_habs'
-  | 'wait_for_gems'
+  | 'wait_for_cash'
   | 'wait_for_research_sale'
   | 'wait_for_research_sale_end'
   | 'wait_for_earnings_boost'
@@ -108,13 +90,12 @@ export interface ActionPayloadMap {
   buy_vehicle: BuyVehiclePayload;
   buy_hab: BuyHabPayload;
   buy_research: BuyResearchPayload;
-  shift: ShiftPayload;
   buy_train_car: BuyTrainCarPayload;
   change_artifacts: import('./artifacts').ChangeArtifactsPayload;
   buy_silo: BuySiloPayload;
   store_fuel: StoreFuelPayload;
   remove_fuel: RemoveFuelPayload;
-  wait_for_te: WaitForTEPayload;
+  wait_for_population: WaitForPopulationPayload;
   launch_missions: LaunchMissionsPayload;
   toggle_sale: ToggleSalePayload;
   equip_artifact_set: import('./artifacts').EquipArtifactSetPayload;
@@ -122,7 +103,7 @@ export interface ActionPayloadMap {
   wait_for_missions: WaitForMissionsPayload;
   wait_for_time: WaitForTimePayload;
   wait_for_full_habs: WaitForFullHabsPayload;
-  wait_for_gems: WaitForGemsPayload;
+  wait_for_cash: WaitForCashPayload;
   wait_for_research_sale: import('./wait').WaitForResearchSalePayload;
   wait_for_research_sale_end: import('./wait').WaitForResearchSaleEndPayload;
   wait_for_earnings_boost: import('./wait').WaitForEarningsBoostPayload;
@@ -148,18 +129,15 @@ export interface CalculationsSnapshot {
   offlineIHR: number;
   ratePerChickenPerSecond: number;
   bankValue: number;
-  currentEgg: VirtueEgg;
-  shiftCount: number;
   te: number;
   soulEggs: number;
+  prophecyEggs: number;
   siloCount: number;
   siloTimeMinutes: number;
   tankLevel: number;
   /** false = Standard permit. undefined = Pro (snapshots from before Standard was supported). */
   proPermit?: boolean;
-  fuelTankAmounts: Record<VirtueEgg, number>;
-  eggsDelivered: Record<VirtueEgg, number>;
-  teEarned: Record<VirtueEgg, number>;
+  fuelTankAmounts: Record<FuelEgg, number>;
   population: number;
   lastStepTime: number;
   vehicles: import('../index').VehicleSlot[];

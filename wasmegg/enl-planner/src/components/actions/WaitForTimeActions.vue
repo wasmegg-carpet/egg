@@ -52,19 +52,19 @@
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estimated End:</span>
           <div class="text-right">
             <div class="text-sm font-mono-premium font-black text-slate-900">
-              {{ formatAbsoluteTime(parsedSeconds, baseTimestamp, virtueStore.ascensionTimezone) }}
+              {{ formatAbsoluteTime(parsedSeconds, baseTimestamp, planStore.ascensionTimezone) }}
             </div>
           </div>
         </div>
 
-        <!-- Expected Gems Display -->
+        <!-- Expected Boks Display -->
         <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center transition-all">
-          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected Gems:</span>
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected Boks:</span>
           <div class="flex items-center gap-2">
             <span class="text-sm font-mono-premium font-black text-slate-900">
-              +{{ formatNumber(expectedGemsEarned, 3) }}
+              +{{ formatNumber(expectedBoksEarned, 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-4 h-4 object-contain" alt="Gems" />
+            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-4 h-4 object-contain" alt="Boks" />
           </div>
         </div>
       </div>
@@ -78,7 +78,7 @@ import { iconURL } from 'lib';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from '@/lib/format';
 import { boostTransitionsFrom, calculateEarningsForTime } from '@/engine/apply/math';
 import { absoluteSimTimeFor } from '@/engine/apply';
@@ -87,7 +87,7 @@ import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const { batch, insertWaitAcrossBoost } = useEventCrossingWaits();
 
 const inputDuration = ref('');
@@ -130,7 +130,7 @@ const parsedSeconds = computed(() => {
           hour,
           minute,
           currentSimTime,
-          virtueStore.ascensionTimezone
+          planStore.ascensionTimezone
         );
         return Math.max(0, targetTS - currentSimTime);
       }
@@ -142,7 +142,7 @@ const parsedSeconds = computed(() => {
   return isNaN(seconds) ? 0 : seconds;
 });
 
-const expectedGemsEarned = computed(() => {
+const expectedBoksEarned = computed(() => {
   if (parsedSeconds.value <= 0) return 0;
   const snapshot = actionsStore.effectiveSnapshot;
   return calculateEarningsForTime(
@@ -155,7 +155,7 @@ const expectedGemsEarned = computed(() => {
 const isValid = computed(() => parsedSeconds.value > 0);
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;

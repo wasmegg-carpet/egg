@@ -29,7 +29,7 @@ export const launchMissionsExecutor: ActionExecutor<'launch_missions'> = {
       parts.push(`${m.count}× ${durName} ${shipName}`);
     }
     const summary = parts.join(', ');
-    const timeStr = payload.totalTimeSeconds === 0 ? '0s (Pre-shift)' : formatDuration(payload.totalTimeSeconds);
+    const timeStr = payload.totalTimeSeconds === 0 ? '0s' : formatDuration(payload.totalTimeSeconds);
     return `${summary} (${timeStr})`;
   },
 };

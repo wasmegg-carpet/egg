@@ -28,13 +28,3 @@ export function calculateCostMultiplier(
 export function applyDiscount(basePrice: number, multiplier: number): number {
   return Math.floor(basePrice * multiplier);
 }
-
-/**
- * Calculate the discounted price, rounding up.
- * @param basePrice The base price of the item
- * @param multiplier The total cost multiplier
- * @returns The discounted price (ceiled)
- */
-export function applyDiscountCeil(basePrice: number, multiplier: number): number {
-  return Math.ceil(basePrice * multiplier);
-}

@@ -61,7 +61,7 @@
               <p v-else class="text-[10px] italic text-slate-400 font-medium">No other actions affected.</p>
             </button>
 
-            <!-- Option B: Until Shift -->
+            <!-- Option B: To End -->
             <button
               v-if="!areOptionsIdentical"
               class="group relative w-full text-left p-4 rounded-xl border border-slate-200 bg-white transition-all hover:border-purple-400 hover:shadow-md hover:ring-1 hover:ring-purple-100 active:scale-[0.99]"
@@ -69,14 +69,14 @@
             >
               <div class="flex justify-between items-start mb-2">
                 <span class="text-xs font-black text-slate-700 group-hover:text-purple-600 uppercase tracking-wide"
-                  >Option B: Undo Until Shift</span
+                  >Option B: Undo To End</span
                 >
                 <span class="badge-premium bg-amber-50 text-amber-700 border border-amber-100 font-mono-premium"
                   >Refund: {{ formatNumber(refundB, 3) }}</span
                 >
               </div>
               <p class="text-xs text-slate-500 mb-3 leading-relaxed">
-                Undoes this action and EVERY action that follows it within the current egg period.
+                Undoes this action and EVERY action that follows it.
               </p>
               <div
                 v-if="dependentsB.length > 0"

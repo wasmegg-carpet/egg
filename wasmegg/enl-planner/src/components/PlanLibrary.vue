@@ -7,7 +7,6 @@ import { downloadGzipped, importedPlanName, readImportedJson } from '@/utils/exp
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import { initLoadPlan, initPlanFuture } from '@/lib/modes';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useUIStore } from '@/stores/ui';
 import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
 import ImportCollisionDialog from '@/components/ImportCollisionDialog.vue';
@@ -16,7 +15,6 @@ import { createEmptySnapshot } from '@/types';
 
 const actionsStore = useActionsStore();
 const initialStateStore = useInitialStateStore();
-const truthEggsStore = useTruthEggsStore();
 const uiStore = useUIStore();
 const { partitionHash, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
 
@@ -203,7 +201,7 @@ async function exportAll() {
     })),
   };
   const jsonString = JSON.stringify(exportData, null, 2);
-  await downloadGzipped(`ascension-library-${new Date().toISOString().split('T')[0]}.json`, jsonString);
+  await downloadGzipped(`enlightenment-library-${new Date().toISOString().split('T')[0]}.json`, jsonString);
 }
 
 /**

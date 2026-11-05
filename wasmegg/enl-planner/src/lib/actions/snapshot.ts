@@ -18,11 +18,10 @@ import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore, totalAwayTime } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useSalesStore } from '@/stores/sales';
 
 /**
@@ -43,11 +42,10 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
   const habCapacityStore = useHabCapacityStore();
   const shippingCapacityStore = useShippingCapacityStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
-  const truthEggsStore = useTruthEggsStore();
   const salesStore = useSalesStore();
 
   // Calculate silo time
@@ -66,13 +64,12 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     onlineIHR: ihr.value.onlineRate,
     offlineIHR: ihr.value.offlineRate,
     ratePerChickenPerSecond: layRate.value.ratePerChickenPerSecond,
-    bankValue: virtueStore.bankValue,
+    bankValue: planStore.bankValue,
 
-    // Virtue state
-    currentEgg: virtueStore.currentEgg,
-    shiftCount: virtueStore.shiftCount,
-    te: virtueStore.te,
+    // Earning bonus inputs
+    te: initialStateStore.truthEggs,
     soulEggs: initialStateStore.soulEggs,
+    prophecyEggs: initialStateStore.prophecyEggs,
 
     // Silo state
     siloCount: silosStore.siloCount,
@@ -84,8 +81,6 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     fuelTankAmounts: { ...fuelTankStore.fuelAmounts },
 
     // Truth Eggs state
-    eggsDelivered: { ...truthEggsStore.eggsDelivered },
-    teEarned: { ...truthEggsStore.teEarned },
 
     // Store state for reconstruction
     vehicles: [...shippingCapacityStore.vehicles],
@@ -100,7 +95,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     ),
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
-    population: virtueStore.population,
+    population: planStore.population,
     lastStepTime: 0,
     activeSales: { ...salesStore.$state },
     earningsBoost: {
@@ -172,11 +167,10 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   const habCapacityStore = useHabCapacityStore();
   const shippingCapacityStore = useShippingCapacityStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
-  const truthEggsStore = useTruthEggsStore();
   const salesStore = useSalesStore();
 
   // Restore hab state
@@ -198,11 +192,8 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
     state.researchLevels = { ...snapshot.researchLevels };
   });
 
-  // Restore virtue state
-  virtueStore.$patch(state => {
-    state.currentEgg = snapshot.currentEgg;
-    state.shiftCount = snapshot.shiftCount;
-    state.te = snapshot.te;
+  // Restore plan state
+  planStore.$patch(state => {
     state.bankValue = snapshot.bankValue;
     state.population = snapshot.population;
   });
@@ -235,14 +226,6 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   }
 
   // Restore truth eggs state
-  truthEggsStore.$patch(state => {
-    if (snapshot.eggsDelivered) {
-      state.eggsDelivered = { ...snapshot.eggsDelivered };
-    }
-    if (snapshot.teEarned) {
-      state.teEarned = { ...snapshot.teEarned };
-    }
-  });
 
   // Restore sales state
   if (snapshot.activeSales) {

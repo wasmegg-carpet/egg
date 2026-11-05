@@ -1,8 +1,8 @@
-import type { VirtueEgg } from './virtue';
+import type { FuelEgg } from './eggs';
 import type { ArtifactSetName, ArtifactSlotPayload } from './artifacts';
 import type { ActionPayloadMap, ActionType, CalculationsSnapshot, CalculationsFullOutputs } from './core';
 
-export * from './virtue';
+export * from './eggs';
 export * from './artifacts';
 export * from './infrastructure';
 export * from './research';

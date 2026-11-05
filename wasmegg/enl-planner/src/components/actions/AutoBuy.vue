@@ -3,7 +3,7 @@
     title="Auto Buy"
     :badge="alwaysOn ? 'Enabled' : 'Disabled'"
     :badge-active="alwaysOn"
-    note="Auto Buy will never spend gems from your bank."
+    note="Auto Buy will never spend boks from your bank."
   >
     <template #icon>
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

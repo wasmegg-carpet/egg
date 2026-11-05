@@ -1,9 +1,8 @@
 /**
- * Store for managing virtue state (current egg, shift count, TE, and ascension timing).
+ * Store for managing plan timing and the bank (the start time is still called 'ascension' internally).
  */
 
 import { defineStore } from 'pinia';
-import type { VirtueEgg } from '@/types';
 import { getLocalTimestampInTimezone } from '@/lib/events';
 
 /**
@@ -36,39 +35,17 @@ function getCurrentTime(): string {
   return now.toTimeString().slice(0, 5);
 }
 
-export interface VirtueState {
-  // The current virtue egg
-  currentEgg: VirtueEgg;
-
-  // Number of shifts performed during this ascension plan
-  // Starts at initialShiftCount from player backup
-  shiftCount: number;
-
-  // The initial shift count from player backup (before any planned shifts)
-  initialShiftCount: number;
-
-  // Eggs of Truth (TE) - affects IHR and earnings bonus multiplier (1.1^TE)
-  // This is the sum of virtue.eovEarned from player backup
-  te: number;
-
-  // The initial TE from player backup (before any planning)
-  initialTE: number;
-
+export interface PlanState {
   // Ascension start time
   ascensionDate: string; // YYYY-MM-DD format
   ascensionTime: string; // HH:MM format
   ascensionTimezone: string; // IANA timezone identifier
-  bankValue: number; // Current gems in bank
+  bankValue: number; // Current boks in bank
   population: number; // Current chickens on farm
 }
 
-export const useVirtueStore = defineStore('virtue', {
-  state: (): VirtueState => ({
-    currentEgg: 'curiosity',
-    shiftCount: 0,
-    initialShiftCount: 0,
-    te: 0,
-    initialTE: 0,
+export const usePlanStore = defineStore('virtue', {
+  state: (): PlanState => ({
     ascensionDate: getCurrentDate(),
     ascensionTime: getCurrentTime(),
     ascensionTimezone: getDetectedTimezone(),
@@ -77,13 +54,6 @@ export const useVirtueStore = defineStore('virtue', {
   }),
 
   getters: {
-    /**
-     * Get the planned shift count (shifts added during planning)
-     */
-    plannedShifts(): number {
-      return this.shiftCount - this.initialShiftCount;
-    },
-
     /**
      * Get the base start time for the planning session as a Date object.
      */
@@ -98,68 +68,6 @@ export const useVirtueStore = defineStore('virtue', {
   },
 
   actions: {
-    /**
-     * Set the initial state from player backup.
-     */
-    setInitialState(initialShiftCount: number, initialTE: number) {
-      this.initialShiftCount = initialShiftCount;
-      this.shiftCount = initialShiftCount;
-      this.initialTE = initialTE;
-      this.te = initialTE;
-    },
-
-    /**
-     * Set the current egg (used when starting ascension or shifting).
-     */
-    setCurrentEgg(egg: VirtueEgg) {
-      this.currentEgg = egg;
-    },
-
-    /**
-     * Set the shift count directly (used when restoring from snapshot).
-     */
-    setShiftCount(count: number) {
-      this.shiftCount = count;
-    },
-
-    /**
-     * Perform a shift to a new egg.
-     * Increments shift count and changes current egg.
-     */
-    shift(toEgg: VirtueEgg) {
-      if (toEgg !== this.currentEgg) {
-        this.currentEgg = toEgg;
-        this.shiftCount++;
-      }
-    },
-
-    /**
-     * Set TE (Eggs of Truth) value (0-490)
-     */
-    setTE(value: number) {
-      this.te = Math.max(0, Math.min(490, Math.round(value)));
-    },
-
-    /**
-     * Set the initial TE value explicitly (baseline for plan).
-     */
-    setInitialTE(value: number) {
-      const newValue = Math.max(0, Math.min(490, Math.round(value)));
-      this.initialTE = newValue;
-    },
-
-    /**
-     * Set the initial shift count (editable by user)
-     */
-    setInitialShiftCount(value: number) {
-      const newValue = Math.max(0, Math.round(value));
-      // Update both initial and current if current matches initial
-      if (this.shiftCount === this.initialShiftCount) {
-        this.shiftCount = newValue;
-      }
-      this.initialShiftCount = newValue;
-    },
-
     /**
      * Set ascension start date (YYYY-MM-DD format)
      */
@@ -226,9 +134,6 @@ export const useVirtueStore = defineStore('virtue', {
      * Reset to initial state.
      */
     reset() {
-      this.shiftCount = this.initialShiftCount;
-      this.currentEgg = 'curiosity';
-      this.te = this.initialTE;
       this.population = 1;
     },
   },

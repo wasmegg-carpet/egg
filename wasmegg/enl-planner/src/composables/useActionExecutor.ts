@@ -60,24 +60,6 @@ export function useActionExecutor() {
     };
 
     if (isEditingPastGroup.value) {
-      // Check for continuity conflicts
-      const { checkAndHandleContinuity } = await safeImport(() => import('@/lib/continuity'));
-
-      const shouldProceed = await checkAndHandleContinuity(
-        actionsStore.actions,
-        fullAction,
-        actionsStore.editingInsertIndex,
-        async idsToRemove => {
-          await actionsStore.removeActions(idsToRemove);
-        }
-      );
-
-      if (!shouldProceed) {
-        // User cancelled - revert stores
-        restoreFromSnapshot(beforeSnapshotArg);
-        return;
-      }
-
       // Insert at the correct position and replay subsequent actions
       await actionsStore.insertAction(fullAction, replayAction);
 

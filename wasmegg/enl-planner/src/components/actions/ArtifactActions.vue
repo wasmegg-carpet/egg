@@ -63,61 +63,6 @@
               </button>
             </template>
           </div>
-
-          <div v-if="selectedTab === 'earnings' && earningsClothedTe !== null" class="flex items-center gap-1.5">
-            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Clothed TE</span>
-            <span class="text-xs font-mono-premium font-bold text-gray-900">{{ Math.round(earningsClothedTe) }}</span>
-          </div>
-        </div>
-
-        <div v-if="selectedTab === 'elr'" class="flex flex-wrap items-center justify-end gap-y-2 gap-x-4 border-t border-gray-200/60 pt-2 -mt-1">
-          <div class="flex items-center gap-2">
-            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-tight"
-              >Exclude Gusset</span
-            >
-            <button
-              @click="excludeGusset = !excludeGusset"
-              class="relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="excludeGusset ? 'bg-amber-600' : 'bg-gray-200'"
-            >
-              <span
-                class="pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="excludeGusset ? 'translate-x-4' : 'translate-x-0'"
-              ></span>
-            </button>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-tight"
-              >Assume Max Habs/Vehicles</span
-            >
-            <button
-              @click="assumeMaxHabsVehicles = !assumeMaxHabsVehicles"
-              class="relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="assumeMaxHabsVehicles ? 'bg-amber-600' : 'bg-gray-200'"
-            >
-              <span
-                class="pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="assumeMaxHabsVehicles ? 'translate-x-4' : 'translate-x-0'"
-              ></span>
-            </button>
-          </div>
-
-          <button
-            class="px-3 py-1 text-white text-[10px] font-black uppercase tracking-widest rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
-            :class="isOptimalELR ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'"
-            @click="equipOptimalELR"
-            v-tippy="'Find and equip the best delivery rate set from your inventory'"
-          >
-            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fill-rule="evenodd"
-                d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            Optimal Delivery Rate
-          </button>
         </div>
       </div>
 
@@ -144,11 +89,10 @@
             </svg>
           </div>
           <div>
-            <h4 class="text-[10px] font-bold text-blue-900 uppercase tracking-tight mb-0.5">Set Optimization</h4>
+            <h4 class="text-[10px] font-bold text-blue-900 uppercase tracking-tight mb-0.5">Clarity Stones</h4>
             <p class="text-[10px] text-blue-700 leading-tight">
-              <strong>Earnings:</strong> Necklaces, Ankhs, Cubes, Lunar stones.
-              <br />
-              <strong>Delivery:</strong> Metronomes, Compasses, Tachyon/Quantum stones.
+              On an enlightenment farm an artifact and its stones do nothing without a clarity stone in that
+              artifact. Each clarity stone adds its share of their effects. Light of Eggendil always works in full.
             </p>
           </div>
         </div>
@@ -174,7 +118,6 @@ import {
   activeSlots,
   artifactSlotCount,
 } from '@/lib/artifacts';
-import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from '@/lib/artifacts/virtue';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
@@ -193,83 +136,6 @@ const selectedTab = ref<ArtifactSetName>('earnings');
 
 // Local state for the selected set (allows unsaved changes)
 const localLoadout = ref<EquippedArtifact[]>(createEmptyLoadout());
-const assumeMaxHabsVehicles = ref(true);
-const excludeGusset = ref(false);
-
-// Clothed TE for the earnings set currently being viewed (localLoadout may hold
-// unsaved edits), regardless of whether it's the equipped set.
-const earningsClothedTe = computed<number | null>(() => {
-  if (selectedTab.value !== 'earnings') return null;
-  const context = getSimulationContext();
-  return calculateClothedTEForSet(localLoadout.value, {
-    truthEggs: actionsStore.effectiveSnapshot.te,
-    colleggtibleModifiers: context.colleggtibleModifiers,
-    labUpgradeLevel: context.epicResearchLevels['cheaper_research'] ?? 0,
-    proPermit: initialStateStore.proPermit,
-  });
-});
-
-const isOptimalELR = computed(() => {
-  if (!initialStateStore.rawBackup) return false;
-
-  const savedSet = artifactSets.value.elr;
-  const context = getSimulationContext();
-  const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
-    assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
-    habIds: actionsStore.effectiveSnapshot.habIds,
-    vehicles: actionsStore.effectiveSnapshot.vehicles,
-    currentSet: savedSet || undefined,
-    excludeGusset: excludeGusset.value,
-    commonResearch: actionsStore.effectiveSnapshot.researchLevels,
-    epicResearchLevels: context.epicResearchLevels,
-    colleggtibleModifiers: context.colleggtibleModifiers,
-    proPermit: initialStateStore.proPermit,
-  });
-
-  const currentArtifacts = actionsStore.effectiveSnapshot.artifactLoadout;
-  return isFunctionallyIdentical(optimized, currentArtifacts);
-
-});
-
-function equipOptimalELR() {
-  if (!initialStateStore.rawBackup) return;
-
-  const savedSet = artifactSets.value.elr;
-  const context = getSimulationContext();
-  const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
-    assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
-    habIds: actionsStore.effectiveSnapshot.habIds,
-    vehicles: actionsStore.effectiveSnapshot.vehicles,
-    currentSet: savedSet || undefined,
-    excludeGusset: excludeGusset.value,
-    commonResearch: actionsStore.effectiveSnapshot.researchLevels,
-    epicResearchLevels: context.epicResearchLevels,
-    colleggtibleModifiers: context.colleggtibleModifiers,
-    proPermit: initialStateStore.proPermit,
-  });
-
-  // If the optimized set is DIFFERENT from our saved ELR set, update it
-  if (optimized !== savedSet) {
-    localLoadout.value = optimized.map(slot => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    }));
-
-    // Auto-save the new optimized loadout
-    saveChanges();
-  }
-
-  // If the optimized set is DIFFERENT from our currently active set, equip the ELR set
-  const currentArtifacts = actionsStore.effectiveSnapshot.artifactLoadout;
-  if (!isFunctionallyIdentical(optimized, currentArtifacts)) {
-    // If the tab is not 'elr', we need to switch to it before calling equipSet
-    // because equipSet uses selectedTab to decide what to equip.
-    if (selectedTab.value !== 'elr') {
-      selectedTab.value = 'elr';
-    }
-    equipSet();
-  }
-}
 
 // Sync local loadout when tab or store state changes
 watch(

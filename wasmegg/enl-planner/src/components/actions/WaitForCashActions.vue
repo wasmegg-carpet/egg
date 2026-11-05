@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-6 leading-relaxed">
-      Wait until you have accumulated a target amount of gems.
+      Wait until you have accumulated a target amount of boks.
     </p>
 
     <!-- Current State -->
@@ -10,13 +10,13 @@
         <div
           class="w-12 h-12 rounded-2xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-2"
         >
-          <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-full h-full object-contain" alt="Gems" />
+          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Boks" />
         </div>
         <div>
           <div class="text-sm font-bold text-slate-800">
-            {{ formatNumber(virtueStore.bankValue, 3) }}
+            {{ formatNumber(planStore.bankValue, 3) }}
           </div>
-          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Gems in Bank</div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Boks in Bank</div>
         </div>
       </div>
     </div>
@@ -27,9 +27,9 @@
         <div
           class="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center p-1.5 shadow-lg border border-slate-800"
         >
-          <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-full h-full object-contain" alt="Gems" />
+          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Boks" />
         </div>
-        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Gem Count </span>
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Bok Count </span>
       </div>
 
       <!-- Target input -->
@@ -49,7 +49,7 @@
 
       <!-- Calculated values -->
       <div
-        v-if="parsedTarget !== null && parsedTarget > virtueStore.bankValue"
+        v-if="parsedTarget !== null && parsedTarget > planStore.bankValue"
         class="space-y-3 bg-slate-50/30 rounded-xl p-4 border border-slate-50"
       >
         <div class="flex justify-between items-center text-[10px]">
@@ -74,7 +74,7 @@
       </div>
 
       <div
-        v-else-if="parsedTarget !== null && parsedTarget <= virtueStore.bankValue"
+        v-else-if="parsedTarget !== null && parsedTarget <= planStore.bankValue"
         class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-emerald-700 text-[10px] font-bold uppercase tracking-tight"
       >
         Target already reached!
@@ -84,14 +84,14 @@
       <button
         class="btn-premium btn-primary w-full mt-6 py-4 flex items-center justify-center gap-2 group disabled:opacity-20 shadow-lg shadow-slate-900/10"
         :disabled="!canWait"
-        @click="handleWaitForGems"
+        @click="handleWaitForCash"
       >
         <img
-          :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+          :src="iconURL('egginc/icon_bock.png', 64)"
           class="w-5 h-5 object-contain group-hover:scale-110 transition-transform"
-          alt="Gems"
+          alt="Boks"
         />
-        <span>Wait for Gems</span>
+        <span>Wait for Boks</span>
       </button>
     </div>
   </div>
@@ -102,7 +102,7 @@ import { ref, computed } from 'vue';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { iconURL } from 'lib';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { formatNumber, formatDuration, parseNumber, formatAbsoluteTime } from '@/lib/format';
 import { generateActionId } from '@/types';
@@ -111,7 +111,7 @@ import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 import { computeDependencies } from '@/lib/actions/executor';
 
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
   useEventCrossingWaits();
@@ -125,7 +125,7 @@ const parsedTarget = computed(() => {
 
 const requiredToEarn = computed(() => {
   if (parsedTarget.value === null) return 0;
-  return Math.max(0, parsedTarget.value - virtueStore.bankValue);
+  return Math.max(0, parsedTarget.value - planStore.bankValue);
 });
 
 const earningsPerSecond = computed(() => {
@@ -134,7 +134,7 @@ const earningsPerSecond = computed(() => {
 });
 
 const timeToSaveSeconds = computed(() => {
-  if (parsedTarget.value === null || parsedTarget.value <= virtueStore.bankValue) return 0;
+  if (parsedTarget.value === null || parsedTarget.value <= planStore.bankValue) return 0;
   
   // Accounts for population growth and 2x earnings, as the wait itself does
   const time = getBoostAwareTimeToSave(parsedTarget.value, actionsStore.effectiveSnapshot, getSimulationContext());
@@ -142,7 +142,7 @@ const timeToSaveSeconds = computed(() => {
 });
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
@@ -150,41 +150,41 @@ const baseTimestamp = computed(() => {
 
 const formattedAbsoluteTime = computed(() => {
   if (timeToSaveSeconds.value === 0 || !isFinite(timeToSaveSeconds.value)) return 'N/A';
-  return formatAbsoluteTime(timeToSaveSeconds.value, baseTimestamp.value, virtueStore.ascensionTimezone);
+  return formatAbsoluteTime(timeToSaveSeconds.value, baseTimestamp.value, planStore.ascensionTimezone);
 });
 
 const canWait = computed(
-  () => parsedTarget.value !== null && parsedTarget.value > virtueStore.bankValue && isFinite(timeToSaveSeconds.value)
+  () => parsedTarget.value !== null && parsedTarget.value > planStore.bankValue && isFinite(timeToSaveSeconds.value)
 );
 
-function handleWaitForGems() {
+function handleWaitForCash() {
   if (!canWait.value || parsedTarget.value === null) return;
-  const targetGems = parsedTarget.value;
+  const targetCash = parsedTarget.value;
 
   batch(async () => {
     prepareExecution();
-    insertBoostCrossingWaits(targetGems);
+    insertBoostCrossingWaits(targetCash);
     if (isEditingPastGroup.value) await settled();
-    addGemsWait(targetGems);
+    addBoksWait(targetCash);
   });
 
   targetInput.value = '';
 }
 
 // After any 2x waits, so everything is measured from where those leave the plan.
-function addGemsWait(targetGems: number) {
+function addBoksWait(targetCash: number) {
   const beforeSnapshot = prepareExecution();
 
   const payload = {
-    targetGems,
-    currentGems: beforeSnapshot.bankValue,
-    requiredGems: Math.max(0, targetGems - beforeSnapshot.bankValue),
+    targetCash,
+    currentCash: beforeSnapshot.bankValue,
+    requiredCash: Math.max(0, targetCash - beforeSnapshot.bankValue),
     earningsPerSecond: beforeSnapshot.offlineEarnings,
-    timeSeconds: getBoostAwareTimeToSave(targetGems, beforeSnapshot, getSimulationContext()),
+    timeSeconds: getBoostAwareTimeToSave(targetCash, beforeSnapshot, getSimulationContext()),
   };
 
   const dependencies = computeDependencies(
-    'wait_for_gems',
+    'wait_for_cash',
     payload,
     actionsStore.actionsBeforeInsertion,
     actionsStore.initialSnapshot.researchLevels
@@ -195,19 +195,19 @@ function addGemsWait(targetGems: number) {
   // The completeExecution will handle snapshots, but we need to update the stores properly.
   // We'll use applyTime logic here to update the store state.
   
-  // Update bank value manually in virtue store
-  virtueStore.setBankValue(targetGems);
+  // Update bank value manually in the plan store
+  planStore.setBankValue(targetCash);
   // Also need to update population if we want to be accurate, but usually 
   // executors handle store updates. 
   // Wait, wait. Action executors' `execute` method should handle this.
   
-  // Let's go back and update lib/actions/executors/waitForGems.ts to actually DO something!
+  // Let's go back and update lib/actions/executors/waitForCash.ts to actually DO something!
   
   completeExecution(
     {
       id: generateActionId(),
       timestamp: Date.now(),
-      type: 'wait_for_gems',
+      type: 'wait_for_cash',
       payload,
       cost: 0,
       dependsOn: dependencies,

@@ -1,17 +1,15 @@
 /**
  * @module initContinueCurrent
- * @description Mode C: Continue Current Ascension
+ * @description Mode C: Continue the current enlightenment farm
  *
  * Contract:
- * - Fresh backup loaded (everything)
+ * - Fresh backup loaded (everything); fails if the save has no enlightenment farm
  * - Farm-specific stores populated from backup farm (research, habs, vehicles, silos)
- * - Start action: egg from backup farm, farm state = backup farm, isQuickContinue=true
+ * - Start action: farm state = backup farm, isQuickContinue=true
  * - isContinuing=true (createBaseEngineState uses farm data)
- * - Ascension date/time = now
+ * - Start date/time = now
  * - Active events auto-pushed (earnings boost, relevant sales)
- * - Artifacts: depends on selection
- *   - 'earnings': backup loadout as earnings set
- *   - 'elr': backup loadout as elr set + computed optimal earnings
+ * - Artifacts: the backup's loadout
  *
  * Key invariant: start_action.initialFarmState MUST be set, isContinuing MUST be true.
  */
@@ -21,14 +19,11 @@ import { fetchPlayerBackup } from './fetchBackup';
 import { loadAndSyncBackup, catchUpFarmState } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 
-export async function initContinueCurrent(
-  playerId: string,
-  artifactSet: 'earnings' | 'elr'
-): Promise<void> {
+export async function initContinueCurrent(playerId: string): Promise<void> {
   // 1. Clean slate
   await resetAllStores();
 
@@ -37,13 +32,15 @@ export async function initContinueCurrent(
 
   // 3. Load from backup and sync global stores
   const initialStateStore = useInitialStateStore();
-  const mode = artifactSet === 'earnings' ? 'continue_earnings' as const : 'continue_elr' as const;
-  const { teEarnedPerEgg } = loadAndSyncBackup(playerId, backup, mode);
+  loadAndSyncBackup(playerId, backup, 'continue');
+  if (!initialStateStore.currentFarmState) {
+    throw new Error('This save is not on the Enlightenment egg, so there is no farm to continue.');
+  }
 
-  // 4. Continue-specific virtue store setup
-  const virtueStore = useVirtueStore();
-  virtueStore.resetToCurrentDateTime();
-  virtueStore.setBankValue(0); // Will be overridden by continueFromBackup
+  // 4. Continue-specific setup
+  const planStore = usePlanStore();
+  planStore.resetToCurrentDateTime();
+  planStore.setBankValue(0); // Will be overridden by continueFromBackup
 
   // 5. Compute a catch-up snapshot and sync farm state
   //    (backup may be hours old — simulate time passage for egg delivery)
@@ -51,7 +48,7 @@ export async function initContinueCurrent(
   const baseState = createBaseEngineState(null);
   const catchUpSnapshot = computeSnapshot(baseState, context);
 
-  catchUpFarmState(catchUpSnapshot, baseState.bankValue, context.ascensionStartTime, teEarnedPerEgg);
+  catchUpFarmState(catchUpSnapshot, baseState.bankValue, context.ascensionStartTime);
 
   // 6. Continue from backup — sets up start action with farm state,
   //    populates farm-specific stores, computes final snapshot, pushes events

@@ -1,4 +1,4 @@
-import { getDiscountedVirtuePrice, type CommonResearch, type ResearchCostModifiers } from './commonResearch';
+import { getDiscountedResearchPrice, type CommonResearch, type ResearchCostModifiers } from './commonResearch';
 import type { CalculationsSnapshot } from '@/types';
 import type { SimulationContext } from '@/engine/types';
 import { createBaseEngineState } from '@/engine/adapter';
@@ -84,7 +84,7 @@ export interface ROICalculationResult {
   timeToBuySeconds: number;
   nextSnapshot: CalculationsSnapshot;
   // The price actually paid, and whether that reflects a research sale — may differ from
-  // `getDiscountedVirtuePrice(research, level, mods, eventTiming.isSaleActive)` when waiting for
+  // `getDiscountedResearchPrice(research, level, mods, eventTiming.isSaleActive)` when waiting for
   // an upcoming sale turns out faster than buying at today's price (see `getSaleAwareTimeToSave`).
   price: number;
   duringSale: boolean;
@@ -146,7 +146,7 @@ export function getSaleAwareTimeToSave(
   snapshot: CalculationsSnapshot,
   transitions: EarningsRateTransition[]
 ): SaleAwarePurchase {
-  const currentPrice = getDiscountedVirtuePrice(research, level, mods, isSaleActive);
+  const currentPrice = getDiscountedResearchPrice(research, level, mods, isSaleActive);
   const currentWait = getTimeToSave(currentPrice, snapshot, transitions);
 
   if (isSaleActive) {
@@ -158,7 +158,7 @@ export function getSaleAwareTimeToSave(
     // necessarily gone for good: a LATER sale (not just this calendar one) may still beat paying
     // full price. `currentPrice` here already IS the sale price (isSaleActive is true), so it's the
     // right target to keep saving toward.
-    const fullPrice = getDiscountedVirtuePrice(research, level, mods, false);
+    const fullPrice = getDiscountedResearchPrice(research, level, mods, false);
     const fullPriceWait = getTimeToSave(fullPrice, snapshot, transitions);
     // `currentWait` above is already the save time for `currentPrice`, which in this branch IS the
     // sale price — no need to recompute it.
@@ -174,7 +174,7 @@ export function getSaleAwareTimeToSave(
     return { price: currentPrice, waitSeconds: currentWait, duringSale: false };
   }
 
-  const salePrice = getDiscountedVirtuePrice(research, level, mods, true);
+  const salePrice = getDiscountedResearchPrice(research, level, mods, true);
   const saleWaitFromNow = getTimeToSave(salePrice, snapshot, transitions);
   const trueSaleWait = earliestSaleTimeAfterSaving(saleWaitFromNow, currentAbsoluteTime);
 

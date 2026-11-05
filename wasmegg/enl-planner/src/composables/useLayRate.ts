@@ -9,7 +9,7 @@ import { storeToRefs } from 'pinia';
 import { useLayRateStore } from '@/stores/layRate';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useHabCapacity } from '@/composables/useHabCapacity';
 import { calculateLayRate, convertRate } from '@/calculations/layRate';
 import type { LayRateInput, LayRateOutput, TimeUnit } from '@/types';
@@ -33,7 +33,7 @@ export function useLayRate(): {
   input: ComputedRef<LayRateInput>;
   output: ComputedRef<LayRateDisplayOutput>;
 } {
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const store = useLayRateStore();
   const initialStateStore = useInitialStateStore();
   const commonResearchStore = useCommonResearchStore();
@@ -41,7 +41,7 @@ export function useLayRate(): {
   const { timeUnit } = storeToRefs(store);
   const { researchLevels } = storeToRefs(commonResearchStore);
   const { epicResearchLevels } = storeToRefs(initialStateStore);
-  const { population } = storeToRefs(virtueStore);
+  const { population } = storeToRefs(planStore);
 
   // Get hab capacity for clamping or reference
   const { output: habCapacityOutput } = useHabCapacity();

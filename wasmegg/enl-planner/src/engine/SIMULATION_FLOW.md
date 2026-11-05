@@ -1,20 +1,19 @@
 # Simulation Flow Documentation
 
-This document describes the step-by-step transformation of the `EngineState` and how results are derived in the Ascension Planner.
+This document describes the step-by-step transformation of the `EngineState` and how results are derived in the Enlightenment Planner.
 
 ## Core State: `EngineState`
 
 The simulation tracks the following mutable state:
-- `currentEgg`: The active Virtue Egg.
+- `soulEggs`, `prophecyEggs`, `te`: Earning bonus inputs, fixed for the plan.
 - `population`: Number of chickens on the farm.
-- `bankValue`: Number of earned gems (accumulated through earnings).
+- `bankValue`: Number of boks (accumulated through earnings).
 - `lastStepTime`: Running total of seconds passed in the ascension.
 - `researchLevels`: Map of common research IDs to levels.
 - `habIds`: Array of 4 hab slots.
 - `vehicles`: Array of vehicle slots (ID and train length).
 - `siloCount`: Number of fuel silos.
-- `fuelTankAmounts`: Amount of each virtue egg in the tank.
-- `eggsDelivered`: Total eggs ever delivered for each virtue egg.
+- `fuelTankAmounts`: Amount of each regular egg in the tank.
 - `artifactLoadout`: Currently equipped artifacts.
 - `artifactSets`: Saved sets for Quick-Equip.
 - `activeSales`: Current sale status (Research, Hab, Vehicle).
@@ -26,35 +25,29 @@ When an action is applied (in `src/engine/apply/actions.ts` and `src/engine/simu
 
 ### 1. Pre-Calculation (Refresh)
 Some actions are **dynamic**. Their payloads are recalculated based on the state *immediately preceding* them.
-- `wait_for_te`: Target TE is converted to `eggsToLay` and then `timeSeconds`.
+- `wait_for_population`: `totalTimeSeconds` is the hatchery time to the target, stopping at full habs.
 - `store_fuel`: `timeSeconds` is derived from target amount.
 - `wait_for_missions`: `totalTimeSeconds` is derived from return timestamps in the backup.
 
 ### 2. Immediate Effects
 The action's immediate state transformations are applied.
 - `buy_research`: Increments level, subtracts `cost` from `bankValue`.
-- `shift`: Resets `bankValue` to 0, `population` to 1.
 - `change_artifacts`: Updates `artifactLoadout`.
 
-### 3. Passive Delivery
-During the action's duration (calculated via `getActionDuration`), eggs are delivered and time passes.
-- `passiveEggs = elr * durationSeconds`
-- `eggsDelivered[egg] += passiveEggs`
-
-### 4. Time Advancement (`applyTime`)
+### 3. Time Advancement (`applyTime`)
 The farm operates during the action's duration:
 - **Population**: `newPop = Math.min(maxHab, P0 + IHR * durationSeconds)`.
 - **Earnings**: Integral of earnings rate over the duration.
   - Phase 1: Laying limited (Population * LayRate < Shipping).
   - Phase 2: Shipping limited (Shipping < Population * LayRate).
-- **Bank**: `bankValue += earnedGems`.
+- **Bank**: `bankValue += earnedBoks`.
 
-### 5. Snapshot Derivation (`computeSnapshot`)
+### 4. Snapshot Derivation (`computeSnapshot`)
 After state changes, a full snapshot is computed using the logic in `src/calculations/`.
 - Total multipliers (Epic Research + Artifacts + Colleggtibles).
 - `EggValue`, `HabCapacity`, `LayRate`, `ShippingCapacity`.
 - `EffectiveLayRate (ELR)`: `min(LayRate, ShippingCapacity)`.
-- `Earnings`: `ELR * EggValue`.
+- `Earnings`: `ELR * EggValue * (1 + EarningBonus)`, the bonus being `SE * SEBonus * (1 + PEBonus)^PE * 1.01^TE`.
 
 ## Dependency Model
 

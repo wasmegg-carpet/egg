@@ -52,7 +52,7 @@
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estimated End:</span>
           <div class="text-right">
             <div class="text-sm font-mono-premium font-black text-slate-900">
-              {{ formatAbsoluteTime(parsedSeconds, baseTimestamp, virtueStore.ascensionTimezone) }}
+              {{ formatAbsoluteTime(parsedSeconds, baseTimestamp, planStore.ascensionTimezone) }}
             </div>
           </div>
         </div>
@@ -63,7 +63,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <p class="text-[10px] text-amber-700 font-medium leading-relaxed">
-            During this wait, you will not earn gems, your chicken population will not grow, and no eggs will be shipped.
+            During this wait, you will not earn boks, your chicken population will not grow, and no eggs will be shipped.
           </p>
         </div>
       </div>
@@ -76,13 +76,13 @@ import { ref, computed } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatDuration, parseDuration, formatAbsoluteTime } from '@/lib/format';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const { batch, insertWaitAcrossBoost } = useEventCrossingWaits();
 
 const inputDuration = ref('');
@@ -125,7 +125,7 @@ const parsedSeconds = computed(() => {
           hour,
           minute,
           currentSimTime,
-          virtueStore.ascensionTimezone
+          planStore.ascensionTimezone
         );
         return Math.max(0, targetTS - currentSimTime);
       }
@@ -140,7 +140,7 @@ const parsedSeconds = computed(() => {
 const isValid = computed(() => parsedSeconds.value > 0);
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;

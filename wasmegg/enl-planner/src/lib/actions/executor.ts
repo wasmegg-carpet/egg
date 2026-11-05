@@ -16,7 +16,7 @@ import type {
   BuyResearchPayload,
   BuyTrainCarPayload,
   BuySiloPayload,
-  VirtueEgg,
+  FuelEgg,
   StartAscensionPayload,
 } from '@/types';
 import type { ArtifactSlotPayload } from '@/types';
@@ -25,12 +25,11 @@ import { startAscensionExecutor } from './executors/startAscension';
 import { buyVehicleExecutor } from './executors/buyVehicle';
 import { buyHabExecutor } from './executors/buyHab';
 import { buyResearchExecutor } from './executors/buyResearch';
-import { shiftExecutor } from './executors/shift';
 import { buyTrainCarExecutor } from './executors/buyTrainCar';
 import { changeArtifactsExecutor } from './executors/changeArtifacts';
 import { buySiloExecutor } from './executors/buySilo';
 import { storeFuelExecutor } from './executors/storeFuel';
-import { waitForTEExecutor } from './executors/waitForTE';
+import { waitForPopulationExecutor } from './executors/waitForPopulation';
 import { launchMissionsExecutor } from './executors/launchMissions';
 import { toggleSaleExecutor } from './executors/toggleSale';
 import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
@@ -44,7 +43,7 @@ import { waitForFullHabsExecutor } from './executors/wait_for_full_habs';
 import { toggleEarningsBoostExecutor } from './executors/toggleEarningsBoost';
 import { waitForResearchSaleExecutor } from './executors/waitForResearchSale';
 import { waitForEarningsBoostExecutor } from './executors/waitForEarningsBoost';
-import { waitForGemsExecutor } from './executors/waitForGems';
+import { waitForCashExecutor } from './executors/waitForCash';
 import { waitForNoEarningsExecutor } from './executors/wait_for_no_earnings';
 import { notificationExecutor } from './executors/notification';
 import { modifyBankExecutor } from './executors/modifyBank';
@@ -85,9 +84,9 @@ export interface ExecutorContext {
   setResearchLevel(researchId: string, level: number): void;
   setArtifactLoadout(loadout: ArtifactSlotPayload[]): void;
   setSiloCount(count: number): void;
-  addFuel(egg: VirtueEgg, amount: number): boolean;
-  removeFuel(egg: VirtueEgg, amount: number): void;
-  addEggsDelivered(egg: VirtueEgg, amount: number): void;
+  addFuel(egg: FuelEgg, amount: number): boolean;
+  removeFuel(egg: FuelEgg, amount: number): void;
+  addEggsDelivered(egg: FuelEgg, amount: number): void;
 
   // Current state readers
   getHabIds(): (number | null)[];
@@ -95,9 +94,9 @@ export interface ExecutorContext {
   getResearchLevels(): Record<string, number>;
   getSiloCount(): number;
   getSiloCapacityLevel(): number;
-  getFuelAmounts(): Record<VirtueEgg, number>;
-  getEggsDelivered(): Record<VirtueEgg, number>;
-  getTEEarned(): Record<VirtueEgg, number>;
+  getFuelAmounts(): Record<FuelEgg, number>;
+  getEggsDelivered(): Record<FuelEgg, number>;
+  getTEEarned(): Record<FuelEgg, number>;
 
   // Cost modifiers
   getHabCostModifiers(): { cheaperContractorsLevel: number; habCostMultiplier: number };
@@ -118,13 +117,12 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   buy_vehicle: buyVehicleExecutor,
   buy_hab: buyHabExecutor,
   buy_research: buyResearchExecutor,
-  shift: shiftExecutor,
   buy_train_car: buyTrainCarExecutor,
   change_artifacts: changeArtifactsExecutor,
   buy_silo: buySiloExecutor,
   store_fuel: storeFuelExecutor,
   remove_fuel: removeFuelExecutor,
-  wait_for_te: waitForTEExecutor,
+  wait_for_population: waitForPopulationExecutor,
   launch_missions: launchMissionsExecutor,
   toggle_sale: toggleSaleExecutor,
   equip_artifact_set: equipArtifactSetExecutor,
@@ -136,7 +134,7 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   wait_for_research_sale_end: waitForResearchSaleEndExecutor,
   wait_for_earnings_boost: waitForEarningsBoostExecutor,
   wait_for_earnings_boost_end: waitForEarningsBoostEndExecutor,
-  wait_for_gems: waitForGemsExecutor,
+  wait_for_cash: waitForCashExecutor,
   wait_for_no_earnings: waitForNoEarningsExecutor,
   toggle_earnings_boost: toggleEarningsBoostExecutor,
   notification: notificationExecutor,
@@ -176,9 +174,8 @@ export function computeDependencies(
     return [];
   }
 
-  // 1. Every action depends on the most recent shift/start_ascension (the "group header")
-  // This ensures that undoing a shift also undoes all actions performed during that shift.
-  const lastHeader = [...existingActions].reverse().find(a => a.type === 'shift' || a.type === 'start_ascension');
+  // 1. Every action depends on the start action (the "group header")
+  const lastHeader = [...existingActions].reverse().find(a => a.type === 'start_ascension');
   if (lastHeader) {
     deps.push(lastHeader.id);
   }

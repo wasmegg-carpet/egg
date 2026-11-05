@@ -1,4 +1,4 @@
-// Core types for the Ascension Planner
+// Core types for the Enlightenment Planner
 
 // Re-export action types
 export * from './actions/index';
@@ -31,7 +31,6 @@ export interface Research {
   per_level: number;
   levels_compound: 'additive' | 'multiplicative';
   prices: number[];
-  virtue_prices: number[];
 }
 
 /**
@@ -168,7 +167,7 @@ export interface IHROutput {
   baseRatePerHab: number;
 
   // Multipliers
-  teMultiplier: number; // From Eggs of Truth (1.1^TE)
+  teMultiplier: number; // From Eggs of Truth (1.01^TE)
   epicMultiplier: number; // From Epic Int. Hatcheries
   ihrMultiplier: number; // From IHR colleggtibles
   artifactMultiplier: number; // From artifacts (The chalice, Life stone)
@@ -366,7 +365,7 @@ export interface EffectiveLayRateOutput {
 export interface EarningsInput {
   eggValue: number; // Value per egg ($/egg)
   effectiveLayRate: number; // eggs/second
-  te: number; // Eggs of Truth - provides 1.1^TE multiplier to earnings bonus
+  earningBonus: number; // SE × SE bonus × (1 + PE bonus)^PE × 1.01^TE
   earningsMultiplier: number; // Multiplier for all earnings (from colleggtibles)
   awayEarningsMultiplier: number; // Combined offline-earnings colleggtible multiplier
   artifactAwayMultiplier: number; // Artifact multiplier for offline earnings (lunar totem/stone - MULTIPLICATIVE)
@@ -380,8 +379,8 @@ export interface EarningsInput {
  * Output from Earnings calculation
  */
 export interface EarningsOutput {
-  baseEarnings: number; // $/second (eggValue × ELR)
-  teMultiplier: number; // 1.1^TE earnings bonus multiplier
+  baseEarnings: number; // boks/second (eggValue × ELR × (1 + earning bonus))
+  earningBonus: number; // Earnings are multiplied by 1 + this
   earningsMultiplier: number; // From earnings colleggtibles (all earnings)
   awayEarningsMultiplier: number; // From offline-earnings colleggtibles (offline only)
   artifactAwayMultiplier: number; // From lunar totem/stone (offline only, MULTIPLICATIVE)

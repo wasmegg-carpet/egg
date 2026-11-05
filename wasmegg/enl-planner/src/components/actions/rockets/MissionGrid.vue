@@ -28,10 +28,6 @@
                 {{ SHIP_INFO[ship].displayName }}
               </span>
             </div>
-            <div class="text-gray-500 text-[11px] font-medium">
-              {{ formatNumber(SHIP_INFO[ship].price, 0) }}
-            </div>
-            <div class="text-gray-400 text-[10px]">Save: {{ formatDuration(saveTime(ship)) }}</div>
           </td>
 
           <!-- Duration cells -->
@@ -44,7 +40,7 @@
             <!-- Line 2: Fuel requirements -->
             <div class="flex justify-center mb-1.5 h-4">
               <div
-                v-if="VIRTUE_FUEL_REQUIREMENTS[ship][dur] && VIRTUE_FUEL_REQUIREMENTS[ship][dur].length > 0"
+                v-if="FUEL_REQUIREMENTS[ship][dur] && FUEL_REQUIREMENTS[ship][dur].length > 0"
                 class="w-[18px] h-[18px] flex items-center justify-center cursor-help group transition-all"
                 v-tippy="{ content: getFuelTooltip(ship, dur), allowHTML: true }"
               >
@@ -90,12 +86,13 @@ import {
   ALL_DURATIONS,
   DURATION_NAMES,
   SHIP_INFO,
-  VIRTUE_FUEL_REQUIREMENTS,
+  FUEL_REQUIREMENTS,
   getEffectiveDuration,
   type Spaceship,
   type DurationType,
 } from '@/lib/missions';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { FUEL_EGG_NAMES } from '@/types';
+import { formatNumber, formatBokPrice, formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 
@@ -111,22 +108,16 @@ function canAfford(ship: Spaceship): boolean {
   return props.earningsPerSecond > 0;
 }
 
-function saveTime(ship: Spaceship): number {
-  const price = SHIP_INFO[ship].price;
-  const snapshot = actionsStore.effectiveSnapshot;
-  return getBoostAwareTimeToSave(price, snapshot, getSimulationContext());
-}
-
 function maxCount(ship: Spaceship, dur: DurationType): number {
   return rocketsStore.maxForMission(ship, dur);
 }
 
 function getFuelTooltip(ship: Spaceship, dur: DurationType): string {
-  const reqs = VIRTUE_FUEL_REQUIREMENTS[ship][dur];
+  const reqs = FUEL_REQUIREMENTS[ship][dur];
   if (!reqs || reqs.length === 0) return 'No fuel required';
   
   const lines = reqs.map(r => {
-    const name = r.egg.charAt(0).toUpperCase() + r.egg.slice(1);
+    const name = FUEL_EGG_NAMES[r.egg];
     return `${name}: <b>${formatNumber(r.amount, 1)}</b>`;
   });
   return lines.join('<br/>');

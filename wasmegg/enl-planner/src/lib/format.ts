@@ -132,11 +132,11 @@ export function formatWithReference(value: number, reference: number, decimals: 
 }
 
 /**
- * Format a gem price.
+ * Format a bok price.
  * If the cost is under 1,000, don't show any decimals.
  * If the cost is 1,000 or more, show with 3 decimal places.
  */
-export function formatGemPrice(price: number): string {
+export function formatBokPrice(price: number): string {
   return formatNumber(price, price < 1000 ? 0 : 3);
 }
 
@@ -189,7 +189,7 @@ export function formatDuration(seconds: number): string {
   // Round to the nearest whole second up front — every branch below floors seconds into minutes,
   // then minutes into hours, then hours into days, and this function never shows sub-second
   // precision anyway. Without this, a value that's THEORETICALLY exact (e.g. a duration
-  // back-derived as `gems / gemsPerSecond` from a delta that was itself `gemsPerSecond * exactSeconds`)
+  // back-derived as `boks / boksPerSecond` from a delta that was itself `boksPerSecond * exactSeconds`)
   // but lands a sub-microsecond epsilon under a whole unit due to the two floating-point ops not
   // perfectly inverting each other gets floored down a full unit at every level it cascades through
   // — confirmed in the wild: a 27h-exact silo credit displaying as "1d 2h" (26h) instead of "1d 3h"

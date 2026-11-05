@@ -42,7 +42,7 @@
         </div>
         <span
           v-tippy="
-            'Max Vehicles mode calculates Achieve ROI as if you had gone to Kindness and bought all available vehicles and hyperloop cars — after buying the research in question.'
+            'Max Vehicles mode calculates Achieve ROI as if you had bought all available vehicles and hyperloop cars — after buying the research in question.'
           "
           class="w-4 h-4 inline-flex items-center justify-center rounded-full bg-gray-100 text-gray-400 text-[9px] cursor-help hover:bg-gray-200 transition-colors leading-none shrink-0"
           >?</span

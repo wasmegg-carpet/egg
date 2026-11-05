@@ -11,4 +11,4 @@ export const isTestingEnvironment =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' ||
     IPV4_HOSTNAME.test(window.location.hostname) ||
-    window.location.hostname === 'ascension-planner--wasmegg-carpet.netlify.app');
+    window.location.hostname === 'enl-planner--wasmegg-carpet.netlify.app');

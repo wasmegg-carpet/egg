@@ -1,7 +1,6 @@
-import { Action, ActionType, CurrentFarmState, VIRTUE_EGGS } from '@/types';
+import { Action, ActionType, CurrentFarmState, FUEL_EGGS } from '@/types';
 import { InitialStateStoreState } from '@/stores/initialState';
 import { GameEvent } from '@/stores/events';
-import { countTEThresholdsPassed } from '@/lib/truthEggs';
 
 export type ReconstructionResult = 'completed' | 'pending' | 'na';
 
@@ -112,23 +111,9 @@ registerStrategy('buy_silo', createComparisonStrategy((payload, farm) => {
   return farm.numSilos >= payload.toCount;
 }));
 
-registerStrategy('wait_for_te', {
-  evaluate(action, context) {
-    const { egg, targetTE } = action.payload;
-    const delivered = context.initialState.initialEggsDelivered[egg] || 0;
-    const earned = context.initialState.initialTeEarned[egg] || 0;
-    const theoretical = countTEThresholdsPassed(delivered);
-    const currentTE = Math.max(earned, theoretical);
-    return currentTE >= targetTE ? 'completed' : 'pending';
-  }
-});
-
-registerStrategy('shift', {
+registerStrategy('wait_for_population', {
   evaluate(action, context) {
     if (!context.farm) return 'pending';
-    const { toEgg } = action.payload;
-    const currentEggIndex = context.farm.eggType - 50;
-    const targetEggIndex = VIRTUE_EGGS.indexOf(toEgg);
-    return currentEggIndex >= targetEggIndex ? 'completed' : 'pending';
+    return context.farm.population >= action.payload.targetPopulation ? 'completed' : 'pending';
   }
 });

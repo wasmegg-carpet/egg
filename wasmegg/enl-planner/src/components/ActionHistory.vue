@@ -16,7 +16,7 @@
       class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm divide-y divide-slate-100"
     >
       <template v-for="(item, idx) in filteredGroupedActions" :key="item.key">
-        <!-- Individual action (current work after last shift) -->
+        <!-- Individual action -->
         <ActionHistoryItem
           v-if="item.type === 'single'"
           :action="item.action"
@@ -24,21 +24,15 @@
           @undo="handleUndoRequest(item.action, $event)"
         />
 
-        <!-- Grouped actions (start or shift period) -->
+        <!-- The plan's actions, under its start -->
         <ActionGroup
           v-else-if="item.type === 'group'"
           :header-action="item.headerAction"
           :actions="item.actions"
           :time-elapsed-seconds="item.timeElapsedSeconds"
           :period-timestamp="item.periodTimestamp"
-          :eggs-delivered="item.eggsDelivered"
-          :visit-count="item.visitCount"
-          :is-editing="actionsStore.editingGroupId === item.headerAction.id"
-          :is-current="item.isCurrent"
           :compact="compactActionHistory"
           @undo="handleUndoRequest"
-          @start-editing="handleStartEditing"
-          @stop-editing="handleStopEditing"
         />
       </template>
     </div>
@@ -57,10 +51,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Action, StoreFuelPayload, WaitForTEPayload, LaunchMissionsPayload } from '@/types';
+import type { Action } from '@/types';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
-import { formatNumber, formatGemPrice } from '@/lib/format';
+import { usePlanStore } from '@/stores/plan';
 import { compactActionHistory } from '@/composables/useCompactActionHistory';
 import ActionHistoryItem from './ActionHistoryItem.vue';
 import ActionGroup from './ActionGroup.vue';
@@ -71,7 +64,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const actions = computed(() => actionsStore.actions);
 const totalCost = computed(() => actionsStore.totalCost);
@@ -82,7 +75,7 @@ const hasStartAction = computed(() => actionsStore.hasStartAction);
  * Get the ascension start time as a Date object.
  */
 const ascensionStartTime = computed(() => {
-  const { ascensionDate, ascensionTime } = virtueStore;
+  const { ascensionDate, ascensionTime } = planStore;
 
   // Parse the date and time
   // Format: "YYYY-MM-DD HH:MM"
@@ -107,157 +100,32 @@ interface SingleItem {
 }
 
 /**
- * Represents a group of actions collapsed under a header (start_ascension or shift).
+ * The plan's actions collapsed under its start action. A plan has no shifts, so there's only this one.
  */
 interface GroupItem {
   type: 'group';
   key: string;
-  headerAction: Action<'start_ascension'> | Action<'shift'>;
-  actions: Action[]; // Actions AFTER the header, until next shift
+  headerAction: Action<'start_ascension'>;
+  actions: Action[];
   timeElapsedSeconds: number;
-  periodTimestamp: Date; // When this period started
-  eggsDelivered: number; // Total eggs delivered during this period (for the current egg)
-  visitCount: number; // Which visit number this is for the egg (1st, 2nd, etc.)
-  isCurrent: boolean; // Whether this is the current (last) period
+  periodTimestamp: Date;
 }
 
 type GroupedItem = SingleItem | GroupItem;
 
-// getActionTimeSeconds removed, usage replaced by action.totalTimeSeconds
-
-/**
- * Group actions by periods.
- *
- * Logic:
- * - start_ascension + actions AFTER it (until first shift) = first group
- * - Each shift + actions AFTER it (until next shift) = subsequent groups
- * - Actions after the last shift (current work) are shown individually
- */
 const groupedActions = computed<GroupedItem[]>(() => {
-  const result: GroupedItem[] = [];
-  const allActions = actions.value;
-
-  const visitCounts: Record<string, number> = {
-    curiosity: 0,
-    integrity: 0,
-    humility: 0,
-    resilience: 0,
-    kindness: 0,
-  };
-
-  // Find all shift indices
-  const shiftIndices: number[] = [];
-  allActions.forEach((action, idx) => {
-    if (action.type === 'shift') {
-      shiftIndices.push(idx);
-    }
-  });
-
-  let cumulativeTimeSeconds = 0;
-
-  // Handle start_ascension
-  if (allActions[0]?.type === 'start_ascension') {
-    const startAction = allActions[0] as Action<'start_ascension'>;
-
-    if (shiftIndices.length > 0) {
-      // There are shifts - group start_ascension with actions until first shift
-      const firstShiftIdx = shiftIndices[0];
-      // Actions between start_ascension (exclusive) and first shift (exclusive)
-      const groupActions = allActions.slice(1, firstShiftIdx);
-
-      // Calculate time elapsed in this period
-      let periodTimeSeconds = 0;
-      groupActions.forEach(action => {
-        periodTimeSeconds += action.totalTimeSeconds || 0;
-      });
-
-      // Add the duration of the shift that ENDS this period
-      const firstShift = allActions[firstShiftIdx] as Action<'shift'>;
-      periodTimeSeconds += firstShift.totalTimeSeconds || 0;
-
-      visitCounts[startAction.payload.initialEgg]++;
-
-      result.push({
-        type: 'group',
-        key: `group_start`,
-        headerAction: startAction,
-        actions: groupActions,
-        timeElapsedSeconds: periodTimeSeconds,
-        periodTimestamp: ascensionStartTime.value,
-        eggsDelivered: computePeriodEggsDelivered(startAction, groupActions),
-        visitCount: visitCounts[startAction.payload.initialEgg],
-        isCurrent: false,
-      });
-
-      cumulativeTimeSeconds = periodTimeSeconds;
-    } else {
-      // No shifts yet - show start_ascension as a group (current period)
-      const groupActions = allActions.slice(1);
-      let periodTimeSeconds = 0;
-      groupActions.forEach(action => {
-        periodTimeSeconds += action.totalTimeSeconds || 0;
-      });
-
-      visitCounts[startAction.payload.initialEgg]++;
-
-      result.push({
-        type: 'group',
-        key: `group_start`,
-        headerAction: startAction,
-        actions: groupActions,
-        timeElapsedSeconds: periodTimeSeconds,
-        periodTimestamp: ascensionStartTime.value,
-        eggsDelivered: computePeriodEggsDelivered(startAction, groupActions),
-        visitCount: visitCounts[startAction.payload.initialEgg],
-        isCurrent: true,
-      });
-      return result;
-    }
-  }
-
-  // Process each shift period
-  for (let i = 0; i < shiftIndices.length; i++) {
-    const shiftIdx = shiftIndices[i];
-    const nextShiftIdx = shiftIndices[i + 1];
-    const shiftAction = allActions[shiftIdx] as Action<'shift'>;
-    const isLastShift = nextShiftIdx === undefined;
-
-    // Actions AFTER this shift, until next shift (or end of list)
-    const endIdx = isLastShift ? allActions.length : nextShiftIdx;
-    const groupActions = allActions.slice(shiftIdx + 1, endIdx);
-
-    // Calculate time elapsed in this period
-    let periodTimeSeconds = 0;
-    groupActions.forEach(action => {
-      periodTimeSeconds += action.totalTimeSeconds || 0;
-    });
-
-    // Add the duration of the next shift that ENDS this period
-    if (nextShiftIdx !== undefined) {
-      const nextShiftAction = allActions[nextShiftIdx] as Action<'shift'>;
-      periodTimeSeconds += nextShiftAction.totalTimeSeconds || 0;
-    }
-
-    visitCounts[shiftAction.payload.toEgg]++;
-
-    result.push({
+  const [startAction, ...groupActions] = actions.value;
+  if (startAction?.type !== 'start_ascension') return [];
+  return [
+    {
       type: 'group',
-      key: `group_${shiftAction.id}`,
-      headerAction: shiftAction,
+      key: 'group_start',
+      headerAction: startAction,
       actions: groupActions,
-      timeElapsedSeconds: periodTimeSeconds,
-      // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
-      // `cumulativeTimeSeconds` routinely lands a sub-microsecond residue short of a whole second.
-      periodTimestamp: new Date(Math.round(ascensionStartTime.value.getTime() + cumulativeTimeSeconds * 1000)),
-      eggsDelivered: computePeriodEggsDelivered(shiftAction, groupActions),
-      visitCount: visitCounts[shiftAction.payload.toEgg],
-      isCurrent: isLastShift,
-    });
-
-    cumulativeTimeSeconds += periodTimeSeconds;
-  }
-
-  return result;
+      timeElapsedSeconds: groupActions.reduce((sum, action) => sum + (action.totalTimeSeconds || 0), 0),
+      periodTimestamp: ascensionStartTime.value,
+    },
+  ];
 });
 
 /**
@@ -270,10 +138,8 @@ const filteredGroupedActions = computed<GroupedItem[]>(() => {
   return groups
     .map(group => {
       if (group.type === 'group') {
-        const shiftStatus = actionsStore.getShiftReconciliationStatus(group.actions);
-
-        // If all internal actions of the shift are completed, hide it.
-        if (shiftStatus === 'completed') return null;
+        // If all of the plan's actions are completed, hide it.
+        if (actionsStore.getGroupReconciliationStatus(group.actions) === 'completed') return null;
 
         // Filter actions to show only incomplete/NA
         const filteredActions = group.actions.filter(a => {
@@ -281,7 +147,7 @@ const filteredGroupedActions = computed<GroupedItem[]>(() => {
           return status !== 'completed';
         });
 
-        // Recalculate time for only incomplete items in this period.
+        // Recalculate time for only incomplete items.
         let incompleteTime = 0;
         for (const a of filteredActions) {
           incompleteTime += a.totalTimeSeconds || 0;
@@ -307,29 +173,4 @@ function handleUndoRequest(action: Action, options?: { skipConfirmation: boolean
 function handleClearAll(event: MouseEvent) {
   emit('clear-all', { skipConfirmation: event.shiftKey });
 }
-
-function handleStartEditing(groupId: string) {
-  actionsStore.setEditingGroup(groupId);
-}
-
-function handleStopEditing() {
-  actionsStore.setEditingGroup(null);
-}
-
-/**
- * Calculate eggs delivered during a period.
- * Uses the delta of eggsDelivered[egg] between the header action and the last action in the group.
- */
-function computePeriodEggsDelivered(
-  headerAction: Action<'start_ascension'> | Action<'shift'>,
-  groupActions: Action[]
-): number {
-  const egg = headerAction.endState.currentEgg;
-  const startDelivered = headerAction.endState.eggsDelivered[egg] || 0;
-  const lastAction = groupActions.length > 0 ? groupActions[groupActions.length - 1] : null;
-  const endDelivered = lastAction ? lastAction.endState.eggsDelivered[egg] || 0 : startDelivered;
-  return Math.max(0, endDelivered - startDelivered);
-}
-
-// getPreviousOfflineEarnings removed
 </script>

@@ -18,26 +18,6 @@
     <!-- Mission Summary -->
     <MissionSummary :summary="summary" :schedule="schedule" />
 
-    <!-- Artifact Warning -->
-    <div
-      v-if="showArtifactWarning"
-      class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3"
-    >
-      <div class="text-amber-500 mt-0.5">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-            clip-rule="evenodd"
-          />
-        </svg>
-      </div>
-      <div class="text-xs text-amber-800 leading-normal">
-        Saving for these ships will take <strong>{{ formatDuration(saveTimeSeconds) }}</strong>. Consider switching to your
-        <strong>earnings set</strong> while you wait.
-      </div>
-    </div>
-
     <!-- Launch Button -->
     <div v-if="rocketsStore.queuedMissions.length > 0" class="flex items-center gap-3">
       <button
@@ -53,18 +33,17 @@
       <span v-if="rocketsStore.isOverBudget" class="text-red-500 text-xs"> Not enough fuel in tank </span>
     </div>
 
-    <!-- Pre-shift Launch Option -->
+    <!-- Launch without waiting -->
     <div v-if="schedule.totalMissions >= 1 && schedule.totalMissions <= 3">
       <div class="flex items-center gap-2 px-1">
         <input type="checkbox" id="zero-time-launch" v-model="isZeroTime" class="rounded text-blue-600" />
         <label for="zero-time-launch" class="text-xs text-gray-600 font-medium cursor-pointer select-none">
-          Launch for 0 time (pre-shift sends)
+          Launch for 0 time
         </label>
       </div>
 
       <p class="text-[11px] text-gray-500 leading-relaxed italic border-l-2 border-gray-200 pl-3 py-0.5">
-        If you choose this option, the missions will launch for 0 time. This is useful for "pre-shift" sends where you
-        launch ships right before shifting, avoiding adding mission duration to your plan.
+        With this on, launching adds no time to your plan, so you keep planning instead of waiting for the missions to return.
       </p>
     </div>
   </div>
@@ -79,8 +58,8 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useEarnings } from '@/composables/useEarnings';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import { computeDependencies } from '@/lib/actions/executor';
-import { generateActionId, VIRTUE_EGGS } from '@/types';
-import type { VirtueEgg, LaunchMissionEntry } from '@/types';
+import { generateActionId, FUEL_EGGS, createEmptyFuelAmounts } from '@/types';
+import type { FuelEgg, LaunchMissionEntry } from '@/types';
 import { SHIP_INFO, Spaceship } from '@/lib/missions';
 import { formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
@@ -109,36 +88,10 @@ const earningsPerSecond = computed(() =>
 const schedule = computed(() => rocketsStore.getSchedule(ftlLevel.value));
 const summary = computed(() => rocketsStore.getSummary(ftlLevel.value));
 
-const totalLaunchCost = computed(() => {
-  let cost = 0;
-  for (const m of rocketsStore.queuedMissions) {
-    cost += SHIP_INFO[m.ship].price * m.count;
-  }
-  return cost;
-});
-
-const saveTimeSeconds = computed(() => {
-  const cost = totalLaunchCost.value;
-  if (cost <= 0) return 0;
-
-  // The wait the launch is charged: handles bank balance, population growth and 2x earnings,
-  // and uses offline rates (consistent with the rest of the app).
-  return getBoostAwareTimeToSave(cost, actionsStore.effectiveSnapshot, getSimulationContext());
-});
-
-const showArtifactWarning = computed(() => {
-  return initialStateStore.activeArtifactSet === 'elr' && saveTimeSeconds.value > 10;
-});
-
 function handleLaunch() {
   if (rocketsStore.isOverBudget || rocketsStore.queuedMissions.length === 0) return;
 
-  batch(async () => {
-    prepareExecution();
-    insertBoostCrossingWaits(totalLaunchCost.value);
-    if (isEditingPastGroup.value) await settled();
-    addLaunch();
-  });
+  addLaunch();
 }
 
 function addLaunch() {
@@ -152,14 +105,8 @@ function addLaunch() {
   }));
 
   // Calculate total fuel consumed
-  const fuelConsumed: Record<VirtueEgg, number> = {
-    curiosity: 0,
-    integrity: 0,
-    humility: 0,
-    resilience: 0,
-    kindness: 0,
-  };
-  for (const egg of VIRTUE_EGGS) {
+  const fuelConsumed = createEmptyFuelAmounts();
+  for (const egg of FUEL_EGGS) {
     fuelConsumed[egg] = rocketsStore.totalFuelCost[egg];
   }
 
@@ -182,17 +129,11 @@ function addLaunch() {
   );
 
   // Deduct fuel from tank
-  for (const egg of VIRTUE_EGGS) {
+  for (const egg of FUEL_EGGS) {
     if (fuelConsumed[egg] > 0) {
       const current = fuelTankStore.fuelAmounts[egg];
       fuelTankStore.setFuelAmount(egg, Math.max(0, current - fuelConsumed[egg]));
     }
-  }
-
-  // Calculate total cost (gems)
-  let totalCost = 0;
-  for (const m of missions) {
-    totalCost += SHIP_INFO[m.ship as Spaceship].price * m.count;
   }
 
   completeExecution(
@@ -201,7 +142,7 @@ function addLaunch() {
       timestamp: Date.now(),
       type: 'launch_missions',
       payload,
-      cost: totalCost,
+      cost: 0, // Launches from a non-virtue farm cost fuel only
       dependsOn: dependencies,
     },
     beforeSnapshot
