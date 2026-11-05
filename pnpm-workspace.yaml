@@ -22,6 +22,7 @@ packages:
   - wasmegg/smart-assistant
   - wasmegg/virtue-companion
   - wasmegg/ascension-planner
+  - wasmegg/enl-planner
 
 allowBuilds:
   esbuild: true

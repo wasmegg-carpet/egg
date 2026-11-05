@@ -1,0 +1,74 @@
+:root {
+    /* Colors - High Performance Palette */
+    --color-brand-primary: #6366f1;
+    /* Indigo 500 */
+    --color-brand-primary-dark: #4f46e5;
+    /* Indigo 600 */
+    --color-brand-primary-glow: rgba(99, 102, 241, 0.3);
+
+    --color-brand-secondary: #f59e0b;
+    /* Amber 500 */
+    --color-brand-secondary-dark: #d97706;
+    /* Amber 600 */
+    --color-brand-secondary-glow: rgba(245, 158, 11, 0.3);
+
+    --color-brand-tertiary: #10b981;
+    /* Emerald 500 */
+    --color-brand-tertiary-dark: #059669;
+    /* Emerald 600 */
+    --color-brand-tertiary-glow: rgba(16, 185, 129, 0.3);
+
+    --color-brand-accent: #a855f7;
+    /* Purple 500 */
+
+    --color-success: var(--color-brand-tertiary);
+    --color-danger: #ef4444;
+    /* Red 500 */
+    --color-warning: var(--color-brand-secondary);
+    --color-info: #3b82f6;
+    /* Blue 500 */
+
+    /* Neutrals */
+    --color-slate-50: #f8fafc;
+    --color-slate-100: #f1f5f9;
+    --color-slate-200: #e2e8f0;
+    --color-slate-300: #cbd5e1;
+    --color-slate-400: #94a3b8;
+    --color-slate-500: #64748b;
+    --color-slate-600: #475569;
+    --color-slate-700: #33411b;
+    --color-slate-800: #1e293b;
+    --color-slate-900: #0f172a;
+
+    /* Surfaces & Backgrounds */
+    --bg-app: var(--color-slate-50);
+    --bg-card: #ffffff;
+    --bg-glass: rgba(255, 255, 255, 0.8);
+    --bg-glass-dark: rgba(15, 23, 42, 0.8);
+
+    /* Text */
+    --text-main: var(--color-slate-900);
+    --text-muted: var(--color-slate-500);
+    --text-dim: var(--color-slate-400);
+    --text-white: #ffffff;
+
+    /* Radii */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
+    --radius-full: 9999px;
+
+    /* Elevation */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+
+    /* Animations */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}

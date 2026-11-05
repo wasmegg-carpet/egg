@@ -177,6 +177,7 @@ const entries: ({
   idToTool.get('rockets-tracker')!,
   idToTool.get('virtue-companion')!,
   idToTool.get('ascension-planner')!,
+  idToTool.get('enl-planner')!,
   idToTool.get('past-contracts')!,
   idToTool.get('inventory-visualizer')!,
   idToTool.get('enlightenment')!,
