@@ -1,9 +1,11 @@
 /**
- * Finds the artifact loadout with the highest offline earnings for a farm state.
+ * Finds the artifact loadout with the highest offline earnings, or the highest offline internal
+ * hatchery rate, for a farm state.
  *
- * Only artifacts and stones that touch offline earnings (egg value, laying rate, shipping, away
- * earnings, the SE and PE bonuses) are tried, plus the gusset when the population needs it to stay
- * within hab capacity. The planner doesn't know the player's inventory, so every artifact counts as
+ * Only artifacts and stones that touch the goal are tried (for earnings: egg value, laying rate,
+ * shipping, away earnings, the SE and PE bonuses; for IHR: those plus internal hatchery rate, so
+ * slots IHR can't use still earn), plus the gusset when the population needs it to stay within hab
+ * capacity. The planner doesn't know the player's inventory, so every artifact counts as
  * owned, the same as the artifact picker.
  *
  * Ties at the current population (e.g. a lay-limited farm, where shipping does nothing yet) are
@@ -20,6 +22,9 @@ const CLARITY_FAMILY = 'clarity-stone';
 const LIGHT_OF_EGGENDIL_FAMILY = 'light-of-eggendil';
 const GUSSET_FAMILIES = ['gusset', 'ornate-gusset'];
 
+export type ArtifactGoal = 'offlineEarnings' | 'ihr';
+
+const IHR_TARGET = 'internal hatchery rate';
 const EARNING_TARGETS = new Set([
   'egg value',
   'enlightenment egg value',
@@ -37,6 +42,7 @@ interface Effects {
   shipping: number;
   away: number;
   habCap: number;
+  ihr: number;
   soulEggBonus: number;
   prophecyEggBonus: number;
 }
@@ -53,6 +59,7 @@ const NO_EFFECTS: Effects = {
   shipping: 1,
   away: 1,
   habCap: 1,
+  ihr: 1,
   soulEggBonus: 0,
   prophecyEggBonus: 0,
 };
@@ -64,6 +71,7 @@ function combine(a: Effects, b: Effects): Effects {
     shipping: a.shipping * b.shipping,
     away: a.away * b.away,
     habCap: a.habCap * b.habCap,
+    ihr: a.ihr * b.ihr,
     soulEggBonus: a.soulEggBonus + b.soulEggBonus,
     prophecyEggBonus: a.prophecyEggBonus + b.prophecyEggBonus,
   };
@@ -77,6 +85,7 @@ function slotEffects(slot: EquippedArtifact): Effects {
     shipping: mods.shippingRate.totalMultiplier,
     away: mods.awayEarnings.totalMultiplier,
     habCap: mods.habCapacity.totalMultiplier,
+    ihr: mods.internalHatcheryRate.totalMultiplier,
     soulEggBonus: mods.soulEggBonus.totalMultiplier,
     prophecyEggBonus: mods.prophecyEggBonus.totalMultiplier,
   };
@@ -118,15 +127,34 @@ function slotConfigs(artifact: ArtifactOption, familyIndex: number, stones: Ston
   return configs;
 }
 
-export type OptimizeOfflineResult =
-  | { ok: true; loadout: EquippedArtifact[]; offlineEarnings: number }
+export type OptimizeResult =
+  | { ok: true; loadout: EquippedArtifact[]; offlineEarnings: number; offlineIHR: number }
   | { ok: false; reason: string };
 
-export function optimizeOfflineEarnings(
+/** Scores compare in order; a later one only breaks ties in the earlier ones. */
+type Score = number[];
+function better(a: Score, b: Score): boolean {
+  for (let i = 0; i < a.length; i++) {
+    const tolerance = 1e-9 * Math.max(Math.abs(a[i]), Math.abs(b[i]));
+    if (Math.abs(a[i] - b[i]) > tolerance) return a[i] > b[i];
+  }
+  return false;
+}
+
+export function optimizeOfflineEarnings(state: EngineState, context: SimulationContext, options: { beamWidth?: number } = {}) {
+  return optimizeArtifacts(state, context, 'offlineEarnings', options);
+}
+
+export function optimizeIHR(state: EngineState, context: SimulationContext, options: { beamWidth?: number } = {}) {
+  return optimizeArtifacts(state, context, 'ihr', options);
+}
+
+export function optimizeArtifacts(
   state: EngineState,
   context: SimulationContext,
+  goal: ArtifactGoal,
   options: { beamWidth?: number } = {}
-): OptimizeOfflineResult {
+): OptimizeResult {
   const beamWidth = options.beamWidth ?? 1500;
   const slotCount = artifactSlotCount(state.proPermit);
   const population = state.population || 0;
@@ -137,10 +165,12 @@ export function optimizeOfflineEarnings(
     if (!b || s.tier > b.tier) bestStones.set(s.familyId, s);
   }
   const clarity = bestStones.get(CLARITY_FAMILY)!;
-  const stones = [...bestStones.values()].filter(s => EARNING_TARGETS.has(s.effectTarget));
+  const targets = new Set(EARNING_TARGETS);
+  if (goal === 'ihr') targets.add(IHR_TARGET);
+  const stones = [...bestStones.values()].filter(s => targets.has(s.effectTarget));
 
-  const earningArtifacts = bestPerFamily(a => EARNING_TARGETS.has(a.effectTarget) && a.effectDelta > 0);
-  const configsByFamily = earningArtifacts.map((a, i) => slotConfigs(a, i, stones, clarity));
+  const candidates = bestPerFamily(a => targets.has(a.effectTarget) && a.effectDelta > 0);
+  const configsByFamily = candidates.map((a, i) => slotConfigs(a, i, stones, clarity));
 
   // Base values with no artifacts, which the effects then scale.
   const empty: EngineState = { ...state, artifactLoadout: [] };
@@ -161,24 +191,20 @@ export function optimizeOfflineEarnings(
   const otherFactor =
     baseFull.elr > 0 ? baseFull.offlineEarnings / (baseFull.eggValue * baseFull.elr * baseBonusFactor) : 0;
 
-  const score = (e: Effects) => {
+  // Offline IHR is the base rate times the artifact multiplier, so the multiplier ranks it.
+  const score = (e: Effects): Score => {
     const perEgg = baseNow.eggValue * e.eggValue * (1 + earningBonus(e)) * otherFactor * e.away;
     const ship = baseNow.shippingCapacity * e.shipping;
     const now = perEgg * Math.min(baseNow.layRate * e.layRate, ship);
     const full = perEgg * Math.min(baseFull.layRate * e.layRate * e.habCap, ship);
-    return { now, full };
-  };
-  const better = (a: { now: number; full: number }, b: { now: number; full: number }) => {
-    const tolerance = 1e-9 * Math.max(a.now, b.now);
-    if (Math.abs(a.now - b.now) > tolerance) return a.now > b.now;
-    return a.full > b.full;
+    return goal === 'ihr' ? [e.ihr, now, full] : [now, full];
   };
 
   // A gusset goes in first when the population wouldn't fit without one.
   interface Partial {
     configs: SlotConfig[];
     effects: Effects;
-    score: { now: number; full: number };
+    score: Score;
   }
   let beam: Partial[];
   const neededHabCap = population / baseNow.habCapacity;
@@ -229,18 +255,23 @@ export function optimizeOfflineEarnings(
     while (loadout.length < Math.max(4, state.artifactLoadout.length)) loadout.push({ artifactId: null, stones: [] });
     return loadout;
   };
-  let best: { loadout: EquippedArtifact[]; score: { now: number; full: number } } | null = null;
+  let best: { loadout: EquippedArtifact[]; score: Score; offlineEarnings: number; offlineIHR: number } | null = null;
   for (const p of beam.slice(0, 50)) {
     const loadout = toLoadout(p);
     const trial: EngineState = { ...state, artifactLoadout: loadout };
     const now = computeSnapshot(trial, context, { freezePopulation: true });
     if (now.habCapacity < population) continue;
     const full = computeSnapshot(trial, context, { skipGrowth: true });
-    const s = { now: now.offlineEarnings, full: full.offlineEarnings };
-    if (!best || better(s, best.score)) best = { loadout, score: s };
+    // Unclamped IHR multiplier: the engine's 500/min floor would hide differences below it.
+    const ihr = calculateArtifactModifiers(loadout).internalHatcheryRate.totalMultiplier;
+    const earnings = [now.offlineEarnings, full.offlineEarnings];
+    const s = goal === 'ihr' ? [ihr, ...earnings] : earnings;
+    if (!best || better(s, best.score)) {
+      best = { loadout, score: s, offlineEarnings: now.offlineEarnings, offlineIHR: now.offlineIHR };
+    }
   }
   if (!best) return { ok: false, reason: 'No loadout keeps hab capacity above the current population.' };
-  return { ok: true, loadout: best.loadout, offlineEarnings: best.score.now };
+  return { ok: true, loadout: best.loadout, offlineEarnings: best.offlineEarnings, offlineIHR: best.offlineIHR };
 }
 
 /** Short description of a loadout, e.g. for a confirmation message. */

@@ -38,13 +38,22 @@
       <div class="px-3 py-2 bg-gray-50/50 border-b border-gray-100 flex flex-col gap-2.5">
         <div class="flex justify-between items-center">
 
-          <button
-            class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
-            v-tippy="'Fill this set with the artifacts and stones that earn the most while offline right now, save it, and equip it'"
-            @click="maximizeOfflineEarnings"
-          >
-            Max Offline Earnings
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              class="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
+              v-tippy="'Fill this set with the artifacts and stones that earn the most while offline right now, save it, and equip it'"
+              @click="applyBest('offlineEarnings')"
+            >
+              Max Offline Earnings
+            </button>
+            <button
+              class="px-3 py-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-colors"
+              v-tippy="'Fill this set with the highest offline internal hatchery rate (the slots IHR can\'t use go to offline earnings), save it, and equip it'"
+              @click="applyBest('ihr')"
+            >
+              Max IHR
+            </button>
+          </div>
 
           <div class="flex items-center gap-2">
             <template v-if="activeArtifactSet !== selectedTab">
@@ -130,7 +139,7 @@ import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { optimizeOfflineEarnings } from '@/lib/artifacts/optimizeOffline';
+import { optimizeArtifacts, type ArtifactGoal } from '@/lib/artifacts/optimizeArtifacts';
 import { formatNumber } from '@/lib/format';
 
 const initialStateStore = useInitialStateStore();
@@ -270,14 +279,15 @@ function saveChanges() {
   insertWaitForFullHabsIfCapacityIncreased(beforeSnapshot);
 }
 
-// One click: the best offline earnings loadout for the current farm, saved to this set and equipped.
-function maximizeOfflineEarnings() {
-  const result = optimizeOfflineEarnings(
+// One click: the best loadout for the goal at this point in the plan, saved to this set and equipped.
+function applyBest(goal: ArtifactGoal) {
+  const result = optimizeArtifacts(
     createBaseEngineState(actionsStore.effectiveSnapshot),
-    getSimulationContext()
+    getSimulationContext(),
+    goal
   );
   if (!result.ok) {
-    warningStore.showWarning('Max Offline Earnings', result.reason);
+    warningStore.showWarning(goal === 'ihr' ? 'Max IHR' : 'Max Offline Earnings', result.reason);
     return;
   }
   localLoadout.value = result.loadout;

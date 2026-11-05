@@ -4,7 +4,7 @@ import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import { computeSnapshot } from '@/engine/compute';
 import type { EngineState } from '@/engine/types';
 import { useInitialStateStore } from '@/stores/initialState';
-import { optimizeOfflineEarnings } from './optimizeOffline';
+import { optimizeOfflineEarnings, optimizeIHR } from './optimizeArtifacts';
 import type { EquippedArtifact } from './types';
 
 describe('max offline earnings loadout', () => {
@@ -63,5 +63,23 @@ describe('max offline earnings loadout', () => {
   test('fills only two slots on a Standard permit', () => {
     const result = optimizeOfflineEarnings(farm({ proPermit: false }), getSimulationContext());
     expect(result.ok && result.loadout.filter(s => s.artifactId).length).toBe(2);
+  });
+
+  test('max IHR puts clarity in the Chalice and earns with the other slots', () => {
+    // Enough hatchery research to be clear of the 500/min manual-hatching floor.
+    const state = farm({ researchLevels: { internal_hatchery1: 10, internal_hatchery2: 10, internal_hatchery3: 15 } });
+    const context = getSimulationContext();
+    const result = optimizeIHR(state, context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const chalice = result.loadout.find(s => s.artifactId?.startsWith('the-chalice'));
+    expect(chalice?.stones).toEqual(['clarity-stone-4', 'clarity-stone-4', 'clarity-stone-4']);
+    const noArtifacts = offline(state, []).offlineIHR;
+    expect(result.offlineIHR / noArtifacts).toBeGreaterThanOrEqual(2.2 - 1e-9);
+    const wide = optimizeIHR(state, context, { beamWidth: 8000 });
+    expect(wide.ok && wide.offlineIHR).toBeCloseTo(result.offlineIHR, 3);
+    expect(wide.ok && wide.offlineEarnings).toBeCloseTo(result.offlineEarnings, -1);
+    // The other slots still earn: well above an IHR-only set.
+    expect(result.offlineEarnings).toBeGreaterThan(offline(state, [chalice!]).offlineEarnings * 100);
   });
 });
