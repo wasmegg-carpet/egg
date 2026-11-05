@@ -139,7 +139,7 @@ interface SortedResearchItem {
   hpp?: number;
   timeRoiSeconds?: number;
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; helpsAlone: boolean; impact: number; hpp: number };
   recommendationNote?: string;
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;

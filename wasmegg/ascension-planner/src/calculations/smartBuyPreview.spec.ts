@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { getCommonResearches, getDiscountedVirtuePrice, getResearchById } from './commonResearch';
 import type { ResearchCostModifiers } from './commonResearch';
+import { deliveryRateScorer } from './deliveryLevelSearch';
 import { rankResearchByELRImpact } from './researchRanking';
 import { runDeliveryBuyLoop } from './smartBuyPreview';
 import { computeSnapshot } from '@/engine/compute';
-import { getTimeToSave } from '@/engine/apply';
+import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
 import { getNextSaleEnd, getNextSaleStart } from '@/lib/events';
@@ -96,7 +97,7 @@ describe('delivery research that needs several levels to help', () => {
     );
     const item = ranked.find(r => r.research.id === researchId)!;
     expect(item.impact).toBeLessThanOrEqual(0);
-    expect(item.lookahead?.minLevels).toBeGreaterThanOrEqual(2);
+    expect(item.lookahead?.levels).toBeGreaterThanOrEqual(2);
   });
 
   test('ranks on the hr/% of the levels it needs, not as a last resort', () => {
@@ -164,7 +165,7 @@ describe('delivery research that needs several levels to help', () => {
       'realistic',
       'efficiency'
     );
-    const minLevels = ranked.find(r => r.research.id === scenario.researchId)!.lookahead!.minLevels;
+    const minLevels = ranked.find(r => r.research.id === scenario.researchId)!.lookahead!.levels;
     let budget = 0;
     for (let n = 0; n < minLevels; n++) budget += scenario.levelSeconds(n);
 
@@ -183,7 +184,7 @@ describe('delivery research that needs several levels to help', () => {
       research: getResearchById(researchId)!,
       canBuy: true,
       showDeadlineWarning: false,
-      lookahead: minLevels ? { minLevels } : undefined,
+      lookahead: minLevels ? { levels: minLevels } : undefined,
     });
     let calls = 0;
     ranking.override = () =>
@@ -191,5 +192,79 @@ describe('delivery research that needs several levels to help', () => {
 
     const { purchases } = buyUntilDeadline(scenario, 86400);
     expect(purchases.map(p => p.researchId)).toEqual([scenario.researchId, scenario.researchId, 'leafsprings']);
+  });
+});
+
+describe('delivery research that helps a little alone and far more with another level', () => {
+  // One Hyper Portalling level only just moves a stone; a second gets the full benefit. Priced so
+  // the first level takes 14 hours to save for, like the report this came from.
+  function smallThenLargeScenario() {
+    const researchLevels: Record<string, number> = {
+      ...maxedLevels(),
+      hyper_portalling: 3,
+      wormhole_dampening: 17,
+      micro_coupling: 3,
+      relativity_optimization: 4,
+      neural_net_refine: 17,
+    };
+    const snapshot = snapshotFor(researchLevels);
+    const research = getResearchById('hyper_portalling')!;
+    const unitMods: ResearchCostModifiers = { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 };
+    const unitSeconds = getTimeToSave(getDiscountedVirtuePrice(research, 3, unitMods, true), snapshot, []);
+    const mods = { ...unitMods, researchCostMultiplier: (14 * 3600) / unitSeconds };
+    return { researchLevels, snapshot, mods };
+  }
+  const rank = (now: number, deadline = saleEnd) => {
+    const { researchLevels, snapshot, mods } = smallThenLargeScenario();
+    return rankResearchByELRImpact(
+      researchLevels,
+      deliverySource,
+      snapshot,
+      context,
+      mods,
+      true,
+      now,
+      deadline,
+      'realistic',
+      'efficiency'
+    );
+  };
+
+  test('ranks on both levels, ahead of research that looked better one level at a time', () => {
+    const ranked = rank(saleEnd - 3 * 86400);
+    const item = ranked.find(r => r.research.id === 'hyper_portalling')!;
+    expect(item.impact).toBeGreaterThan(0);
+    expect(item.lookahead?.levels).toBe(2);
+    expect(item.lookahead!.hpp).toBeLessThan(item.hpp!);
+    expect(ranked[0].research.id).toBe('hyper_portalling');
+  });
+
+  test('falls back to one level when the second cannot finish before the sale ends', () => {
+    const item = rank(saleEnd - 20 * 3600).find(r => r.research.id === 'hyper_portalling')!;
+    expect(item.lookahead).toBeUndefined();
+    expect(item.showDeadlineWarning).toBe(false);
+  });
+
+  test('stopping the search early never misses the best level count', () => {
+    const { researchLevels, snapshot, mods } = smallThenLargeScenario();
+    const now = saleEnd - 3 * 86400;
+    const rateOf = deliveryRateScorer(deliverySource!, researchLevels, snapshot.proPermit, context);
+    const baseRate = rateOf(researchLevels);
+    const noBank = { ...snapshot, bankValue: 0 };
+    const transitions = boostTransitionsFrom(snapshot, now);
+
+    // A deadline nothing misses, so every level count is in play.
+    for (const item of rank(now, now + 1e9)) {
+      const r = item.research;
+      const level = researchLevels[r.id];
+      let gems = 0;
+      let best = Infinity;
+      for (let n = 1; level + n <= r.levels; n++) {
+        gems += getDiscountedVirtuePrice(r, level + n - 1, mods, true);
+        const impact = rateOf({ ...researchLevels, [r.id]: level + n }) / baseRate - 1;
+        if (impact > 0) best = Math.min(best, getTimeToSave(gems, noBank, transitions) / 3600 / (impact * 100));
+      }
+      expect(item.lookahead?.hpp ?? item.hpp!).toBeCloseTo(best, 6);
+    }
   });
 });

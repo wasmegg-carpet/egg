@@ -115,7 +115,7 @@ export interface ResearchRankingItem {
   timeRoiSeconds?: number;
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
   lookahead?: {
-    minLevels: number;
+    levels: number;
     impact: number;
     hpp: number;
     timeRoiSeconds: number;
@@ -505,7 +505,7 @@ export function rankResearchByROI(
 /**
  * Ranks unpurchased research by Delivery Rate impact. `realistic` mode runs the full pipeline
  * (optimal artifacts + max habs/vehicles via `getOptimalELRSet`/`computeRealisticELR`), with a
- * lookahead search for multi-level research where level+1 alone has zero impact. `potential` mode
+ * lookahead search for research where buying several levels at once beats buying one. `potential` mode
  * uses a cheaper formula-based estimate instead. Both compute `hpp` (hours per impact-percentage-
  * point) and can be sorted by it (`efficiency`) or by raw impact (`impact`).
  *
@@ -564,6 +564,23 @@ export function rankResearchByELRImpact(
     // re-solving stones, rather than repeating the up-to-495-combo structure search unchanged.
     const baselineArtifactIds = baselineOptimal.map(slot => slot.artifactId);
     const transitions = boostTransitionsFrom(startSnapshot, absoluteSimTime);
+    const statsAt = (levels: Record<string, number>) => {
+      const optimal = getOptimalELRSetFromSource(rawBackup, {
+        proPermit: startSnapshot.proPermit,
+        assumeMaxHabsVehicles: true,
+        excludeGusset: false,
+        commonResearch: levels,
+        epicResearchLevels: context.epicResearchLevels,
+        colleggtibleModifiers: context.colleggtibleModifiers,
+        forcedArtifacts: baselineArtifactIds,
+      });
+      return computeRealisticELR(
+        levels,
+        calculateArtifactModifiers(optimal),
+        context.epicResearchLevels,
+        context.colleggtibleModifiers
+      );
+    };
 
     candidates = uniqueUnpurchased
       .map((r): ResearchRankingItem => {
@@ -585,33 +602,20 @@ export function rankResearchByELRImpact(
         const secondsToBuyNoBank = getTimeToSave(price, noBankSnapshot, transitions);
         const secondsToBuyWithBank = withBankPurchase.waitSeconds;
 
-        const tempLevels = { ...researchLevels, [r.id]: level + 1 };
-        const tempOptimal = getOptimalELRSetFromSource(rawBackup, {
-          proPermit: startSnapshot.proPermit,
-          assumeMaxHabsVehicles: true,
-          excludeGusset: false,
-          commonResearch: tempLevels,
-          epicResearchLevels: context.epicResearchLevels,
-          colleggtibleModifiers: context.colleggtibleModifiers,
-          forcedArtifacts: baselineArtifactIds,
-        });
-        const tempArtifactMods = calculateArtifactModifiers(tempOptimal);
-        const stats = computeRealisticELR(
-          tempLevels,
-          tempArtifactMods,
-          context.epicResearchLevels,
-          context.colleggtibleModifiers
-        );
+        const stats = statsAt({ ...researchLevels, [r.id]: level + 1 });
         const impact = (stats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
 
         const hoursToBuy = secondsToBuyNoBank / 3600;
         const hpp = impact > 0 ? hoursToBuy / (impact * 100) : Infinity;
         const timeRoiSeconds = impact > 0 ? secondsToBuyNoBank / impact : Infinity;
 
-        // Lookahead: find the minimum N levels that unlock positive ELR impact.
+        // Lookahead: the number of levels with the best hr/%. A stone only moves once a side has
+        // enough spare rate, so one level can add almost nothing and the next add far more. Levels
+        // that help but can't finish before the sale ends don't count, unless nothing else helps,
+        // when the deadline warning below says so.
         let lookahead:
           | {
-              minLevels: number;
+              levels: number;
               impact: number;
               hpp: number;
               timeRoiSeconds: number;
@@ -619,50 +623,47 @@ export function rankResearchByELRImpact(
             }
           | undefined;
         // What the deadline check below judges: normally just the next level, but a candidate that
-        // needs N levels to help at all is only worth starting if all N can finish in time.
+        // needs N levels is only worth starting if all N can finish in time.
         let secondsUntilUseful = secondsToBuyWithBank;
-        if (impact <= 0 && level + 1 < r.levels) {
-          for (let n = 2; n <= r.levels - level; n++) {
-            const laLevels = { ...researchLevels, [r.id]: level + n };
-            const laOptimal = getOptimalELRSetFromSource(rawBackup, {
-              proPermit: startSnapshot.proPermit,
-              assumeMaxHabsVehicles: true,
-              excludeGusset: false,
-              commonResearch: laLevels,
-              epicResearchLevels: context.epicResearchLevels,
-              colleggtibleModifiers: context.colleggtibleModifiers,
-              forcedArtifacts: baselineArtifactIds,
-            });
-            const laArtifactMods = calculateArtifactModifiers(laOptimal);
-            const laStats = computeRealisticELR(
-              laLevels,
-              laArtifactMods,
-              context.epicResearchLevels,
-              context.colleggtibleModifiers
-            );
-            const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
-            if (laImpact > 0) {
-              let totalPriceForN = 0;
-              for (let l = level; l < level + n; l++) {
-                totalPriceForN += getDiscountedVirtuePrice(r, l, mods, withBankPurchase.duringSale);
-              }
-              const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
-              const totalHoursForN = totalSecondsForN / 3600;
-              secondsUntilUseful = getTimeToSave(totalPriceForN, startSnapshot, transitions);
-              lookahead = {
-                minLevels: n,
-                impact: laImpact,
-                hpp: totalHoursForN / (laImpact * 100),
-                timeRoiSeconds: totalSecondsForN / laImpact,
-                realisticStats: {
-                  layRate: laStats.layRate * 3600,
-                  shippingRate: laStats.shippingRate * 3600,
-                  elr: laStats.effectiveRate * 3600,
-                  elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
-                },
-              };
+        let bestHpp = hpp;
+        if (level + 1 < r.levels) {
+          // No level can beat what the last one reaches, so this bounds how far the search goes.
+          const highestImpact =
+            (statsAt({ ...researchLevels, [r.id]: r.levels }).effectiveRate - baseline.effectiveRate) /
+            baseline.effectiveRate;
+          let totalPriceForN = getDiscountedVirtuePrice(r, level, mods, withBankPurchase.duringSale);
+          for (let n = 2; n <= r.levels - level && highestImpact > 0; n++) {
+            totalPriceForN += getDiscountedVirtuePrice(r, level + n - 1, mods, withBankPurchase.duringSale);
+            const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
+            const totalHoursForN = totalSecondsForN / 3600;
+            const helps = impact > 0 || lookahead !== undefined;
+            if (helps && totalHoursForN / (highestImpact * 100) >= bestHpp) break;
+
+            const secondsWithBank = getTimeToSave(totalPriceForN, startSnapshot, transitions);
+            if (helps && isResearchSaleActive(absoluteSimTime) && absoluteSimTime + secondsWithBank > researchSaleDeadline) {
               break;
             }
+
+            const laStats = statsAt({ ...researchLevels, [r.id]: level + n });
+            const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
+            if (laImpact <= 0) continue;
+            const laHpp = totalHoursForN / (laImpact * 100);
+            if (helps && laHpp >= bestHpp) continue;
+
+            bestHpp = laHpp;
+            secondsUntilUseful = secondsWithBank;
+            lookahead = {
+              levels: n,
+              impact: laImpact,
+              hpp: laHpp,
+              timeRoiSeconds: totalSecondsForN / laImpact,
+              realisticStats: {
+                layRate: laStats.layRate * 3600,
+                shippingRate: laStats.shippingRate * 3600,
+                elr: laStats.effectiveRate * 3600,
+                elrDelta: (laStats.effectiveRate - baseline.effectiveRate) * 3600,
+              },
+            };
           }
         }
 
@@ -749,8 +750,8 @@ export function rankResearchByELRImpact(
       .filter(c => (c.impact ?? 0) > 0);
   }
 
-  // A candidate that needs several levels ranks on what those levels achieve together, the same
-  // figures the caller displays for it: its next level alone has no positive impact to rank on.
+  // A candidate with a lookahead ranks on what those levels achieve together, the same figures the
+  // caller displays for it.
   const rankHpp = (c: ResearchRankingItem) => c.lookahead?.hpp ?? c.hpp!;
   const rankImpact = (c: ResearchRankingItem) => c.lookahead?.impact ?? c.impact!;
 
@@ -772,8 +773,8 @@ export function rankResearchByELRImpact(
 
   // Note: `hpp`/`timeRoiSeconds`/`realisticStats`/`impact` above are the item's own (pre-lookahead)
   // values; when `lookahead` is set, the caller displays *its* hpp/timeRoiSeconds/realisticStats/
-  // impact instead (this item alone has no positive impact, so its own stats aren't meaningful to
-  // show) — that swap is a view-layer formatting choice, done by the caller, not baked in here.
+  // impact instead, since that's what the item ranked on — that swap is a view-layer formatting
+  // choice, done by the caller, not baked in here.
   return candidates;
 }
 

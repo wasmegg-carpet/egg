@@ -49,7 +49,7 @@
             </svg>
             <span>
               <span class="font-bold uppercase tracking-tight mr-1">Lookahead:</span>
-              Needs {{ lookahead.minLevels }} levels for +{{ (lookahead.impact * 100).toFixed(3) }}% Delivery Rate ({{ lookahead.hpp.toFixed(1) }} hr/%)
+              {{ lookahead.helpsAlone ? 'Best with' : 'Needs' }} {{ lookahead.levels }} levels for +{{ (lookahead.impact * 100).toFixed(3) }}% Delivery Rate ({{ lookahead.hpp.toFixed(1) }} hr/%)
             </span>
           </div>
         </div>
@@ -314,7 +314,7 @@ const props = defineProps<{
   timeRoiSeconds?: number;
   roiDisplayMode?: 'hpp' | 'time';
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; helpsAlone: boolean; impact: number; hpp: number };
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
   duringSale?: boolean;

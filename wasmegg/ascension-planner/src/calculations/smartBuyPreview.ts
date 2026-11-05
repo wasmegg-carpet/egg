@@ -439,9 +439,9 @@ export function runDeliveryBuyLoop(
   let simSnapshot = snapshot;
   let simTime = absoluteSimTime;
   const purchases: DeliveryPurchase[] = [];
-  // A candidate that needs several levels to help (`lookahead`) stays committed until they're all
-  // bought: its first levels do nothing alone, so another candidate taking the time in between could
-  // strand them. `showDeadlineWarning` already confirmed all of them fit before the deadline.
+  // A candidate ranked on several levels (`lookahead`) stays committed until they're all bought:
+  // its first levels do little or nothing alone, so another candidate taking the time in between
+  // could strand them. `showDeadlineWarning` already confirmed all of them fit before the deadline.
   let committed: { researchId: string; levelsLeft: number } | null = null;
 
   buyWhilePassingCheck(
@@ -476,7 +476,7 @@ export function runDeliveryBuyLoop(
       );
       const candidate = ranked.find(item => item.canBuy && !item.showDeadlineWarning);
       if (candidate?.lookahead) {
-        committed = { researchId: candidate.research.id, levelsLeft: candidate.lookahead.minLevels };
+        committed = { researchId: candidate.research.id, levelsLeft: candidate.lookahead.levels };
       }
       return candidate ? { researchId: candidate.research.id } : undefined;
     },

@@ -143,7 +143,7 @@ export interface ResearchViewItem {
   impact?: number;
   hpp?: number;
   timeRoiSeconds?: number;
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; helpsAlone: boolean; impact: number; hpp: number };
 
   // Cheapest specific / generic
   buyToHereTime?: string;
@@ -541,12 +541,12 @@ export function useResearchViews() {
       hpp: la ? la.hpp : item.hpp,
       timeRoiSeconds: la ? la.timeRoiSeconds : item.timeRoiSeconds,
       realisticStats: la ? la.realisticStats : item.realisticStats,
-      lookahead: la ? { minLevels: la.minLevels, impact: la.impact, hpp: la.hpp } : undefined,
+      lookahead: la ? { levels: la.levels, helpsAlone: item.impact! > 0, impact: la.impact, hpp: la.hpp } : undefined,
       showDeadlineWarning: item.showDeadlineWarning,
       duringSale: item.duringSale,
       duringEarningsBoost: item.duringEarningsBoost,
       extraStats: `+${((la ? la.impact : item.impact!) * 100).toFixed(3)}%`,
-      extraLabel: la ? `${la.minLevels}-lvl impact` : 'Impact',
+      extraLabel: la ? `${la.levels}-lvl impact` : 'Impact',
     };
   }
 
