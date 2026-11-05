@@ -41,29 +41,14 @@
     </div>
 
     <div v-if="expanded" class="mt-3 pt-3 border-t border-sky-100 space-y-2">
-      <label class="flex items-center justify-between gap-3">
-        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Puzzle cube</span>
-        <select
-          class="text-xs rounded-lg border-slate-200 py-1 pr-8"
-          :value="setting.artifactId"
-          @change="changeCube(($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="option in cubes" :key="option.id" :value="option.id">
-            {{ option.label }} ({{ option.effect }})
-          </option>
-        </select>
-      </label>
-      <label v-for="(stone, i) in slotStones" :key="i" class="flex items-center justify-between gap-3">
-        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stone {{ i + 1 }}</span>
-        <select
-          class="text-xs rounded-lg border-slate-200 py-1 pr-8"
-          :value="stone ?? ''"
-          @change="changeStone(i, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">None</option>
-          <option v-for="option in clarityStones" :key="option.id" :value="option.id">{{ option.label }}</option>
-        </select>
-      </label>
+      <ArtifactSelector
+        :model-value="[{ artifactId: setting.artifactId, stones: slotStones }]"
+        :families="['puzzle-cube']"
+        :stone-families="['clarity-stone']"
+        :slot-count="1"
+        :show-slot-numbers="false"
+        @update:model-value="change($event[0])"
+      />
       <p class="text-[10px] text-slate-500 leading-tight">
         A puzzle cube needs clarity stones to work here. Past 100% clarity it divides the price by the clarity
         instead, the same as Artifact Sandbox.
@@ -77,9 +62,10 @@ import { computed, ref } from 'vue';
 import { iconURL } from 'lib';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { getArtifact, getStonesByFamily } from '@/lib/artifacts/data';
+import { getArtifact } from '@/lib/artifacts/data';
+import type { EquippedArtifact } from '@/lib/artifacts/types';
+import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import {
-  puzzleCubeOptions,
   researchCubeClarity,
   researchCubeMultiplier,
   type ResearchCubeSetting,
@@ -91,8 +77,6 @@ const actionsStore = useActionsStore();
 const expanded = ref(false);
 const setting = computed(() => initialStateStore.researchCube);
 const cube = computed(() => getArtifact(setting.value.artifactId));
-const cubes = puzzleCubeOptions();
-const clarityStones = [...getStonesByFamily('clarity-stone')].reverse();
 
 const slotStones = computed(() =>
   Array.from({ length: cube.value?.slots ?? 0 }, (_, i) => setting.value.stones[i] ?? null)
@@ -100,6 +84,7 @@ const slotStones = computed(() =>
 
 const summary = computed(() => {
   if (!setting.value.enabled) return 'Off: priced with your equipped set';
+  if (!cube.value) return 'No puzzle cube: full price';
   const discount = 1 - researchCubeMultiplier(setting.value);
   const clarity = researchCubeClarity(setting.value);
   if (clarity === 0) return `${cube.value?.label}: no clarity, no discount`;
@@ -115,16 +100,7 @@ function update(change: Partial<ResearchCubeSetting>) {
   void actionsStore.recalculateAll();
 }
 
-function changeCube(artifactId: string) {
-  const slots = getArtifact(artifactId)?.slots ?? 0;
-  // Keep the stones that still fit; new slots get the best clarity stone.
-  const stones = Array.from({ length: slots }, (_, i) => setting.value.stones[i] ?? clarityStones[0].id);
-  update({ artifactId, stones });
-}
-
-function changeStone(index: number, stoneId: string) {
-  const stones = [...slotStones.value];
-  stones[index] = stoneId || null;
-  update({ stones });
+function change(slot: EquippedArtifact) {
+  update({ artifactId: slot.artifactId, stones: [...slot.stones] });
 }
 </script>

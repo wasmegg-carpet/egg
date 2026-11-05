@@ -8,7 +8,7 @@ import { puzzleCubeFactor } from './calculator';
 
 export interface ResearchCubeSetting {
   enabled: boolean;
-  artifactId: string;
+  artifactId: string | null;
   stones: (string | null)[];
 }
 

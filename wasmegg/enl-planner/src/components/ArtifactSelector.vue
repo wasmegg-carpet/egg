@@ -30,7 +30,7 @@
       </div>
       <div v-else class="section-premium p-3 mb-2 group-artifact" :style="getSlotBackgroundStyle(slot.artifactId)">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-          <div class="flex items-center gap-2">
+          <div v-if="showSlotNumbers" class="flex items-center gap-2">
             <span
               class="text-[10px] font-black text-slate-400 w-5 h-5 flex items-center justify-center bg-white/50 rounded-full shadow-inner"
               >{{ slotIndex + 1 }}</span
@@ -73,7 +73,7 @@
               <StoneSelect
                 :model-value="slot.stones[stoneIndex - 1]"
                 placeholder=""
-                :items="stoneOptions"
+                :items="slotStoneOptions"
                 :get-item-id="item => item.id"
                 :get-item-display="item => item.label"
                 :get-item-icon-path="item => item.iconPath"
@@ -134,8 +134,16 @@ const props = withDefaults(
     families?: (string | null)[];
     /** How many slots count: 4 with Pro permit, 2 with Standard. Later slots show as ignored. */
     slotCount?: number;
+    /** Stone families the stone pickers offer; none (or no list) offers every stone. */
+    stoneFamilies?: string[];
+    /** The slot number badge; off for a single-slot picker. */
+    showSlotNumbers?: boolean;
   }>(),
-  { stones: 'edit', families: () => [], slotCount: 4 }
+  { stones: 'edit', families: () => [], slotCount: 4, stoneFamilies: () => [], showSlotNumbers: true }
+);
+
+const slotStoneOptions = computed(() =>
+  props.stoneFamilies.length ? stoneOptions.filter(s => props.stoneFamilies.includes(s.familyId)) : stoneOptions
 );
 
 const hasIgnoredArtifacts = computed(() => props.modelValue.slice(props.slotCount).some(slot => slot.artifactId));
@@ -162,7 +170,7 @@ const searchArtifacts = (query: string, slotIndex: number) => {
 
 const searchStones = (query: string) => {
   const q = query.toLowerCase();
-  return stoneOptions.filter(s => s.label.toLowerCase().includes(q) || s.familyName.toLowerCase().includes(q));
+  return slotStoneOptions.value.filter(s => s.label.toLowerCase().includes(q) || s.familyName.toLowerCase().includes(q));
 };
 
 function onArtifactChange(slotIndex: number, artifactId: string) {
