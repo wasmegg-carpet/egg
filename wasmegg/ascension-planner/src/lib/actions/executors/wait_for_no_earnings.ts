@@ -5,12 +5,12 @@
  * Cost is 0 gems.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { WaitWithoutEarningsPayload } from '@/types';
 import { formatDuration } from '@/lib/format';
 
-export const waitForNoEarningsExecutor: ActionExecutor<'wait_for_no_earnings'> = {
-    execute(_payload: WaitWithoutEarningsPayload, _context: ExecutorContext): number {
+export const waitForNoEarningsExecutor: PayloadExecutor<WaitWithoutEarningsPayload> = {
+    execute(_payload: WaitWithoutEarningsPayload, _context: BaseExecutorContext): number {
         // Waiting is free
         return 0;
     },

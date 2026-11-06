@@ -2,7 +2,7 @@ import { getCommonResearches, getDiscountedVirtuePrice, isTierUnlocked } from '.
 import type { CommonResearch, ResearchCostModifiers } from './commonResearch';
 import { computeRealisticELR } from './realisticELR';
 import { DELIVERY_IMPACT_CATEGORIES } from './researchRanking';
-import { calculateMaxTrainLength, calculateMaxVehicleSlots, GRAVITON_COUPLING_ID } from './shippingCapacity';
+import { calculateMaxTrainLength, calculateMaxVehicleSlots, GRAVITON_COUPLING_ID } from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
 import type { SimulationContext } from '@/engine/types';

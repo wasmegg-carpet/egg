@@ -18,7 +18,7 @@ import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
 import { researchPurchaseAt } from '@/engine/researchSale';
-import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
+import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import {
   getNextPacificTime,
   getBuildPhaseEndForSaleCount,

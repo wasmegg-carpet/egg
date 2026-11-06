@@ -51,7 +51,7 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
   }
 }
 import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useInitialStateStore } from '@/stores/initialState';

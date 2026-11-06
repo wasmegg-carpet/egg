@@ -1,9 +1,9 @@
-import type { ActionExecutor, ExecutorContext } from '../executor';
-import type { ToggleSalePayload } from '@/types/actions';
-import { useSalesStore } from 'lib/planners/stores/sales';
+import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
+import type { ToggleSalePayload } from '../../types/actions/research';
+import { useSalesStore } from '../../stores/sales';
 
-export const toggleSaleExecutor: ActionExecutor<'toggle_sale'> = {
-  execute(payload: ToggleSalePayload, context: ExecutorContext): number {
+export const toggleSaleExecutor: PayloadExecutor<ToggleSalePayload> = {
+  execute(payload: ToggleSalePayload, context: BaseExecutorContext): number {
     const salesStore = useSalesStore();
     salesStore.setSaleActive(payload.saleType, payload.active);
     return 0; // No cost

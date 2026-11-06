@@ -16,7 +16,7 @@ import {
   findEventCrossings,
   type PurchaseEventCrossings,
 } from './researchROI';
-import { calculateMaxVehicleSlots, calculateMaxTrainLength } from './shippingCapacity';
+import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
 import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { computeRealisticELR } from './realisticELR';

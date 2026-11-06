@@ -5,12 +5,12 @@
  * Cost is 0 bocks.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { WaitForCashPayload } from '@/types';
 import { formatDuration, formatNumber } from '@/lib/format';
 
-export const waitForCashExecutor: ActionExecutor<'wait_for_cash'> = {
-    execute(_payload: WaitForCashPayload, _context: ExecutorContext): number {
+export const waitForCashExecutor: PayloadExecutor<WaitForCashPayload> = {
+    execute(_payload: WaitForCashPayload, _context: BaseExecutorContext): number {
         // Waiting for bocks is free
         return 0;
     },

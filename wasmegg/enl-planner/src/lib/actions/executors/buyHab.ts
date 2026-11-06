@@ -2,13 +2,13 @@
  * Buy Hab Action Executor
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { BuyHabPayload } from '@/types';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, isHabId } from '@/lib/habs';
 import { formatNumber } from '@/lib/format';
 
-export const buyHabExecutor: ActionExecutor<'buy_hab'> = {
-  execute(payload: BuyHabPayload, context: ExecutorContext): number {
+export const buyHabExecutor: PayloadExecutor<BuyHabPayload> = {
+  execute(payload: BuyHabPayload, context: BaseExecutorContext): number {
     const { slotIndex, habId } = payload;
 
     if (!isHabId(habId)) return 0;

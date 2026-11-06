@@ -2,13 +2,13 @@
  * Buy Vehicle Action Executor
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { BuyVehiclePayload } from '@/types';
 import { getVehicleType, getDiscountedVehiclePrice, countVehiclesOfType } from '@/lib/vehicles';
 import { formatNumber } from '@/lib/format';
 
-export const buyVehicleExecutor: ActionExecutor<'buy_vehicle'> = {
-  execute(payload: BuyVehiclePayload, context: ExecutorContext): number {
+export const buyVehicleExecutor: PayloadExecutor<BuyVehiclePayload> = {
+  execute(payload: BuyVehiclePayload, context: BaseExecutorContext): number {
     const { slotIndex, vehicleId, trainLength } = payload;
 
     // Get current vehicles to determine purchase index

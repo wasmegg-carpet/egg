@@ -24,7 +24,7 @@ import {
   calculateShippingCapacity,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
-} from '@/calculations/shippingCapacity';
+} from 'lib/planners/calculations/shippingCapacity';
 import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
 import { getArtifact, getStone, artifactOptions } from './data';

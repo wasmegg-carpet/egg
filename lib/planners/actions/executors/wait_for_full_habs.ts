@@ -1,8 +1,8 @@
-import type { ActionExecutor } from '../executor';
-import type { WaitForFullHabsPayload } from '@/types';
-import { formatDuration } from '@/lib/format';
+import type { PayloadExecutor } from '../executorTypes';
+import type { WaitForFullHabsPayload } from '../../types/actions/wait';
+import { formatDuration } from '../../format';
 
-export const waitForFullHabsExecutor: ActionExecutor<'wait_for_full_habs'> = {
+export const waitForFullHabsExecutor: PayloadExecutor<WaitForFullHabsPayload> = {
   execute() {
     // Stores are not updated here as population is not a store-backed value in the same way
     // research or artifact sets are. The engine handles population growth during simulation.

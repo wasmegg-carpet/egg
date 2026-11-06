@@ -4,11 +4,11 @@
  * Waits until the farm holds a target population: a trophy, NAH, or any number the player picks.
  */
 
-import type { ActionExecutor } from '../executor';
+import type { PayloadExecutor } from 'lib/planners/actions/executorTypes';
 import type { WaitForPopulationPayload } from '@/types';
 import { formatDuration, formatNumber } from '@/lib/format';
 
-export const waitForPopulationExecutor: ActionExecutor<'wait_for_population'> = {
+export const waitForPopulationExecutor: PayloadExecutor<WaitForPopulationPayload> = {
   execute() {
     return 0;
   },

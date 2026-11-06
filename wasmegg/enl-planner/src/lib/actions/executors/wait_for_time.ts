@@ -5,12 +5,12 @@
  * Cost is 0 bocks.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { WaitForTimePayload } from '@/types';
 import { formatDuration } from '@/lib/format';
 
-export const waitForTimeExecutor: ActionExecutor<'wait_for_time'> = {
-  execute(_payload: WaitForTimePayload, _context: ExecutorContext): number {
+export const waitForTimeExecutor: PayloadExecutor<WaitForTimePayload> = {
+  execute(_payload: WaitForTimePayload, _context: BaseExecutorContext): number {
     // Waiting for time is free
     return 0;
   },

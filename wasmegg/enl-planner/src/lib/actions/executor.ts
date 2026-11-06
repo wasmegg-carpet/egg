@@ -19,33 +19,33 @@ import type {
   FuelEgg,
   StartAscensionPayload,
 } from '@/types';
-import type { ArtifactSlotPayload } from '@/types';
+import type { BaseExecutorContext, PayloadExecutor } from 'lib/planners/actions/executorTypes';
 import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@/calculations/commonResearch';
 import { startAscensionExecutor } from './executors/startAscension';
 import { buyVehicleExecutor } from './executors/buyVehicle';
 import { buyHabExecutor } from './executors/buyHab';
 import { buyResearchExecutor } from './executors/buyResearch';
 import { buyTrainCarExecutor } from './executors/buyTrainCar';
-import { changeArtifactsExecutor } from './executors/changeArtifacts';
-import { buySiloExecutor } from './executors/buySilo';
+import { changeArtifactsExecutor } from 'lib/planners/actions/executors/changeArtifacts';
+import { buySiloExecutor } from 'lib/planners/actions/executors/buySilo';
 import { storeFuelExecutor } from './executors/storeFuel';
 import { waitForPopulationExecutor } from './executors/waitForPopulation';
 import { launchMissionsExecutor } from './executors/launchMissions';
-import { toggleSaleExecutor } from './executors/toggleSale';
+import { toggleSaleExecutor } from 'lib/planners/actions/executors/toggleSale';
 import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
 import { updateArtifactSetExecutor } from './executors/updateArtifactSet';
 import { waitForMissionsExecutor } from './executors/wait_for_missions';
 import { waitForTimeExecutor } from './executors/wait_for_time';
-import { waitForResearchSaleEndExecutor } from './executors/waitForResearchSaleEnd';
-import { waitForEarningsBoostEndExecutor } from './executors/waitForEarningsBoostEnd';
+import { waitForResearchSaleEndExecutor } from 'lib/planners/actions/executors/waitForResearchSaleEnd';
+import { waitForEarningsBoostEndExecutor } from 'lib/planners/actions/executors/waitForEarningsBoostEnd';
 import { removeFuelExecutor } from './executors/removeFuel';
-import { waitForFullHabsExecutor } from './executors/wait_for_full_habs';
-import { toggleEarningsBoostExecutor } from './executors/toggleEarningsBoost';
-import { waitForResearchSaleExecutor } from './executors/waitForResearchSale';
-import { waitForEarningsBoostExecutor } from './executors/waitForEarningsBoost';
+import { waitForFullHabsExecutor } from 'lib/planners/actions/executors/wait_for_full_habs';
+import { toggleEarningsBoostExecutor } from 'lib/planners/actions/executors/toggleEarningsBoost';
+import { waitForResearchSaleExecutor } from 'lib/planners/actions/executors/waitForResearchSale';
+import { waitForEarningsBoostExecutor } from 'lib/planners/actions/executors/waitForEarningsBoost';
 import { waitForCashExecutor } from './executors/waitForCash';
 import { waitForNoEarningsExecutor } from './executors/wait_for_no_earnings';
-import { notificationExecutor } from './executors/notification';
+import { notificationExecutor } from 'lib/planners/actions/executors/notification';
 import { modifyBankExecutor } from './executors/modifyBank';
 
 // ============================================================================
@@ -53,55 +53,21 @@ import { modifyBankExecutor } from './executors/modifyBank';
 // ============================================================================
 
 /**
- * Interface for action executors.
- * Each action type needs an executor that handles its logic.
+ * Interface for action executors, keyed by this planner's action types.
+ * See lib/planners/actions/executorTypes.ts for the shared shape.
  */
-export interface ActionExecutor<T extends ActionType> {
-  /**
-   * Apply the action to stores and return the cost.
-   */
-  execute(payload: ActionPayloadMap[T], context: ExecutorContext): number;
-
-  /**
-   * Get a human-readable display name for the action.
-   */
-  getDisplayName(payload: ActionPayloadMap[T]): string;
-
-  /**
-   * Get a description of the action's effect.
-   */
-  getEffectDescription(payload: ActionPayloadMap[T]): string;
-}
+export interface ActionExecutor<T extends ActionType> extends PayloadExecutor<ActionPayloadMap[T], ExecutorContext> {}
 
 /**
- * Context passed to executors with store access.
+ * Context passed to executors with store access: the shared context plus this planner's fuel eggs.
  */
-export interface ExecutorContext {
-  // Store setters
-  setHab(slotIndex: number, habId: number | null): void;
-  setVehicle(slotIndex: number, vehicleId: number | null): void;
-  setTrainLength(slotIndex: number, length: number): void;
-  setResearchLevel(researchId: string, level: number): void;
-  setArtifactLoadout(loadout: ArtifactSlotPayload[]): void;
-  setSiloCount(count: number): void;
+export interface ExecutorContext extends BaseExecutorContext {
   addFuel(egg: FuelEgg, amount: number): boolean;
   removeFuel(egg: FuelEgg, amount: number): void;
   addEggsDelivered(egg: FuelEgg, amount: number): void;
-
-  // Current state readers
-  getHabIds(): (number | null)[];
-  getVehicles(): { vehicleId: number | null; trainLength: number }[];
-  getResearchLevels(): Record<string, number>;
-  getSiloCount(): number;
-  getSiloCapacityLevel(): number;
   getFuelAmounts(): Record<FuelEgg, number>;
   getEggsDelivered(): Record<FuelEgg, number>;
   getTEEarned(): Record<FuelEgg, number>;
-
-  // Cost modifiers
-  getHabCostModifiers(): { cheaperContractorsLevel: number; habCostMultiplier: number };
-  getVehicleCostModifiers(): { bustUnionsLevel: number; vehicleCostMultiplier: number };
-  getResearchCostModifiers(): { labUpgradeLevel: number; researchCostMultiplier: number; puzzleCubeMultiplier: number };
 }
 
 // ============================================================================

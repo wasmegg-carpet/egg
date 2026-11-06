@@ -4,13 +4,13 @@
  * Adds a car to a hyperloop train in a specific slot.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { BuyTrainCarPayload } from '@/types';
 import { getDiscountedTrainCarPrice } from '@/lib/vehicles';
 import { formatNumber } from '@/lib/format';
 
-export const buyTrainCarExecutor: ActionExecutor<'buy_train_car'> = {
-  execute(payload: BuyTrainCarPayload, context: ExecutorContext): number {
+export const buyTrainCarExecutor: PayloadExecutor<BuyTrainCarPayload> = {
+  execute(payload: BuyTrainCarPayload, context: BaseExecutorContext): number {
     const { slotIndex, toLength } = payload;
 
     // Calculate cost - toLength is 1-indexed, but carIndex for cost is 0-indexed

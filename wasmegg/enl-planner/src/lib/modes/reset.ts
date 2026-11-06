@@ -29,7 +29,7 @@ import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { useNotesStore } from 'lib/planners/stores/notes';

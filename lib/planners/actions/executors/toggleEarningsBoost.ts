@@ -1,12 +1,12 @@
-import type { ActionExecutor, ExecutorContext } from '../executor';
-import type { ToggleEarningsBoostPayload } from '@/types';
-import { useSalesStore } from 'lib/planners/stores/sales';
+import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
+import type { ToggleEarningsBoostPayload } from '../../types/actions/research';
+import { useSalesStore } from '../../stores/sales';
 
 /**
  * Executor for toggling earnings boost.
  */
-export const toggleEarningsBoostExecutor: ActionExecutor<'toggle_earnings_boost'> = {
-  execute(payload: ToggleEarningsBoostPayload, context: ExecutorContext): number {
+export const toggleEarningsBoostExecutor: PayloadExecutor<ToggleEarningsBoostPayload> = {
+  execute(payload: ToggleEarningsBoostPayload, context: BaseExecutorContext): number {
     const salesStore = useSalesStore();
     salesStore.setEarningsBoost(payload.active, payload.multiplier);
     return 0;

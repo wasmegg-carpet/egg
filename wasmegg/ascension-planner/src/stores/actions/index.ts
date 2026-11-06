@@ -23,7 +23,7 @@ import { useVirtueStore } from '@/stores/virtue';
 import { useSilosStore } from '@/stores/silos';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useEventsStore } from 'lib/planners/stores/events';
 
 import { simulateAsync } from '@/engine/simulate';

@@ -7,12 +7,12 @@
  * executor only supplies display metadata.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { ModifyBankPayload } from '@/types';
 import { formatBockPrice } from '@/lib/format';
 
-export const modifyBankExecutor: ActionExecutor<'modify_bank'> = {
-  execute(payload: ModifyBankPayload, context: ExecutorContext): number {
+export const modifyBankExecutor: PayloadExecutor<ModifyBankPayload> = {
+  execute(payload: ModifyBankPayload, context: BaseExecutorContext): number {
     return 0; // No time or bock cost; the bank delta itself is reflected in bankDelta.
   },
 

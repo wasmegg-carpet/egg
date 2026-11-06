@@ -5,11 +5,11 @@
  * but affects all subsequent calculations.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
-import type { ChangeArtifactsPayload } from '@/types';
+import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
+import type { ChangeArtifactsPayload } from '../../types/actions/artifacts';
 
-export const changeArtifactsExecutor: ActionExecutor<'change_artifacts'> = {
-  execute(payload: ChangeArtifactsPayload, context: ExecutorContext): number {
+export const changeArtifactsExecutor: PayloadExecutor<ChangeArtifactsPayload> = {
+  execute(payload: ChangeArtifactsPayload, context: BaseExecutorContext): number {
     // Apply the new loadout
     context.setArtifactLoadout(payload.toLoadout);
 

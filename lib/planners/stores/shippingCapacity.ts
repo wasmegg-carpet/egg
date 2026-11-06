@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia';
-import type { ResearchLevels, VehicleSlot, TimeUnit } from '@/types';
+import type { ResearchLevels, VehicleSlot, TimeUnit } from '../types';
 import {
   getCapacityResearches,
   getFleetSizeResearches,
   getGravitonCouplingResearch,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
-} from '@/calculations/shippingCapacity';
-import { BASE_FLEET_SIZE } from '@/lib/vehicles';
+} from '../calculations/shippingCapacity';
+import { BASE_FLEET_SIZE } from '../vehicles';
 
 const capacityResearches = getCapacityResearches();
 const fleetSizeResearches = getFleetSizeResearches();

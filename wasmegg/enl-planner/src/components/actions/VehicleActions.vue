@@ -190,7 +190,7 @@ import {
   type VehicleType,
 } from '@/lib/vehicles';
 import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useCommonResearchStore } from '@/stores/commonResearch';
@@ -203,7 +203,7 @@ import {
   calculateShippingMultipliers,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
-} from '@/calculations/shippingCapacity';
+} from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';

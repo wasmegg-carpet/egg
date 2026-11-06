@@ -9,10 +9,10 @@ import type {
   ShippingCapacityInput,
   ShippingCapacityOutput,
   BaseCalculationResearch,
-} from '@/types';
-import { vehicleTypes, getVehicleType, BASE_FLEET_SIZE, BASE_TRAIN_LENGTH } from '@/lib/vehicles';
-import { allResearches } from 'lib';
-import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
+} from '../types';
+import { vehicleTypes, getVehicleType, BASE_FLEET_SIZE, BASE_TRAIN_LENGTH } from '../vehicles';
+import { allResearches } from '../../index';
+import { calculateLinearEffect, selectResearches } from '../utils/research';
 
 /**
  * Shipping capacity research with flags for hover/hyperloop-only effects.

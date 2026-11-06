@@ -8,7 +8,7 @@ import {
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
   calculateShippingMultipliers,
-} from '../../../calculations/shippingCapacity';
+} from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import {
   planMaxVehicles,

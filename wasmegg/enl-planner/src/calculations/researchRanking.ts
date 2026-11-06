@@ -16,7 +16,7 @@ import {
   findEventCrossings,
   type PurchaseEventCrossings,
 } from './researchROI';
-import { calculateMaxVehicleSlots, calculateMaxTrainLength } from './shippingCapacity';
+import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import type { SimulationContext, EngineState } from '@/engine/types';
 import type { CalculationsSnapshot } from '@/types';

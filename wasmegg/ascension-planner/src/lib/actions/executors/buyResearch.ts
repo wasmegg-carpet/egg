@@ -2,13 +2,13 @@
  * Buy Research Action Executor
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { BuyResearchPayload } from '@/types';
 import { getResearchById, getDiscountedVirtuePrice } from '@/calculations/commonResearch';
 import { formatNumber } from '@/lib/format';
 
-export const buyResearchExecutor: ActionExecutor<'buy_research'> = {
-  execute(payload: BuyResearchPayload, context: ExecutorContext): number {
+export const buyResearchExecutor: PayloadExecutor<BuyResearchPayload> = {
+  execute(payload: BuyResearchPayload, context: BaseExecutorContext): number {
     const { researchId, fromLevel, toLevel } = payload;
 
     // Get research definition

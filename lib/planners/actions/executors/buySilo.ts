@@ -5,12 +5,12 @@
  * Cost formula: 100M * n^(3*n+15) where n = current silos owned
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
-import type { BuySiloPayload } from '@/types';
-import { nextSiloCost, formatSiloTime, awayTimePerSilo } from '@/stores/silos';
+import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
+import type { BuySiloPayload } from '../../types/actions/infrastructure';
+import { nextSiloCost, formatSiloTime, awayTimePerSilo } from '../../silos';
 
-export const buySiloExecutor: ActionExecutor<'buy_silo'> = {
-  execute(payload: BuySiloPayload, context: ExecutorContext): number {
+export const buySiloExecutor: PayloadExecutor<BuySiloPayload> = {
+  execute(payload: BuySiloPayload, context: BaseExecutorContext): number {
     const { fromCount, toCount } = payload;
 
     // Calculate cost - cost is based on current count (fromCount)

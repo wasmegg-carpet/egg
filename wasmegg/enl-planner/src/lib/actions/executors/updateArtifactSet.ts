@@ -1,4 +1,4 @@
-import type { ActionExecutor } from '../executor';
+import type { PayloadExecutor } from 'lib/planners/actions/executorTypes';
 import type { UpdateArtifactSetPayload } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { summarizeLoadout, artifactSlotCount } from '@/lib/artifacts';
@@ -6,7 +6,7 @@ import { summarizeLoadout, artifactSlotCount } from '@/lib/artifacts';
 /**
  * Executor for updating an artifact set.
  */
-export const updateArtifactSetExecutor: ActionExecutor<'update_artifact_set'> = {
+export const updateArtifactSetExecutor: PayloadExecutor<UpdateArtifactSetPayload> = {
   execute(payload) {
     const initialStateStore = useInitialStateStore();
     initialStateStore.updateArtifactSet(
