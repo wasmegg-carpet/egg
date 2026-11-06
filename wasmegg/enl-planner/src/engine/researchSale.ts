@@ -13,7 +13,7 @@ import {
   type PurchaseEventCrossings,
   type SaleAwarePurchase,
 } from '@/calculations/researchROI';
-import { boostTransitionsFrom } from './apply/math';
+import { boostTransitionsFrom } from 'lib/planners/engine/apply/math';
 import type { SimulationContext } from './types';
 
 /**

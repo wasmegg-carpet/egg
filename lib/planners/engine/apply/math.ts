@@ -1,5 +1,5 @@
-import type { CalculationsSnapshot } from '@/types';
-import { isEarningsBoostActive, getNextEarningsBoostStart, getNextEarningsBoostEnd } from 'lib/planners/events';
+import type { BaseCalculationsSnapshot } from '../../types/actions/core';
+import { isEarningsBoostActive, getNextEarningsBoostStart, getNextEarningsBoostEnd } from '../../events';
 
 /**
  * A future point (relative to t=0 of the calculation) at which the earnings boost's active state
@@ -68,7 +68,7 @@ const EARNINGS_BOOST_MULTIPLIER = 2;
  * once started, stays active for the rest of the wait instead of reverting to 1x after 24h.
  */
 export function boostTransitionsFrom(
-  snapshot: CalculationsSnapshot,
+  snapshot: BaseCalculationsSnapshot,
   absTime: number,
   horizonSeconds: number = BOOST_TRANSITION_HORIZON_SECONDS
 ): EarningsRateTransition[] {
@@ -197,7 +197,7 @@ export function integrateRate(seconds: number, P0: number, I: number, R: number,
  */
 export function calculateEarningsForTime(
   seconds: number,
-  prevSnapshot: CalculationsSnapshot,
+  prevSnapshot: BaseCalculationsSnapshot,
   transitions: EarningsRateTransition[] = []
 ): number {
   if (seconds <= 0) return 0;
@@ -247,7 +247,7 @@ export function calculateEarningsForTime(
 /**
  * Calculate the total eggs delivered integrated over a period of time [0, seconds].
  */
-export function calculateEggsDeliveredForTime(seconds: number, prevSnapshot: CalculationsSnapshot): number {
+export function calculateEggsDeliveredForTime(seconds: number, prevSnapshot: BaseCalculationsSnapshot): number {
   return integrateRate(
     seconds,
     prevSnapshot.population,
@@ -281,7 +281,7 @@ export function calculateEggsDeliveredForTime(seconds: number, prevSnapshot: Cal
  */
 export function getTimeToSave(
   cost: number,
-  prevSnapshot: CalculationsSnapshot,
+  prevSnapshot: BaseCalculationsSnapshot,
   transitions: EarningsRateTransition[] = []
 ): number {
   const effectiveCost = Math.max(0, cost - (prevSnapshot.bankValue || 0));

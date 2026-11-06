@@ -80,7 +80,7 @@ defineExpose({ focus: () => inputEl.value?.focus() });
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from '@/lib/format';
-import { boostTransitionsFrom, calculateEarningsForTime } from '@/engine/apply/math';
+import { boostTransitionsFrom, calculateEarningsForTime } from 'lib/planners/engine/apply/math';
 import { absoluteSimTimeFor } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';

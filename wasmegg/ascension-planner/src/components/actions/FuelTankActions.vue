@@ -311,7 +311,7 @@ import { useLayRate } from '@/composables/useLayRate';
 import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
 import { useHabCapacity } from '@/composables/useHabCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
-import { solveForTime, integrateRate } from '@/engine/apply/math';
+import { solveForTime, integrateRate } from 'lib/planners/engine/apply/math';
 
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();

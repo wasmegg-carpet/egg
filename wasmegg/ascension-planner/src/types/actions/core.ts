@@ -1,5 +1,4 @@
 import type { VirtueEgg } from './virtue';
-import type { ArtifactSlotPayload, ArtifactSetName } from 'lib/planners/types/actions/artifacts';
 
 /**
  * Payload for starting an ascension (initial state).
@@ -46,8 +45,8 @@ import type {
   EarningsOutput,
   IHROutput,
 } from '../index';
-import type { ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
-export type { ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
+import type { BaseCalculationsSnapshot, ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
+export type { BaseCalculationsSnapshot, ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
 
 /**
  * Union of all action types.
@@ -117,47 +116,12 @@ export interface ActionPayloadMap {
 /**
  * Snapshot of all calculation outputs at a point in time.
  */
-export interface CalculationsSnapshot {
-  eggValue: number;
-  habCapacity: number;
-  elr: number;
-  shippingCapacity: number;
-  layRate: number;
-  onlineEarnings: number;
-  offlineEarnings: number;
-  onlineIHR: number;
-  offlineIHR: number;
-  ratePerChickenPerSecond: number;
-  bankValue: number;
+export interface CalculationsSnapshot extends BaseCalculationsSnapshot {
   currentEgg: VirtueEgg;
   shiftCount: number;
-  te: number;
-  soulEggs: number;
-  siloCount: number;
-  siloTimeMinutes: number;
-  tankLevel: number;
-  /** false = Standard permit. undefined = Pro (snapshots from before Standard was supported). */
-  proPermit?: boolean;
   fuelTankAmounts: Record<VirtueEgg, number>;
   eggsDelivered: Record<VirtueEgg, number>;
   teEarned: Record<VirtueEgg, number>;
-  population: number;
-  lastStepTime: number;
-  vehicles: import('../index').VehicleSlot[];
-  habIds: (number | null)[];
-  researchLevels: import('../index').ResearchLevels;
-  artifactLoadout: ArtifactSlotPayload[];
-  activeArtifactSet: ArtifactSetName | null;
-  artifactSets: Record<ArtifactSetName, ArtifactSlotPayload[] | null>;
-  activeSales: {
-    research: boolean;
-    hab: boolean;
-    vehicle: boolean;
-  };
-  earningsBoost: {
-    active: boolean;
-    multiplier: number;
-  };
   fullOutputs?: CalculationsFullOutputs;
 }
 

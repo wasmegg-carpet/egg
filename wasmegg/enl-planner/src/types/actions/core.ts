@@ -1,5 +1,4 @@
 import type { FuelEgg } from './eggs';
-import type { ArtifactSlotPayload, ArtifactSetName } from 'lib/planners/types/actions/artifacts';
 
 /**
  * Payload for starting the enlightenment plan (initial state).
@@ -29,8 +28,8 @@ import type {
   EarningsOutput,
   IHROutput,
 } from '../index';
-import type { ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
-export type { ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
+import type { BaseCalculationsSnapshot, ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
+export type { BaseCalculationsSnapshot, ModifyBankPayload, NotificationPayload } from 'lib/planners/types/actions/core';
 
 /**
  * Union of all action types.
@@ -98,44 +97,9 @@ export interface ActionPayloadMap {
 /**
  * Snapshot of all calculation outputs at a point in time.
  */
-export interface CalculationsSnapshot {
-  eggValue: number;
-  habCapacity: number;
-  elr: number;
-  shippingCapacity: number;
-  layRate: number;
-  onlineEarnings: number;
-  offlineEarnings: number;
-  onlineIHR: number;
-  offlineIHR: number;
-  ratePerChickenPerSecond: number;
-  bankValue: number;
-  te: number;
-  soulEggs: number;
+export interface CalculationsSnapshot extends BaseCalculationsSnapshot {
   prophecyEggs: number;
-  siloCount: number;
-  siloTimeMinutes: number;
-  tankLevel: number;
-  /** false = Standard permit. undefined = Pro (snapshots from before Standard was supported). */
-  proPermit?: boolean;
   fuelTankAmounts: Record<FuelEgg, number>;
-  population: number;
-  lastStepTime: number;
-  vehicles: import('../index').VehicleSlot[];
-  habIds: (number | null)[];
-  researchLevels: import('../index').ResearchLevels;
-  artifactLoadout: ArtifactSlotPayload[];
-  activeArtifactSet: ArtifactSetName | null;
-  artifactSets: Record<ArtifactSetName, ArtifactSlotPayload[] | null>;
-  activeSales: {
-    research: boolean;
-    hab: boolean;
-    vehicle: boolean;
-  };
-  earningsBoost: {
-    active: boolean;
-    multiplier: number;
-  };
   fullOutputs?: CalculationsFullOutputs;
 }
 

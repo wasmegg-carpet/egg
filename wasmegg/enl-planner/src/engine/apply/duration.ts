@@ -18,7 +18,7 @@ import {
   integrateRate,
   getTimeToSave,
   boostTransitionsFrom,
-} from './math';
+} from 'lib/planners/engine/apply/math';
 import { getResearchById } from '@/calculations/commonResearch';
 import { researchPurchaseAt } from '../researchSale';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';

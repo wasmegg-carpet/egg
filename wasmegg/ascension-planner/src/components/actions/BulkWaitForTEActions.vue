@@ -157,7 +157,7 @@ import { computeDependencies } from '@/lib/actions/executor';
 import { formatNumber, formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { generateActionId, VIRTUE_EGG_NAMES, VIRTUE_EGGS, type VirtueEgg, type DraftAction } from '@/types';
 import { TE_BREAKPOINTS, countTEThresholdsPassed, MAX_TE, eggsNeededForTE } from '@/lib/truthEggs';
-import { integrateRate } from '@/engine/apply/math';
+import { integrateRate } from 'lib/planners/engine/apply/math';
 
 const truthEggsStore = useTruthEggsStore();
 const virtueStore = useVirtueStore();

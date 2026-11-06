@@ -20,7 +20,7 @@ import {
   getTimeToSave,
   calculateEggsDeliveredForTime,
   boostTransitionsFrom,
-} from './math';
+} from 'lib/planners/engine/apply/math';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
 import { getResearchById } from '@/calculations/commonResearch';
 import { researchPurchaseAt } from '../researchSale';

@@ -9,7 +9,7 @@ import type {
 } from '@/types';
 import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
 import { totalAwayTime } from '@/stores/silos';
-import { integrateRate } from './apply/math';
+import { integrateRate } from 'lib/planners/engine/apply/math';
 
 import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
 import { calculateHabCapacity_Full as calculateHabCapacity } from 'lib/planners/calculations/habCapacity';
