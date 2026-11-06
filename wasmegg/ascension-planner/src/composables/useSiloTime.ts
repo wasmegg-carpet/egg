@@ -6,7 +6,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore, awayTimePerSilo, totalAwayTime, formatSiloTime, MAX_SILOS, nextSiloCost } from '@/stores/silos';
+import { useSilosStore, awayTimePerSilo, totalAwayTime, formatSiloTime, maxSilos, nextSiloCost } from '@/stores/silos';
 
 /**
  * Input for silo time calculation.
@@ -43,7 +43,7 @@ export function useSiloTime(): {
   const silosStore = useSilosStore();
 
   const { siloCount } = storeToRefs(silosStore);
-  const { epicResearchLevels } = storeToRefs(initialStateStore);
+  const { epicResearchLevels, proPermit } = storeToRefs(initialStateStore);
 
   // Build the calculation input reactively
   const input = computed<SiloTimeInput>(() => ({
@@ -56,17 +56,18 @@ export function useSiloTime(): {
     const { siloCount, siloCapacityLevel } = input.value;
     const minutesPerSilo = awayTimePerSilo(siloCapacityLevel);
     const totalMinutes = totalAwayTime(siloCount, siloCapacityLevel);
+    const max = maxSilos(proPermit.value);
 
     return {
       siloCount,
-      maxSilos: MAX_SILOS,
+      maxSilos: max,
       siloCapacityLevel,
       minutesPerSilo,
       totalMinutes,
       totalHours: totalMinutes / 60,
       formatted: formatSiloTime(totalMinutes),
-      canBuyMore: siloCount < MAX_SILOS,
-      nextSiloCost: nextSiloCost(siloCount),
+      canBuyMore: siloCount < max,
+      nextSiloCost: nextSiloCost(siloCount, proPermit.value),
     };
   });
 

@@ -5,7 +5,7 @@ import { computeSnapshot } from '../../../engine/compute';
 import { applyAction } from '../../../engine/apply';
 import { advanceTimeFlat } from './advanceTime';
 import { simulateHabPurchases, type HabMultipliers } from '../../../calculations/habPurchasePlan';
-import { calculateTotalResearchMultipliers } from '../../../calculations/habCapacity';
+import { calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import type { HabCostModifiers } from '../../../lib/habs';
 

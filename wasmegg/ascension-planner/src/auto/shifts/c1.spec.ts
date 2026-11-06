@@ -3,6 +3,7 @@ import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { runC1 } from './c1';
 import type { EngineState, SimulationContext } from '../types';
 import type { ArtifactSlotPayload } from '@/types';
+import { createEmptyStonePool, type AutoLoadoutInputs } from '../loadout';
 
 const EARNINGS_LOADOUT: ArtifactSlotPayload[] = [
   { artifactId: 'lunar_totem', stones: [] },
@@ -123,5 +124,40 @@ describe('runC1 forces earnings gear on entry', () => {
 
     expect(result.endState.activeArtifactSet).toBe('elr');
     expect(result.endState.artifactLoadout).toEqual(ELR_LOADOUT);
+  });
+});
+
+describe('runC1 with loadout inputs', () => {
+  test('equips the input earnings set, socketed from the input stones, even when the state already has one', () => {
+    const stones = createEmptyStonePool();
+    stones.lunar[4] = 1;
+    const inputs: AutoLoadoutInputs = {
+      earnings: [
+        { artifactId: 'tungsten-ankh-4-3', stones: [] },
+        { artifactId: null, stones: [] },
+        { artifactId: null, stones: [] },
+        { artifactId: null, stones: [] },
+      ],
+      delivery: { mode: 'fixed', artifactIds: [null, null, null, null] },
+      stones,
+    };
+    const state = fakeState({
+      activeArtifactSet: 'elr',
+      artifactLoadout: ELR_LOADOUT,
+      artifactSets: { earnings: EARNINGS_LOADOUT, elr: ELR_LOADOUT },
+    });
+
+    const result = runC1(state, fakeContext({ loadoutInputs: inputs }), 0);
+
+    const expected = [
+      { artifactId: 'tungsten-ankh-4-3', stones: ['lunar-stone-4', null, null] },
+      { artifactId: null, stones: [] },
+      { artifactId: null, stones: [] },
+      { artifactId: null, stones: [] },
+    ];
+    expect(result.endState.activeArtifactSet).toBe('earnings');
+    expect(result.endState.artifactSets.earnings).toEqual(expected);
+    expect(result.endState.artifactLoadout).toEqual(expected);
+    expect(result.actions.filter(a => a.type === 'update_artifact_set')).toHaveLength(1);
   });
 });

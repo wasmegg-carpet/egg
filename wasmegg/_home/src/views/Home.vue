@@ -44,6 +44,7 @@
     <li><tool-description id="rockets-tracker" @visit="onvisit" /></li>
     <li><tool-description id="virtue-companion" @visit="onvisit" /></li>
     <li><tool-description id="ascension-planner" @visit="onvisit" /></li>
+    <li><tool-description id="enl-planner" @visit="onvisit" /></li>
     <li><tool-description id="past-contracts" @visit="onvisit" /></li>
     <li><tool-description id="inventory-visualizer" @visit="onvisit" /></li>
     <li><tool-description id="enlightenment" @visit="onvisit" /></li>

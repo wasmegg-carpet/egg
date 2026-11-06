@@ -1,0 +1,11 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@import 'ui/styles/base';
+@import 'ui/styles/planners/design-tokens.css';
+@import 'ui/styles/planners/components.css';
+
+.app-loading {
+  display: none;
+}

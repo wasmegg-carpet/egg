@@ -50,15 +50,15 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
     });
   }
 }
-import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 /**
  * Replay an action on top of a given snapshot state.

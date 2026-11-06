@@ -200,7 +200,7 @@ describe('solveTEDistributionForDeadline partial progress', () => {
 
 describe('runTEWaitShift maxWaitSeconds clamp', () => {
   test('unbounded (default) behavior is unchanged: reaches the full whole-TE target', () => {
-    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     const result = runTEWaitShift(state, context, 'curiosity', 1, PEAK_ELR);
@@ -213,7 +213,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
   });
 
   test('maxWaitSeconds <= 0 is a total no-op: no shift action spent, no state change', () => {
-    const state = fakeState({ currentEgg: 'integrity', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'integrity', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     const result = runTEWaitShift(state, context, 'curiosity', 1, PEAK_ELR, 0);
@@ -224,7 +224,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
   });
 
   test('a cap shorter than the full target clips the wait and reports fractional progress', () => {
-    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     const cap = T1 * 0.5;
 
@@ -243,7 +243,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
   });
 
   test('a cap comfortably longer than the full target has no effect (matches computeTEEarned exactly)', () => {
-    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
 
     const result = runTEWaitShift(state, context, 'curiosity', 1, PEAK_ELR, T1 * 10);
@@ -256,7 +256,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
     // maxWaitSeconds > 0 but the egg being requested isn't the current one — the shift itself is
     // still worth doing (it's what a real "partial" ascension truncation looks like: you did switch
     // to the egg, you just ran out of clock before banking any of its next TE).
-    const state = fakeState({ currentEgg: 'kindness', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'kindness', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     const cap = T1 * 0.1;
 
@@ -269,7 +269,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
   });
 
   test('runC4 forwards maxWaitSeconds to the underlying runTEWaitShift clamp', () => {
-    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as any });
+    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 0 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     const cap = T1 * 0.5;
 
@@ -280,7 +280,7 @@ describe('runTEWaitShift maxWaitSeconds clamp', () => {
   });
 
   test('clamped fractional progress matches computeTEEarned exactly for the same duration', () => {
-    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 1.2e9 } as any });
+    const state = fakeState({ currentEgg: 'curiosity', eggsDelivered: { curiosity: 1.2e9 } as Record<VirtueEgg, number> });
     const context = fakeContext();
     const cap = 5000;
 

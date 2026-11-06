@@ -181,7 +181,7 @@ export const useTruthEggsStore = defineStore('truthEggs', {
       return eggsNeededForTE(this.eggsDelivered[egg], targetTE);
     },
 
-    hydrate(data: any) {
+    hydrate(data: { initialEggsDelivered?: Record<VirtueEgg, number>; initialTeEarned?: Record<VirtueEgg, number> } | null | undefined) {
       if (!data) return;
       if (data.initialEggsDelivered) this.eggsDelivered = { ...data.initialEggsDelivered };
       if (data.initialTeEarned) this.teEarned = { ...data.initialTeEarned };

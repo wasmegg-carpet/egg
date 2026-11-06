@@ -24,7 +24,7 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildPacificTimeTable } from '../src/lib/events.ts';
+import { buildPacificTimeTable } from 'lib/planners/events';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outPath = join(__dirname, '..', 'src', 'lib', 'pacificTimeTable.json');

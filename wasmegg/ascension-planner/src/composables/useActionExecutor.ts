@@ -10,7 +10,7 @@ import type { Action, CalculationsSnapshot } from '@/types';
 import { useActionsStore } from '@/stores/actions';
 import { replayAction } from '@/lib/actions/replay';
 import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@/lib/actions/snapshot';
-import { safeImport } from '@/lib/import';
+import { safeImport } from 'lib/planners/import';
 
 export function useActionExecutor() {
   const actionsStore = useActionsStore();

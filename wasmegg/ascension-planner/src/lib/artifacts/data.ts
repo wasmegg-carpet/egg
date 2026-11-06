@@ -21,7 +21,7 @@ function parseArtifacts(): ArtifactOption[] {
 
       options.push({
         id: `${tier.family.id}-${tier.tier_number}-${effect.afx_rarity}`,
-        afxId: (tier as any).afx_id,
+        afxId: tier.afx_id,
         familyId: tier.family.id,
         familyName: tier.family.name,
         tier: tier.tier_number,

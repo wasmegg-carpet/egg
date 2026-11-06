@@ -11,3 +11,4 @@ __target__
 .agent
 lib/.claude
 .pnpm-store/
+.DS_Store

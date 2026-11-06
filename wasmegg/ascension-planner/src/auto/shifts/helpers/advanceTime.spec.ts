@@ -3,7 +3,13 @@ import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import type { EngineState, SimulationContext } from '../../types';
 import type { Action } from '@/types/actions/meta';
 import { advanceTimeWithBoundaries } from './advanceTime';
-import { getNextEarningsBoostStart, getNextSaleStart, isResearchSaleActive } from '@/lib/events';
+import {
+  getNextEarningsBoostEnd,
+  getNextEarningsBoostStart,
+  getNextSaleEnd,
+  getNextSaleStart,
+  isResearchSaleActive,
+} from 'lib/planners/events';
 
 function fakeState(overrides: Partial<EngineState> = {}): EngineState {
   return {
@@ -137,5 +143,28 @@ describe('advanceTimeWithBoundaries boundary-landing precision', () => {
 
     const toggleIdx = actions.findIndex(a => a.type === 'toggle_sale' && a.payload.active === true);
     expect(toggleIdx).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('advanceTimeWithBoundaries wait types', () => {
+  test('a wait landing on a sale or boost end is named for it, and other stretches stay plain', () => {
+    const saleEnd = getNextSaleEnd(Date.UTC(2026, 9, 26) / 1000);
+    const start = saleEnd - 3600;
+    const boostEnd = getNextEarningsBoostEnd(getNextEarningsBoostStart(saleEnd));
+    const actions: Action[] = [];
+    advanceTimeWithBoundaries(
+      fakeState(),
+      actions,
+      0,
+      fakeContext({ ascensionStartTime: start }),
+      start,
+      boostEnd - start + 600
+    );
+    expect(actions.filter(a => !a.type.startsWith('toggle')).map(a => a.type)).toEqual([
+      'wait_for_research_sale_end',
+      'wait_for_earnings_boost',
+      'wait_for_earnings_boost_end',
+      'wait_for_time',
+    ]);
   });
 });

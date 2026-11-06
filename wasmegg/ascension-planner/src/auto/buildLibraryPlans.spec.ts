@@ -1,6 +1,9 @@
+import type { Action } from '@/types/actions/meta';
+import type { AscensionSummary } from './types';
+import type { VirtueEgg } from '@/types';
 import { describe, expect, test } from 'vitest';
 import { buildLibraryPlansFromExport } from './buildLibraryPlans';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import type { ExportedPlan } from './export';
 
 const TIMEZONE = 'America/Chicago';
@@ -25,8 +28,8 @@ function makeFixture(startTime: number): ExportedPlan {
       isUltra: false,
       initialTankLevel: 0,
       initialFuelAmounts: {},
-      initialEggsDelivered: {},
-      initialTeEarned: {},
+      initialEggsDelivered: {} as Record<VirtueEgg, number>,
+      initialTeEarned: {} as Record<VirtueEgg, number>,
     },
     ascensions: [
       {
@@ -52,10 +55,10 @@ function makeFixture(startTime: number): ExportedPlan {
               startShiftCount: 0,
               endShiftCount: 12,
               totalShiftCost: 0,
-              eggsDelivered: {} as any,
-              teEarned: {} as any,
-              finalTE: {} as any,
-            } as any,
+              eggsDelivered: {} as Record<VirtueEgg, number>,
+              teEarned: {} as Record<VirtueEgg, number>,
+              finalTE: {} as Record<VirtueEgg, number>,
+            } as AscensionSummary,
             actions: [],
           },
         },
@@ -71,8 +74,8 @@ describe('buildLibraryPlansFromExport', () => {
     const trueStart = getLocalTimestampInTimezone('2026-11-10', '12:36', TIMEZONE) + 30.872108936309814;
 
     const [plan] = buildLibraryPlansFromExport(makeFixture(trueStart), 'Test');
-    const virtueState = plan.data.virtueState as any;
-    const actions = plan.data.actions as any[];
+    const virtueState = plan.data.virtueState as { ascensionDate: string; ascensionTime: string; ascensionTimezone: string };
+    const actions = plan.data.actions as Action[];
 
     // The date/time fields are necessarily minute-only (an "HH:MM" form input) — reconstructing
     // from them alone would floor away the `:30.872` remainder.
@@ -97,7 +100,7 @@ describe('buildLibraryPlansFromExport', () => {
     const trueStart = getLocalTimestampInTimezone('2026-11-10', '12:36', TIMEZONE);
 
     const [plan] = buildLibraryPlansFromExport(makeFixture(trueStart), 'Test');
-    const actions = plan.data.actions as any[];
+    const actions = plan.data.actions as Action[];
 
     expect(actions[0].endState.lastStepTime).toBe(0);
   });

@@ -19,6 +19,7 @@
     :total-te="initialTotalTe"
     :soul-eggs="store.soulEggs"
     :assume-double-earnings="store.assumeDoubleEarnings"
+    :pro-permit="store.proPermit"
     :artifact-sets="store.artifactSets"
     :active-artifact-set="store.activeArtifactSet"
     :colleggtible-tiers="store.colleggtibleTiers"
@@ -39,6 +40,7 @@
     @include-pending-te="handleIncludePendingTe"
     @set-soul-eggs="handleSetSoulEggs"
     @set-assume-double-earnings="handleSetAssumeDoubleEarnings"
+    @set-pro-permit="handleSetProPermit"
     @save-current-to-set="handleSaveCurrentToSet"
     @update-artifact-set="handleUpdateArtifactSet"
     @set-active-artifact-set="handleSetActiveArtifactSet"
@@ -57,9 +59,9 @@ import { useVirtueStore } from '@/stores/virtue';
 import { useActionsStore } from '@/stores/actions';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
 import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
 import type { VirtueEgg, Action, ArtifactSetName } from '@/types';
@@ -101,7 +103,7 @@ const earningsClothedTe = computed<number | null>(() => {
     truthEggs: initialTotalTe.value,
     colleggtibleModifiers: store.colleggtibleModifiers,
     labUpgradeLevel: store.epicResearchLevels['cheaper_research'] ?? 0,
-    permitLevel: store.rawBackup?.game?.permitLevel ?? null,
+    proPermit: store.proPermit,
   });
 });
 
@@ -264,6 +266,11 @@ function handleSetSoulEggs(count: number) {
 
 function handleSetAssumeDoubleEarnings(enabled: boolean) {
   store.setAssumeDoubleEarnings(enabled);
+  updateInitialSnapshotAndRecalculate();
+}
+
+function handleSetProPermit(enabled: boolean) {
+  store.setProPermit(enabled);
   updateInitialSnapshotAndRecalculate();
 }
 

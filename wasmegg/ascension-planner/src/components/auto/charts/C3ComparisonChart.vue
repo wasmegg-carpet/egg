@@ -20,8 +20,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import EChart from '@/components/charts/EChart.vue';
-import type { ChartOption } from '@/lib/charts/echarts';
+import EChart from 'ui/components/planners/charts/EChart.vue';
+import type { ChartOption } from 'ui/components/planners/charts/echarts';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { useVirtueStore } from '@/stores/virtue';
 import { formatAbsoluteTime, formatNumber } from '@/lib/format';

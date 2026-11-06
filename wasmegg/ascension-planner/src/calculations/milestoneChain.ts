@@ -26,8 +26,8 @@ import type { CalculationsSnapshot } from '@/types';
 import { computeSnapshot } from '@/engine/compute';
 import { createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
-import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from '@/lib/events';
-import { DEBUG_MILESTONE_CHAIN } from '@/lib/debugFlags';
+import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from 'lib/planners/events';
+import { DEBUG_MILESTONE_CHAIN } from 'lib/planners/debugFlags';
 
 export type MilestoneTarget =
   | { kind: 'tier'; tier: number }
@@ -61,6 +61,9 @@ export interface MilestoneChainItem {
   buyToHereSeconds: number;
   roiSeconds?: number;
   totalRoiSeconds?: number;
+  // Seconds from this purchase until `roiSeconds` starts counting. Non-zero only on the earlier
+  // purchase of a pair, whose combined payback can't begin until its partner is bought too.
+  roiStartDelaySeconds?: number;
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
   // Whether this purchase's price reflects a research sale, and whether it completed during a
@@ -363,6 +366,7 @@ function findRoiDetour(
  *  them onto its own running total. */
 function tagDetourItems(items: SequencedPurchase[], candidate: ResearchRankingItem): MilestoneChainItem[] {
   const isPair = items.length > 1;
+  const sequenceSeconds = items.reduce((sum, purchase) => sum + purchase.timeToBuySeconds, 0);
   let totalSeconds = 0;
   return items.map(purchase => {
     totalSeconds += purchase.timeToBuySeconds;
@@ -374,6 +378,7 @@ function tagDetourItems(items: SequencedPurchase[], candidate: ResearchRankingIt
       // combined figure that actually justified buying it instead.
       roiSeconds: isPair ? candidate.pairRoiSeconds : candidate.roiSeconds,
       totalRoiSeconds: isPair ? candidate.pairRoiSeconds : candidate.totalRoiSeconds,
+      roiStartDelaySeconds: sequenceSeconds - totalSeconds,
       showSaleWarning: candidate.showSaleWarning,
       showDeadlineWarning: candidate.showDeadlineWarning,
     };
@@ -855,21 +860,10 @@ export function computeTierMilestoneChain(
     );
 
     if (detour) {
-      const isPair = detour.items.length > 1;
-      for (const purchase of detour.items) {
-        totalSeconds += purchase.timeToBuySeconds;
-        items.push({
-          ...purchase,
-          buyToHereSeconds: totalSeconds,
-          // A paired purchase's own solo `roiSeconds`/`totalRoiSeconds` (near-infinite, since
-          // that's exactly why it needed pairing to be worth taking) would be misleading here —
-          // show the combined figure that actually justified buying it instead.
-          roiSeconds: isPair ? detour.candidate.pairRoiSeconds : detour.candidate.roiSeconds,
-          totalRoiSeconds: isPair ? detour.candidate.pairRoiSeconds : detour.candidate.totalRoiSeconds,
-          showSaleWarning: detour.candidate.showSaleWarning,
-          showDeadlineWarning: detour.candidate.showDeadlineWarning,
-        });
+      for (const item of tagDetourItems(detour.items, detour.candidate)) {
+        items.push({ ...item, buyToHereSeconds: totalSeconds + item.buyToHereSeconds });
       }
+      totalSeconds += detour.totalSeconds;
       state = detour.state;
       snapshot = detour.snapshot;
       continue;

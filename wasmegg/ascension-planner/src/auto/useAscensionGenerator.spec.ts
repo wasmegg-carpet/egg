@@ -101,3 +101,32 @@ describe('computeFirstDiffIdx: both override kinds together', () => {
     expect(idx).toBe(0);
   });
 });
+
+describe('computeFirstDiffIdx: loadout inputs', () => {
+  const withHash = (item: ChainedAscension, loadoutHash: string): ChainedAscension => ({ ...item, loadoutHash });
+
+  test('matching loadout hashes change nothing', () => {
+    const chain = [withHash(fakeChainItem(0, 50), 'a'), withHash(fakeChainItem(1, 100), 'a')];
+    expect(computeFirstDiffIdx([50, 100], chain, {}, {}, ['a', 'a'])).toBe(2);
+  });
+
+  test('a changed override (or removed one) forces regeneration starting AT that ascension', () => {
+    const chain = [
+      withHash(fakeChainItem(0, 50), 'a'),
+      withHash(fakeChainItem(1, 100), 'a'),
+      withHash(fakeChainItem(2, 490), 'b'),
+    ];
+    expect(computeFirstDiffIdx([50, 100, 490], chain, {}, {}, ['a', 'b', 'b'])).toBe(1);
+    expect(computeFirstDiffIdx([50, 100, 490], chain, {}, {}, ['a', 'a', 'a'])).toBe(2);
+  });
+
+  test('a changed setup-form value forces regeneration from the first ascension using it', () => {
+    const chain = [withHash(fakeChainItem(0, 50), 'old'), withHash(fakeChainItem(1, 100), 'old')];
+    expect(computeFirstDiffIdx([50, 100], chain, {}, {}, ['new', 'new'])).toBe(0);
+  });
+
+  test('a chain from before loadout hashes existed is treated as stale', () => {
+    const chain = [fakeChainItem(0, 50), fakeChainItem(1, 100)];
+    expect(computeFirstDiffIdx([50, 100], chain, {}, {}, ['', ''])).toBe(0);
+  });
+});

@@ -77,13 +77,14 @@ import { useRocketsStore } from '@/stores/rockets';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useEarnings } from '@/composables/useEarnings';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, VIRTUE_EGGS } from '@/types';
 import type { VirtueEgg, LaunchMissionEntry } from '@/types';
 import { SHIP_INFO, Spaceship } from '@/lib/missions';
 import { formatDuration } from '@/lib/format';
-import { getTimeToSave } from '@/engine/apply';
+import { getBoostAwareTimeToSave } from '@/engine/apply';
+import { getSimulationContext } from '@/engine/adapter';
 
 import FuelTankGraphic from './rockets/FuelTankGraphic.vue';
 import MissionGrid from './rockets/MissionGrid.vue';
@@ -94,7 +95,8 @@ const rocketsStore = useRocketsStore();
 const actionsStore = useActionsStore();
 const initialStateStore = useInitialStateStore();
 const { output: earningsOutput } = useEarnings();
-const { prepareExecution, completeExecution } = useActionExecutor();
+const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
+  useEventCrossingWaits();
 
 const isZeroTime = ref(false);
 
@@ -119,9 +121,9 @@ const saveTimeSeconds = computed(() => {
   const cost = totalLaunchCost.value;
   if (cost <= 0) return 0;
 
-  // Use the engine's timeToSave which correctly handles bank balance,
-  // population growth, and uses offline rates (consistent with the rest of the app).
-  return getTimeToSave(cost, actionsStore.effectiveSnapshot);
+  // The wait the launch is charged: handles bank balance, population growth and 2x earnings,
+  // and uses offline rates (consistent with the rest of the app).
+  return getBoostAwareTimeToSave(cost, actionsStore.effectiveSnapshot, getSimulationContext());
 });
 
 const showArtifactWarning = computed(() => {
@@ -131,6 +133,15 @@ const showArtifactWarning = computed(() => {
 function handleLaunch() {
   if (rocketsStore.isOverBudget || rocketsStore.queuedMissions.length === 0) return;
 
+  batch(async () => {
+    prepareExecution();
+    insertBoostCrossingWaits(totalLaunchCost.value);
+    if (isEditingPastGroup.value) await settled();
+    addLaunch();
+  });
+}
+
+function addLaunch() {
   const beforeSnapshot = prepareExecution();
 
   // Build mission entries for the payload

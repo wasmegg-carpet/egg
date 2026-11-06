@@ -5,12 +5,12 @@
  * Cost is 0 gems.
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { WaitForGemsPayload } from '@/types';
 import { formatDuration, formatNumber } from '@/lib/format';
 
-export const waitForGemsExecutor: ActionExecutor<'wait_for_gems'> = {
-    execute(_payload: WaitForGemsPayload, _context: ExecutorContext): number {
+export const waitForGemsExecutor: PayloadExecutor<WaitForGemsPayload> = {
+    execute(_payload: WaitForGemsPayload, _context: BaseExecutorContext): number {
         // Waiting for gems is free
         return 0;
     },

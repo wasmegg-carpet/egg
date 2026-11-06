@@ -119,7 +119,9 @@
           v-else
           class="flex flex-col items-center py-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 border-dashed text-emerald-700/80"
         >
-          <p class="text-[10px] font-black uppercase tracking-widest">Maximum silos reached (10/10)</p>
+          <p class="text-[10px] font-black uppercase tracking-widest">
+            Maximum silos reached ({{ siloOutput.maxSilos }}/{{ siloOutput.maxSilos }})
+          </p>
         </div>
       </div>
 
@@ -199,26 +201,28 @@ import { useSilosStore } from '@/stores/silos';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 import { generateActionId } from '@/types';
-import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computed } from 'vue';
-import { getTimeToSave } from '@/engine/apply';
-import { planSilosWithinBudget } from '@/calculations/siloPurchasePlan';
+import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
+import { getSimulationContext } from '@/engine/adapter';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';
 
 const ONE_HOUR_SECONDS = 3600;
 
 const silosStore = useSilosStore();
 const actionsStore = useActionsStore();
 const { output: siloOutput } = useSiloTime();
-const { prepareExecution, completeExecution, batch } = useActionExecutor();
+const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
+  useEventCrossingWaits();
 
 const baseUrl = import.meta.env.BASE_URL;
 
 const timeToBuy = computed(() => {
   const price = siloOutput.value.nextSiloCost;
-  const seconds = getTimeToSave(price, actionsStore.effectiveSnapshot);
+  const seconds = getBoostAwareTimeToSave(price, actionsStore.effectiveSnapshot, getSimulationContext());
   if (seconds <= 0) return '0s';
   if (seconds === Infinity) return '∞';
   return formatDuration(seconds);
@@ -227,14 +231,23 @@ const timeToBuy = computed(() => {
 // Simulate buying silos back-to-back (waiting to save up gems between purchases)
 // to see how many fit within a 1-hour window.
 const maxSilosIn1Hour = computed<{ count: number; seconds: number }>(() => {
-  const plan = planSilosWithinBudget(actionsStore.effectiveSnapshot, siloOutput.value.siloCount, ONE_HOUR_SECONDS);
+  const snapshot = actionsStore.effectiveSnapshot;
+  const plan = planSilosWithinBudget(
+    snapshot,
+    siloOutput.value.siloCount,
+    ONE_HOUR_SECONDS,
+    absoluteSimTimeFor(snapshot, getSimulationContext())
+  );
   return { count: plan.steps.length, seconds: plan.totalSeconds };
 });
 
-async function handleBuySilo() {
+async function buySilo() {
   if (!siloOutput.value.canBuyMore) return;
 
   // Prepare execution (restores stores if editing past group)
+  prepareExecution();
+  insertBoostCrossingWaits(siloOutput.value.nextSiloCost);
+  if (isEditingPastGroup.value) await settled();
   const beforeSnapshot = prepareExecution();
 
   const fromCount = beforeSnapshot.siloCount;
@@ -274,6 +287,10 @@ async function handleBuySilo() {
     },
     beforeSnapshot
   );
+}
+
+async function handleBuySilo() {
+  await batch(buySilo);
 }
 
 function handleBuyMaxSilos1Hour() {

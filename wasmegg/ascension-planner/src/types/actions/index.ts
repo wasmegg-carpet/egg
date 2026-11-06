@@ -1,11 +1,11 @@
 import type { VirtueEgg } from './virtue';
-import type { ArtifactSetName, ArtifactSlotPayload } from './artifacts';
+import type { ArtifactSetName, ArtifactSlotPayload } from 'lib/planners/types/actions/artifacts';
 import type { ActionPayloadMap, ActionType, CalculationsSnapshot, CalculationsFullOutputs } from './core';
 
 export * from './virtue';
-export * from './artifacts';
+export * from 'lib/planners/types/actions/artifacts';
 export * from './infrastructure';
-export * from './research';
+export * from 'lib/planners/types/actions/research';
 export * from './missions';
 export * from './wait';
 export * from './core';

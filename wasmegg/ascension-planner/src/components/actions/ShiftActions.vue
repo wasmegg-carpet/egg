@@ -159,20 +159,17 @@ import { useVirtueStore } from '@/stores/virtue';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useSalesStore } from '@/stores/sales';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { resetResearchViewForCuriosityShift } from '@/composables/useResearchViews';
-import { isResearchSaleActive } from '@/lib/events';
 import { shiftCost, iconURL } from 'lib';
-import { getColleggtibleIconPath } from '@/lib/assets';
+import { getColleggtibleIconPath } from 'lib/planners/assets';
 import { formatNumber, formatDuration } from '@/lib/format';
 
 const virtueStore = useVirtueStore();
 const actionsStore = useActionsStore();
 const initialStateStore = useInitialStateStore();
 const truthEggsStore = useTruthEggsStore();
-const salesStore = useSalesStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 
 const availableEggs = VIRTUE_EGGS;
@@ -307,42 +304,6 @@ function handleShift(toEgg: VirtueEgg) {
     },
     beforeSnapshot
   );
-
-  // If this lands in Curiosity mid-sale (by the calendar, not whatever `activeSales.research`
-  // happened to carry over from before the shift — normally `false`, off, from a non-Curiosity
-  // phase), auto-activate the research sale, same as the real game does. Same "sync to calendar
-  // truth at the shift instant" the auto planner's `applyShiftAction` now also does — see its own
-  // doc comment in auto/shifts/helpers/actionHelpers.ts for the full reasoning. Checked right here,
-  // before `pushWaitForFullHabsAction` below can advance the clock further waiting for habs to
-  // fill — this needs to reflect the shift's own instant, not wherever the clock ends up after that
-  // wait.
-  if (toEgg === 'curiosity') {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
-    const shiftAbsoluteSimTime =
-      baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset);
-    const isSaleNow = isResearchSaleActive(shiftAbsoluteSimTime);
-    if (actionsStore.effectiveSnapshot.activeSales.research !== isSaleNow) {
-      const saleToggleBeforeSnapshot = prepareExecution();
-      const saleTogglePayload = { saleType: 'research' as const, active: isSaleNow, multiplier: 0.3 };
-      salesStore.setSaleActive('research', isSaleNow);
-      completeExecution(
-        {
-          id: generateActionId(),
-          timestamp: Date.now(),
-          type: 'toggle_sale',
-          payload: saleTogglePayload,
-          cost: 0,
-          dependsOn: computeDependencies(
-            'toggle_sale',
-            saleTogglePayload,
-            actionsStore.actionsBeforeInsertion,
-            actionsStore.initialSnapshot.researchLevels
-          ),
-        },
-        saleToggleBeforeSnapshot
-      );
-    }
-  }
 
   actionsStore.pushWaitForFullHabsAction();
 

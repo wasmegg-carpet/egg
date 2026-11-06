@@ -1,6 +1,6 @@
 import { Action, ActionType, CurrentFarmState, VIRTUE_EGGS } from '@/types';
 import { InitialStateStoreState } from '@/stores/initialState';
-import { GameEvent } from '@/stores/events';
+import { GameEvent } from 'lib/planners/stores/events';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 
 export type ReconstructionResult = 'completed' | 'pending' | 'na';
@@ -57,7 +57,7 @@ export function evaluateAction(
 // --- HELPER: Simple Comparison Strategy Factory ---
 
 const createComparisonStrategy = <T extends ActionType>(
-  evaluateFn: (payload: any, farm: CurrentFarmState) => boolean
+  evaluateFn: (payload: Action<T>['payload'], farm: CurrentFarmState) => boolean
 ): ActionReconciliationStrategy<T> => ({
   evaluate(action, context) {
     if (!context.farm) return 'pending';
@@ -88,27 +88,27 @@ registerStrategy('start_ascension', {
   evaluate: (action, context) => (context.farm ? 'completed' : 'pending')
 });
 
-registerStrategy('buy_research', createComparisonStrategy((payload: any, farm: CurrentFarmState) => {
+registerStrategy('buy_research', createComparisonStrategy((payload, farm) => {
   const currentLevel = farm.commonResearches[payload.researchId] || 0;
   return currentLevel >= payload.toLevel;
 }));
 
-registerStrategy('buy_hab', createComparisonStrategy((payload: any, farm: CurrentFarmState) => {
+registerStrategy('buy_hab', createComparisonStrategy((payload, farm) => {
   const currentHabId = farm.habs[payload.slotIndex] || 0;
   return currentHabId >= payload.habId;
 }));
 
-registerStrategy('buy_vehicle', createComparisonStrategy((payload: any, farm: CurrentFarmState) => {
+registerStrategy('buy_vehicle', createComparisonStrategy((payload, farm) => {
   const currentVehicleId = farm.vehicles[payload.slotIndex]?.vehicleId || 0;
   return currentVehicleId >= payload.vehicleId;
 }));
 
-registerStrategy('buy_train_car', createComparisonStrategy((payload: any, farm: CurrentFarmState) => {
+registerStrategy('buy_train_car', createComparisonStrategy((payload, farm) => {
   const vehicle = farm.vehicles[payload.slotIndex];
   return !!(vehicle?.vehicleId === 11 && vehicle.trainLength >= payload.toLength);
 }));
 
-registerStrategy('buy_silo', createComparisonStrategy((payload: any, farm: CurrentFarmState) => {
+registerStrategy('buy_silo', createComparisonStrategy((payload, farm) => {
   return farm.numSilos >= payload.toCount;
 }));
 

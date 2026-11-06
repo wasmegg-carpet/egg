@@ -28,13 +28,15 @@ import {
   getNextEarningsBoostEnd,
   getNextEarningsBoostStart,
   BOUNDARY_EPSILON_SECONDS,
-} from '@/lib/events';
+} from 'lib/planners/events';
 
 // Actions that pass time (or mark an event boundary) without the player doing anything.
 const IDLE_ACTION_TYPES = new Set([
   'wait_for_time',
   'wait_for_research_sale',
+  'wait_for_research_sale_end',
   'wait_for_earnings_boost',
+  'wait_for_earnings_boost_end',
   'toggle_sale',
   'toggle_earnings_boost',
 ]);
@@ -158,9 +160,16 @@ export function advanceTimeWithBoundaries(
     }
 
     if (stepSeconds > 0) {
-      let actionType: 'wait_for_time' | 'wait_for_research_sale' | 'wait_for_earnings_boost' = 'wait_for_time';
+      let actionType:
+        | 'wait_for_time'
+        | 'wait_for_research_sale'
+        | 'wait_for_research_sale_end'
+        | 'wait_for_earnings_boost'
+        | 'wait_for_earnings_boost_end' = 'wait_for_time';
       if (targetEvent === 'research_sale') actionType = 'wait_for_research_sale';
+      else if (targetEvent === 'research_sale_end') actionType = 'wait_for_research_sale_end';
       else if (targetEvent === 'earnings_boost') actionType = 'wait_for_earnings_boost';
+      else if (targetEvent === 'earnings_boost_end') actionType = 'wait_for_earnings_boost_end';
 
       const snap = computeSnapshot(currentState, context, { skipGrowth: true });
       const waitAction = createSimAction(actionType, { totalTimeSeconds: stepSeconds });
@@ -255,7 +264,7 @@ export function advanceTimeWithBoundaries(
         // getDiscountedVirtuePrice is the actual price authority and is independently hardcoded to
         // the same 0.3; this field is purely descriptive/display, but 0.35 here was inconsistent
         // with it and with every other call site (ResearchActions.vue, ShiftActions.vue,
-        // WaitForEventActions.vue, useEventExpiry.ts, actionHelpers.ts).
+        // WaitForEventActions.vue, actionHelpers.ts).
       });
       currentState = applyAction(currentState, toggleSale);
       toggleSale.endState = computeSnapshot(currentState, context, { skipGrowth: true });

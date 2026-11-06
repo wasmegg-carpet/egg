@@ -4,7 +4,7 @@ import type { EngineState, SimulationContext, ShiftResult } from '../../types';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction } from '../../../engine/apply';
 import { advanceTimeFlat } from './advanceTime';
-import { planSilosWithinBudget } from '../../../calculations/siloPurchasePlan';
+import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';
 
 /**
  * `planSilosWithinBudget` plans against a snapshot up front (growth-aware, via `getTimeToSave`);

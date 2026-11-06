@@ -8,7 +8,7 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useEggValueStore } from '@/stores/eggValue';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { calculateEggValue } from '@/calculations/eggValue';
 import type { EggValueInput, EggValueOutput } from '@/types';
 

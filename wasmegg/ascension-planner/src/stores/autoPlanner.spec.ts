@@ -1,3 +1,4 @@
+import type { VirtueEgg } from '@/types';
 import { describe, expect, test } from 'vitest';
 import { pickVariant, type VariantKey, type VariantResult } from './autoPlanner';
 import type { AscensionSummary } from '@/auto/types';
@@ -21,9 +22,9 @@ function fakeVariant(overrides: Partial<AscensionSummary> = {}): VariantResult {
     startShiftCount: 0,
     endShiftCount: 12,
     totalShiftCost: 0,
-    eggsDelivered: {} as any,
-    teEarned: {} as any,
-    finalTE: {} as any,
+    eggsDelivered: {} as Record<VirtueEgg, number>,
+    teEarned: {} as Record<VirtueEgg, number>,
+    finalTE: {} as Record<VirtueEgg, number>,
     lastTEDurationSeconds: 0,
     strategyLabel: '1-sale build',
     isMaxELRAscension: false,

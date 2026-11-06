@@ -35,6 +35,14 @@
                   v-if="hasEndTimeOverride"
                   class="px-1 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-100 text-[7px] font-black uppercase tracking-wider leading-none"
                 >Overridden</span>
+                <span
+                  v-if="hasLoadoutOverride"
+                  v-tippy="'This ascension uses its own artifacts & stones — see Show Details'"
+                  class="px-1 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-100 text-[7px] font-black uppercase tracking-wider leading-none flex items-center gap-0.5"
+                >
+                  <img :src="iconURL('egginc/afx_quantum_metronome_4.png', 32)" class="w-2.5 h-2.5" alt="" />
+                  Artifacts
+                </span>
               </span>
             </div>
 
@@ -308,6 +316,40 @@
 
       <!-- Collapsible Detailed Breakdown Content -->
       <div v-if="isExpanded" class="mt-2.5 border-t border-slate-100 pt-2.5 space-y-2 animate-in fade-in slide-in-from-top-4 duration-500">
+        <!-- Artifacts & stones this ascension used, editable as a per-ascension override -->
+        <div v-if="loadoutEditorValue" class="bg-slate-50/50 border border-slate-100 rounded-xl p-2 sm:p-3 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <h4 class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Artifacts &amp; Stones</h4>
+              <span
+                v-if="hasLoadoutOverride"
+                class="px-1 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-100 text-[7px] font-black uppercase tracking-wider leading-none"
+              >Overridden</span>
+              <span v-else class="text-[8px] font-bold text-slate-400">As used in C1 and H1</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button
+                v-if="isLoadoutDirty"
+                class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                @click="emit('overrideLoadout', loadoutEditorValue)"
+              >Apply</button>
+              <button
+                v-if="hasLoadoutOverride"
+                class="px-2 py-1 bg-slate-50 hover:bg-rose-50 border border-slate-200/80 hover:border-rose-200/50 text-slate-500 hover:text-rose-600 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                @click="emit('overrideLoadout', null)"
+              >Remove override</button>
+            </div>
+          </div>
+          <AutoLoadoutEditor
+            v-model="loadoutEditorValue"
+            :default-value="loadoutOpeningValue"
+            :inventory-delivery="inventoryDelivery"
+            reset-label="Undo changes"
+            default-label="Was"
+            :slot-count="artifactSlotCount(initialStateStore.proPermit)"
+          />
+        </div>
+
         <!-- SE Cost & Balance Grid -->
         <div class="grid grid-cols-3 gap-x-1.5 sm:gap-x-4 gap-y-2 bg-slate-50/50 border border-slate-100 rounded-xl p-2 sm:p-3">
           <!-- SE Cost -->
@@ -408,15 +450,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import { iconURL } from 'lib';
 import type { AscensionSummary } from '@/auto/types';
+import type { Action } from '@/types/actions/meta';
 import type { VirtueEgg } from '@/types';
 import VariantComparisonModal from './VariantComparisonModal.vue';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import ShiftSummary from './ShiftSummary.vue';
+import AutoLoadoutEditor from './AutoLoadoutEditor.vue';
+import { useInitialStateStore } from '@/stores/initialState';
+import { artifactSlotCount } from '@/lib/artifacts/calculator';
+import {
+  cloneLoadoutInputs,
+  extractUsedLoadout,
+  loadoutInputsEqual,
+  type AutoLoadoutInputs,
+  type DeliveryInputs,
+} from '@/auto/loadout';
+
+const initialStateStore = useInitialStateStore();
 
 const props = defineProps<{
   summary: AscensionSummary & {
@@ -431,7 +486,7 @@ const props = defineProps<{
       isActive: boolean;
     }[];
   };
-  actions: any[];
+  actions: Action[];
   index: number;
   total: number;
   targetTE: number | null;
@@ -446,6 +501,12 @@ const props = defineProps<{
   timezone: string;
   /** True when this ascension already has a user-set end-time override active (`autoPlannerStore.endTimeOverrides`). */
   hasEndTimeOverride?: boolean;
+  /** The artifact/stone inputs this ascension ran with: its override if it has one, else the setup form's. */
+  loadoutInputs?: AutoLoadoutInputs | null;
+  /** True when this ascension has its own artifact/stone override (`autoPlannerStore.loadoutOverrides`). */
+  hasLoadoutOverride?: boolean;
+  /** The inventory's `auto` delivery inputs, so a fixed delivery set can switch back to them. */
+  inventoryDelivery?: DeliveryInputs | null;
 }>();
 
 const emit = defineEmits<{
@@ -453,7 +514,34 @@ const emit = defineEmits<{
   (e: 'saveSingleToLibrary'): void;
   /** Sets (a finite unix timestamp) or clears (`null`) this ascension's end-time override. */
   (e: 'overrideEndTime', endTime: number | null): void;
+  /** Sets (inputs) or removes (`null`) this ascension's artifact/stone override. */
+  (e: 'overrideLoadout', inputs: AutoLoadoutInputs | null): void;
 }>();
+
+// --- Artifacts & stones ---
+// The editor opens on what this ascension really equipped (C1's earnings set, H1's delivery set) —
+// or on its override, when it has one. Edits stay local until Apply.
+const usedLoadout = computed(() =>
+  props.loadoutInputs ? extractUsedLoadout(props.actions, props.loadoutInputs) : null
+);
+
+const loadoutOpeningValue = computed<AutoLoadoutInputs | null>(() => {
+  if (!props.loadoutInputs) return null;
+  return props.hasLoadoutOverride ? cloneLoadoutInputs(props.loadoutInputs) : usedLoadout.value!;
+});
+
+const loadoutEditorValue = ref<AutoLoadoutInputs | null>(null);
+watch(
+  loadoutOpeningValue,
+  value => {
+    loadoutEditorValue.value = value ? cloneLoadoutInputs(value) : null;
+  },
+  { immediate: true }
+);
+
+const isLoadoutDirty = computed(
+  () => !!loadoutEditorValue.value && !loadoutInputsEqual(loadoutEditorValue.value, loadoutOpeningValue.value)
+);
 
 const isExpanded = ref(false);
 const isDropdownOpen = ref(false);
@@ -573,10 +661,21 @@ const warnings = computed(() => {
   return list;
 });
 
+interface ShiftGroup {
+  title: string;
+  egg: VirtueEgg;
+  actions: Action[];
+  duration: number;
+  cost: number;
+  costType: 'SE' | 'Virtue';
+  startTime: number;
+  endTime: number;
+}
+
 const shifts = computed(() => {
   const actions = props.actions;
   const ascStartTime = props.summary.startTime;
-  const shifts: any[] = [];
+  const shifts: ShiftGroup[] = [];
   let absoluteTime = ascStartTime;
 
   const startEgg = (actions[0]?.type === 'start_ascension' && actions[0]?.payload?.initialEgg) || 'curiosity';
@@ -590,13 +689,13 @@ const shifts = computed(() => {
     return `${egg.charAt(0).toUpperCase()}${count} Shift`;
   };
 
-  let currentShift = {
+  let currentShift: ShiftGroup = {
     title: visitTitle(startEgg),
     egg: startEgg,
-    actions: [] as any[],
+    actions: [],
     duration: 0,
     cost: 0,
-    costType: 'SE' as 'SE' | 'Virtue',
+    costType: 'SE',
     startTime: absoluteTime,
     endTime: absoluteTime,
   };
@@ -623,7 +722,8 @@ const shifts = computed(() => {
     } else {
       currentShift.actions.push(action);
       if (action.type.startsWith('wait_')) {
-        const dt = action.totalTimeSeconds || action.payload.totalTimeSeconds || action.payload.timeSeconds || 0;
+        const payload = action.payload as { totalTimeSeconds?: number; timeSeconds?: number };
+        const dt = action.totalTimeSeconds || payload.totalTimeSeconds || payload.timeSeconds || 0;
         currentShift.duration += dt;
         absoluteTime += dt;
       }

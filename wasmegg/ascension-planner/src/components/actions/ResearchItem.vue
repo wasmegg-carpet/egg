@@ -49,7 +49,7 @@
             </svg>
             <span>
               <span class="font-bold uppercase tracking-tight mr-1">Lookahead:</span>
-              Needs {{ lookahead.minLevels }} levels for +{{ (lookahead.impact * 100).toFixed(3) }}% Delivery Rate ({{ lookahead.hpp.toFixed(1) }} hr/%)
+              {{ lookahead.helpsAlone ? 'Best with' : 'Needs' }} {{ lookahead.partner ? `${lookahead.partner.name} ${lookahead.partner.level}` : `${lookahead.levels} levels` }} for +{{ (lookahead.impact * 100).toFixed(3) }}% Delivery Rate ({{ lookahead.hpp.toFixed(1) }} hr/%)
             </span>
           </div>
         </div>
@@ -125,8 +125,9 @@
             </div>
             <div
               class="text-[11px] font-mono text-gray-900 leading-none"
+              :class="{ 'cursor-help': extraSeconds !== undefined }"
               v-tippy="
-                extraLabel === 'Achieve ROI' && extraSeconds !== undefined
+                extraSeconds !== undefined
                   ? formatAbsoluteTime(extraSeconds, baseTimestamp, virtueStore.ascensionTimezone)
                   : undefined
               "
@@ -155,7 +156,16 @@
       <!-- Time Cost and Actions (Right aligned) -->
       <div class="flex items-center gap-2 shrink-0">
         <!-- Time Cost -->
-        <div v-if="timeToBuy && !isMaxed" class="text-[11px] font-mono text-gray-400 whitespace-nowrap">
+        <div
+          v-if="timeToBuy && !isMaxed"
+          class="text-[11px] font-mono text-gray-400 whitespace-nowrap"
+          :class="{ 'cursor-help': timeCostTooltipSeconds !== undefined }"
+          v-tippy="
+            timeCostTooltipSeconds !== undefined
+              ? formatAbsoluteTime(timeCostTooltipSeconds, baseTimestamp, virtueStore.ascensionTimezone)
+              : undefined
+          "
+        >
           {{ timeToBuy }}
         </div>
 
@@ -268,7 +278,7 @@
 import { computed } from 'vue';
 import type { CommonResearch } from '@/calculations/commonResearch';
 import { formatNumber, formatGemPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
@@ -294,6 +304,9 @@ const props = defineProps<{
   recommendationNote?: string;
   maxTime?: string;
   timeToBuySeconds?: number;
+  // Seconds from now until this purchase completes, shown as an absolute time on hover over the
+  // time cost. Differs from `timeToBuySeconds` in a chain, where that only counts this one wait.
+  timeCostTooltipSeconds?: number;
   maxTimeSeconds?: number;
   buyToHereSeconds?: number;
   buyToHereTooltip?: string;
@@ -301,7 +314,7 @@ const props = defineProps<{
   timeRoiSeconds?: number;
   roiDisplayMode?: 'hpp' | 'time';
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; partner?: { name: string; level: number }; helpsAlone: boolean; impact: number; hpp: number };
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;
   duringSale?: boolean;
@@ -333,7 +346,7 @@ function deadlineWarningTooltip(seconds?: number, extraText?: string) {
   if (seconds === undefined) return extraText || '';
   const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
   const warning = props.showDeadlineWarning
-    ? `${timeStr} is after next Saturday at +0. Turn off the research sale to see realistic prices.`
+    ? `${timeStr} is after this sale ends (Saturday at +0). The price shown is what it will cost by then.`
     : timeStr;
   
   if (extraText) {

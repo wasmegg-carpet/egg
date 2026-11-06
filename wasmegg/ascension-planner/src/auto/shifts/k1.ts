@@ -1,5 +1,5 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
-import { applyShiftAction } from './helpers/actionHelpers';
+import { applyShiftIfNeeded } from './helpers/actionHelpers';
 import { runVehiclesForTimeLimit } from './helpers/vehicles';
 
 /**
@@ -16,11 +16,11 @@ import { runVehiclesForTimeLimit } from './helpers/vehicles';
  * else. See `planVehiclesForTimeLimit`'s doc comment for the full rationale.
  */
 export function runK1(startState: EngineState, context: SimulationContext, timeLimit: number = 1800): ShiftResult {
-  const { state, action: shiftAction } = applyShiftAction(startState, context, 'kindness');
+  const { state, actions: shiftActions } = applyShiftIfNeeded(startState, context, 'kindness');
   const plan = runVehiclesForTimeLimit(state, context, timeLimit);
 
   return {
-    actions: [shiftAction, ...plan.actions],
+    actions: [...shiftActions, ...plan.actions],
     elapsedSeconds: plan.elapsedSeconds,
     endState: plan.endState,
   };

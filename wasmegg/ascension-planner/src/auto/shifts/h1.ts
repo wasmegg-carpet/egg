@@ -1,14 +1,19 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
-import { getOptimalELRSet } from '@/lib/artifacts/virtue';
+import { getOptimalELRSetFromSource } from '@/lib/artifacts/virtue';
 import { createSimAction } from '@/types/actions/meta';
 import { applyShiftAction, applyDecoratedAction } from './helpers/actionHelpers';
+import { contextDeliverySource } from '../loadout/resolve';
 
 /**
  * H1: Shift to Humility and switch to optimal ELR artifacts.
+ *
+ * The delivery set comes from `context.loadoutInputs` when set (the auto planner's artifact/stone
+ * inputs: `auto` mode searches its candidates, `fixed` mode keeps the user's artifacts — stones are
+ * placed from the pool either way), else from the backup's inventory.
  */
 export function runH1(state: EngineState, context: SimulationContext): ShiftResult {
-  const backup = context.rawBackup;
-  if (!backup) {
+  const source = contextDeliverySource(context);
+  if (!source) {
     return {
       actions: [],
       elapsedSeconds: 0,
@@ -17,10 +22,11 @@ export function runH1(state: EngineState, context: SimulationContext): ShiftResu
   }
 
   // Compute optimal ELR set based on current state
-  const optimalSet = getOptimalELRSet(backup, {
+  const optimalSet = getOptimalELRSetFromSource(source, {
     commonResearch: state.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: state.proPermit,
     assumeMaxHabsVehicles: true, // H1 is near the end, we likely have CU and max vehicles
   });
 

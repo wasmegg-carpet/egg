@@ -17,7 +17,7 @@ import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction, boostTransitionsFrom } from '../../../engine/apply';
 import { advanceTimeWithBoundaries } from './advanceTime';
-import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from '@/lib/events';
+import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from 'lib/planners/events';
 import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from '@/lib/actions/notes';
 import { runWithEarningsEventDeferral } from './earningsEventDeferral';
 import type { DeferralCheckpoint, EarningsEventDeferralHost } from './earningsEventDeferral';

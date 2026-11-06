@@ -12,7 +12,7 @@
 
 <script setup lang="ts">
 import { useContinuityStore } from '@/stores/continuity';
-import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
+import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 
 const store = useContinuityStore();
 </script>

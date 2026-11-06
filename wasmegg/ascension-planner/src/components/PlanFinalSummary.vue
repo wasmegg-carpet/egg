@@ -95,7 +95,7 @@
            </button>
          </div>
 
-        <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleImport" />
+        <input ref="fileInput" type="file" accept=".gz,.json" class="hidden" @change="handleImport" />
 
         <div class="w-px h-8 bg-slate-100 mx-1"></div>
 
@@ -222,6 +222,7 @@ import { type CalculationsSnapshot, type VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { formatNumber } from '@/lib/format';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
+import { readImportedJson } from 'lib/planners/utils/export';
 import { iconURL } from 'lib';
 import TeBreakdownModal from '@/components/TeBreakdownModal.vue';
 
@@ -408,7 +409,7 @@ function handleImport(event: Event) {
 
   reader.onload = async e => {
     try {
-      const jsonString = e.target?.result as string;
+      const jsonString = await readImportedJson(e.target?.result as ArrayBuffer);
 
       if (actionsStore.actionCount > 0) {
         if (!confirm('Importing a plan will overwrite your current actions. Continue?')) {
@@ -426,7 +427,7 @@ function handleImport(event: Event) {
     }
   };
 
-  reader.readAsText(file);
+  reader.readAsArrayBuffer(file);
 }
 
 // Cat Gif Logic

@@ -1,3 +1,4 @@
+import type { Action } from '@/types/actions/meta';
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import { createEmptySnapshot } from '@/types';
 import { migrateExportedPlanV1, type ExportedPlan, type ExportedPlanV1 } from './export';
@@ -36,9 +37,9 @@ export function buildLibraryPlansFromExport(
       state.initialShiftCount = prevBest.summary.endShiftCount;
     }
 
-    let finalActions: any[] = best.actions;
+    let finalActions: Action[] = best.actions;
     if (finalActions.length === 0 || finalActions[0].type !== 'start_ascension') {
-      const startAction = {
+      const startAction: Action<'start_ascension'> = {
         id: 'start_' + Math.random().toString(36).substring(2, 9),
         index: 0,
         timestamp: best.summary.startTime * 1000,
@@ -56,7 +57,7 @@ export function buildLibraryPlansFromExport(
         dependsOn: [], dependents: [],
       };
       finalActions = [startAction, ...finalActions];
-      finalActions.forEach((action: any, i: number) => { action.index = i; });
+      finalActions.forEach((action, i) => { action.index = i; });
     }
 
     // `virtueState.ascensionTime` below only has minute resolution (an "HH:MM" form input), but
@@ -77,7 +78,7 @@ export function buildLibraryPlansFromExport(
     // needed downstream.
     const flooredStartTime = Math.floor(best.summary.startTime / 60) * 60;
     const droppedSeconds = best.summary.startTime - flooredStartTime;
-    const startAscensionAction: any = finalActions[0];
+    const startAscensionAction = finalActions[0];
     startAscensionAction.endState.lastStepTime = (startAscensionAction.endState.lastStepTime || 0) - droppedSeconds;
 
     const summary = best.summary;
@@ -95,7 +96,7 @@ export function buildLibraryPlansFromExport(
         initialState: state,
         virtueState: {
           shiftCount: state.initialShiftCount || 0,
-          initialTE: Object.values(state.initialTeEarned || {}).reduce((s: number, v: any) => s + (v || 0), 0),
+          initialTE: Object.values<number>(state.initialTeEarned || {}).reduce((s, v) => s + (v || 0), 0),
           ascensionDate: formatUnixToDateInput(best.summary.startTime, imported.timezone),
           ascensionTime: formatUnixToTimeInput(best.summary.startTime, imported.timezone),
           ascensionTimezone: imported.timezone,

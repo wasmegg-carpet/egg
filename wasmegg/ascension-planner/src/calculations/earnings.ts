@@ -19,6 +19,7 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
     artifactAwayMultiplier,
     videoDoublerMultiplier,
     eventMultiplier,
+    proPermit,
     artifactEffects,
   } = input;
 
@@ -35,8 +36,11 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
   // Online earnings
   const onlineEarnings = baseEarnings * finalMultiplier;
 
-  // Offline earnings = online × away-earnings colleggtibles × artifact (lunar)
-  const offlineEarnings = onlineEarnings * awayEarningsMultiplier * artifactAwayMultiplier;
+  // Standard permit halves offline earnings only
+  const permitAwayMultiplier = proPermit === false ? 0.5 : 1;
+
+  // Offline earnings = online × away-earnings colleggtibles × artifact (lunar) × permit
+  const offlineEarnings = onlineEarnings * awayEarningsMultiplier * artifactAwayMultiplier * permitAwayMultiplier;
 
   return {
     baseEarnings,
@@ -44,6 +48,7 @@ export function calculateEarnings(input: EarningsInput): EarningsOutput {
     earningsMultiplier,
     awayEarningsMultiplier,
     artifactAwayMultiplier,
+    permitAwayMultiplier,
     videoDoublerMultiplier,
     eventMultiplier,
     onlineEarnings,

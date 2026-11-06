@@ -86,7 +86,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ChevronDownIcon, LockOpenIcon } from '@heroicons/vue/solid';
 import { type CommonResearch } from '@/calculations/commonResearch';
 import { type MilestoneTarget } from '@/composables/useResearchViews';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 
 interface ResearchOption {

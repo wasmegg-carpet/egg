@@ -44,7 +44,7 @@
         <SmartBuyStats
           :purchase-count="saleAwareStats70.purchaseCount"
           :seconds="saleAwareStats70.seconds"
-          :gems="saleAwareStats70.gems"
+          :cost="saleAwareStats70.gems"
         />
         <RatePreviewDelta
           label="Earnings"
@@ -54,6 +54,10 @@
         />
       </div>
     </SmartBuyCard>
+
+    <!-- Only while no research sale is running, so the plan can be advanced to the next sale without
+         leaving the Smart Buy view for the Wait tab. -->
+    <WaitForResearchSaleButton v-if="!isResearchSaleActive" />
 
     <SmartBuyCard title="Buy Delivery Research" :loading="saleEndsLoading">
       <template #icon>
@@ -77,7 +81,7 @@
       <SmartBuyStats
         :purchase-count="saleEndsStats.purchaseCount"
         :seconds="saleEndsStats.seconds"
-        :gems="saleEndsStats.gems"
+        :cost="saleEndsStats.gems"
       />
       <ResearchPurchasePreview
         :items="saleEndsEarningsPreview"
@@ -116,13 +120,14 @@
 import { iconURL } from 'lib';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 import QuickBuy from './QuickBuy.vue';
-import AutoBuy from './AutoBuy.vue';
-import SmartBuyCard from './SmartBuyCard.vue';
-import SaleRideStepper from './SaleRideStepper.vue';
+import AutoBuy from 'ui/components/planners/actions/AutoBuy.vue';
+import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
+import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
-import RatePreviewDelta from './RatePreviewDelta.vue';
-import SmartBuyStats from './SmartBuyStats.vue';
-import InlineSpinner from '@/components/InlineSpinner.vue';
+import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
+import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
+import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
+import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 interface RateSummary {
   before: number;
@@ -137,6 +142,7 @@ interface BuyStats {
 
 defineProps<{
   autoBuyAlwaysOn: boolean;
+  isResearchSaleActive: boolean;
   canBuyUntilSaleWarning: boolean;
   canBuyUntilSaleDeadline: boolean;
   quickBuyPreview: ResearchSummaryItem[];

@@ -134,6 +134,22 @@ import {
 import { iconURL } from 'lib';
 import { idToTool } from 'lib/tools';
 
+// True on localhost or a Netlify branch deploy (https://<branch>--wasmegg-carpet.netlify.app),
+// false on the main site (https://wasmegg-carpet.netlify.app).
+function isLocalOrBranchDeploy(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const host = window.location.hostname;
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '[::1]' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('--wasmegg-carpet.netlify.app')
+  );
+}
+
 // null for group separator.
 const entries: ({
   id: string;
@@ -177,6 +193,7 @@ const entries: ({
   idToTool.get('rockets-tracker')!,
   idToTool.get('virtue-companion')!,
   idToTool.get('ascension-planner')!,
+  ...(isLocalOrBranchDeploy() ? [idToTool.get('enl-planner')!] : []),
   idToTool.get('past-contracts')!,
   idToTool.get('inventory-visualizer')!,
   idToTool.get('enlightenment')!,

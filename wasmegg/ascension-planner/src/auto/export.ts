@@ -1,7 +1,9 @@
-import { downloadFile } from '@/utils/export';
+import { downloadGzipped } from 'lib/planners/utils/export';
 import type { Action } from '@/types/actions/meta';
+import type { ArtifactSlotPayload, VirtueEgg } from '@/types';
 import type { AscensionSummary } from './types';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
+import type { AutoLoadoutInputs } from './loadout/types';
 
 interface ExportedPlanGoal {
   type: 'te' | 'date';
@@ -13,13 +15,15 @@ interface ExportedPlanGoal {
 interface ExportedInitialState {
   epicResearchLevels: Record<string, number>;
   colleggtibleTiers: Record<string, number>;
-  artifactLoadout: any[];
+  artifactLoadout: ArtifactSlotPayload[];
   soulEggs: number;
   isUltra: boolean;
+  /** Absent on exports made before Standard permit was supported; those plans were all Pro. */
+  proPermit?: boolean;
   initialTankLevel: number;
   initialFuelAmounts: Record<string, number>;
-  initialEggsDelivered: Record<string, number>;
-  initialTeEarned: Record<string, number>;
+  initialEggsDelivered: Record<VirtueEgg, number>;
+  initialTeEarned: Record<VirtueEgg, number>;
 }
 
 export interface ExportedPlan {
@@ -33,12 +37,17 @@ export interface ExportedPlan {
    * `endTimeOverrides` — see its doc comment in `stores/autoPlanner.ts`. Absent on exports made
    * before this field existed; treated as `{}` on import. */
   endTimeOverrides?: Record<number, number>;
+  /** Setup-form artifact/stone inputs and per-ascension overrides (see `stores/autoPlanner.ts`).
+   * Absent on exports made before these existed; the setup form then falls back to the backup. */
+  loadoutInputs?: AutoLoadoutInputs | null;
+  loadoutOverrides?: Record<number, AutoLoadoutInputs>;
   /** @deprecated use planVariantOverrides */
   a1ForceMode?: 'continue' | 'prestige' | null;
   ascensions: {
     index: number;
     targetTE: number;
     variants: Partial<Record<VariantKey, VariantResult>>;
+    loadoutHash?: string;
     result3SkippedReason?: string;
     goal: ExportedPlanGoal;
   }[];
@@ -93,9 +102,9 @@ export function migrateExportedPlanV1(old: ExportedPlanV1): ExportedPlan {
 }
 
 /**
- * Triggers a browser download of the ascension plan as a JSON file.
+ * Triggers a browser download of the ascension plan as a gzipped JSON file.
  */
-export function triggerPlanExport(plan: ExportedPlan) {
+export async function triggerPlanExport(plan: ExportedPlan) {
   const dateStr = new Date().toISOString().split('T')[0];
   const x = plan.ascensions.length;
   const firstVariant = Object.values(plan.ascensions[0]?.variants ?? {})[0];
@@ -105,5 +114,5 @@ export function triggerPlanExport(plan: ExportedPlan) {
 
   const filename = `Auto_AP_${dateStr}_${x}-ascensions_${startTE}_to_${endTE}.json`;
   const content = JSON.stringify(plan);
-  downloadFile(filename, content, 'application/json');
+  await downloadGzipped(filename, content);
 }

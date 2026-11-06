@@ -5,12 +5,12 @@
  * (normal flow) and by replay.ts (replay flow).
  */
 
-import type { ActionExecutor } from '../executor';
+import type { PayloadExecutor } from 'lib/planners/actions/executorTypes';
 import type { LaunchMissionsPayload } from '@/types';
 import { SHIP_INFO, DURATION_NAMES, type Spaceship, type DurationType } from '@/lib/missions';
 import { formatDuration } from '@/lib/format';
 
-export const launchMissionsExecutor: ActionExecutor<'launch_missions'> = {
+export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
   execute(_payload: LaunchMissionsPayload): number {
     // Fuel deduction is handled directly by the component and replay
     return 0;

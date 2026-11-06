@@ -10,26 +10,27 @@ import {
   type CommonResearch,
 } from '@/calculations/commonResearch';
 import { formatDuration, formatAbsoluteTime } from '@/lib/format';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { applyAction, applyTime, getTimeToSave } from '@/engine/apply';
-import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
+import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
+import { researchPurchaseAt } from '@/engine/researchSale';
+import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import {
   getNextPacificTime,
   getBuildPhaseEndForSaleCount,
   countSalesThrough,
   isResearchSaleActive as isRealSaleActiveAt,
-} from '@/lib/events';
+} from 'lib/planners/events';
 import { type CalculationsSnapshot } from '@/types';
 import { getOptimalELRSet } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { calculateLayRate } from '@/calculations/layRate';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
-import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
+import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { computeRealisticELR } from '@/calculations/realisticELR';
 import {
   type MilestoneTarget,
@@ -59,7 +60,8 @@ import { ei } from 'lib';
 function computeRealisticDeliverySummary(
   researchLevels: Record<string, number>,
   rawBackup: ei.IBackup | null | undefined,
-  context: SimulationContext
+  context: SimulationContext,
+  proPermit: boolean
 ): { layRate: number; shippingRate: number; elr: number } | null {
   if (!rawBackup) return null;
 
@@ -69,6 +71,7 @@ function computeRealisticDeliverySummary(
     commonResearch: researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit,
   });
   const artifactMods = calculateArtifactModifiers(optimal);
   const stats = computeRealisticELR(
@@ -140,7 +143,7 @@ export interface ResearchViewItem {
   impact?: number;
   hpp?: number;
   timeRoiSeconds?: number;
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; partner?: { name: string; level: number }; helpsAlone: boolean; impact: number; hpp: number };
 
   // Cheapest specific / generic
   buyToHereTime?: string;
@@ -325,7 +328,8 @@ export function useResearchViews() {
     return computeRealisticDeliverySummary(
       commonResearchStore.researchLevels,
       initialStateStore.rawBackup,
-      getSimulationContext()
+      getSimulationContext(),
+      initialStateStore.proPermit
     );
   });
 
@@ -456,7 +460,9 @@ export function useResearchViews() {
       result.roiLabel = roiLabel;
       result.extraStats = roiLabel;
       result.extraLabel = 'ROI';
-      result.extraSeconds = item.roiSeconds;
+      // Measured from the chain's start, like `buyToHereSeconds` — `roiSeconds` alone only counts
+      // from the purchase, and ResearchItem turns this into an absolute time for its tooltip.
+      result.extraSeconds = item.buyToHereSeconds + (item.roiStartDelaySeconds ?? 0) + item.roiSeconds;
     }
 
     return result;
@@ -535,12 +541,14 @@ export function useResearchViews() {
       hpp: la ? la.hpp : item.hpp,
       timeRoiSeconds: la ? la.timeRoiSeconds : item.timeRoiSeconds,
       realisticStats: la ? la.realisticStats : item.realisticStats,
-      lookahead: la ? { minLevels: la.minLevels, impact: la.impact, hpp: la.hpp } : undefined,
+      lookahead: la
+        ? { levels: la.levels, partner: la.partner, helpsAlone: item.impact! > 0, impact: la.impact, hpp: la.hpp }
+        : undefined,
       showDeadlineWarning: item.showDeadlineWarning,
       duringSale: item.duringSale,
       duringEarningsBoost: item.duringEarningsBoost,
       extraStats: `+${((la ? la.impact : item.impact!) * 100).toFixed(3)}%`,
-      extraLabel: la ? `${la.minLevels}-lvl impact` : 'Impact',
+      extraLabel: la ? `${la.levels}-lvl impact` : 'Impact',
     };
   }
 
@@ -692,6 +700,7 @@ export function useResearchViews() {
       purchaseCount: core.purchaseCount!,
       gemsSpent: core.gemsSpent!,
       finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
+      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
     };
   });
 
@@ -700,7 +709,8 @@ export function useResearchViews() {
 
     const context = getSimulationContext();
     const baseSnapshot = actionsStore.effectiveSnapshot;
-    const mods = costModifiers.value;
+    const transitionsAt = (snapshot: CalculationsSnapshot) =>
+      boostTransitionsFrom(snapshot, context.ascensionStartTime + (snapshot.lastStepTime - context.planStartOffset));
 
     const resultResearches: Record<string, string> = {};
     const resultTiers: Record<number, string> = {};
@@ -723,8 +733,7 @@ export function useResearchViews() {
         const rVirtualBank = baseSnapshot.bankValue || 0;
 
         for (let l = currentLevel; l < r.levels; l++) {
-          const price = getDiscountedVirtuePrice(r, l, mods, rSnapshot.activeSales.research);
-          const seconds = getTimeToSave(price, rSnapshot);
+          const { price, waitSeconds: seconds } = researchPurchaseAt(r, l, rSnapshot, context);
 
           if (seconds === Infinity) {
             rInfinite = true;
@@ -737,8 +746,8 @@ export function useResearchViews() {
             payload: { researchId: r.id, fromLevel: l, toLevel: l + 1 },
             cost: price,
           });
-          rState = applyTime(rState, seconds, rSnapshot);
-          rSnapshot = computeSnapshot(rState, context);
+          rState = applyTime(rState, seconds, rSnapshot, { transitions: transitionsAt(rSnapshot) });
+          rSnapshot = computeSnapshot(rState, context, { skipEpochConversion: true });
         }
         resultResearches[r.id] = rInfinite ? '∞' : rSeconds < 0.1 ? '0s' : formatDuration(rSeconds);
         resultResearchSeconds[r.id] = rInfinite ? Infinity : rSeconds;
@@ -754,8 +763,7 @@ export function useResearchViews() {
         const currentLevel = levels[r.id] || 0;
         for (let l = currentLevel; l < r.levels; l++) {
           anyUnpurchasedInTier = true;
-          const price = getDiscountedVirtuePrice(r, l, mods, tierSnapshot.activeSales.research);
-          const seconds = getTimeToSave(price, tierSnapshot);
+          const { price, waitSeconds: seconds } = researchPurchaseAt(r, l, tierSnapshot, context);
 
           if (seconds === Infinity) {
             tierInfinite = true;
@@ -768,8 +776,8 @@ export function useResearchViews() {
             payload: { researchId: r.id, fromLevel: l, toLevel: l + 1 },
             cost: price,
           });
-          tierState = applyTime(tierState, seconds, tierSnapshot);
-          tierSnapshot = computeSnapshot(tierState, context);
+          tierState = applyTime(tierState, seconds, tierSnapshot, { transitions: transitionsAt(tierSnapshot) });
+          tierSnapshot = computeSnapshot(tierState, context, { skipEpochConversion: true });
         }
         if (tierInfinite) break;
       }
@@ -1025,6 +1033,7 @@ export function useResearchViews() {
     endLevels: {},
     endSnapshot: actionsStore.effectiveSnapshot,
     lastPurchaseTimestamp: 0,
+    endDeliveryRate: null,
   });
   let saleEndsPlanGeneration = 0;
 
@@ -1048,6 +1057,7 @@ export function useResearchViews() {
         endLevels: {},
         endSnapshot: actionsStore.effectiveSnapshot,
         lastPurchaseTimestamp: 0,
+        endDeliveryRate: null,
       };
       isComputingSaleEndsPlan.value = false;
       return;
@@ -1176,8 +1186,18 @@ export function useResearchViews() {
   const saleEndsDeliverySummary = computed(() => {
     const rawBackup = initialStateStore.rawBackup;
     const context = getSimulationContext();
-    const before = computeRealisticDeliverySummary(commonResearchStore.researchLevels, rawBackup, context);
-    const after = computeRealisticDeliverySummary(saleEndsPlan.value.endLevels, rawBackup, context);
+    const before = computeRealisticDeliverySummary(
+      commonResearchStore.researchLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
+    const after = computeRealisticDeliverySummary(
+      saleEndsPlan.value.endLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
     if (!before || !after) return null;
     return { before: before.elr, after: after.elr };
   });
@@ -1231,15 +1251,12 @@ export function useResearchViews() {
       let currentSimSnapshot = baseSnapshot;
       let totalSeconds = 0;
 
-      const formatTimeToBuy = (
-        price: number,
-        snapshot: CalculationsSnapshot
-      ): { timeToBuy: string; secondsToBuy: number } => {
-        const seconds = getTimeToSave(price, snapshot);
-        if (seconds === Infinity) return { timeToBuy: '∞', secondsToBuy: Infinity };
+      const purchaseFrom = (item: UnpurchasedResearch, snapshot: CalculationsSnapshot) => {
+        const purchase = researchPurchaseAt(item.research, item.targetLevel - 1, snapshot, context);
+        const seconds = purchase.waitSeconds;
         return {
-          timeToBuy: seconds < 0.1 ? '0s' : formatDuration(seconds),
-          secondsToBuy: seconds,
+          ...purchase,
+          timeToBuy: seconds === Infinity ? '∞' : seconds < 0.1 ? '0s' : formatDuration(seconds),
         };
       };
 
@@ -1269,16 +1286,15 @@ export function useResearchViews() {
             pendingDividerTiers.delete(r.tier);
           }
 
-          const { secondsToBuy: sequentialSecondsToBuy } = formatTimeToBuy(item.price, currentSimSnapshot);
+          const purchase = purchaseFrom(item, currentSimSnapshot);
+          const sequentialSecondsToBuy = purchase.waitSeconds;
           totalSeconds += sequentialSecondsToBuy === Infinity ? 0 : sequentialSecondsToBuy;
-
-          const rawSnapshot = { ...currentSimSnapshot, bankValue: 0 };
-          const { timeToBuy: rawTimeToBuy, secondsToBuy: rawSecondsToBuy } = formatTimeToBuy(item.price, rawSnapshot);
 
           result.push({
             research: r,
             targetLevel: item.targetLevel,
-            price: item.price,
+            price: purchase.price,
+            duringSale: purchase.duringSale,
             currentLevel: researchLevels[r.id] || 0,
             timeToBuy: sequentialSecondsToBuy < 0.1 ? '0s' : formatDuration(sequentialSecondsToBuy),
             timeToBuySeconds: sequentialSecondsToBuy,
@@ -1298,14 +1314,20 @@ export function useResearchViews() {
           currentSimState = applyAction(currentSimState, {
             type: 'buy_research',
             payload: { researchId: r.id, fromLevel: item.targetLevel - 1, toLevel: item.targetLevel },
-            cost: item.price,
+            cost: purchase.price,
           });
           currentSimState = applyTime(
             currentSimState,
             sequentialSecondsToBuy === Infinity ? 0 : sequentialSecondsToBuy,
-            currentSimSnapshot
+            currentSimSnapshot,
+            {
+              transitions: boostTransitionsFrom(
+                currentSimSnapshot,
+                context.ascensionStartTime + (currentSimSnapshot.lastStepTime - context.planStartOffset)
+              ),
+            }
           );
-          currentSimSnapshot = computeSnapshot(currentSimState, context);
+          currentSimSnapshot = computeSnapshot(currentSimState, context, { skipEpochConversion: true });
 
           const getMaxUnlocked = () =>
             Array.from({ length: 13 }, (_, i) => i + 1)
@@ -1348,16 +1370,19 @@ export function useResearchViews() {
         const key = `${r.id}-${item.targetLevel}`;
         if (!processed.has(key)) {
           processed.add(key);
-          const { secondsToBuy: sequentialSecondsToBuy } = formatTimeToBuy(item.price, currentSimSnapshot);
+          const { waitSeconds: sequentialSecondsToBuy } = purchaseFrom(item, currentSimSnapshot);
           totalSeconds += sequentialSecondsToBuy === Infinity ? 0 : sequentialSecondsToBuy;
 
           const rawSnapshot = { ...currentSimSnapshot, bankValue: 0 };
-          const { timeToBuy: rawTimeToBuy, secondsToBuy: rawSecondsToBuy } = formatTimeToBuy(item.price, rawSnapshot);
+          const raw = purchaseFrom(item, rawSnapshot);
+          const rawTimeToBuy = raw.timeToBuy;
+          const rawSecondsToBuy = raw.waitSeconds;
 
           result.push({
             research: r,
             targetLevel: item.targetLevel,
-            price: item.price,
+            price: raw.price,
+            duringSale: raw.duringSale,
             currentLevel: researchLevels[r.id] || 0,
             timeToBuy: rawTimeToBuy,
             timeToBuySeconds: rawSecondsToBuy,

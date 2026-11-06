@@ -5,7 +5,7 @@ import {
   computeShowFullRoiWarning,
   findEventCrossings,
 } from './researchROI';
-import { getNextSaleStart, getNextSaleEnd, isResearchSaleActive, BOUNDARY_EPSILON_SECONDS } from '@/lib/events';
+import { getNextSaleStart, getNextSaleEnd, isResearchSaleActive, BOUNDARY_EPSILON_SECONDS } from 'lib/planners/events';
 import type { CommonResearch, ResearchCostModifiers } from './commonResearch';
 import type { CalculationsSnapshot } from '@/types';
 

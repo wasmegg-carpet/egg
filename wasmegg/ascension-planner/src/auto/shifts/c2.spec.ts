@@ -49,6 +49,26 @@ function throughR1(state: EngineState, context: SimulationContext) {
   return { siloCount: r1.endState.siloCount, seconds: k2.elapsedSeconds + r1.elapsedSeconds };
 }
 
+describe('pre-C3 shifts already on their egg', () => {
+  test('K2 from Kindness buys vehicles without a redundant shift', () => {
+    const state = fakeState({ currentEgg: 'kindness', bankValue: 1e30 });
+
+    const result = runK2(state, fakeContext());
+
+    expect(result.actions.some(a => a.type === 'shift')).toBe(false);
+    expect(result.actions.length).toBeGreaterThan(0);
+    expect(result.endState.shiftCount).toBe(0);
+    expect(result.endState.soulEggs).toBe(state.soulEggs);
+  });
+
+  test('K2 from another egg still shifts', () => {
+    const result = runK2(fakeState(), fakeContext());
+
+    expect(result.actions[0].type).toBe('shift');
+    expect(result.endState.shiftCount).toBe(1);
+  });
+});
+
 describe('runR1LookaheadEarningsBuy', () => {
   test('a zero budget buys nothing and leaves the state untouched', () => {
     const context = fakeContext();

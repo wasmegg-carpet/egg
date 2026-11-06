@@ -13,7 +13,7 @@ import { shiftCost } from 'lib';
 import type { EngineState, SimulationContext } from '../../types';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction } from '../../../engine/apply';
-import { isResearchSaleActive } from '@/lib/events';
+import { isResearchSaleActive } from 'lib/planners/events';
 
 /**
  * Apply `action` to `state`, then decorate it with `endState`/`totalTimeSeconds`/`bankDelta` the
@@ -92,4 +92,22 @@ export function applyShiftAction(
   }
 
   return { state: shifted.state, action: shifted.action, saleToggleAction };
+}
+
+/**
+ * `applyShiftAction`, unless the farm is already on `toEgg` — then nothing happens, since a shift
+ * to the same egg would spend SE and reset the bank and population for nothing. Pre-C3 shifts can
+ * land there when a shift between two visits to the same egg was skipped for buying nothing (e.g.
+ * an opening ending on K, then C2 skipped, then K2). Returns the actions to lead the shift with:
+ * the shift plus any research-sale sync, or none.
+ */
+export function applyShiftIfNeeded(
+  state: EngineState,
+  context: SimulationContext,
+  toEgg: VirtueEgg
+): { state: EngineState; actions: Action[] } {
+  if (state.currentEgg === toEgg) return { state, actions: [] };
+  const shifted = applyShiftAction(state, context, toEgg);
+  const actions = shifted.saleToggleAction ? [shifted.action, shifted.saleToggleAction] : [shifted.action];
+  return { state: shifted.state, actions };
 }

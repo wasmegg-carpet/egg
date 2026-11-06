@@ -124,6 +124,14 @@ export const tools = [
     iconCssClasses: 'h-5 w-5',
   }),
   new Tool({
+    id: 'enl-planner',
+    title: 'Enlightenment Planner',
+    url: '/enl-planner/',
+    iconUrl: iconURL('egginc/egg_enlightenment.png', 64),
+    description: 'Planner for the fastest route to Enlightenment trophies',
+    iconCssClasses: 'h-5 w-5',
+  }),
+  new Tool({
     id: 'rockets-tracker',
     title: 'Rockets tracker',
     url: '/rockets-tracker/',

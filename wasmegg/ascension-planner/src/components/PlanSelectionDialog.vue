@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 import { loadLibraryPlans, type PlanData } from '@/lib/storage/db';
 import { usePersistence } from '@/composables/usePersistence';
 import { useActionsStore } from '@/stores/actions';
-import PlanAlreadyOpenWarning from '@/components/PlanAlreadyOpenWarning.vue';
+import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 
 const actionsStore = useActionsStore();
 const { partitionHash, broadcastPresence, busyPlanIds } = usePersistence();
