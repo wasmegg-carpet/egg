@@ -19,6 +19,19 @@ export interface PlannerCurrency {
   formatPrice(price: number): string;
 }
 
+/** Discounted price lookups, in the planner's currency. */
+export interface PlannerPricing {
+  hab(hab: Hab, purchaseIndex: number, modifiers: HabCostModifiers, isActiveSale?: boolean): number;
+  vehicle(vehicleId: number, purchaseIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
+  trainCar(carIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
+  research(
+    research: CommonResearch,
+    currentLevel: number,
+    modifiers: ResearchCostModifiers,
+    isActiveSale?: boolean
+  ): number;
+}
+
 export interface PlannerProfile {
   /** What the planner spends. */
   currency: PlannerCurrency;
@@ -31,17 +44,18 @@ export interface PlannerProfile {
     showCurrencyBadge: boolean;
   };
   /** Discounted prices, in the planner's currency (virtue prices vs regular prices). */
-  pricing: {
-    hab(hab: Hab, purchaseIndex: number, modifiers: HabCostModifiers, isActiveSale?: boolean): number;
-    vehicle(vehicleId: number, purchaseIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
-    trainCar(carIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
-    research(
-      research: CommonResearch,
-      currentLevel: number,
-      modifiers: ResearchCostModifiers,
-      isActiveSale?: boolean
-    ): number;
-  };
+  pricing: PlannerPricing;
   /** Base of the internal hatchery rate's Truth Egg multiplier (base^TE). */
   ihrTruthEggBase: number;
+}
+
+/**
+ * Binds a shared function that takes `pricing` first to one planner's prices, so the planner can
+ * re-export it with its original signature.
+ */
+export function withPricing<A extends unknown[], R>(
+  fn: (pricing: PlannerPricing, ...args: A) => R,
+  pricing: PlannerPricing
+): (...args: A) => R {
+  return (...args) => fn(pricing, ...args);
 }

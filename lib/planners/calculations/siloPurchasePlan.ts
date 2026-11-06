@@ -1,6 +1,6 @@
-import { nextSiloCost, maxSilos } from '@/stores/silos';
-import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
-import type { CalculationsSnapshot } from '@/types';
+import { nextSiloCost, maxSilos } from '../silos';
+import { boostTransitionsFrom, getTimeToSave } from '../engine/apply/math';
+import type { BaseCalculationsSnapshot } from '../types/actions/core';
 
 export interface SiloPurchaseStep {
   fromCount: number;
@@ -15,7 +15,7 @@ export interface SiloPlanResult {
 }
 
 /**
- * Simulate buying silos back-to-back (waiting to save up gems between purchases)
+ * Simulate buying silos back-to-back (waiting to save up between purchases)
  * within a `budgetSeconds` window, using the growth-aware `getTimeToSave` for each
  * purchase's wait and hand-advancing population/layRate/elr/offlineEarnings toward
  * hab capacity for the next iteration.
@@ -23,13 +23,13 @@ export interface SiloPlanResult {
  * `startAbsoluteTime` makes the waits count 2x earnings from that instant; omitted, they run at the snapshot's own rate.
  */
 export function planSilosWithinBudget(
-  startSnapshot: CalculationsSnapshot,
+  startSnapshot: BaseCalculationsSnapshot,
   startSiloCount: number,
   budgetSeconds: number,
   startAbsoluteTime?: number
 ): SiloPlanResult {
   const steps: SiloPurchaseStep[] = [];
-  const virtualSnapshot: CalculationsSnapshot = { ...startSnapshot };
+  const virtualSnapshot: BaseCalculationsSnapshot = { ...startSnapshot };
   let elapsedSeconds = 0;
   let currentSiloCount = startSiloCount;
 

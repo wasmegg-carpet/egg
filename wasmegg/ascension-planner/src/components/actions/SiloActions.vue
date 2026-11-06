@@ -208,7 +208,7 @@ import { computed } from 'vue';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
-import { planSilosWithinBudget } from '@/calculations/siloPurchasePlan';
+import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';
 
 const ONE_HOUR_SECONDS = 3600;
 
