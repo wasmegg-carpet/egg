@@ -1,10 +1,11 @@
 // Core types for the Ascension Planner
 
-import type { ArtifactEffectDisplay, Research as SharedResearch } from 'lib/planners/types';
+import type { ArtifactEffectDisplay } from 'lib/planners/types';
 
 // Types shared with the other planners (lib/planners/types)
 export type {
   InitialState,
+  Research,
   ResearchLevels,
   BaseCalculationResearch,
   ArtifactEffectDisplay,
@@ -27,13 +28,6 @@ export type {
 
 // Re-export action types
 export * from './actions/index';
-
-/**
- * Research entry from researches.json. The ascension planner also reads virtue prices.
- */
-export interface Research extends SharedResearch {
-  virtue_prices: number[];
-}
 
 /**
  * Input for Earnings calculation

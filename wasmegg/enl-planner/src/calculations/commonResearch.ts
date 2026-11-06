@@ -2,130 +2,30 @@
  * Common research calculations including tier unlock logic and cost discounts.
  */
 
-import type { Research, ResearchLevels } from '@/types';
-import { allResearches } from 'lib';
+import type { ResearchLevels } from '@/types';
 
-import type { ResearchCostModifiers, TierSummary } from 'lib/planners/calculations/commonResearch';
-import { TIER_UNLOCK_THRESHOLDS, calculateCostMultiplier } from 'lib/planners/calculations/commonResearch';
-export type { ResearchCostModifiers, TierSummary } from 'lib/planners/calculations/commonResearch';
-export { TIER_UNLOCK_THRESHOLDS, calculateCostMultiplier } from 'lib/planners/calculations/commonResearch';
-
-/**
- * Common research entry with full data
- */
-export interface CommonResearch extends Research {
-  // Inherited: id, name, description, tier, levels, per_level, prices, prices, etc.
-}
-
-// Filter to only common research and sort by tier then serial_id
-const commonResearches: CommonResearch[] = (allResearches as Research[])
-  .filter(r => r.type === 'common')
-  .sort((a, b) => {
-    if (a.tier !== b.tier) return a.tier - b.tier;
-    return a.serial_id - b.serial_id;
-  });
-
-// Group by tier for easy access
-const researchByTier: Map<number, CommonResearch[]> = new Map();
-for (const research of commonResearches) {
-  if (!researchByTier.has(research.tier)) {
-    researchByTier.set(research.tier, []);
-  }
-  researchByTier.get(research.tier)!.push(research);
-}
-
-/**
- * Get all common researches
- */
-export function getCommonResearches(): CommonResearch[] {
-  return commonResearches;
-}
-
-/**
- * Get common researches grouped by tier
- */
-export function getResearchByTier(): Map<number, CommonResearch[]> {
-  return researchByTier;
-}
-
-/**
- * Get all unique tier numbers
- */
-export function getTiers(): number[] {
-  return Array.from(researchByTier.keys()).sort((a, b) => a - b);
-}
-
-/**
- * Get research by ID
- */
-export function getResearchById(id: string): CommonResearch | undefined {
-  return commonResearches.find(r => r.id === id);
-}
-
-/**
- * Calculate total purchases made across all tiers up to (but not including) a specific tier.
- */
-export function calculatePurchasesBeforeTier(researchLevels: ResearchLevels, tier: number): number {
-  let total = 0;
-  for (const research of commonResearches) {
-    if (research.tier < tier) {
-      total += researchLevels[research.id] || 0;
-    }
-  }
-  return total;
-}
-
-/**
- * Calculate total purchases made in tiers 1 through tierNum (inclusive).
- */
-export function calculatePurchasesUpToTier(researchLevels: ResearchLevels, tierNum: number): number {
-  let total = 0;
-  for (const research of commonResearches) {
-    if (research.tier <= tierNum) {
-      total += researchLevels[research.id] || 0;
-    }
-  }
-  return total;
-}
-
-/**
- * Calculate total purchases made in each tier.
- * Returns a Map where key is tier number and value is total purchases.
- */
-export function calculatePurchasesByTierMap(researchLevels: ResearchLevels): Map<number, number> {
-  const map = new Map<number, number>();
-  for (const research of commonResearches) {
-    const current = map.get(research.tier) || 0;
-    map.set(research.tier, current + (researchLevels[research.id] || 0));
-  }
-  return map;
-}
-
-/**
- * Check if a tier is unlocked based on total purchases from previous tiers.
- */
-export function isTierUnlocked(researchLevels: ResearchLevels, tier: number): boolean {
-  if (tier <= 1) return true;
-  const tierIndex = tier - 1;
-  if (tierIndex >= TIER_UNLOCK_THRESHOLDS.length) return false;
-
-  const requiredPurchases = TIER_UNLOCK_THRESHOLDS[tierIndex];
-  const currentPurchases = calculatePurchasesUpToTier(researchLevels, tier - 1);
-  return currentPurchases >= requiredPurchases;
-}
-
-/**
- * Get the number of purchases still needed to unlock a tier.
- */
-export function purchasesNeededForTier(researchLevels: ResearchLevels, tier: number): number {
-  if (tier <= 1) return 0;
-  const tierIndex = tier - 1;
-  if (tierIndex >= TIER_UNLOCK_THRESHOLDS.length) return Infinity;
-
-  const requiredPurchases = TIER_UNLOCK_THRESHOLDS[tierIndex];
-  const currentPurchases = calculatePurchasesUpToTier(researchLevels, tier - 1);
-  return Math.max(0, requiredPurchases - currentPurchases);
-}
+import type { ResearchCostModifiers, TierSummary, CommonResearch } from 'lib/planners/calculations/commonResearch';
+import {
+  TIER_UNLOCK_THRESHOLDS,
+  calculateCostMultiplier,
+  researchByTier,
+  isTierUnlocked,
+  purchasesNeededForTier,
+} from 'lib/planners/calculations/commonResearch';
+export type { CommonResearch, ResearchCostModifiers, TierSummary } from 'lib/planners/calculations/commonResearch';
+export {
+  getCommonResearches,
+  getResearchByTier,
+  getTiers,
+  getResearchById,
+  calculatePurchasesBeforeTier,
+  calculatePurchasesUpToTier,
+  calculatePurchasesByTierMap,
+  isTierUnlocked,
+  purchasesNeededForTier,
+  TIER_UNLOCK_THRESHOLDS,
+  calculateCostMultiplier,
+} from 'lib/planners/calculations/commonResearch';
 
 /**
  * Get the base virtue price for a research at a specific level (0-indexed).

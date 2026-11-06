@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
-import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
+import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from './calculator';

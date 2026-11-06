@@ -3,11 +3,11 @@
  * These have no Vue dependencies and are fully testable.
  */
 
-import type { Research, ResearchLevels, HabCapacityInput, HabCapacityOutput } from '@/types';
-import { habTypes, isPortalHab, type Hab } from '@/lib/habs';
-import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
+import type { Research, ResearchLevels, HabCapacityInput, HabCapacityOutput } from '../types';
+import { habTypes, isPortalHab, type Hab } from '../habs';
+import { calculateLinearEffect, selectResearches } from '../utils/research';
 
-import { BaseCalculationResearch } from '@/types';
+import { BaseCalculationResearch } from '../types';
 
 /**
  * Hab capacity research with portal-only flag.

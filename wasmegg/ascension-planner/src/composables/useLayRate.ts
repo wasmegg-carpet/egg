@@ -8,7 +8,7 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLayRateStore } from 'lib/planners/stores/layRate';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useHabCapacity } from '@/composables/useHabCapacity';
 import { calculateLayRate, convertRate } from 'lib/planners/calculations/layRate';

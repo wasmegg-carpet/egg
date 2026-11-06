@@ -193,7 +193,7 @@ import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from '@/lib/actions/executor';

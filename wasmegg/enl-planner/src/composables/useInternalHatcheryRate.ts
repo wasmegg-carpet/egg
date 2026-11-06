@@ -7,7 +7,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { calculateIHR } from '@/calculations/internalHatcheryRate';
 import type { IHRInput, IHROutput } from '@/types';
 

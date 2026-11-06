@@ -3,13 +3,13 @@
  */
 
 import { defineStore } from 'pinia';
-import type { ResearchLevels } from '@/types';
+import type { ResearchLevels } from '../types';
 import {
   getCommonResearches,
   getResearchByTier,
   getResearchById,
   type CommonResearch,
-} from '@/calculations/commonResearch';
+} from '../calculations/commonResearch';
 
 export interface CommonResearchStoreState {
   researchLevels: ResearchLevels;

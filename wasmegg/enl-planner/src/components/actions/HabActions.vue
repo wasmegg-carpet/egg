@@ -135,14 +135,14 @@ import {
   type HabCostModifiers,
 } from '@/lib/habs';
 import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
-import { useHabCapacityStore } from '@/stores/habCapacity';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId } from '@/types';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
-import { calculateHabCapacity, calculateTotalResearchMultipliers } from '@/calculations/habCapacity';
+import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
 import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from '@/calculations/habPurchasePlan';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';

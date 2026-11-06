@@ -12,7 +12,7 @@ import { totalAwayTime } from '@/stores/silos';
 import { integrateRate } from './apply/math';
 
 import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
-import { calculateHabCapacity_Full as calculateHabCapacity } from '@/calculations/habCapacity';
+import { calculateHabCapacity_Full as calculateHabCapacity } from 'lib/planners/calculations/habCapacity';
 import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';

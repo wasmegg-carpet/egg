@@ -30,6 +30,7 @@ function fakeResearch(researchPrice: number): CommonResearch {
     per_level: 1,
     levels_compound: 'additive',
     prices: [researchPrice],
+    virtue_prices: [],
   };
 }
 

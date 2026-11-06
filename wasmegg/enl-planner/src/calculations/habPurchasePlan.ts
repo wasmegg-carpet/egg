@@ -7,7 +7,7 @@ import {
   type HabCostModifiers,
   type HabId,
 } from '@/lib/habs';
-import { calculateHabCapacity } from '@/calculations/habCapacity';
+import { calculateHabCapacity } from 'lib/planners/calculations/habCapacity';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import type { CalculationsSnapshot } from '@/types';
 

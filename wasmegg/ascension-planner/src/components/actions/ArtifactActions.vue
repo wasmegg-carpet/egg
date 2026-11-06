@@ -177,7 +177,7 @@ import {
 import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from '@/lib/artifacts/virtue';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
-import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
+import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { getSimulationContext } from '@/engine/adapter';
 import { formatNumber } from '@/lib/format';
 

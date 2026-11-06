@@ -50,9 +50,9 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
     });
   }
 }
-import { useHabCapacityStore } from '@/stores/habCapacity';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore } from '@/stores/silos';

@@ -31,6 +31,8 @@ export interface Research {
   per_level: number;
   levels_compound: 'additive' | 'multiplicative';
   prices: number[];
+  /** Virtue (ascension) prices. Read only by the ascension planner. */
+  virtue_prices: number[];
 }
 
 /**

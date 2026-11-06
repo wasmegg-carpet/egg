@@ -10,7 +10,7 @@ import {
   type CommonResearch,
 } from '@/calculations/commonResearch';
 import { formatDuration, formatAbsoluteTime } from '@/lib/format';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
@@ -30,7 +30,7 @@ import { type CalculationsSnapshot } from '@/types';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
-import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
+import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import {
   type MilestoneTarget,
   type MilestoneChainItem,

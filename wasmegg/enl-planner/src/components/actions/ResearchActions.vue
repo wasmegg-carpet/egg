@@ -237,7 +237,7 @@ import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from '@/calculations/researchROI';
 import { formatDuration, formatNumber, formatBockPrice, formatAbsoluteTime } from '@/lib/format';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
 import { usePlanStore } from '@/stores/plan';

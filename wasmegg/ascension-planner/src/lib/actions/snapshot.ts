@@ -15,9 +15,9 @@ import { useEffectiveLayRate } from '@/composables/useEffectiveLayRate';
 import { useEarnings } from '@/composables/useEarnings';
 import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
 
-import { useHabCapacityStore } from '@/stores/habCapacity';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore, totalAwayTime } from '@/stores/silos';

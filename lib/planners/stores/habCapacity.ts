@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
-import type { ResearchLevels } from '@/types';
-import { getHabCapacityResearches, type HabCapacityResearch } from '@/calculations/habCapacity';
-import { habTypes, type HabId } from '@/lib/habs';
+import type { ResearchLevels } from '../types';
+import { getHabCapacityResearches, type HabCapacityResearch } from '../calculations/habCapacity';
+import { habTypes, type HabId } from '../habs';
 
 const habCapacityResearches = getHabCapacityResearches();
 
