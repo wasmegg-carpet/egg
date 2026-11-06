@@ -6,6 +6,10 @@
  * (ui/composables/planners/plannerProfile.ts), which each planner provides app-wide in main.ts.
  */
 
+import type { Hab, HabCostModifiers } from './habs';
+import type { VehicleCostModifiers } from './vehicles';
+import type { CommonResearch, ResearchCostModifiers } from './calculations/commonResearch';
+
 export interface PlannerCurrency {
   /** Plural noun used in text, e.g. 'gems' or 'bocks'. */
   name: string;
@@ -25,6 +29,18 @@ export interface PlannerProfile {
     activeHeading: string;
     /** Whether active mission cards carry a currency badge. */
     showCurrencyBadge: boolean;
+  };
+  /** Discounted prices, in the planner's currency (virtue prices vs regular prices). */
+  pricing: {
+    hab(hab: Hab, purchaseIndex: number, modifiers: HabCostModifiers, isActiveSale?: boolean): number;
+    vehicle(vehicleId: number, purchaseIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
+    trainCar(carIndex: number, modifiers: VehicleCostModifiers, isActiveSale?: boolean): number;
+    research(
+      research: CommonResearch,
+      currentLevel: number,
+      modifiers: ResearchCostModifiers,
+      isActiveSale?: boolean
+    ): number;
   };
   /** Base of the internal hatchery rate's Truth Egg multiplier (base^TE). */
   ihrTruthEggBase: number;

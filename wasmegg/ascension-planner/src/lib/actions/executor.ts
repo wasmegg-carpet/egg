@@ -23,11 +23,11 @@ import type { BaseExecutorContext, PayloadExecutor } from 'lib/planners/actions/
 import { PROFILE } from '@/lib/profile';
 import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@/calculations/commonResearch';
 import { startAscensionExecutor } from './executors/startAscension';
-import { buyVehicleExecutor } from './executors/buyVehicle';
-import { buyHabExecutor } from './executors/buyHab';
-import { buyResearchExecutor } from './executors/buyResearch';
+import { createBuyVehicleExecutor } from 'lib/planners/actions/executors/buyVehicle';
+import { createBuyHabExecutor } from 'lib/planners/actions/executors/buyHab';
+import { createBuyResearchExecutor } from 'lib/planners/actions/executors/buyResearch';
 import { shiftExecutor } from './executors/shift';
-import { buyTrainCarExecutor } from './executors/buyTrainCar';
+import { createBuyTrainCarExecutor } from 'lib/planners/actions/executors/buyTrainCar';
 import { changeArtifactsExecutor } from 'lib/planners/actions/executors/changeArtifacts';
 import { buySiloExecutor } from 'lib/planners/actions/executors/buySilo';
 import { storeFuelExecutor } from './executors/storeFuel';
@@ -82,11 +82,11 @@ export interface ExecutorContext extends BaseExecutorContext {
  */
 const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   start_ascension: startAscensionExecutor,
-  buy_vehicle: buyVehicleExecutor,
-  buy_hab: buyHabExecutor,
-  buy_research: buyResearchExecutor,
+  buy_vehicle: createBuyVehicleExecutor(PROFILE),
+  buy_hab: createBuyHabExecutor(PROFILE),
+  buy_research: createBuyResearchExecutor(PROFILE),
   shift: shiftExecutor,
-  buy_train_car: buyTrainCarExecutor,
+  buy_train_car: createBuyTrainCarExecutor(PROFILE),
   change_artifacts: changeArtifactsExecutor,
   buy_silo: buySiloExecutor,
   store_fuel: storeFuelExecutor,
