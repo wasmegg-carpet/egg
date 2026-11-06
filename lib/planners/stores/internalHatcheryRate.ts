@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import type { ResearchLevels } from '@/types';
-import { getCommonIHRResearches, getEpicIHRResearches } from '@/calculations/internalHatcheryRate';
+import type { ResearchLevels } from '../types';
+import { getCommonIHRResearches, getEpicIHRResearches } from '../calculations/internalHatcheryRate';
 
 const commonResearches = getCommonIHRResearches();
 const epicResearches = getEpicIHRResearches();

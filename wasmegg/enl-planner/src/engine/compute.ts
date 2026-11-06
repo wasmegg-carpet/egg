@@ -17,7 +17,8 @@ import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateEarningBonus, calculateEarnings } from '@/calculations/earnings';
-import { calculateIHR } from '@/calculations/internalHatcheryRate';
+import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
+import { PROFILE } from '@/lib/profile';
 
 
 /**
@@ -56,6 +57,7 @@ export function computeSnapshot(
   // 7. Internal Hatchery Rate (IHR)
   const ihrInput: IHRInput = {
     te: state.te,
+    teBase: PROFILE.ihrTruthEggBase,
     researchLevels: state.researchLevels,
     epicResearchLevels: {
       epicInternalIncubators: epicResearchLevels['epic_internal_incubators'] || 0,

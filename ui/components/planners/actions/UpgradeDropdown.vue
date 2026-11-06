@@ -7,7 +7,9 @@
       @click="toggleOpen"
     >
       <div v-if="selectedOption" class="flex gap-3 items-center">
-        <div class="w-10 h-10 bg-white rounded-lg shadow-sm border border-slate-100 flex-shrink-0 p-1.5 group-hover:scale-105 transition-transform">
+        <div
+          class="w-10 h-10 bg-white rounded-lg shadow-sm border border-slate-100 flex-shrink-0 p-1.5 group-hover:scale-105 transition-transform"
+        >
           <img :src="iconURL(selectedOption.iconPath, 64)" class="w-full h-full object-contain" />
         </div>
         <div class="flex flex-col flex-1 min-w-0 justify-center">
@@ -15,32 +17,42 @@
           <div class="text-[10px] text-slate-500 truncate flex items-center mt-0.5 font-medium leading-none">
             <span v-if="selectedOption.capacity">{{ selectedOption.capacity }}</span>
             <span v-if="selectedOption.capacity && selectedOption.price !== undefined" class="mx-1.5">•</span>
-            
+
             <template v-if="selectedOption.price !== undefined">
-              <span>{{ formatBockPrice(selectedOption.price) }}</span>
-              <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
+              <span>{{ currency.formatPrice(selectedOption.price) }}</span>
+              <img :src="iconURL(currency.iconPath, 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
             </template>
-            
-            <span v-if="(selectedOption.capacity || selectedOption.price !== undefined) && selectedOption.time" class="mx-1.5">•</span>
+
+            <span
+              v-if="(selectedOption.capacity || selectedOption.price !== undefined) && selectedOption.time"
+              class="mx-1.5"
+              >•</span
+            >
             <span v-if="selectedOption.time">{{ selectedOption.time }}</span>
-            
+
             <span v-if="selectedOption.subtext">{{ selectedOption.subtext }}</span>
           </div>
         </div>
         <svg
           class="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform duration-300"
           :class="{ 'rotate-180': isOpen }"
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
       <div v-else class="flex justify-between items-center text-slate-400 p-2">
-        <span class="text-sm font-bold uppercase tracking-widest text-[10px]">{{ placeholder || 'Select upgrade...' }}</span>
+        <span class="text-sm font-bold uppercase tracking-widest text-[10px]">{{
+          placeholder || 'Select upgrade...'
+        }}</span>
         <svg
           class="w-5 h-5 transition-transform duration-300"
           :class="{ 'rotate-180': isOpen }"
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
@@ -61,36 +73,43 @@
           :class="modelValue === opt.id ? 'bg-blue-50/30' : ''"
           @click="selectOption(opt.id)"
         >
-          <div class="w-10 h-10 bg-white rounded-lg shadow-sm border border-slate-100 flex-shrink-0 p-1.5 mt-0.5 relative">
+          <div
+            class="w-10 h-10 bg-white rounded-lg shadow-sm border border-slate-100 flex-shrink-0 p-1.5 mt-0.5 relative"
+          >
             <img :src="iconURL(opt.iconPath, 64)" class="w-full h-full object-contain" />
           </div>
           <div class="flex-1 min-w-0 flex flex-col justify-center">
             <div class="text-sm font-bold truncate" :class="modelValue === opt.id ? 'text-blue-700' : 'text-slate-900'">
               {{ opt.name }}
             </div>
-            <div class="text-[10px] sm:text-xs text-slate-500 whitespace-normal flex flex-wrap items-center leading-relaxed mt-0.5 font-medium">
+            <div
+              class="text-[10px] sm:text-xs text-slate-500 whitespace-normal flex flex-wrap items-center leading-relaxed mt-0.5 font-medium"
+            >
               <span v-if="opt.capacity">{{ opt.capacity }}</span>
               <span v-if="opt.capacity && opt.price !== undefined" class="mx-1.5">•</span>
-              
+
               <template v-if="opt.price !== undefined">
-                <span>{{ formatBockPrice(opt.price) }}</span>
-                <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
+                <span>{{ currency.formatPrice(opt.price) }}</span>
+                <img :src="iconURL(currency.iconPath, 64)" class="w-2.5 h-2.5 ml-0.5 opacity-80" />
               </template>
-              
+
               <span v-if="(opt.capacity || opt.price !== undefined) && opt.time" class="mx-1.5">•</span>
               <span v-if="opt.time">{{ opt.time }}</span>
-              
+
               <span v-if="opt.subtext">{{ opt.subtext }}</span>
             </div>
           </div>
           <div v-if="modelValue === opt.id" class="text-blue-500 flex-shrink-0 mt-2">
-             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-             </svg>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+            </svg>
           </div>
         </button>
 
-        <div v-if="options.length === 0" class="p-6 text-center text-sm font-bold text-slate-400 uppercase tracking-widest text-[10px]">
+        <div
+          v-if="options.length === 0"
+          class="p-6 text-center text-sm font-bold text-slate-400 uppercase tracking-widest text-[10px]"
+        >
           No upgrades available
         </div>
       </div>
@@ -101,7 +120,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { iconURL } from 'lib';
-import { formatBockPrice } from '@/lib/format';
+import { usePlannerProfile } from '../../../composables/planners/plannerProfile';
 
 export interface UpgradeDropdownOption {
   id: string;
@@ -122,6 +141,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [id: string];
 }>();
+
+const { currency } = usePlannerProfile();
 
 const isOpen = ref(false);
 const openUpward = ref(false);

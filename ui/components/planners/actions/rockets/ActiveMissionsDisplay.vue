@@ -5,7 +5,7 @@
         <div class="w-4 h-4 bg-black rounded-full flex items-center justify-center p-0.5 overflow-hidden">
           <img :src="iconURL('egginc/icon_afx_mission.png', 64)" class="w-full h-full object-contain" />
         </div>
-        Active Virtue Missions
+        {{ profile.missions.activeHeading }}
       </h3>
       <span class="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
         {{ missions.filter(m => !m.statusIsFueling).length }} In-flight
@@ -30,9 +30,9 @@
           />
           <div class="absolute inset-0 bg-slate-50 rounded-full scale-110 opacity-50"></div>
 
-          <!-- Virtue Badge -->
-          <div class="absolute -top-1 -right-1 z-20">
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-4 h-4 shadow-sm" />
+          <!-- Currency badge -->
+          <div v-if="profile.missions.showCurrencyBadge" class="absolute -top-1 -right-1 z-20">
+            <img :src="iconURL(profile.currency.iconPath, 64)" class="w-4 h-4 shadow-sm" />
           </div>
         </div>
 
@@ -123,12 +123,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { iconURL } from 'lib';
-import type { ActiveMissionInfo } from '@/types';
+import type { ActiveMissionInfo } from 'lib/planners/types/actions/missions';
+import { usePlannerProfile } from '../../../../composables/planners/plannerProfile';
 
 const props = defineProps<{
   missions: ActiveMissionInfo[];
   currentTimeSeconds: number;
 }>();
+
+const profile = usePlannerProfile();
 
 defineEmits<{
   'wait-missions': [missions: ActiveMissionInfo[]];

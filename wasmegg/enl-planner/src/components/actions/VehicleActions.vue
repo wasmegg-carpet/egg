@@ -177,7 +177,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import UpgradeDropdown, { type UpgradeDropdownOption } from './UpgradeDropdown.vue';
+import UpgradeDropdown, { type UpgradeDropdownOption } from 'ui/components/planners/actions/UpgradeDropdown.vue';
 import {
   vehicleTypes,
   getVehicleType,

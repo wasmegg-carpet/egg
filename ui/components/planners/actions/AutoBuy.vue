@@ -3,7 +3,7 @@
     title="Auto Buy"
     :badge="alwaysOn ? 'Enabled' : 'Disabled'"
     :badge-active="alwaysOn"
-    note="Auto Buy will never spend gems from your bank."
+    :note="`Auto Buy will never spend ${currency.name} from your bank.`"
   >
     <template #icon>
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -53,8 +53,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { formatDuration, parseDuration } from '@/lib/format';
-import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
+import { formatDuration, parseDuration } from 'lib/planners/format';
+import SmartBuyCard from './SmartBuyCard.vue';
+import { usePlannerProfile } from '../../../composables/planners/plannerProfile';
 
 const props = defineProps<{
   alwaysOn: boolean;
@@ -64,6 +65,8 @@ const emit = defineEmits<{
   (e: 'update', state: { threshold: number; alwaysOn: boolean }): void;
   (e: 'update:alwaysOn', value: boolean): void;
 }>();
+
+const { currency } = usePlannerProfile();
 
 const timeValue = ref('1s');
 

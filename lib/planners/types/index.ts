@@ -150,7 +150,8 @@ export interface HabCapacityOutput {
  * Input for IHR (Internal Hatchery Rate) calculation
  */
 export interface IHRInput {
-  te: number; // Eggs of Truth (0-490), each provides 1.1x multiplier
+  te: number; // Eggs of Truth (0-490)
+  teBase: number; // Each TE multiplies the rate by this (PlannerProfile.ihrTruthEggBase)
   researchLevels: ResearchLevels;
   epicResearchLevels: {
     epicInternalIncubators: number; // Epic Int. Hatcheries (0-20)

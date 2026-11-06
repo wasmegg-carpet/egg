@@ -3,9 +3,9 @@
  * These have no Vue dependencies and are fully testable.
  */
 
-import type { Research, ResearchLevels, IHRInput, IHROutput } from '@/types';
-import { allResearches } from 'lib';
-import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
+import type { Research, ResearchLevels, IHRInput, IHROutput } from '../types';
+import { allResearches } from '../../index';
+import { calculateLinearEffect, selectResearches } from '../utils/research';
 
 /**
  * IHR research with additional flags for multiplicative/offline behavior.
@@ -85,7 +85,7 @@ export function calculateResearchContribution(research: IHRResearch, level: numb
  * Assumes 4 habs for total rate.
  */
 export function calculateIHR(input: IHRInput): IHROutput {
-  const { te, researchLevels, epicResearchLevels, ihrMultiplier, artifactMultiplier, artifactEffects } = input;
+  const { te, teBase, researchLevels, epicResearchLevels, ihrMultiplier, artifactMultiplier, artifactEffects } = input;
 
   // Calculate base rate from additive researches (per hab)
   let baseRatePerHab = 0;
@@ -94,9 +94,9 @@ export function calculateIHR(input: IHRInput): IHROutput {
     baseRatePerHab += calculateResearchContribution(research, level);
   }
 
-  // Calculate TE multiplier (1.1^TE)
+  // Calculate TE multiplier (teBase^TE)
   const clampedTE = Math.max(0, Math.min(490, Math.round(te)));
-  const teMultiplier = Math.pow(1.1, clampedTE);
+  const teMultiplier = Math.pow(teBase, clampedTE);
 
   // Calculate epic multiplier (Epic Int. Hatcheries)
   const epicMultiplier = 1 + epicResearchLevels.epicInternalIncubators * 0.05;

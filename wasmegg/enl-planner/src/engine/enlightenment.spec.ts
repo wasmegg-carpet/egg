@@ -5,7 +5,7 @@ import { getDiscountedHabPrice, getHabById } from '@/lib/habs';
 import { getResearchById, getDiscountedResearchPrice } from '@/calculations/commonResearch';
 import { calculateEarningBonus } from '@/calculations/earnings';
 import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
-import { calculateIHR } from '@/calculations/internalHatcheryRate';
+import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
 import { computeGoalStatuses, nahPopulationTarget, secondsToReachPopulation } from '@/calculations/goals';
 import { createBaseEngineState, getSimulationContext } from './adapter';
 import { computeSnapshot } from './compute';
@@ -17,6 +17,7 @@ import { createSimAction, createEmptySnapshot, type Action } from '@/types';
 import { parseEnlightenmentFarm } from '@/lib/backupFarm';
 import { getArtifactLoadoutFromBackup } from '@/lib/artifacts';
 import { allPossibleTiers } from 'lib/artifacts/data';
+import { PROFILE } from '@/lib/profile';
 
 
 describe('earnings on an enlightenment farm', () => {
@@ -47,6 +48,7 @@ describe('earnings on an enlightenment farm', () => {
     const ihr = (te: number) =>
       calculateIHR({
         te,
+        teBase: PROFILE.ihrTruthEggBase,
         researchLevels: { internal_hatchery1: 10 },
         epicResearchLevels: { epicInternalIncubators: 20, internalHatcheryCalm: 20 },
         ihrMultiplier: 1,

@@ -20,6 +20,7 @@ import type {
   StartAscensionPayload,
 } from '@/types';
 import type { BaseExecutorContext, PayloadExecutor } from 'lib/planners/actions/executorTypes';
+import { PROFILE } from '@/lib/profile';
 import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@/calculations/commonResearch';
 import { startAscensionExecutor } from './executors/startAscension';
 import { buyVehicleExecutor } from './executors/buyVehicle';
@@ -35,8 +36,8 @@ import { launchMissionsExecutor } from './executors/launchMissions';
 import { toggleSaleExecutor } from 'lib/planners/actions/executors/toggleSale';
 import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
 import { updateArtifactSetExecutor } from './executors/updateArtifactSet';
-import { waitForMissionsExecutor } from './executors/wait_for_missions';
-import { waitForTimeExecutor } from './executors/wait_for_time';
+import { createWaitForMissionsExecutor } from 'lib/planners/actions/executors/wait_for_missions';
+import { waitForTimeExecutor } from 'lib/planners/actions/executors/wait_for_time';
 import { waitForResearchSaleEndExecutor } from 'lib/planners/actions/executors/waitForResearchSaleEnd';
 import { waitForEarningsBoostEndExecutor } from 'lib/planners/actions/executors/waitForEarningsBoostEnd';
 import { removeFuelExecutor } from './executors/removeFuel';
@@ -45,9 +46,9 @@ import { toggleEarningsBoostExecutor } from 'lib/planners/actions/executors/togg
 import { waitForResearchSaleExecutor } from 'lib/planners/actions/executors/waitForResearchSale';
 import { waitForEarningsBoostExecutor } from 'lib/planners/actions/executors/waitForEarningsBoost';
 import { waitForGemsExecutor } from './executors/waitForGems';
-import { waitForNoEarningsExecutor } from './executors/wait_for_no_earnings';
+import { createWaitForNoEarningsExecutor } from 'lib/planners/actions/executors/wait_for_no_earnings';
 import { notificationExecutor } from 'lib/planners/actions/executors/notification';
-import { modifyBankExecutor } from './executors/modifyBank';
+import { createModifyBankExecutor } from 'lib/planners/actions/executors/modifyBank';
 
 // ============================================================================
 // Executor Interface
@@ -95,7 +96,7 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   toggle_sale: toggleSaleExecutor,
   equip_artifact_set: equipArtifactSetExecutor,
   update_artifact_set: updateArtifactSetExecutor,
-  wait_for_missions: waitForMissionsExecutor,
+  wait_for_missions: createWaitForMissionsExecutor(PROFILE),
   wait_for_time: waitForTimeExecutor,
   wait_for_full_habs: waitForFullHabsExecutor,
   wait_for_research_sale: waitForResearchSaleExecutor,
@@ -103,10 +104,10 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   wait_for_earnings_boost: waitForEarningsBoostExecutor,
   wait_for_earnings_boost_end: waitForEarningsBoostEndExecutor,
   wait_for_gems: waitForGemsExecutor,
-  wait_for_no_earnings: waitForNoEarningsExecutor,
+  wait_for_no_earnings: createWaitForNoEarningsExecutor(PROFILE),
   toggle_earnings_boost: toggleEarningsBoostExecutor,
   notification: notificationExecutor,
-  modify_bank: modifyBankExecutor,
+  modify_bank: createModifyBankExecutor(PROFILE),
 };
 
 /**

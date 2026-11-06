@@ -68,7 +68,7 @@ import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId, type ActiveMissionInfo } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useVirtueStore } from '@/stores/virtue';
-import ActiveMissionsDisplay from './rockets/ActiveMissionsDisplay.vue';
+import ActiveMissionsDisplay from 'ui/components/planners/actions/rockets/ActiveMissionsDisplay.vue';
 
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();

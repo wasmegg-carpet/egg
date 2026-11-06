@@ -44,7 +44,7 @@
         <SmartBuyStats
           :purchase-count="saleAwareStats70.purchaseCount"
           :seconds="saleAwareStats70.seconds"
-          :gems="saleAwareStats70.gems"
+          :cost="saleAwareStats70.gems"
         />
         <RatePreviewDelta
           label="Earnings"
@@ -81,7 +81,7 @@
       <SmartBuyStats
         :purchase-count="saleEndsStats.purchaseCount"
         :seconds="saleEndsStats.seconds"
-        :gems="saleEndsStats.gems"
+        :cost="saleEndsStats.gems"
       />
       <ResearchPurchasePreview
         :items="saleEndsEarningsPreview"
@@ -120,12 +120,12 @@
 import { iconURL } from 'lib';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 import QuickBuy from './QuickBuy.vue';
-import AutoBuy from './AutoBuy.vue';
+import AutoBuy from 'ui/components/planners/actions/AutoBuy.vue';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
 import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
-import SmartBuyStats from './SmartBuyStats.vue';
+import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 

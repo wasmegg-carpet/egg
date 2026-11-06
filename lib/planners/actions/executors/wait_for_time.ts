@@ -2,12 +2,12 @@
  * Wait for Time Action Executor
  *
  * Account for a fixed amount of time spent waiting.
- * Cost is 0 gems.
+ * Cost is 0.
  */
 
-import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
-import type { WaitForTimePayload } from '@/types';
-import { formatDuration } from '@/lib/format';
+import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
+import type { WaitForTimePayload } from '../../types/actions/wait';
+import { formatDuration } from '../../format';
 
 export const waitForTimeExecutor: PayloadExecutor<WaitForTimePayload> = {
   execute(_payload: WaitForTimePayload, _context: BaseExecutorContext): number {
