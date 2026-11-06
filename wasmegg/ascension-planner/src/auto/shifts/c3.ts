@@ -27,8 +27,8 @@ import {
   getBuildPhaseEndForSaleCount,
   getSaleStartForEnd,
   countSalesThrough,
-} from '@/lib/events';
-import { DEBUG_SHIFT_TIMING } from '@/lib/debugFlags';
+} from 'lib/planners/events';
+import { DEBUG_SHIFT_TIMING } from 'lib/planners/debugFlags';
 import { calculateEggsLaidDuringActions } from '../engine/eggs';
 
 export interface C3Params {

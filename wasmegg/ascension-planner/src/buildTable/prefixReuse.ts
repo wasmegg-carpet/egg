@@ -22,7 +22,7 @@ import {
   getNextSaleStart,
   isEarningsBoostActive,
   isResearchSaleActive,
-} from '@/lib/events';
+} from 'lib/planners/events';
 import { REFERENCE_WEEK, WEEK_HOURS } from './cell';
 
 export type EventClass = 'none' | 'sale' | 'boost';

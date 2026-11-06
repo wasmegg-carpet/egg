@@ -17,7 +17,7 @@
  */
 import { getArtifact, getStone, getOptimalELRSet, sanitizeLongs } from '@/lib/artifacts';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import { getColleggtibleTiers, modifiersFromColleggtibleTiers, type Modifiers } from 'lib/collegtibles';
 import type { ei } from 'lib';
 

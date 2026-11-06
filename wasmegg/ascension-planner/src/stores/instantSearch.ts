@@ -55,7 +55,7 @@ import { fetchPlayerBackup } from '@/lib/modes/fetchBackup';
 import { resolveFetchablePlayerId } from '@/lib/modes/utils';
 import type { ei } from 'lib';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
-import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import type { InstantSearchRequest, InstantSearchResponse, SpaceSummary } from '@/workers/instantSearch.protocol';
 

@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import InlineSpinner from '@/components/InlineSpinner.vue';
+import InlineSpinner from '../InlineSpinner.vue';
 
 defineProps<{
   title: string;

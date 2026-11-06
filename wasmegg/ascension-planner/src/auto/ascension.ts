@@ -17,7 +17,7 @@ import { runH1 } from './shifts/h1';
 import { runK3 } from './shifts/k3';
 import { runC4, runI2, runR2, runH2, runTEWaitShift, distributeTargetTE, solveTEDistributionForDeadline } from './shifts/te-wait';
 import { runMaxVehiclesPlan } from './shifts/helpers/vehicles';
-import { countSalesThrough, isResearchSaleActive, isEarningsBoostActive } from '@/lib/events';
+import { countSalesThrough, isResearchSaleActive, isEarningsBoostActive } from 'lib/planners/events';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { computeRealisticELR } from '@/calculations/realisticELR';
 import { calculateEggValue } from '@/calculations/eggValue';
@@ -26,7 +26,7 @@ import { getTiers, isTierUnlocked } from '@/calculations/commonResearch';
 import type { VirtueEgg } from '@/types';
 import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
-import { DEBUG_SHIFT_TIMING } from '@/lib/debugFlags';
+import { DEBUG_SHIFT_TIMING } from 'lib/planners/debugFlags';
 
 function logShiftTimings(label: string, timings: { name: string; ms: number }[]): void {
   if (!DEBUG_SHIFT_TIMING) return;

@@ -13,7 +13,7 @@ import {
   getNextSaleEnd,
   isEarningsBoostActive,
   isResearchSaleActive,
-} from '@/lib/events';
+} from 'lib/planners/events';
 import {
   solveForTime,
   integrateRate,

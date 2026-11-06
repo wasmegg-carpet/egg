@@ -267,7 +267,7 @@ import { loadAutoPlannerSchedule, saveAutoPlannerSchedule, saveAutoPlannerTEInpu
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
 import { iconURL } from 'lib';
 import SchedulingInputs from './SchedulingInputs.vue';
-import ProPermitToggle from '@/components/ProPermitToggle.vue';
+import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
 import VirtueProgressSection from './VirtueProgressSection.vue';
 import ChainSummaryBar from './ChainSummaryBar.vue';
 import SimulationErrorAlert from './SimulationErrorAlert.vue';
@@ -275,7 +275,7 @@ import AscensionOverview from './AscensionOverview.vue';
 import ForcedAscensionPreview from './ForcedAscensionPreview.vue';
 import ValidationDialog from './ValidationDialog.vue';
 import LoadoutOverrideScopeDialog from './LoadoutOverrideScopeDialog.vue';
-import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
+import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import type { AutoLoadoutInputs } from '@/auto/loadout';
 import { applyAutoStartingTE } from '@/auto/startingTE';
 import { formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';

@@ -22,7 +22,7 @@ import { makeContinueState, VIRTUE_EGGS_MAP } from '@/auto/continueState';
 import { getOptimalEarningsSet } from '@/lib/artifacts';
 import { parseVirtueFarm, parseVirtueProgress } from '@/lib/backupVirtue';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import { getColleggtibleTiers, modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { EGG_ORDER, type BuildParams } from './precomputedLeg';
 import type { VirtueEgg } from '@/types';

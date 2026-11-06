@@ -166,7 +166,7 @@
 import { computed, ref } from 'vue';
 import { iconURL, allResearches } from 'lib';
 import { formatNumber, formatDuration } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import type { Research } from '@/types';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { variantLabel, variantColor } from '@/lib/charts/variantComparisonData';

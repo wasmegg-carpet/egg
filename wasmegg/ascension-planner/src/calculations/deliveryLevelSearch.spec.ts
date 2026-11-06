@@ -17,7 +17,7 @@ import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
-import { getNextSaleEnd, getNextSaleStart } from '@/lib/events';
+import { getNextSaleEnd, getNextSaleStart } from 'lib/planners/events';
 
 const context = maxedContext();
 const source = contextDeliverySource(context)!;

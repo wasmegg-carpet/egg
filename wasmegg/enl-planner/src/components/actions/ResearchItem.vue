@@ -278,7 +278,7 @@
 import { computed } from 'vue';
 import type { CommonResearch } from '@/calculations/commonResearch';
 import { formatNumber, formatBockPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';

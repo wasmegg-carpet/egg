@@ -27,7 +27,7 @@
 
 import type { Action } from '@/types/actions/meta';
 import type { EngineState, SimulationContext } from '../../types';
-import { getNextEarningsBoostStart, isEarningsBoostActive } from '@/lib/events';
+import { getNextEarningsBoostStart, isEarningsBoostActive } from 'lib/planners/events';
 import { totalAwayTime } from '@/stores/silos';
 
 /** Only the id matters here — the target level, if any, is the calling shift's own business. */

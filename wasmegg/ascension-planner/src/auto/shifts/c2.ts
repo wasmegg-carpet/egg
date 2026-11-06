@@ -3,7 +3,7 @@ import { getResearchById, isTierUnlocked } from '../../calculations/commonResear
 import { rankResearchByROI } from '../../calculations/researchRanking';
 import { computeSnapshot } from '../../engine/compute';
 import { maxSilos } from '@/stores/silos';
-import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
+import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
 import { buildR1LookaheadNotePayload } from '@/lib/actions/notes';
 import type { DeferralCheckpoint } from './helpers/earningsEventDeferral';
 import { applyShiftIfNeeded } from './helpers/actionHelpers';

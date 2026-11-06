@@ -239,7 +239,7 @@ import { loadoutInputsEqual } from '@/auto/loadout';
 import RefreshBackupButton from './RefreshBackupButton.vue';
 import StandardPermitWarning from '@/components/StandardPermitWarning.vue';
 import SegmentedToggle from './SegmentedToggle.vue';
-import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
+import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
 import {
   MAX_ASCENSIONS,
   MAX_TE,

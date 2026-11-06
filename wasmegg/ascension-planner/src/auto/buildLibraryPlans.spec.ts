@@ -3,7 +3,7 @@ import type { AscensionSummary } from './types';
 import type { VirtueEgg } from '@/types';
 import { describe, expect, test } from 'vitest';
 import { buildLibraryPlansFromExport } from './buildLibraryPlans';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import type { ExportedPlan } from './export';
 
 const TIMEZONE = 'America/Chicago';

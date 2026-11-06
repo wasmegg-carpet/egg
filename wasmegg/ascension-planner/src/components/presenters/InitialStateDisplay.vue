@@ -608,16 +608,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { iconURL } from 'lib';
-import { getResearchIconPath, getColleggtibleIconPath } from '@/lib/assets';
+import { getResearchIconPath, getColleggtibleIconPath } from 'lib/planners/assets';
 import type { ResearchLevels, VirtueEgg } from '@/types';
 import { VIRTUE_EGGS, VIRTUE_EGG_NAMES } from '@/types';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import type { EquippedArtifact } from '@/lib/artifacts';
 import { TANK_CAPACITIES, VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
-import ProPermitToggle from '@/components/ProPermitToggle.vue';
-import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
+import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
+import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
 import { createEmptyLoadout, artifactSlotCount } from '@/lib/artifacts';
 import {
   colleggtibleDefs,

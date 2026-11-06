@@ -51,7 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
+import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 
 const props = defineProps<{
   mode: 'set' | 'remove';

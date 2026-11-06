@@ -1,4 +1,4 @@
-import { downloadGzipped } from '@/utils/export';
+import { downloadGzipped } from 'lib/planners/utils/export';
 import type { Action } from '@/types/actions/meta';
 import type { ArtifactSlotPayload, VirtueEgg } from '@/types';
 import type { AscensionSummary } from './types';

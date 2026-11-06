@@ -1,11 +1,11 @@
 import { computed } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
-import { getNextPacificTime, getNextSaleEnd, getNextSaleStart } from '@/lib/events';
+import { getNextPacificTime, getNextSaleEnd, getNextSaleStart } from 'lib/planners/events';
 
 /**
  * Advances the plan to the next research sale boundary. The sale itself follows sim time (see

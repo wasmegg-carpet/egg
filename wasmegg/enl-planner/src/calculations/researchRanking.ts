@@ -24,7 +24,7 @@ import { computeSnapshot } from '@/engine/compute';
 import { createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, getTimeToSave, calculateEarningsForTime, boostTransitionsFrom } from '@/engine/apply';
 import { createSimAction } from '@/types/actions/meta';
-import { getNextPacificTime, isEarningsBoostActive, isResearchSaleActive } from '@/lib/events';
+import { getNextPacificTime, isEarningsBoostActive, isResearchSaleActive } from 'lib/planners/events';
 import { ei } from 'lib';
 
 // Research categories to exclude from specific ranking views

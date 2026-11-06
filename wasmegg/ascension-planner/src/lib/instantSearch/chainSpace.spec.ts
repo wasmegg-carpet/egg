@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { chainPricer, findRoutes, polishFound, type FindOptions, type Route } from './routeFinder';
 import {
   chainGaps,

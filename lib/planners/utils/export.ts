@@ -1,4 +1,4 @@
-import { gunzipBytes, gzipBytes } from '@/utils/gzip';
+import { gunzipBytes, gzipBytes } from './gzip';
 
 /**
  * Utility to trigger a file download in the browser. `filename` is the file as it reads once

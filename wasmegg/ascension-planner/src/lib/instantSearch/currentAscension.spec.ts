@@ -9,7 +9,7 @@ import type { ei } from 'lib';
 import { useInitialStateStore } from '@/stores/initialState';
 import { TE_BREAKPOINTS } from '@/lib/truthEggs';
 import { readCurrentAscension } from './currentAscension';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 
 const BACKUP_TIME = 1_792_470_300; // Mon 19 Oct 2026, 11:25 PM Central
 const FARM_STEP = BACKUP_TIME - 36 * 3600; // the farm's own last step, older than the backup

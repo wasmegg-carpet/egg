@@ -36,12 +36,12 @@ import { computed } from 'vue';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
 import { formatDuration } from '@/lib/format';
-import { getNextPacificTime } from '@/lib/events';
+import { getNextPacificTime } from 'lib/planners/events';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
 
 const actionsStore = useActionsStore();

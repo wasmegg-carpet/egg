@@ -78,7 +78,7 @@ const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { useVirtueStore } from '@/stores/virtue';
 import { formatDuration, parseDuration, formatAbsoluteTime } from '@/lib/format';
-import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 
 const actionsStore = useActionsStore();

@@ -3,7 +3,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 
 /**
  * Get the user's detected timezone.

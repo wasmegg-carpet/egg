@@ -162,6 +162,9 @@ importers:
       pako:
         specifier: 2.1.0
         version: 2.1.0
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
       protobufjs:
         specifier: ^8.0.0
         version: 8.0.0
@@ -193,9 +196,6 @@ importers:
       jest:
         specifier: ^30.3.0
         version: 30.3.0(@types/node@25.5.0)
-      pinia:
-        specifier: ^3.0.4
-        version: 3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
       protobufjs-cli:
         specifier: ^2.0.0
         version: 2.0.0(protobufjs@8.0.0)
@@ -214,15 +214,27 @@ importers:
       '@heroicons/vue':
         specifier: ^1.0.6
         version: 1.0.6(vue@3.5.31(typescript@6.0.2))
+      echarts:
+        specifier: ^6.1.0
+        version: 6.1.0
       lib:
         specifier: workspace:^
         version: link:../lib
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(typescript@6.0.2)(vue@3.5.31(typescript@6.0.2))
       scroll-into-view-if-needed:
         specifier: ^3.1.0
         version: 3.1.0
+      tippy.js:
+        specifier: ^6.3.7
+        version: 6.3.7
       vue:
         specifier: ^3.5.31
         version: 3.5.31(typescript@6.0.2)
+      vue-tippy:
+        specifier: ^6.7.1
+        version: 6.7.1(vue@3.5.31(typescript@6.0.2))
 
   wasmegg/_home:
     dependencies:

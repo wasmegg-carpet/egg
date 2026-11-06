@@ -193,7 +193,7 @@ import { usePlanStore } from '@/stores/plan';
 import { computeGoalStatuses } from '@/calculations/goals';
 import { formatNumber } from '@/lib/format';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
-import { readImportedJson } from '@/utils/export';
+import { readImportedJson } from 'lib/planners/utils/export';
 import { iconURL } from 'lib';
 
 const actionsStore = useActionsStore();

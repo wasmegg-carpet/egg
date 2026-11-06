@@ -1,6 +1,6 @@
 import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { ToggleSalePayload } from '@/types/actions';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 export const toggleSaleExecutor: ActionExecutor<'toggle_sale'> = {
   execute(payload: ToggleSalePayload, context: ExecutorContext): number {

@@ -27,8 +27,8 @@ import type { SimulationContext, EngineState } from '@/engine/types';
 import { createBaseEngineState } from '@/engine/adapter';
 import { computeSnapshot } from '@/engine/compute';
 import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@/engine/apply';
-import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
-import { DEBUG_SALE_AWARE_BUY } from '@/lib/debugFlags';
+import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
+import { DEBUG_SALE_AWARE_BUY } from 'lib/planners/debugFlags';
 import { ei } from 'lib';
 import type { DeliverySource } from '@/lib/artifacts/virtue';
 

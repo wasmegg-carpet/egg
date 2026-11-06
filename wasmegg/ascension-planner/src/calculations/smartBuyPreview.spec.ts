@@ -8,7 +8,7 @@ import { computeSnapshot } from '@/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
-import { getNextSaleEnd, getNextSaleStart } from '@/lib/events';
+import { getNextSaleEnd, getNextSaleStart } from 'lib/planners/events';
 
 // Lets one test script the ranking; every other test runs the real one.
 const ranking = vi.hoisted(() => ({ override: null as null | (() => unknown[]) }));

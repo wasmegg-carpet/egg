@@ -7,7 +7,7 @@ import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
 import { activeSlots } from '@/lib/artifacts/calculator';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import { researchCubeOverride } from '@/lib/artifacts/researchCube';
 
 /**

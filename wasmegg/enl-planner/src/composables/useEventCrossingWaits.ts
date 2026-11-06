@@ -1,5 +1,5 @@
 import { useActionsStore } from '@/stores/actions';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -8,7 +8,7 @@ import type { CommonResearch } from '@/calculations/commonResearch';
 import { getSimulationContext } from '@/engine/adapter';
 import { eventCrossingsForPurchase } from '@/engine/researchSale';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
-import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive } from '@/lib/events';
+import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive } from 'lib/planners/events';
 
 /**
  * Inserts the wait and toggle actions that carry a plan across sale and boost boundaries, and hands

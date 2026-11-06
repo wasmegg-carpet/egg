@@ -3,11 +3,11 @@
  * @description Import/Export logic for Ascension Plans.
  */
 
-import { downloadGzipped } from '@/utils/export';
+import { downloadGzipped } from 'lib/planners/utils/export';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useNotesStore } from '@/stores/notes';
+import { useNotesStore } from 'lib/planners/stores/notes';
 import { useSilosStore } from '@/stores/silos';
 import { createEmptySnapshot, type FuelEgg, type Action, type CalculationsSnapshot } from '@/types';
 import { redactBackupForStorage } from '@/lib/artifacts';

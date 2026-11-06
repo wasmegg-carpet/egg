@@ -15,7 +15,7 @@ import { useEventCrossingWaits } from './useEventCrossingWaits';
 import { simulateHabPurchases } from '@/calculations/habPurchasePlan';
 import { planMaxVehicles, planVehiclesForTimeLimit } from '@/calculations/vehiclePurchasePlan';
 import { planSilosWithinBudget } from '@/calculations/siloPurchasePlan';
-import { getNextEarningsBoostEnd, getNextEarningsBoostStart } from '@/lib/events';
+import { getNextEarningsBoostEnd, getNextEarningsBoostStart } from 'lib/planners/events';
 import { getDiscountedHabPrice, getHabById, type HabId } from '@/lib/habs';
 import { generateActionId } from '@/types';
 

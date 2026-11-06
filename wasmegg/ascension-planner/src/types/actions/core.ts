@@ -55,7 +55,7 @@ import type {
   StoreFuelPayload,
   RemoveFuelPayload,
 } from './infrastructure';
-import type { BuyResearchPayload, ToggleSalePayload, ToggleEarningsBoostPayload } from './research';
+import type { BuyResearchPayload, ToggleSalePayload, ToggleEarningsBoostPayload } from 'lib/planners/types/actions/research';
 import type { LaunchMissionsPayload, WaitForMissionsPayload } from './missions';
 import type { WaitForTEPayload, WaitForTimePayload, WaitForFullHabsPayload, WaitForGemsPayload } from './wait';
 import type {

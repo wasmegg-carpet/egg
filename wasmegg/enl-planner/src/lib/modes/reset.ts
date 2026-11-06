@@ -31,8 +31,8 @@ import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
-import { useSalesStore } from '@/stores/sales';
-import { useNotesStore } from '@/stores/notes';
+import { useSalesStore } from 'lib/planners/stores/sales';
+import { useNotesStore } from 'lib/planners/stores/notes';
 
 /**
  * Reset all stores to their default state.

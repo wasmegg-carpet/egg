@@ -4,8 +4,8 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, onBeforeUnmount, watch } from 'vue';
-import { echarts, type ChartOption } from '@/lib/charts/echarts';
-import type { ECharts } from '@/lib/charts/echarts';
+import { echarts, type ChartOption } from './echarts';
+import type { ECharts } from './echarts';
 
 const props = withDefaults(
   defineProps<{

@@ -201,7 +201,7 @@ import { useSilosStore } from '@/stores/silos';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 import { generateActionId } from '@/types';
 import { computed } from 'vue';

@@ -18,7 +18,7 @@ import {
   getNextEarningsBoostEnd,
   isResearchSaleActive,
   BOUNDARY_EPSILON_SECONDS,
-} from '@/lib/events';
+} from 'lib/planners/events';
 
 // See the comment where this is used in `calculateResearchROI` for why the ROI-payback horizon is
 // deliberately much shorter than `boostTransitionsFrom`'s own multi-year default.

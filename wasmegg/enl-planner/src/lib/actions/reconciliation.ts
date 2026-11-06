@@ -1,6 +1,6 @@
 import { Action, ActionType, CurrentFarmState, FUEL_EGGS } from '@/types';
 import { InitialStateStoreState } from '@/stores/initialState';
-import { GameEvent } from '@/stores/events';
+import { GameEvent } from 'lib/planners/stores/events';
 
 export type ReconstructionResult = 'completed' | 'pending' | 'na';
 

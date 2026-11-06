@@ -222,7 +222,7 @@ import { type CalculationsSnapshot, type VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { formatNumber } from '@/lib/format';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
-import { readImportedJson } from '@/utils/export';
+import { readImportedJson } from 'lib/planners/utils/export';
 import { iconURL } from 'lib';
 import TeBreakdownModal from '@/components/TeBreakdownModal.vue';
 

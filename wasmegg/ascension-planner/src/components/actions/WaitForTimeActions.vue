@@ -83,7 +83,7 @@ import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from 
 import { boostTransitionsFrom, calculateEarningsForTime } from '@/engine/apply/math';
 import { absoluteSimTimeFor } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
-import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 
 const actionsStore = useActionsStore();

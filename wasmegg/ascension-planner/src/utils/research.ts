@@ -2,7 +2,7 @@
  * Research logic.
  */
 
-import { clamp } from './math';
+import { clamp } from 'lib/planners/utils/math';
 import { allResearches } from 'lib';
 import type { Research, BaseCalculationResearch } from '@/types';
 

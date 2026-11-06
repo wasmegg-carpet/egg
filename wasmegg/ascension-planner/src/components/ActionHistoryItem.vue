@@ -285,7 +285,7 @@ import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { getExecutor } from '@/lib/actions';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { getResearchById } from '@/calculations/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';

@@ -13,7 +13,7 @@ import { checkPacked, packTable, type Cell } from '@/buildTable/pack';
 import { allHours, prefixSourceFor, SEED_HOURS, type EventClass } from '@/buildTable/prefixReuse';
 import { cteBonusOf, type K3Record, type TaskResult } from '@/buildTable/task';
 import type { SimulationContext } from '@/auto/types';
-import { gzipBytes } from '@/utils/gzip';
+import { gzipBytes } from 'lib/planners/utils/gzip';
 import { BuildEta } from './eta';
 import { ChainFinderWorkerPool } from './workerPool';
 

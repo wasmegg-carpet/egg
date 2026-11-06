@@ -8,7 +8,7 @@
  */
 import { colleggtibleDefs, modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { getArtifact } from '@/lib/artifacts/data';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import { createEmptyStonePool, withEmptyStones, type AutoLoadoutInputs } from '@/auto/loadout';
 import type { EngineState, SimulationContext } from '@/auto/types';
 

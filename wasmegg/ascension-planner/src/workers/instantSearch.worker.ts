@@ -21,7 +21,7 @@ import {
   type LegHours,
 } from '@/lib/instantSearch/chainSpace';
 import { compositeTable, readTable, shiftedLookup, type Table } from '@/lib/instantSearch/table';
-import { gunzipBytes } from '@/utils/gzip';
+import { gunzipBytes } from 'lib/planners/utils/gzip';
 import type { InstantSearchRequest, InstantSearchResponse } from './instantSearch.protocol';
 
 // `Worker`, not `DedicatedWorkerGlobalScope`: see researchCalc.worker.ts (dom and webworker libs clash).

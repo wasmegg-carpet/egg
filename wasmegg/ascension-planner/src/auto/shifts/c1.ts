@@ -11,7 +11,7 @@ import {
 } from './helpers/milestones';
 import { applyDecoratedAction } from './helpers/actionHelpers';
 import { computeSnapshot } from '../../engine/compute';
-import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
+import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
 import { getOptimalEarningsSet, activeSlots } from '@/lib/artifacts';
 import { socketEarningsStones } from '../loadout/resolve';
 

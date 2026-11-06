@@ -48,11 +48,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { formatDuration, parseDuration } from '@/lib/format';
-import SmartBuyCard from './SmartBuyCard.vue';
+import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
 import RatePreviewDelta from './RatePreviewDelta.vue';
 import SmartBuyStats from './SmartBuyStats.vue';
-import InlineSpinner from '@/components/InlineSpinner.vue';
+import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 
 defineProps<{

@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { runContinueCurrent } from '@/auto/ascension';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
 import { startStateAt } from '@/buildTable/cell';

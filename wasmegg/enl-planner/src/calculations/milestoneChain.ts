@@ -26,8 +26,8 @@ import type { CalculationsSnapshot } from '@/types';
 import { computeSnapshot } from '@/engine/compute';
 import { createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
-import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from '@/lib/events';
-import { DEBUG_MILESTONE_CHAIN } from '@/lib/debugFlags';
+import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from 'lib/planners/events';
+import { DEBUG_MILESTONE_CHAIN } from 'lib/planners/debugFlags';
 
 export type MilestoneTarget =
   | { kind: 'tier'; tier: number }

@@ -1,6 +1,6 @@
 import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { ToggleEarningsBoostPayload } from '@/types';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 /**
  * Executor for toggling earnings boost.

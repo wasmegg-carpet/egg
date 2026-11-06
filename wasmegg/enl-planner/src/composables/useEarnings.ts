@@ -9,7 +9,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
 import { useEggValue } from './useEggValue';
 import { useEffectiveLayRate } from './useEffectiveLayRate';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { calculateEarningBonus, calculateEarnings } from '@/calculations/earnings';
 import type { EarningsInput, EarningsOutput } from '@/types';
 

@@ -2,7 +2,7 @@
 
 <script lang="ts">
 import { computed, defineComponent, toRefs } from 'vue';
-import { useCountdown } from '@/composables/countdown';
+import { useCountdown } from '../../composables/planners/countdown';
 
 export default defineComponent({
   props: {

@@ -28,7 +28,7 @@ import {
   getNextEarningsBoostEnd,
   getNextEarningsBoostStart,
   BOUNDARY_EPSILON_SECONDS,
-} from '@/lib/events';
+} from 'lib/planners/events';
 
 // Actions that pass time (or mark an event boundary) without the player doing anything.
 const IDLE_ACTION_TYPES = new Set([

@@ -8,7 +8,7 @@ import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { formatNumber, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { computeSnapshot } from '@/engine/compute';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import { runUntilShift, deriveNextStartState, runContinueCurrent, runAscensionFromC3Variant } from '@/auto/ascension';
 import { runC3Variants } from '@/auto/shifts/c3';
 import { rollUpPendingTE } from '@/lib/modes';

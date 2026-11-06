@@ -114,13 +114,13 @@ import { iconURL } from 'lib';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 import QuickBuy from './QuickBuy.vue';
 import AutoBuy from './AutoBuy.vue';
-import SmartBuyCard from './SmartBuyCard.vue';
-import SaleRideStepper from './SaleRideStepper.vue';
+import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
+import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
 import RatePreviewDelta from './RatePreviewDelta.vue';
 import SmartBuyStats from './SmartBuyStats.vue';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
-import InlineSpinner from '@/components/InlineSpinner.vue';
+import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 interface RateSummary {
   before: number;

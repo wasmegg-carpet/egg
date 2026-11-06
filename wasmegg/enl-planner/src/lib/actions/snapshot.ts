@@ -22,7 +22,7 @@ import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore, totalAwayTime } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 /**
  * Compute a CalculationsSnapshot from current store state.

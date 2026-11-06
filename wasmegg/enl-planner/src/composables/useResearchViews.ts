@@ -25,7 +25,7 @@ import {
   getBuildPhaseEndForSaleCount,
   countSalesThrough,
   isResearchSaleActive as isRealSaleActiveAt,
-} from '@/lib/events';
+} from 'lib/planners/events';
 import { type CalculationsSnapshot } from '@/types';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { calculateLayRate } from '@/calculations/layRate';

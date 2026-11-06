@@ -12,7 +12,7 @@ import {
 import { computeSnapshot } from './compute';
 import { withCalendarResearchSale } from './researchSale';
 import { computeDeltas } from '@/lib/actions/snapshot';
-import { yieldForOverlayPaint } from '@/lib/yieldForOverlayPaint';
+import { yieldForOverlayPaint } from 'lib/planners/yieldForOverlayPaint';
 
 /**
  * Simulate a list of actions to produce a timeline of states.

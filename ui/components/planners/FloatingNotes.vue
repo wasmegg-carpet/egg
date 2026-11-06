@@ -142,8 +142,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
-import { useNotesStore } from '@/stores/notes';
-import type { PlannerNote } from '@/stores/notes';
+import { useNotesStore } from 'lib/planners/stores/notes';
+import type { PlannerNote } from 'lib/planners/stores/notes';
 
 const notesStore = useNotesStore();
 

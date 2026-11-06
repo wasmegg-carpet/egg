@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { useWarningStore } from '@/stores/warning';
+import { useWarningStore } from 'lib/planners/stores/warning';
 
 const warningStore = useWarningStore();
 const { isOpen, title, message } = storeToRefs(warningStore);

@@ -399,15 +399,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { iconURL } from 'lib';
-import { getResearchIconPath, getColleggtibleIconPath } from '@/lib/assets';
+import { getResearchIconPath, getColleggtibleIconPath } from 'lib/planners/assets';
 import type { ResearchLevels, FuelEgg } from '@/types';
 import { FUEL_EGG_NAMES } from '@/types';
 import { fuelEggIconPath } from '@/lib/missions';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import { TANK_CAPACITIES, FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
-import ProPermitToggle from '@/components/ProPermitToggle.vue';
-import DateTimeZonePicker from '@/components/DateTimeZonePicker.vue';
+import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
+import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
 import {
   colleggtibleDefs,
   formatColleggtibleBonus,

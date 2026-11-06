@@ -1,5 +1,5 @@
 import { defineAsyncComponent, type AsyncComponentLoader } from 'vue';
-import { useWarningStore } from '@/stores/warning';
+import { useWarningStore } from './stores/warning';
 
 /**
  * A wrapper for dynamic imports that handles failures caused by stale assets

@@ -7,7 +7,7 @@ import type {
   ActiveMissionInfo,
 } from '@/types';
 import { ei, Mission } from 'lib';
-import { epicResearchDefs } from '@/lib/epicResearch';
+import { epicResearchDefs } from 'lib/planners/epicResearch';
 import {
   type ColleggtibleTiers,
   type Modifiers as ColleggtibleModifiers,

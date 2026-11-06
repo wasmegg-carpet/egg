@@ -14,7 +14,7 @@ import { VIRTUE_EGGS, VIRTUE_EGG_NAMES } from '@/types/actions/virtue';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { isTierUnlocked } from '@/calculations/commonResearch';
 import { getThresholdForTE } from '@/lib/truthEggs';
-import { getTimezoneOffsetAt } from '@/lib/events';
+import { getTimezoneOffsetAt } from 'lib/planners/events';
 import { allResearches } from 'lib';
 import type { Research } from '@/types';
 

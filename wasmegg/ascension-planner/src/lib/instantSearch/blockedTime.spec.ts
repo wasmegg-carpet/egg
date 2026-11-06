@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 import { avoidBlocked, hoursBlocked, localTime, nextDate, weekdayOf } from './blockedTime';
 import { mergeBlocked, nextAllowed, type Blocked } from './routeFinder';
 

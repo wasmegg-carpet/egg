@@ -1,5 +1,5 @@
 import type { Action, BuyResearchPayload, CalculationsSnapshot } from '@/types';
-import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive, isResearchSaleActive } from '@/lib/events';
+import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive, isResearchSaleActive } from 'lib/planners/events';
 import { activeSlots, calculateArtifactModifiers } from '@/lib/artifacts';
 import {
   getDiscountedResearchPrice,

@@ -8,7 +8,7 @@ import {
   isEarningsBoostActive,
   isResearchSaleActive,
   BOUNDARY_EPSILON_SECONDS,
-} from '@/lib/events';
+} from 'lib/planners/events';
 import {
   hasStaleResearchPurchasePrices,
   hasStaleResearchSaleFlags,

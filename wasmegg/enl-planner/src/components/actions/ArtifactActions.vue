@@ -84,7 +84,7 @@ import { ref, computed, watch } from 'vue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useWarningStore } from '@/stores/warning';
+import { useWarningStore } from 'lib/planners/stores/warning';
 import { generateActionId, type ArtifactSlotPayload, type ArtifactSetName, type CalculationsSnapshot } from '@/types';
 import {
   type EquippedArtifact,

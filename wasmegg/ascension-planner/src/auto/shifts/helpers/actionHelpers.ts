@@ -13,7 +13,7 @@ import { shiftCost } from 'lib';
 import type { EngineState, SimulationContext } from '../../types';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction } from '../../../engine/apply';
-import { isResearchSaleActive } from '@/lib/events';
+import { isResearchSaleActive } from 'lib/planners/events';
 
 /**
  * Apply `action` to `state`, then decorate it with `endState`/`totalTimeSeconds`/`bankDelta` the

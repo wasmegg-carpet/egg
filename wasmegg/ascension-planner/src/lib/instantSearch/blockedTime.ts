@@ -3,7 +3,7 @@
  * (routeFinder.ts `FindOptions.avoid`). Days to avoid and weekly blocked hours are both read in the
  * time zone the user picked, daylight saving included.
  */
-import { getLocalTimestampInTimezone, getTimezoneOffsetAt } from '@/lib/events';
+import { getLocalTimestampInTimezone, getTimezoneOffsetAt } from 'lib/planners/events';
 import { formatUnixToDateInput } from '@/lib/format';
 import { mergeBlocked, type Blocked } from './routeFinder';
 

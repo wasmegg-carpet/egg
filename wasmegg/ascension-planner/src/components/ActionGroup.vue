@@ -170,8 +170,8 @@ import { useVirtueStore } from '@/stores/virtue';
 import type { Action, VirtueEgg, StartAscensionPayload, ShiftPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
-import { safeAsyncComponent } from '@/lib/import';
-import { scrollToAndHighlight } from '@/lib/scrollToAndHighlight';
+import { safeAsyncComponent } from 'lib/planners/import';
+import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
 import ActionHistoryItem from './ActionHistoryItem.vue';
 import DayGroup from './DayGroup.vue';
 

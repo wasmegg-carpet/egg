@@ -23,7 +23,7 @@ import { useSilosStore } from '@/stores/silos';
 import { useCommonResearchStore } from '@/stores/commonResearch';
 import { useHabCapacityStore } from '@/stores/habCapacity';
 import { useShippingCapacityStore } from '@/stores/shippingCapacity';
-import { useEventsStore } from '@/stores/events';
+import { useEventsStore } from 'lib/planners/stores/events';
 
 import { simulateAsync } from '@/engine/simulate';
 import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '@/engine/researchSale';
@@ -683,7 +683,7 @@ export const useActionsStore = defineStore('actions', {
         data: exportPlanData(this.actions, this.initialSnapshot, planId),
       };
 
-      const { safeImport } = await import('@/lib/import');
+      const { safeImport } = await import('lib/planners/import');
       const { savePlanToLibrary } = await safeImport(() => import('@/lib/storage/db'));
       await savePlanToLibrary(partitionHash, planData);
 

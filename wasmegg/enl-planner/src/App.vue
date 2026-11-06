@@ -440,24 +440,24 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { useUIStore } from '@/stores/ui';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useEventsStore } from '@/stores/events';
+import { useEventsStore } from 'lib/planners/stores/events';
 
-import { useNotesStore } from '@/stores/notes';
-import CustomEggWatcher from '@/components/CustomEggWatcher.vue';
+import { useNotesStore } from 'lib/planners/stores/notes';
+import CustomEggWatcher from 'ui/components/planners/CustomEggWatcher.vue';
 import ActionHistory from '@/components/ActionHistory.vue';
 import AvailableActions from '@/components/AvailableActions.vue';
 import UndoConfirmationDialog from '@/components/UndoConfirmationDialog.vue';
 import PlanFinalSummary from '@/components/PlanFinalSummary.vue';
-import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
+import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import FloatingStats from '@/components/FloatingStats.vue';
-import FloatingNotes from '@/components/FloatingNotes.vue';
-import WarningDialog from '@/components/WarningDialog.vue';
+import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
+import WarningDialog from 'ui/components/planners/WarningDialog.vue';
 import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
-import LoadingOverlay from '@/components/LoadingOverlay.vue';
+import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
 import PlanGoals from '@/components/PlanGoals.vue';
 import PlanLibrary from '@/components/PlanLibrary.vue';
 import PlanSelectionDialog from '@/components/PlanSelectionDialog.vue';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { usePersistence } from '@/composables/usePersistence';
@@ -891,7 +891,7 @@ async function saveCurrentPlan() {
   if (!partitionHash.value) return;
 
   if (actionsStore.activePlanId) {
-    const { safeImport } = await import('@/lib/import');
+    const { safeImport } = await import('lib/planners/import');
     const plans = await (await safeImport(() => import('@/lib/storage/db'))).loadLibraryPlans(partitionHash.value!);
     const current = plans.find(p => p.id === actionsStore.activePlanId);
     if (current) {

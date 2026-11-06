@@ -11,7 +11,7 @@
  * its one target. Both give the simulator's numbers to the bit; AutoAutoAP's `tailTo` and
  * `canonicalDelivered`, run alongside, agreed on every route tried.
  */
-import { getTimezoneOffsetAt, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getTimezoneOffsetAt, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { TE_BREAKPOINTS } from '@/lib/truthEggs';
 import type { BuildParams } from '@/buildTable/cell';
 import type { VirtueEgg } from '@/types';

@@ -16,7 +16,7 @@
  * cell moved by the seconds it is late (`startInSale`), which is exact there, so a route does not
  * wait a week for want of an hour.
  */
-import { getNextSaleEnd, isResearchSaleActive } from '@/lib/events';
+import { getNextSaleEnd, isResearchSaleActive } from 'lib/planners/events';
 import { countTEThresholdsPassed, TE_BREAKPOINTS } from '@/lib/truthEggs';
 import {
   bestTailTo,

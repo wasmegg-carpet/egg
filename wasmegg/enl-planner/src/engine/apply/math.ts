@@ -1,5 +1,5 @@
 import type { CalculationsSnapshot } from '@/types';
-import { isEarningsBoostActive, getNextEarningsBoostStart, getNextEarningsBoostEnd } from '@/lib/events';
+import { isEarningsBoostActive, getNextEarningsBoostStart, getNextEarningsBoostEnd } from 'lib/planners/events';
 
 /**
  * A future point (relative to t=0 of the calculation) at which the earnings boost's active state

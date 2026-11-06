@@ -302,16 +302,16 @@ import {
   shouldDeferToNextSale,
   findEventCrossings,
 } from '@/calculations/researchROI';
-import { getNextSaleStart } from '@/lib/events';
+import { getNextSaleStart } from 'lib/planners/events';
 import {
   simulateThresholdBuy,
   summarizeResearchLevelChanges,
   type SaleAwarePlanEntry,
   type SimpleBuyPlan,
 } from '@/calculations/smartBuyPreview';
-import { yieldForOverlayPaint } from '@/lib/yieldForOverlayPaint';
-import { DEBUG_MILESTONE_EXECUTION } from '@/lib/debugFlags';
-import InlineSpinner from '@/components/InlineSpinner.vue';
+import { yieldForOverlayPaint } from 'lib/planners/yieldForOverlayPaint';
+import { DEBUG_MILESTONE_EXECUTION } from 'lib/planners/debugFlags';
+import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 // Sub-components
 import ResearchSaleToggle from './ResearchSaleToggle.vue';

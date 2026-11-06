@@ -3,12 +3,12 @@
  * @description Import/Export logic for Ascension Plans.
  */
 
-import { downloadGzipped } from '@/utils/export';
+import { downloadGzipped } from 'lib/planners/utils/export';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useVirtueStore } from '@/stores/virtue';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useNotesStore } from '@/stores/notes';
+import { useNotesStore } from 'lib/planners/stores/notes';
 import { useSilosStore } from '@/stores/silos';
 import { createEmptySnapshot, type VirtueEgg, type Action, type CalculationsSnapshot } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';

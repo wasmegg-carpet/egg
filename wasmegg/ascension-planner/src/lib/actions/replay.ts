@@ -58,7 +58,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 /**
  * Replay an action on top of a given snapshot state.

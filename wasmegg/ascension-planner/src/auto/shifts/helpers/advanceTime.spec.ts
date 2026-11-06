@@ -9,7 +9,7 @@ import {
   getNextSaleEnd,
   getNextSaleStart,
   isResearchSaleActive,
-} from '@/lib/events';
+} from 'lib/planners/events';
 
 function fakeState(overrides: Partial<EngineState> = {}): EngineState {
   return {

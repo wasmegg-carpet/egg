@@ -163,7 +163,7 @@ import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { resetResearchViewForCuriosityShift } from '@/composables/useResearchViews';
 import { shiftCost, iconURL } from 'lib';
-import { getColleggtibleIconPath } from '@/lib/assets';
+import { getColleggtibleIconPath } from 'lib/planners/assets';
 import { formatNumber, formatDuration } from '@/lib/format';
 
 const virtueStore = useVirtueStore();

@@ -3,14 +3,14 @@ import { ref, onMounted, watch, nextTick } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 import { usePersistence } from '@/composables/usePersistence';
 import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanData } from '@/lib/storage/db';
-import { downloadGzipped, importedPlanName, readImportedJson } from '@/utils/export';
+import { downloadGzipped, importedPlanName, readImportedJson } from 'lib/planners/utils/export';
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import { initLoadPlan, initPlanFuture } from '@/lib/modes';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useUIStore } from '@/stores/ui';
-import ConfirmationDialog from '@/components/ConfirmationDialog.vue';
-import ImportCollisionDialog from '@/components/ImportCollisionDialog.vue';
-import PlanAlreadyOpenWarning from '@/components/PlanAlreadyOpenWarning.vue';
+import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
+import ImportCollisionDialog from 'ui/components/planners/ImportCollisionDialog.vue';
+import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 import { createEmptySnapshot } from '@/types';
 
 const actionsStore = useActionsStore();

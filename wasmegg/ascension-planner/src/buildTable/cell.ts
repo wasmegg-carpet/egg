@@ -25,7 +25,7 @@ import { applyShiftAction } from '@/auto/shifts/helpers/actionHelpers';
 import { runMaxVehiclesPlan } from '@/auto/shifts/helpers/vehicles';
 import { computeRealisticELR } from '@/calculations/realisticELR';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
+import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { countTEThresholdsPassed, TE_BREAKPOINTS } from '@/lib/truthEggs';
 import type { AscensionSummary, EngineState, SimulationContext } from '@/auto/types';
 import type { VirtueEgg } from '@/types';
