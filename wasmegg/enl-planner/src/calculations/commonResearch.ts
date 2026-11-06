@@ -4,7 +4,11 @@
 
 import type { Research, ResearchLevels } from '@/types';
 import { allResearches } from 'lib';
-import { calculateCostMultiplier as calculateBaseCostMultiplier } from '@/utils/pricing';
+
+import type { ResearchCostModifiers, TierSummary } from 'lib/planners/calculations/commonResearch';
+import { TIER_UNLOCK_THRESHOLDS, calculateCostMultiplier } from 'lib/planners/calculations/commonResearch';
+export type { ResearchCostModifiers, TierSummary } from 'lib/planners/calculations/commonResearch';
+export { TIER_UNLOCK_THRESHOLDS, calculateCostMultiplier } from 'lib/planners/calculations/commonResearch';
 
 /**
  * Common research entry with full data
@@ -12,27 +16,6 @@ import { calculateCostMultiplier as calculateBaseCostMultiplier } from '@/utils/
 export interface CommonResearch extends Research {
   // Inherited: id, name, description, tier, levels, per_level, prices, prices, etc.
 }
-
-/**
- * Tier unlock thresholds - cumulative purchases required to unlock each tier
- * Index 0 = tier 1 (requires 0 purchases)
- * Index 12 = tier 13 (requires 1655 purchases from tiers 1-12)
- */
-export const TIER_UNLOCK_THRESHOLDS = [
-  0, // Tier 1
-  30, // Tier 2
-  80, // Tier 3
-  160, // Tier 4
-  280, // Tier 5
-  400, // Tier 6
-  520, // Tier 7
-  650, // Tier 8
-  800, // Tier 9
-  980, // Tier 10
-  1185, // Tier 11
-  1390, // Tier 12
-  1655, // Tier 13
-] as const;
 
 // Filter to only common research and sort by tier then serial_id
 const commonResearches: CommonResearch[] = (allResearches as Research[])
@@ -145,29 +128,6 @@ export function purchasesNeededForTier(researchLevels: ResearchLevels, tier: num
 }
 
 /**
- * Cost discount modifiers
- */
-export interface ResearchCostModifiers {
-  labUpgradeLevel: number; // Epic research: Lab Upgrade (cheaper_research), 0-10
-  researchCostMultiplier: number; // Colleggtible multiplier (0.95-1.0)
-  puzzleCubeMultiplier: number; // Artifact multiplier (e.g., 0.5 for -50%)
-}
-
-/**
- * Calculate the total cost multiplier from all discounts.
- * All discounts are multiplicative.
- */
-export function calculateCostMultiplier(modifiers: ResearchCostModifiers, isActiveSale: boolean = false): number {
-  const multiplier = calculateBaseCostMultiplier(
-    modifiers.labUpgradeLevel,
-    0.05,
-    modifiers.researchCostMultiplier,
-    modifiers.puzzleCubeMultiplier
-  );
-  return isActiveSale ? multiplier * 0.3 : multiplier;
-}
-
-/**
  * Get the base virtue price for a research at a specific level (0-indexed).
  * Returns the price to buy level (currentLevel + 1).
  */
@@ -230,19 +190,6 @@ export function getTotalCostToMaxTier(
   }
 
   return total;
-}
-
-/**
- * Get summary stats for a tier
- */
-export interface TierSummary {
-  tier: number;
-  totalResearches: number;
-  totalLevels: number; // Total possible levels across all research in tier
-  purchasedLevels: number; // Current purchased levels
-  isUnlocked: boolean;
-  purchasesNeeded: number; // Purchases still needed to unlock (0 if unlocked)
-  costToMax: number; // Discounted cost to max all research in tier
 }
 
 export function getTierSummary(
