@@ -57,7 +57,7 @@ import { createModifyBankExecutor } from 'lib/planners/actions/executors/modifyB
  * Interface for action executors, keyed by this planner's action types.
  * See lib/planners/actions/executorTypes.ts for the shared shape.
  */
-export interface ActionExecutor<T extends ActionType> extends PayloadExecutor<ActionPayloadMap[T], ExecutorContext> {}
+export type ActionExecutor<T extends ActionType> = PayloadExecutor<ActionPayloadMap[T], ExecutorContext>;
 
 /**
  * Context passed to executors with store access: the shared context plus this planner's fuel eggs.
