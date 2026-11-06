@@ -2,7 +2,7 @@
  * Artifact Set types and payloads.
  */
 
-import type { EquippedArtifact } from '../../lib/artifacts/types';
+import type { EquippedArtifact } from '../../artifacts/types';
 
 export type ArtifactSetName = 'earnings' | 'elr';
 
@@ -10,7 +10,6 @@ export type ArtifactSetName = 'earnings' | 'elr';
  * Artifact slot in a loadout (serializable).
  */
 export type ArtifactSlotPayload = EquippedArtifact;
-
 
 /**
  * Payload for changing artifact loadout.
