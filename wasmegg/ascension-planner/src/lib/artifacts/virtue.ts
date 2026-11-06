@@ -19,13 +19,13 @@ import {
 import { EquippedArtifact } from './types';
 import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from './utils';
 import { calculateArtifactModifiers, createEmptyLoadout, artifactSlotCount, activeSlots } from './calculator';
-import { calculateLayRate } from '@/calculations/layRate';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import {
   calculateShippingCapacity,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
 } from '@/calculations/shippingCapacity';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
 import { getArtifact, getStone, artifactOptions } from './data';
 import { InventoryItem } from 'lib/artifacts';

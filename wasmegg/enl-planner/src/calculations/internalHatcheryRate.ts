@@ -5,7 +5,7 @@
 
 import type { Research, ResearchLevels, IHRInput, IHROutput } from '@/types';
 import { allResearches } from 'lib';
-import { calculateLinearEffect, selectResearches } from '@/utils/research';
+import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
 
 /**
  * IHR research with additional flags for multiplicative/offline behavior.

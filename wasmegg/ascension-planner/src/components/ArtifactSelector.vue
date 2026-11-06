@@ -111,7 +111,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { GenericBaseSelectFilterable } from 'ui/components/BaseSelectFilterable.vue';
-import { rarityTint } from '@/lib/artifacts/display';
+import { rarityTint } from 'lib/planners/artifacts/display';
 import {
   type EquippedArtifact,
   type ArtifactOption,

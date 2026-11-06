@@ -124,7 +124,7 @@ import AutoBuy from './AutoBuy.vue';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
 import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
-import RatePreviewDelta from './RatePreviewDelta.vue';
+import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from './SmartBuyStats.vue';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';

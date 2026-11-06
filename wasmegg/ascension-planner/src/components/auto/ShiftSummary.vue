@@ -124,7 +124,7 @@
 import { computed } from 'vue';
 import { formatNumber, formatDuration } from '@/lib/format';
 import { iconURL } from 'lib';
-import { rarityTint } from '@/lib/artifacts/display';
+import { rarityTint } from 'lib/planners/artifacts/display';
 import { getResearchById, getResearchByTier } from '@/calculations/commonResearch';
 import { getVehicleType } from '@/lib/vehicles';
 import { getHabById, type HabId } from '../../lib/habs';

@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatDuration } from '@/lib/format';
+import { formatDuration } from 'lib/planners/format';
 
 const props = defineProps<{
   isActive: boolean;

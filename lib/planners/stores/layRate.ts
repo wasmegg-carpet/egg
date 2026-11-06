@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import type { ResearchLevels, TimeUnit } from '@/types';
-import { getCommonLayRateResearches } from '@/calculations/layRate';
+import type { ResearchLevels, TimeUnit } from '../types';
+import { getCommonLayRateResearches } from '../calculations/layRate';
 
 const commonResearches = getCommonLayRateResearches();
 

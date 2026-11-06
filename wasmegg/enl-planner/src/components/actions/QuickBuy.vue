@@ -50,7 +50,7 @@ import { ref, computed, watch } from 'vue';
 import { formatDuration, parseDuration } from '@/lib/format';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
 import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
-import RatePreviewDelta from './RatePreviewDelta.vue';
+import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from './SmartBuyStats.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';

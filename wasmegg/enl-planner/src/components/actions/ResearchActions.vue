@@ -271,7 +271,7 @@ import { DEBUG_MILESTONE_EXECUTION } from 'lib/planners/debugFlags';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 // Sub-components
-import ResearchSaleToggle from './ResearchSaleToggle.vue';
+import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
 import ResearchCubeToggle from './ResearchCubeToggle.vue';
 import ResearchViewSelector from './ResearchViewSelector.vue';
 import ResearchGameView from './ResearchGameView.vue';

@@ -2,9 +2,9 @@
  * Research logic.
  */
 
-import { clamp } from 'lib/planners/utils/math';
-import { allResearches } from 'lib';
-import type { Research, BaseCalculationResearch } from '@/types';
+import { clamp } from './math';
+import { allResearches } from '../../index';
+import type { Research, BaseCalculationResearch } from '../types';
 
 /**
  * Select specific researches by ID from the global list and map them to a base format.

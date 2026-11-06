@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { TimeUnit } from '@/types';
+import type { TimeUnit } from '../types';
 
 export interface EffectiveLayRateState {
   timeUnit: TimeUnit;

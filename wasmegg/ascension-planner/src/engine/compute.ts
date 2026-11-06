@@ -13,9 +13,9 @@ import { integrateRate } from './apply/math';
 
 import { calculateEggValue } from '@/calculations/eggValue';
 import { calculateHabCapacity_Full as calculateHabCapacity } from '@/calculations/habCapacity';
-import { calculateLayRate } from '@/calculations/layRate';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateEarnings } from '@/calculations/earnings';
 import { calculateIHR } from '@/calculations/internalHatcheryRate';
 

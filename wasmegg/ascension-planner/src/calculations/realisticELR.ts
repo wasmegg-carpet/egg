@@ -1,5 +1,5 @@
 import { calculateHabCapacity_Full } from './habCapacity';
-import { calculateLayRate } from './layRate';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
 import { calculateMaxVehicleSlots, calculateMaxTrainLength, calculateShippingCapacity } from './shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import type { Modifiers as ColleggtibleModifiers } from 'lib/collegtibles';

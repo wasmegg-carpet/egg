@@ -312,7 +312,7 @@ import { isDeliveryTargetArtifact } from '@/lib/artifacts/virtue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import { artifactOptions, getArtifact, getStone } from '@/lib/artifacts/data';
 import type { ArtifactOption } from '@/lib/artifacts/types';
-import { rarityTint } from '@/lib/artifacts/display';
+import { rarityTint } from 'lib/planners/artifacts/display';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
 import {
   STONE_FAMILIES,

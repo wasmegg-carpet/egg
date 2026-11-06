@@ -12,7 +12,7 @@ import type {
 } from '@/types';
 import { vehicleTypes, getVehicleType, BASE_FLEET_SIZE, BASE_TRAIN_LENGTH } from '@/lib/vehicles';
 import { allResearches } from 'lib';
-import { calculateLinearEffect, selectResearches } from '@/utils/research';
+import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
 
 /**
  * Shipping capacity research with flags for hover/hyperloop-only effects.

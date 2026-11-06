@@ -5,7 +5,7 @@
 
 import type { Research, ResearchLevels, HabCapacityInput, HabCapacityOutput } from '@/types';
 import { habTypes, isPortalHab, type Hab } from '@/lib/habs';
-import { calculateLinearEffect, selectResearches } from '@/utils/research';
+import { calculateLinearEffect, selectResearches } from 'lib/planners/utils/research';
 
 import { BaseCalculationResearch } from '@/types';
 

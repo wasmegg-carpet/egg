@@ -6,7 +6,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { useLayRate } from './useLayRate';
 import { useShippingCapacity } from './useShippingCapacity';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import type { EffectiveLayRateOutput } from '@/types';
 
 /**

@@ -28,8 +28,8 @@ import {
 } from 'lib/planners/events';
 import { type CalculationsSnapshot } from '@/types';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { calculateLayRate } from '@/calculations/layRate';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
 import {
   type MilestoneTarget,

@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatNumber } from '@/lib/format';
+import { formatNumber } from 'lib/planners/format';
 
 const props = defineProps<{
   label: string;

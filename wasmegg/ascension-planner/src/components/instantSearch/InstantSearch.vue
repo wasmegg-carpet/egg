@@ -251,7 +251,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { formatDuration, formatNumber } from '@/lib/format';
 import { iconURL } from 'lib';
 import { getArtifact } from '@/lib/artifacts';
-import { rarityTint } from '@/lib/artifacts/display';
+import { rarityTint } from 'lib/planners/artifacts/display';
 import type { ArtifactOption } from '@/lib/artifacts/types';
 import { DELIVERY_CORE_FAMILIES, deliveryCore } from '@/lib/instantSearch/tableCatalog';
 import { CHAIN_FINDER_EARNINGS_FAMILIES, STONE_HOLDERS } from '@/lib/instantSearch/earningsShift';

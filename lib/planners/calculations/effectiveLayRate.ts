@@ -3,7 +3,7 @@
  * ELR is the minimum of lay rate and shipping capacity.
  */
 
-import type { EffectiveLayRateOutput } from '@/types';
+import type { EffectiveLayRateOutput } from '../types';
 
 /**
  * Calculate effective lay rate as the minimum of lay rate and shipping capacity.

@@ -3,9 +3,9 @@
  * These have no Vue dependencies and are fully testable.
  */
 
-import type { Research, ResearchLevels, LayRateInput, LayRateOutput } from '@/types';
-import { allResearches } from 'lib';
-import { calculateLinearEffect, selectResearches } from '@/utils/research';
+import type { Research, ResearchLevels, LayRateInput, LayRateOutput } from '../types';
+import { allResearches } from '../../index';
+import { calculateLinearEffect, selectResearches } from '../utils/research';
 
 /**
  * Lay rate research definition.
@@ -67,8 +67,7 @@ export function calculateResearchMultiplier(research: LayRateResearch, level: nu
  * Main calculation: compute lay rate with full breakdown.
  */
 export function calculateLayRate(input: LayRateInput): LayRateOutput {
-  const { researchLevels, epicComfyNestsLevel, elrMultiplier, population, artifactMultiplier, artifactEffects } =
-    input;
+  const { researchLevels, epicComfyNestsLevel, elrMultiplier, population, artifactMultiplier, artifactEffects } = input;
 
   // Calculate combined research multiplier from common researches
   let researchMultiplier = 1;
