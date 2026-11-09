@@ -23,10 +23,10 @@
  * Loaded via Vite's native worker support — no bundler config needed:
  *   new Worker(new URL('./researchCalc.worker.ts', import.meta.url), { type: 'module' })
  */
-import { computeTierMilestoneChain, computeResearchMilestoneChain } from 'lib/planners/calculations/milestoneChain';
-import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '@/calculations/smartBuyPreview';
-import { createBaseEngineState } from '@/engine/adapter';
-import { sanitizeLongs } from '@/lib/artifacts/utils';
+import { computeTierMilestoneChain, computeResearchMilestoneChain } from '../calculations/milestoneChain';
+import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '../calculations/smartBuyPreview';
+import { createBaseEngineState } from '@planner/engine/adapter';
+import { sanitizeLongs } from '@planner/lib/artifacts/utils';
 import type { WorkerRequest, WorkerResponse } from './researchCalc.protocol';
 
 // Typed as `Worker` — the DOM-lib interface describing a worker instance as seen from the *main*
@@ -108,8 +108,18 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
           mods,
           absoluteSimTime,
           deadline,
+          elrViewMode,
           elrSortMode,
+          rawBackup,
         } = msg;
+        // Defense-in-depth against the postMessage/structuredClone boundary this message itself
+        // just crossed: protobufjs Long-typed int64 fields on `rawBackup` (e.g. artifact item ids,
+        // read by the realistic-ELR sort this feeds) silently lose their `Long` prototype through
+        // structuredClone, becoming plain `{low,high,unsigned}` objects with none of Long's methods.
+        // `sanitizeLongs`'s duck-typed check works identically whether it's handed a live Long or
+        // that already-stripped equivalent, so this is correct regardless of whether the caller
+        // (useResearchCalcWorker.ts) also happens to sanitize before sending.
+        const sanitizedBackup = rawBackup ? sanitizeLongs(rawBackup) : rawBackup;
         const result = simulateSaleEndsBuy(
           researchLevels,
           startSnapshot,
@@ -117,7 +127,9 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
           mods,
           absoluteSimTime,
           deadline,
+          elrViewMode,
           elrSortMode,
+          sanitizedBackup
         );
         post({ type: 'result', requestId: msg.requestId, result });
         break;

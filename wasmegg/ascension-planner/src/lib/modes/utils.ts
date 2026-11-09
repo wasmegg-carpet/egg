@@ -8,7 +8,7 @@ import type { VirtueEgg, CalculationsSnapshot } from '@/types';
 import type { ei } from 'lib';
 import { getSavedPlayerID } from 'lib';
 import { PlayerIdSchema } from 'lib/schema';
-import { fetchPlayerBackup } from './fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import type { PlanData } from '@/lib/storage/db';
 
 /**

@@ -1,4 +1,4 @@
-import { VIEWS } from '@/composables/useResearchViews';
+import { VIEWS } from 'lib/planners/composables/useResearchViews';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ei } from 'lib';

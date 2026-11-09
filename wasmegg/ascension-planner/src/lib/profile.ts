@@ -17,4 +17,5 @@ export const PROFILE: PlannerProfile = {
   ihrTruthEggBase: 1.1,
   storagePrefix: 'ascension',
   hasDeliveryViews: true,
+  maxVehiclesRoiRoute: 'gone to Kindness and ',
 };

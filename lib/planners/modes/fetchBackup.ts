@@ -7,9 +7,9 @@
  * independently and handles its own store population.
  */
 
-import { requestFirstContact, resolveColleggtibleContracts } from 'lib';
-import type { ei } from 'lib';
-import { hashID, saveMetadata } from '@/lib/storage/db';
+import { requestFirstContact, resolveColleggtibleContracts } from '../..';
+import type { ei } from '../..';
+import { hashID, saveMetadata } from '@planner/lib/storage/db';
 
 export interface BackupResult {
   /** The raw protobuf backup from the server */

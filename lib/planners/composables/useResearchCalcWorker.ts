@@ -28,9 +28,9 @@
  * actual computation is researchCalc.worker.ts's.
  */
 import { onUnmounted } from 'vue';
-import { sanitizeLongs } from '@/lib/artifacts/utils';
-import type { MilestoneChainResult } from 'lib/planners/calculations/milestoneChain';
-import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '@/calculations/smartBuyPreview';
+import { sanitizeLongs } from '@planner/lib/artifacts/utils';
+import type { MilestoneChainResult } from '../calculations/milestoneChain';
+import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '../calculations/smartBuyPreview';
 import type {
   WorkerRequest,
   WorkerResponse,
@@ -38,7 +38,7 @@ import type {
   SaleAwareBuyRequest,
   SaleEndsBuyRequest,
   ThresholdBuyRequest,
-} from '@/workers/researchCalc.protocol';
+} from '../workers/researchCalc.protocol';
 
 interface PendingEntry {
   resolve: (result: unknown) => void;

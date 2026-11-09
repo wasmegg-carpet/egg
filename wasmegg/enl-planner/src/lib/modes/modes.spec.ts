@@ -10,7 +10,7 @@ import { initContinueCurrent } from './continueCurrent';
 import { initPlanFuture } from './planFuture';
 
 const backupRef = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock('./fetchBackup', () => ({
+vi.mock('lib/planners/modes/fetchBackup', () => ({
   fetchPlayerBackup: async () => ({ backup: backupRef.current, pHash: 'hash' }),
 }));
 

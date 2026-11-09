@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { getCommonResearches, getDiscountedResearchPrice, getResearchById } from './commonResearch';
 import type { ResearchCostModifiers } from './commonResearch';
-import { deliveryRateScorer } from './deliveryLevelSearch';
-import { rankResearchByELRImpact } from './researchRanking';
-import { runDeliveryBuyLoop } from './smartBuyPreview';
+import { deliveryRateScorer } from 'lib/planners/calculations/deliveryLevelSearch';
+import { rankResearchByELRImpact } from 'lib/planners/calculations/researchRanking';
+import { runDeliveryBuyLoop } from 'lib/planners/calculations/smartBuyPreview';
 import { computeSnapshot } from '@/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
@@ -12,8 +12,8 @@ import { getNextSaleEnd, getNextSaleStart } from 'lib/planners/events';
 
 // Lets one test script the ranking; every other test runs the real one.
 const ranking = vi.hoisted(() => ({ override: null as null | (() => unknown[]) }));
-vi.mock('./researchRanking', async importOriginal => {
-  const actual = await importOriginal<typeof import('./researchRanking')>();
+vi.mock('lib/planners/calculations/researchRanking', async importOriginal => {
+  const actual = await importOriginal<typeof import('lib/planners/calculations/researchRanking')>();
   return {
     ...actual,
     rankResearchByELRImpact: (...args: Parameters<typeof actual.rankResearchByELRImpact>) =>

@@ -19,8 +19,8 @@ import {
   reorderPurchaseListByROI,
   type SequencedPurchase,
   type ResearchRankingItem,
-} from '@planner/calculations/researchRanking';
-import { simulateSaleAwareBuy } from '@planner/calculations/smartBuyPreview';
+} from './researchRanking';
+import { simulateSaleAwareBuy } from './smartBuyPreview';
 import type { EngineState, SimulationContext } from '@planner/engine/types';
 import type { CalculationsSnapshot } from '@planner/types';
 import { computeSnapshot } from '@planner/engine/compute';

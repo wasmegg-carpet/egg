@@ -4,7 +4,7 @@ import {
   getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
-} from './commonResearch';
+} from '@planner/calculations/commonResearch';
 import {
   calculateResearchROI,
   getSaleAwareTimeToSave,
@@ -15,19 +15,19 @@ import {
   MAX_ROI_PAYBACK_SEARCH_SECONDS,
   findEventCrossings,
   type PurchaseEventCrossings,
-} from 'lib/planners/calculations/researchROI';
-import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
-import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
+} from './researchROI';
+import { calculateMaxVehicleSlots, calculateMaxTrainLength } from './shippingCapacity';
+import { getOptimalELRSetFromSource, type DeliverySource } from '../artifacts/virtue';
+import { calculateArtifactModifiers } from '@planner/lib/artifacts';
 import { computeRealisticELR } from './realisticELR';
-import type { SimulationContext, EngineState } from '@/engine/types';
-import type { CalculationsSnapshot } from '@/types';
-import { computeSnapshot } from '@/engine/compute';
-import { createBaseEngineState } from '@/engine/adapter';
-import { applyAction, applyTime, getTimeToSave, calculateEarningsForTime, boostTransitionsFrom } from '@/engine/apply';
-import { createSimAction } from '@/types/actions/meta';
-import { getNextPacificTime, isEarningsBoostActive, isResearchSaleActive } from 'lib/planners/events';
-import { ei } from 'lib';
+import type { SimulationContext, EngineState } from '@planner/engine/types';
+import type { CalculationsSnapshot } from '@planner/types';
+import { computeSnapshot } from '@planner/engine/compute';
+import { createBaseEngineState } from '@planner/engine/adapter';
+import { applyAction, applyTime, getTimeToSave, calculateEarningsForTime, boostTransitionsFrom } from '@planner/engine/apply';
+import { createSimAction } from '@planner/types/actions/meta';
+import { getNextPacificTime, isEarningsBoostActive, isResearchSaleActive } from '../events';
+import { ei } from '../..';
 
 // Research categories to exclude from specific ranking views
 const ROI_EXCLUDED_CATEGORIES = [

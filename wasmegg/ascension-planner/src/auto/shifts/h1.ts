@@ -1,5 +1,5 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
-import { getOptimalELRSetFromSource } from '@/lib/artifacts/virtue';
+import { getOptimalELRSetFromSource } from 'lib/planners/artifacts/virtue';
 import { createSimAction } from '@/types/actions/meta';
 import { applyShiftAction, applyDecoratedAction } from './helpers/actionHelpers';
 import { contextDeliverySource } from '../loadout/resolve';

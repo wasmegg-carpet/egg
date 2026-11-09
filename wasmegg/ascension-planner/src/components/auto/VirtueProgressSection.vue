@@ -162,7 +162,7 @@ import { consumeAutoPlannerTEInputs, saveAutoPlannerTEInputs } from '@/lib/autoP
 import { applyAutoStartingTE, eggsSinceLastSync } from '@/auto/startingTE';
 import type { VirtueEgg } from '@/types';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
-import { calculateClothedTEForSet } from '@/lib/artifacts/virtue';
+import { calculateClothedTEForSet } from 'lib/planners/artifacts/virtue';
 import {
   buildLoadoutInputsFromBackup,
   buildLoadoutInputsFromSets,

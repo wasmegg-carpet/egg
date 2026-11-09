@@ -1,4 +1,4 @@
-import { ei } from 'lib/proto';
+import { ei } from '../../proto';
 import {
   Artifact,
   ArtifactSet,
@@ -7,29 +7,29 @@ import {
   Strategy,
   contenderToArtifactSet,
   newItem,
-} from 'lib/artifacts';
-import { allModifiersFromColleggtibles, maxModifierFromColleggtibles, Modifiers } from 'lib/collegtibles';
-import { getNumTruthEggs } from 'lib/earning_bonus';
-import { cteFromArtifacts, cteFromColleggtibles, cteFromLabUpgrade, multiplierToTE } from 'lib/virtue';
+} from '../../artifacts';
+import { allModifiersFromColleggtibles, maxModifierFromColleggtibles, Modifiers } from '../../collegtibles';
+import { getNumTruthEggs } from '../../earning_bonus';
+import { cteFromArtifacts, cteFromColleggtibles, cteFromLabUpgrade, multiplierToTE } from '../../virtue';
 import {
   eggValueMultiplier,
   awayEarningsMultiplier,
   researchPriceMultiplierFromArtifacts,
-} from 'lib/artifacts/virtue_effects';
-import { EquippedArtifact } from './types';
-import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from './utils';
-import { calculateArtifactModifiers, createEmptyLoadout, artifactSlotCount, activeSlots } from './calculator';
-import { calculateLayRate } from 'lib/planners/calculations/layRate';
+} from '../../artifacts/virtue_effects';
+import { EquippedArtifact } from '@planner/lib/artifacts/types';
+import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from '@planner/lib/artifacts/utils';
+import { calculateArtifactModifiers, createEmptyLoadout, artifactSlotCount, activeSlots } from '@planner/lib/artifacts/calculator';
+import { calculateLayRate } from '../calculations/layRate';
 import {
   calculateShippingCapacity,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
-} from 'lib/planners/calculations/shippingCapacity';
-import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
-import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
-import { getArtifact, getStone, artifactOptions } from './data';
-import { InventoryItem } from 'lib/artifacts';
-import { VehicleSlot } from '@/types';
+} from '../calculations/shippingCapacity';
+import { calculateEffectiveLayRate } from '../calculations/effectiveLayRate';
+import { calculateHabCapacity_Full } from '../calculations/habCapacity';
+import { getArtifact, getStone, artifactOptions } from '@planner/lib/artifacts/data';
+import { InventoryItem } from '../../artifacts';
+import { VehicleSlot } from '@planner/types';
 
 /**
  * Get the optimal artifact set for earnings (Clothed TE). With Standard permit only 2 artifacts

@@ -5,7 +5,7 @@ import type { FuelEgg, CalculationsSnapshot } from '@/types';
 import type { ei } from 'lib';
 import { getSavedPlayerID } from 'lib';
 import { PlayerIdSchema } from 'lib/schema';
-import { fetchPlayerBackup } from './fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { optimizeOfflineEarnings } from '@/lib/artifacts/optimizeArtifacts';
 import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import type { PlanData } from '@/lib/storage/db';

@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ResearchSummaryItem } from '@planner/calculations/smartBuyPreview';
+import type { ResearchSummaryItem } from 'lib/planners/calculations/smartBuyPreview';
 
 const props = withDefaults(
   defineProps<{

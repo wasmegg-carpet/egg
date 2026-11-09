@@ -15,7 +15,7 @@
  */
 
 import { resetAllStores } from './reset';
-import { fetchPlayerBackup } from './fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { loadAndSyncBackup, equipMaxEarningsSet } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';

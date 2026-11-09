@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-4">
-    <ResearchCubeToggle />
+    <slot name="top" />
 
     <ResearchSaleToggle
       :is-active="isResearchSaleActive"
@@ -24,8 +24,10 @@
 
     <ElrViewControls
       v-if="currentView === 'elr'"
+      :view-mode="elrViewMode"
       :sort-mode="elrSortMode"
       :roi-display-mode="elrRoiDisplayMode"
+      @update:view-mode="elrViewMode = $event"
       @update:sort-mode="elrSortMode = $event"
       @update:roi-display-mode="elrRoiDisplayMode = $event"
     />
@@ -48,6 +50,7 @@
       :sale-ends-earnings-preview="saleEndsEarningsPreview"
       :sale-ends-earnings-summary="saleEndsEarningsSummary"
       :sale-aware-earnings-summary70="saleAwareEarningsSummary70"
+      :sale-ends-delivery-summary="saleEndsDeliverySummary"
       :sale-ends-stats="saleEndsStats"
       :quick-buy-loading="isComputingQuickBuyPlan"
       :quick-buy-applying="isThresholdBuying"
@@ -129,7 +132,7 @@
             </div>
             <div class="flex flex-col border-l border-gray-200 pl-6">
               <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
-                >Bocks Spent</span
+                >{{ currency.title }} Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
                 {{ formatPrice(milestoneSummary.totalSpent) }}
@@ -179,6 +182,48 @@
       </div>
     </div>
 
+    <!-- Realistic Mode Summary -->
+    <div
+      v-if="currentView === 'elr' && elrViewMode === 'realistic' && realisticSummary"
+      class="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm"
+    >
+      <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-center">
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none mb-1">Lay Rate</span>
+          <span
+            v-tippy="'Optimal artifacts applied, max population assumed'"
+            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
+          >
+            {{ formatNumber(realisticSummary.layRate) }}/hr
+          </span>
+        </div>
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none mb-1"
+            >Shipping Cap</span
+          >
+          <span
+            v-tippy="'Optimal artifacts applied, max vehicles assumed'"
+            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
+          >
+            {{ formatNumber(realisticSummary.shippingRate) }}/hr
+          </span>
+        </div>
+        <div class="flex flex-col border-l border-gray-200 pl-6">
+          <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
+            >Delivery Rate</span
+          >
+          <span
+            v-tippy="'The lower of the two rates'"
+            class="text-sm font-mono font-bold text-gray-900 leading-none py-1"
+          >
+            {{ formatNumber(realisticSummary.elr) }}/hr
+          </span>
+        </div>
+      </div>
+      <p class="mt-2 text-[10px] text-gray-400 text-center italic leading-tight px-2">
+        Note: These stats reflect performance after maxing habs, vehicles, and equipping optimal stone layout.
+      </p>
+    </div>
 
     <!-- Wrapped (same as the summary area above) so the milestones-view "computing" spinner dims
          just the list instead of the whole page. Harmless no-op wrapper for every other view. -->
@@ -231,19 +276,20 @@
 </template>
 
 <script setup lang="ts">
-import { PROFILE } from '@/lib/profile';
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
+import { PROFILE } from '@planner/lib/profile';
 import { computed, ref, watch, watchEffect } from 'vue';
-import { getResearchById, type CommonResearch } from '@/calculations/commonResearch';
-import { researchPurchaseAt } from '@/engine/researchSale';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { getResearchById, type CommonResearch } from '@planner/calculations/commonResearch';
+import { researchPurchaseAt } from '@planner/engine/researchSale';
+import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from 'lib/planners/calculations/researchROI';
-import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@/lib/format';
+import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@planner/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useActionsStore } from '@/stores/actions';
-import { useEventWaits } from '@/composables/useEventWaits';
-import { usePlanStore } from '@/stores/plan';
-import { computeDependencies } from '@/lib/actions/executor';
-import { generateActionId, type Action } from '@/types';
+import { useActionsStore } from '@planner/stores/actions';
+import { useEventWaits } from '@planner/composables/useEventWaits';
+import { usePlanStore } from '@planner/stores/plan';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import { generateActionId, type Action } from '@planner/types';
 import {
   createNoteAction,
   buildQuickBuyNotePayload,
@@ -251,10 +297,10 @@ import {
   buildSaleEndsBuyNotePayload,
   buildMilestoneNotePayload,
 } from 'lib/planners/actions/notes';
-import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from '@/composables/useResearchViews';
-import { getTimeToSave, boostTransitionsFrom } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
-import { buyWhilePassingCheck, buyUntilRealSaleStarts } from '@/calculations/researchRanking';
+import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from 'lib/planners/composables/useResearchViews';
+import { getTimeToSave, boostTransitionsFrom } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
+import { buyWhilePassingCheck, buyUntilRealSaleStarts } from 'lib/planners/calculations/researchRanking';
 import {
   getSaleAwareTimeToSave,
   shouldDeferToNextSale,
@@ -266,21 +312,22 @@ import {
   summarizeResearchLevelChanges,
   type SaleAwarePlanEntry,
   type SimpleBuyPlan,
-} from '@/calculations/smartBuyPreview';
+} from 'lib/planners/calculations/smartBuyPreview';
 import { yieldForOverlayPaint } from 'lib/planners/yieldForOverlayPaint';
 import { DEBUG_MILESTONE_EXECUTION } from 'lib/planners/debugFlags';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 // Sub-components
 import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
-import ResearchCubeToggle from './ResearchCubeToggle.vue';
 import ResearchViewSelector from 'ui/components/planners/actions/ResearchViewSelector.vue';
 import ResearchGameView from 'ui/components/planners/actions/ResearchGameView.vue';
 import ResearchFlatView from 'ui/components/planners/actions/ResearchFlatView.vue';
-import ElrViewControls from './ElrViewControls.vue';
-import RoiViewControls from './RoiViewControls.vue';
-import SmartBuyView from './SmartBuyView.vue';
+import ElrViewControls from 'ui/components/planners/actions/ElrViewControls.vue';
+import RoiViewControls from 'ui/components/planners/actions/RoiViewControls.vue';
+import SmartBuyView from 'ui/components/planners/actions/SmartBuyView.vue';
 import MilestoneTargetPicker from 'ui/components/planners/actions/MilestoneTargetPicker.vue';
+
+const { currency } = usePlannerProfile();
 
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
@@ -313,6 +360,7 @@ const isApplyingSaleEndsBuy = ref(false);
 
 const {
   currentView,
+  elrViewMode,
   elrSortMode,
   elrRoiDisplayMode,
   deliveryImpactOnly,
@@ -348,7 +396,9 @@ const {
   saleEndsEarningsPreview,
   saleEndsEarningsSummary,
   saleAwareEarningsSummary70,
+  saleEndsDeliverySummary,
   saleEndsStats,
+  realisticSummary,
   researchSaleDeadline,
   computeThresholdBuy,
   TIER_THRESHOLDS,
@@ -435,7 +485,7 @@ const quickBuyEarningsSummary = computed(() => ({
   after: quickBuyPlan.value.endSnapshot.offlineEarnings * 3600,
 }));
 
-// Purchase count / time-saved / bocks spent for the Quick Buy card — the same three figures its note
+// Purchase count / time-saved / currency spent for the Quick Buy card — the same three figures its note
 // reports (`buildQuickBuyNotePayload` in `src/lib/actions/notes.ts`), shown live in the card itself
 // before the button is clicked.
 const quickBuyStats = computed(() => ({

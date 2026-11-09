@@ -174,7 +174,7 @@ import {
   activeSlots,
   artifactSlotCount,
 } from '@/lib/artifacts';
-import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from '@/lib/artifacts/virtue';
+import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from 'lib/planners/artifacts/virtue';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';

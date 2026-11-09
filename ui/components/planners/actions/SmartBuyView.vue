@@ -99,6 +99,13 @@
         label="Most efficient delivery research until sale ends"
         empty-text="Nothing to buy right now"
       />
+      <RatePreviewDelta
+        v-if="saleEndsDeliverySummary"
+        label="Delivery Rate"
+        :before="saleEndsDeliverySummary.before"
+        :after="saleEndsDeliverySummary.after"
+        unit="/hr"
+      />
     </SmartBuyCard>
 
     <AutoBuy
@@ -110,9 +117,9 @@
 </template>
 
 <script setup lang="ts">
-import { PROFILE } from '@/lib/profile';
+import { PROFILE } from '@planner/lib/profile';
 import { iconURL } from 'lib';
-import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
+import type { ResearchSummaryItem } from 'lib/planners/calculations/smartBuyPreview';
 import QuickBuy from 'ui/components/planners/actions/QuickBuy.vue';
 import AutoBuy from 'ui/components/planners/actions/AutoBuy.vue';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
@@ -120,7 +127,7 @@ import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue'
 import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
-import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
+import WaitForResearchSaleButton from '@planner/components/actions/WaitForResearchSaleButton.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 interface RateSummary {
@@ -154,6 +161,7 @@ defineProps<{
   saleEndsEarningsPreview: ResearchSummaryItem[];
   saleEndsEarningsSummary: RateSummary;
   saleAwareEarningsSummary70: RateSummary;
+  saleEndsDeliverySummary: RateSummary | null;
   saleEndsStats: BuyStats;
   /** Whether each card's own plan is currently being (re)computed — dims that card only. */
   quickBuyLoading?: boolean;

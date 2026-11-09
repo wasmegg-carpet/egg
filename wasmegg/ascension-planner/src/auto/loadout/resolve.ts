@@ -2,7 +2,7 @@ import type { ei } from 'lib/proto';
 import { cteFromArtifacts } from 'lib/virtue';
 import { equippedArtifactsToLibArtifacts } from '@/lib/artifacts/utils';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import type { DeliveryPool, DeliveryPoolStone, DeliverySource } from '@/lib/artifacts/virtue';
+import type { DeliveryPool, DeliveryPoolStone, DeliverySource } from 'lib/planners/artifacts/virtue';
 import { withEmptyStones } from './fromBackup';
 import { STONE_TIERS, stoneId, type AutoLoadoutInputs, type StoneFamily, type StonePool } from './types';
 

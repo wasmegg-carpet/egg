@@ -54,7 +54,7 @@ import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurc
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
-import type { ResearchSummaryItem } from '@planner/calculations/smartBuyPreview';
+import type { ResearchSummaryItem } from 'lib/planners/calculations/smartBuyPreview';
 
 const { currency } = usePlannerProfile();
 

@@ -14,7 +14,7 @@ import { runWithEarningsEventDeferral, MULTI_LAYERING_ID } from './helpers/earni
 import { computeSnapshot } from '../../engine/compute';
 import { calculateArtifactModifiers } from '../../lib/artifacts';
 import { contextDeliverySource } from '../loadout/resolve';
-import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateFinalSaleGapBuy } from '../../calculations/smartBuyPreview';
+import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateFinalSaleGapBuy } from 'lib/planners/calculations/smartBuyPreview';
 import {
   buildSaleAwareBuyNotePayload,
   buildSaleEndsBuyNotePayload,

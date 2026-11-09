@@ -19,7 +19,7 @@ import { runC4, runI2, runR2, runH2, runTEWaitShift, distributeTargetTE, solveTE
 import { runMaxVehiclesPlan } from './shifts/helpers/vehicles';
 import { countSalesThrough, isResearchSaleActive, isEarningsBoostActive } from 'lib/planners/events';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { computeRealisticELR } from '@/calculations/realisticELR';
+import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
 import { calculateEggValue } from '@/calculations/eggValue';
 import { calculateEarnings } from '@/calculations/earnings';
 import { getTiers, isTierUnlocked } from '@/calculations/commonResearch';

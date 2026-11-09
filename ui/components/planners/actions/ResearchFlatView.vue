@@ -111,7 +111,7 @@
 import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { computed } from 'vue';
 import { type CommonResearch } from '@planner/calculations/commonResearch';
-import { type ViewType, type ElrRoiDisplayMode } from '@planner/composables/useResearchViews';
+import { type ViewType, type ElrRoiDisplayMode } from 'lib/planners/composables/useResearchViews';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useActionsStore } from '@planner/stores/actions';
 import { usePlanStore } from '@planner/stores/plan';

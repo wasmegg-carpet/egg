@@ -1,12 +1,12 @@
-import { getCommonResearches, getDiscountedResearchPrice, isTierUnlocked } from './commonResearch';
-import type { CommonResearch, ResearchCostModifiers } from './commonResearch';
+import { getCommonResearches, getDiscountedResearchPrice, isTierUnlocked } from '@planner/calculations/commonResearch';
+import type { CommonResearch, ResearchCostModifiers } from '@planner/calculations/commonResearch';
 import { computeRealisticELR } from './realisticELR';
 import { DELIVERY_IMPACT_CATEGORIES } from './researchRanking';
-import { calculateMaxTrainLength, calculateMaxVehicleSlots, GRAVITON_COUPLING_ID } from 'lib/planners/calculations/shippingCapacity';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
-import type { SimulationContext } from '@/engine/types';
-import type { CalculationsSnapshot } from '@/types';
+import { calculateMaxTrainLength, calculateMaxVehicleSlots, GRAVITON_COUPLING_ID } from './shippingCapacity';
+import { calculateArtifactModifiers } from '@planner/lib/artifacts';
+import { getOptimalELRSetFromSource, type DeliverySource } from '../artifacts/virtue';
+import type { SimulationContext } from '@planner/engine/types';
+import type { CalculationsSnapshot } from '@planner/types';
 
 /**
  * Past this many steps of trying every combination, the caller falls back to the greedy buy loop.

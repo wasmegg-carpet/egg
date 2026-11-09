@@ -6,15 +6,15 @@ import {
   getResearchById,
   getResearchByTier,
   isTierUnlocked,
-} from './commonResearch';
+} from '@planner/calculations/commonResearch';
 import {
   rankResearchByROI,
   rankResearchByELRImpact,
   buyWhilePassingCheck,
   buyUntilRealSaleStarts,
 } from './researchRanking';
-import { meetsROIByDeadline, getSaleAwareTimeToSave } from 'lib/planners/calculations/researchROI';
-import { findSmartBuyCandidate } from 'lib/planners/calculations/smartBuyCandidate';
+import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
+import { findSmartBuyCandidate } from './smartBuyCandidate';
 import {
   type DeliveryLevelSet,
   deliveryPlanCost,
@@ -22,15 +22,15 @@ import {
   deliveryRateScorer,
   dropLevelsNotWorthTheirTime,
 } from './deliveryLevelSearch';
-import type { CalculationsSnapshot } from '@/types';
-import type { SimulationContext, EngineState } from '@/engine/types';
-import { createBaseEngineState } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
-import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@/engine/apply';
-import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
-import { DEBUG_SALE_AWARE_BUY } from 'lib/planners/debugFlags';
-import { ei } from 'lib';
-import type { DeliverySource } from '@/lib/artifacts/virtue';
+import type { CalculationsSnapshot } from '@planner/types';
+import type { SimulationContext, EngineState } from '@planner/engine/types';
+import { createBaseEngineState } from '@planner/engine/adapter';
+import { computeSnapshot } from '@planner/engine/compute';
+import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@planner/engine/apply';
+import { isResearchSaleActive, getNextSaleEnd } from '../events';
+import { DEBUG_SALE_AWARE_BUY } from '../debugFlags';
+import { ei } from '../..';
+import type { DeliverySource } from '../artifacts/virtue';
 
 /**
  * Safety-net cap shared by every dry run below — protects against a runaway loop, not a real
@@ -95,7 +95,7 @@ export interface SimpleBuyPlan {
    *  isn't real elapsed time; it's just the figure the Quick Buy note reports as time saved. Only
    *  populated by `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
   totalSecondsToSave?: number;
-  /** Sum of each purchase's price — the Quick Buy note's "gems spent" figure. Only populated by
+  /** Sum of each purchase's price — the Quick Buy note's "currency spent" figure. Only populated by
    *  `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
   totalSpent?: number;
 }
@@ -509,7 +509,7 @@ export function runDeliveryBuyLoop(
   return { purchases, endLevels: simState.researchLevels, endSnapshot: simSnapshot };
 }
 
-/** Whichever next level adds the most earnings per gem, or the cheapest if none adds any. */
+/** Whichever next level adds the most earnings per currency, or the cheapest if none adds any. */
 function nextDeliveryLevel(
   available: CommonResearch[],
   state: EngineState,
@@ -519,12 +519,12 @@ function nextDeliveryLevel(
   isSale: boolean
 ): CommonResearch {
   const priceOf = (r: CommonResearch) => getDiscountedResearchPrice(r, state.researchLevels[r.id] || 0, mods, isSale);
-  const earningsPerGem = (r: CommonResearch) => {
+  const earningsPerCurrency = (r: CommonResearch) => {
     const levels = { ...state.researchLevels, [r.id]: (state.researchLevels[r.id] || 0) + 1 };
     const next = computeSnapshot({ ...state, researchLevels: levels }, context, { skipEpochConversion: true });
     return (next.offlineEarnings - snapshot.offlineEarnings) / priceOf(r);
   };
-  const scored = available.map(r => ({ r, value: earningsPerGem(r), price: priceOf(r) }));
+  const scored = available.map(r => ({ r, value: earningsPerCurrency(r), price: priceOf(r) }));
   return scored.reduce((a, b) => (b.value > a.value || (b.value === a.value && b.price < a.price) ? b : a)).r;
 }
 

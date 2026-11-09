@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { type ElrViewMode, type ElrSortMode, type ElrRoiDisplayMode } from '@/composables/useResearchViews';
+import { type ElrViewMode, type ElrSortMode, type ElrRoiDisplayMode } from 'lib/planners/composables/useResearchViews';
 
 const viewOptions = [
   { id: 'realistic' as ElrViewMode, label: 'Realistic' },

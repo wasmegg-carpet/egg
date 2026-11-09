@@ -308,7 +308,7 @@ import { computed, ref } from 'vue';
 import { iconURL } from 'lib';
 import { ei } from 'lib/proto';
 import { GenericBaseSelectFilterable } from 'ui/components/BaseSelectFilterable.vue';
-import { isDeliveryTargetArtifact } from '@/lib/artifacts/virtue';
+import { isDeliveryTargetArtifact } from 'lib/planners/artifacts/virtue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import { artifactOptions, getArtifact, getStone } from '@/lib/artifacts/data';
 import type { ArtifactOption } from '@/lib/artifacts/types';

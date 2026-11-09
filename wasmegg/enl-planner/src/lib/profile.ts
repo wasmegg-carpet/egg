@@ -1,3 +1,5 @@
+import { researchCubeOverride } from '@/lib/artifacts/researchCube';
+import { useInitialStateStore } from '@/stores/initialState';
 import type { PlannerProfile } from 'lib/planners/profile';
 import { getDiscountedHabPrice } from '@/lib/habs';
 import { getDiscountedVehiclePrice, getDiscountedTrainCarPrice } from '@/lib/vehicles';
@@ -18,4 +20,6 @@ export const PROFILE: PlannerProfile = {
   ihrTruthEggBase: 1.01,
   storagePrefix: 'enl',
   hasDeliveryViews: false,
+  maxVehiclesRoiRoute: '',
+  researchCubeMultiplier: () => researchCubeOverride(useInitialStateStore().researchCube),
 };

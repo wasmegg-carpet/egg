@@ -2,7 +2,7 @@ import type { Action } from '@/types/actions/meta';
 import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { isTierUnlocked, getTiers, getResearchById } from '../../calculations/commonResearch';
-import { rankResearchByROI, buyWhilePassingCheck } from '../../calculations/researchRanking';
+import { rankResearchByROI, buyWhilePassingCheck } from 'lib/planners/calculations/researchRanking';
 import {
   runBuyResearchLevelByLevel,
   runTierUnlockMilestone,

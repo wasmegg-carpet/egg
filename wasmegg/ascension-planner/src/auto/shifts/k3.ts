@@ -2,7 +2,7 @@ import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { computeSnapshot } from '../../engine/compute';
 import { applyAction } from '../../engine/apply';
 import { createSimAction } from '@/types/actions/meta';
-import { computeRealisticELR } from '../../calculations/realisticELR';
+import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeTEEarned, timeToEarnTE } from '../te-thresholds';

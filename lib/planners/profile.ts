@@ -61,6 +61,10 @@ export interface PlannerProfile {
   storagePrefix: string;
   /** Whether research offers delivery views. Enlightenment plans are about earnings and hatching, so it doesn't. */
   hasDeliveryViews: boolean;
+  /** How the Max Vehicles ROI note says you get to the vehicles, including a trailing space if not empty. */
+  maxVehiclesRoiRoute: string;
+  /** A research puzzle cube multiplier that replaces the equipped set's, or null to use the set. */
+  researchCubeMultiplier?: () => number | null;
 }
 
 /**

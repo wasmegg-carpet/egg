@@ -11,12 +11,12 @@
  * that part can't move into the worker), so there's nothing worker-side to interpret beyond a
  * `switch` on `kind`.
  */
-import type { CalculationsSnapshot } from '@/types';
-import type { SimulationContext } from '@/engine/types';
-import type { ResearchCostModifiers } from '@/calculations/commonResearch';
-import type { MilestoneTarget, MilestoneChainResult } from 'lib/planners/calculations/milestoneChain';
-import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '@/calculations/smartBuyPreview';
-import type { ei } from 'lib';
+import type { CalculationsSnapshot } from '@planner/types';
+import type { SimulationContext } from '@planner/engine/types';
+import type { ResearchCostModifiers } from '@planner/calculations/commonResearch';
+import type { MilestoneTarget, MilestoneChainResult } from '../calculations/milestoneChain';
+import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '../calculations/smartBuyPreview';
+import type { ei } from '../..';
 
 export interface MilestoneChainRequest {
   kind: 'milestoneChain';

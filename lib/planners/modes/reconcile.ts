@@ -22,12 +22,12 @@
  *    whole point of comparing against *live* data.
  */
 
-import { resetAllStores } from './reset';
+import { resetAllStores } from '@planner/lib/modes/reset';
 import { fetchPlayerBackup } from './fetchBackup';
-import { loadAndSyncBackup, captureReconciliationTargets } from './utils';
-import { useActionsStore } from '@/stores/actions';
-import { useInitialStateStore } from '@/stores/initialState';
-import type { PlanData } from '@/lib/storage/db';
+import { loadAndSyncBackup, captureReconciliationTargets } from '@planner/lib/modes/utils';
+import { useActionsStore } from '@planner/stores/actions';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import type { PlanData } from '@planner/lib/storage/db';
 
 export async function initReconcile(
   playerId: string,

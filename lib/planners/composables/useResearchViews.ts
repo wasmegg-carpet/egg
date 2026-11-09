@@ -1,4 +1,4 @@
-import { PROFILE } from '@/lib/profile';
+import { PROFILE } from '@planner/lib/profile';
 import { ref, computed, watch, watchEffect } from 'vue';
 import {
   getCommonResearches,
@@ -9,29 +9,30 @@ import {
   isTierUnlocked,
   TIER_UNLOCK_THRESHOLDS,
   type CommonResearch,
-} from '@/calculations/commonResearch';
-import { formatDuration, formatAbsoluteTime } from '@/lib/format';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
-import { researchPurchaseAt } from '@/engine/researchSale';
-import { researchCubeOverride } from '@/lib/artifacts/researchCube';
-import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
+} from '@planner/calculations/commonResearch';
+import { formatDuration, formatAbsoluteTime } from '@planner/lib/format';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
+import { computeSnapshot } from '@planner/engine/compute';
+import { getSimulationContext, createBaseEngineState } from '@planner/engine/adapter';
+import { applyAction, applyTime, boostTransitionsFrom } from '@planner/engine/apply';
+import { researchPurchaseAt } from '@planner/engine/researchSale';
+import { calculateShippingCapacity } from '../calculations/shippingCapacity';
 import {
   getNextPacificTime,
   getBuildPhaseEndForSaleCount,
   countSalesThrough,
   isResearchSaleActive as isRealSaleActiveAt,
-} from 'lib/planners/events';
-import { type CalculationsSnapshot } from '@/types';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { calculateLayRate } from 'lib/planners/calculations/layRate';
-import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
-import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
+} from '../events';
+import { type CalculationsSnapshot } from '@planner/types';
+import { getOptimalELRSet } from '../artifacts/virtue';
+import { calculateArtifactModifiers } from '@planner/lib/artifacts';
+import { calculateLayRate } from '../calculations/layRate';
+import { calculateEffectiveLayRate } from '../calculations/effectiveLayRate';
+import { calculateHabCapacity_Full } from '../calculations/habCapacity';
+import { computeRealisticELR } from '../calculations/realisticELR';
 import {
   type MilestoneTarget,
   type MilestoneChainItem,
@@ -39,21 +40,59 @@ import {
   isMilestoneReached,
   computeMilestoneBaseline,
   computeMilestoneSummaryCore,
-} from 'lib/planners/calculations/milestoneChain';
-import { type ResearchRankingItem, rankResearchByROI, rankResearchByELRImpact } from '@/calculations/researchRanking';
-import { type PurchaseEventCrossings, isActuallyDuringSale } from 'lib/planners/calculations/researchROI';
+} from '../calculations/milestoneChain';
+import { type ResearchRankingItem, rankResearchByROI, rankResearchByELRImpact } from '../calculations/researchRanking';
+import { type PurchaseEventCrossings, isActuallyDuringSale } from '../calculations/researchROI';
 import {
   summarizeResearchLevelChanges,
   type SaleAwareBuyPlan,
   type SaleEndsPlan,
-} from '@/calculations/smartBuyPreview';
-import { useResearchCalcWorker } from '@/composables/useResearchCalcWorker';
-import type { SimulationContext } from '@/engine/types';
-import { ei } from 'lib';
+} from '../calculations/smartBuyPreview';
+import { useResearchCalcWorker } from './useResearchCalcWorker';
+import type { SimulationContext } from '@planner/engine/types';
+import { ei } from '../..';
 
-export type { MilestoneTarget } from 'lib/planners/calculations/milestoneChain';
+/**
+ * Shared by `realisticSummary` (current research levels) and the Smart Buy tab's before/after
+ * delivery-rate comparisons (simulated post-purchase levels) — same "optimal artifacts + max
+ * habs/vehicles" pipeline, just parameterized over which research levels to evaluate instead of
+ * always reading the live store, so both callers stay in sync by construction.
+ */
+function computeRealisticDeliverySummary(
+  researchLevels: Record<string, number>,
+  rawBackup: ei.IBackup | null | undefined,
+  context: SimulationContext,
+  proPermit: boolean
+): { layRate: number; shippingRate: number; elr: number } | null {
+  if (!rawBackup) return null;
+
+  const optimal = getOptimalELRSet(rawBackup, {
+    assumeMaxHabsVehicles: true,
+    excludeGusset: false,
+    commonResearch: researchLevels,
+    epicResearchLevels: context.epicResearchLevels,
+    colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit,
+  });
+  const artifactMods = calculateArtifactModifiers(optimal);
+  const stats = computeRealisticELR(
+    researchLevels,
+    artifactMods,
+    context.epicResearchLevels,
+    context.colleggtibleModifiers
+  );
+
+  return {
+    layRate: stats.layRate * 3600,
+    shippingRate: stats.shippingRate * 3600,
+    elr: stats.effectiveRate * 3600,
+  };
+}
+
+export type { MilestoneTarget } from '../calculations/milestoneChain';
 
 export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'smart_buy';
+export type ElrViewMode = 'realistic' | 'potential';
 export type ElrSortMode = 'efficiency' | 'impact';
 export type ElrRoiDisplayMode = 'hpp' | 'time';
 export type RoiMode = 'immediate' | 'maxed_vehicles';
@@ -135,13 +174,14 @@ const ALL_VIEWS = [
 
 export const VIEWS = ALL_VIEWS.filter(view => view.id !== 'elr' || PROFILE.hasDeliveryViews);
 
-const RESEARCH_VIEW_STORAGE_KEY = 'enl_research_view';
-const ELR_SORT_MODE_STORAGE_KEY = 'enl_research_elr_sort_mode';
-const ELR_ROI_DISPLAY_MODE_STORAGE_KEY = 'enl_research_elr_roi_display_mode';
-const DELIVERY_IMPACT_ONLY_STORAGE_KEY = 'enl_research_delivery_impact_only';
-const ROI_MODE_STORAGE_KEY = 'enl_research_roi_mode';
-const MILESTONE_TARGET_STORAGE_KEY = 'enl_research_milestone_target';
-const SMART_BUY_SALE_TARGET_END_STORAGE_KEY = 'enl_smart_buy_sale_target_end';
+const RESEARCH_VIEW_STORAGE_KEY = `${PROFILE.storagePrefix}_research_view`;
+const ELR_VIEW_MODE_STORAGE_KEY = `${PROFILE.storagePrefix}_research_elr_view_mode`;
+const ELR_SORT_MODE_STORAGE_KEY = `${PROFILE.storagePrefix}_research_elr_sort_mode`;
+const ELR_ROI_DISPLAY_MODE_STORAGE_KEY = `${PROFILE.storagePrefix}_research_elr_roi_display_mode`;
+const DELIVERY_IMPACT_ONLY_STORAGE_KEY = `${PROFILE.storagePrefix}_research_delivery_impact_only`;
+const ROI_MODE_STORAGE_KEY = `${PROFILE.storagePrefix}_research_roi_mode`;
+const MILESTONE_TARGET_STORAGE_KEY = `${PROFILE.storagePrefix}_research_milestone_target`;
+const SMART_BUY_SALE_TARGET_END_STORAGE_KEY = `${PROFILE.storagePrefix}_smart_buy_sale_target_end`;
 
 const DEFAULT_RESEARCH_VIEW: ViewType = 'smart_buy';
 
@@ -153,6 +193,19 @@ export const SMART_BUY_SALE_COUNT_CAP = 3;
 function loadStoredResearchView(): ViewType {
   const stored = localStorage.getItem(RESEARCH_VIEW_STORAGE_KEY);
   return VIEWS.some(v => v.id === stored) ? (stored as ViewType) : DEFAULT_RESEARCH_VIEW;
+}
+
+/**
+ * Called when the player shifts into Curiosity so the research tab greets them with Smart Buy
+ * again, rather than leaving them on whatever view they last happened to be looking at.
+ */
+export function resetResearchViewForCuriosityShift(): void {
+  localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, DEFAULT_RESEARCH_VIEW);
+}
+
+function loadStoredElrViewMode(): ElrViewMode {
+  const stored = localStorage.getItem(ELR_VIEW_MODE_STORAGE_KEY);
+  return stored === 'realistic' || stored === 'potential' ? stored : 'realistic';
 }
 
 function loadStoredElrSortMode(): ElrSortMode {
@@ -223,6 +276,8 @@ export function useResearchViews() {
 
   const currentView = ref<ViewType>(loadStoredResearchView());
   watch(currentView, v => localStorage.setItem(RESEARCH_VIEW_STORAGE_KEY, v));
+  const elrViewMode = ref<ElrViewMode>(PROFILE.hasDeliveryViews ? loadStoredElrViewMode() : 'potential');
+  watch(elrViewMode, v => localStorage.setItem(ELR_VIEW_MODE_STORAGE_KEY, v));
   const elrSortMode = ref<ElrSortMode>(loadStoredElrSortMode());
   watch(elrSortMode, v => localStorage.setItem(ELR_SORT_MODE_STORAGE_KEY, v));
   const elrRoiDisplayMode = ref<ElrRoiDisplayMode>(loadStoredElrRoiDisplayMode());
@@ -271,6 +326,16 @@ export function useResearchViews() {
     }
   );
 
+  const realisticSummary = computed(() => {
+    if (elrViewMode.value !== 'realistic') return null;
+    return computeRealisticDeliverySummary(
+      commonResearchStore.researchLevels,
+      initialStateStore.rawBackup,
+      getSimulationContext(),
+      initialStateStore.proPermit
+    );
+  });
+
   const viewDescription = computed(() => {
     switch (currentView.value) {
       case 'game':
@@ -280,9 +345,17 @@ export function useResearchViews() {
       case 'roi':
         return 'Prioritizes upgrades that pay for themselves fastest based on your current earnings.';
       case 'elr': {
-        return elrSortMode.value === 'efficiency'
-          ? 'Theoretical max impact to Delivery Rate, sorted by time efficiency.'
-          : 'Theoretical max impact to Delivery Rate, sorted by total impact.';
+        const view = elrViewMode.value;
+        const sort = elrSortMode.value;
+        if (view === 'potential' && sort === 'efficiency') {
+          return 'Theoretical max impact to Delivery Rate, sorted by time efficiency.';
+        } else if (view === 'potential' && sort === 'impact') {
+          return 'Theoretical max impact to Delivery Rate, sorted by total impact.';
+        } else if (view === 'realistic' && sort === 'efficiency') {
+          return 'True Delivery Rate impact with optimal artifacts and max habs/vehicles, sorted by time efficiency.';
+        } else {
+          return 'True Delivery Rate impact with optimal artifacts and max habs/vehicles, sorted by total impact.';
+        }
       }
       case 'milestones':
         return 'Pick a tier unlock or a specific research level, and see the fastest ROI-optimal path to it.';
@@ -297,8 +370,7 @@ export function useResearchViews() {
     labUpgradeLevel: initialStateStore.epicResearchLevels['cheaper_research'] || 0,
     researchCostMultiplier: initialStateStore.colleggtibleModifiers.researchCost,
     puzzleCubeMultiplier:
-      researchCubeOverride(initialStateStore.researchCube) ??
-      initialStateStore.artifactModifiers.researchCost.totalMultiplier,
+      PROFILE.researchCubeMultiplier?.() ?? initialStateStore.artifactModifiers.researchCost.totalMultiplier,
   }));
 
   const isResearchSaleActive = computed(() => actionsStore.effectiveSnapshot.activeSales.research);
@@ -352,7 +424,7 @@ export function useResearchViews() {
   // unset.
   //
   // `item.duringSale` (from `getSaleAwareTimeToSave`) means "priced at a sale discount, whichever
-  // sale that turns out to be" — correct for the actual bocks charged, but not what the "Sale" badge
+  // sale that turns out to be" — correct for the actual currency charged, but not what the "Sale" badge
   // should mean to a player glancing at the list: a purchase that only becomes worthwhile several
   // sale cycles out is still priced at a discount, but showing the same badge as an item landing in
   // NEXT week's sale is misleading. `isActuallyDuringSale` (already re-derived against calendar
@@ -774,12 +846,14 @@ export function useResearchViews() {
 
     const ranked = rankResearchByELRImpact(
       researchLevels,
+      initialStateStore.rawBackup,
       actionsStore.effectiveSnapshot,
       context,
       mods,
       isSale,
       absoluteSimTime,
       researchSaleDeadline.value,
+      elrViewMode.value,
       elrSortMode.value
     );
 
@@ -1000,7 +1074,9 @@ export function useResearchViews() {
     const context = getSimulationContext();
     const mods = costModifiers.value;
     const deadline = researchSaleDeadline.value;
+    const mode = elrViewMode.value;
     const sort = elrSortMode.value;
+    const rawBackup = initialStateStore.rawBackup;
     const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
@@ -1016,7 +1092,9 @@ export function useResearchViews() {
         mods,
         absoluteSimTime,
         deadline,
+        elrViewMode: mode,
         elrSortMode: sort,
+        rawBackup,
       });
 
       if (generation === saleEndsPlanGeneration) {
@@ -1054,7 +1132,7 @@ export function useResearchViews() {
     after: saleAwarePlan70.value.endSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / bocks spent for the "70% Return" card — the same three
+  // Purchase count / duration spanned / currency spent for the "70% Return" card — the same three
   // figures its note reports (`buildSaleAwareBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1088,7 +1166,7 @@ export function useResearchViews() {
     after: saleEndsPlan.value.earningsEndSnapshot.offlineEarnings * 3600,
   }));
 
-  // Purchase count / duration spanned / bocks spent for "Buy Until Sale Ends" — the same three
+  // Purchase count / duration spanned / currency spent for "Buy Until Sale Ends" — the same three
   // figures its note reports (`buildSaleEndsBuyNotePayload` in `src/lib/actions/notes.ts`), shown
   // live in the card itself before the button is clicked.
   //
@@ -1106,6 +1184,28 @@ export function useResearchViews() {
       seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
       spent: saleEndsPlan.value.totalSpent ?? 0,
     };
+  });
+
+  // Current vs. simulated-post-purchase Delivery Rate for "Buy Until Sale Ends" — same "realistic"
+  // (optimal artifacts + max habs/vehicles) calculation `realisticSummary` uses, just evaluated
+  // against the plan's simulated end levels instead of the live research levels.
+  const saleEndsDeliverySummary = computed(() => {
+    const rawBackup = initialStateStore.rawBackup;
+    const context = getSimulationContext();
+    const before = computeRealisticDeliverySummary(
+      commonResearchStore.researchLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
+    const after = computeRealisticDeliverySummary(
+      saleEndsPlan.value.endLevels,
+      rawBackup,
+      context,
+      initialStateStore.proPermit
+    );
+    if (!before || !after) return null;
+    return { before: before.elr, after: after.elr };
   });
 
   const sortedResearches = computed(() => {
@@ -1296,7 +1396,7 @@ export function useResearchViews() {
             buyToHereSeconds: totalSeconds,
             buyToHereTooltip:
               totalSeconds < rawSecondsToBuy
-                ? 'Includes existing bocks from your bank. Individual research wait times show the time to save from 0.'
+                ? `Includes existing ${PROFILE.currency.name} from your bank. Individual research wait times show the time to save from 0.`
                 : undefined,
             canBuy: true,
             isMaxed: false,
@@ -1325,6 +1425,7 @@ export function useResearchViews() {
 
   return {
     currentView,
+    elrViewMode,
     elrSortMode,
     elrRoiDisplayMode,
     deliveryImpactOnly,
@@ -1361,7 +1462,9 @@ export function useResearchViews() {
     saleEndsEarningsPreview,
     saleEndsEarningsSummary,
     saleAwareEarningsSummary70,
+    saleEndsDeliverySummary,
     saleEndsStats,
+    realisticSummary,
     researchSaleDeadline,
     nextSaleStart,
     // Not used within this composable — returned so ResearchActions.vue's own `quickBuyPlan`

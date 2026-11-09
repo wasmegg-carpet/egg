@@ -27,7 +27,7 @@ import {
   getDiscountedResearchPrice,
   type CommonResearch,
 } from '@/calculations/commonResearch';
-import { useResearchViews } from '@/composables/useResearchViews';
+import { useResearchViews } from 'lib/planners/composables/useResearchViews';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import { getExecutor } from '@/lib/actions/executor';
 import { createBaseEngineState, getSimulationContext } from './adapter';

@@ -52,7 +52,7 @@ import {
 } from '@/auto/loadout';
 import { maxedLoadoutInputs } from '@/buildTable/maxedAccount';
 import { parseVirtueProgress } from '@/lib/backupVirtue';
-import { fetchPlayerBackup } from '@/lib/modes/fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { resolveFetchablePlayerId } from '@/lib/modes/utils';
 import type { ei } from 'lib';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';

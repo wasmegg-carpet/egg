@@ -161,7 +161,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
-import { resetResearchViewForCuriosityShift } from '@/composables/useResearchViews';
+import { resetResearchViewForCuriosityShift } from 'lib/planners/composables/useResearchViews';
 import { shiftCost, iconURL } from 'lib';
 import { getColleggtibleIconPath } from 'lib/planners/assets';
 import { formatNumber, formatDuration } from '@/lib/format';
