@@ -29,18 +29,29 @@
         :class="[isCollapsed ? 'w-9 h-9 p-1' : 'w-12 h-12 p-1.5 mb-2 group-hover/toggle:scale-105']"
       >
         <img
-          :src="iconURL('egginc/egg_enlightenment.png', 64)"
+          :src="iconURL(`egginc/egg_${currentEgg}.png`, 64)"
           class="w-full h-full object-contain"
-          alt="Enlightenment"
+          :alt="currentEgg"
         />
       </div>
 
+      <!-- Shift Name -->
+      <div v-if="!isCollapsed && shiftName" class="text-lg font-bold text-slate-800 tracking-tight leading-none mb-1 shadow-sm">
+        {{ shiftName }}
+      </div>
     </button>
 
     <!-- Collapsible Content -->
     <div v-if="!isCollapsed" class="flex flex-col items-center w-full transition-all">
+      <!-- Active Set Badge -->
+      <template v-if="PROFILE.hasDeliveryViews">
+        <div v-if="activeSet" class="badge-premium badge-brand py-0.5 mb-3 scale-90">
+          {{ activeSet === 'earnings' ? 'Earnings' : 'Delivery Rate' }} Set
+        </div>
+        <div v-else class="badge-premium py-0.5 mb-3 scale-90 bg-slate-100 text-slate-500">No Active Set</div>
+      </template>
 
-      <!-- Plan Timing & Duration -->
+      <!-- Shift Timing & Duration -->
       <div
         v-if="dates"
         class="w-full bg-white/30 rounded-xl border border-white/40 p-2.5 mb-3 flex flex-col items-center shadow-inner"
@@ -145,7 +156,7 @@
             <span class="font-mono-premium text-[11px] font-bold text-slate-700">
               {{ formatNumber(Math.max(0, snapshot.bankValue), 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_bock.png', 32)" class="w-3 h-3" alt="Bocks" />
+            <img :src="iconURL(PROFILE.currency.iconPath, 32)" class="w-3 h-3" :alt="PROFILE.currency.name" />
           </div>
         </div>
       </div>
@@ -158,10 +169,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
 import { iconURL } from 'lib';
-import { formatNumber } from '@/lib/format';
+import { formatNumber } from '@planner/lib/format';
+import { PROFILE } from '@planner/lib/profile';
+import { plannerGroupName } from '@planner/lib/actions/plannerRules';
 import ModifyBankModal from 'ui/components/planners/ModifyBankModal.vue';
 
 const showModifyBankModal = ref(false);
@@ -171,10 +184,12 @@ const planStore = usePlanStore();
 
 const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 
-// The plan's latest state
+// Get the effective snapshot (state at the end of the edited/current shift)
 const snapshot = computed(() => actionsStore.effectiveSnapshot);
 
 // Basic properties from snapshot
+const currentEgg = computed(() => snapshot.value.currentEgg);
+const activeSet = computed(() => snapshot.value.activeArtifactSet);
 const habCapacity = computed(() => snapshot.value.habCapacity);
 const population = computed(() => snapshot.value.population);
 
@@ -210,29 +225,56 @@ function formatMoney(amount: number): string {
 }
 
 /**
- * Calculate the timing and duration of the plan.
+ * Calculate the shift name (e.g. C1, H2) for the current state.
+ */
+const shiftName = computed(() => plannerGroupName(currentEgg.value));
+
+/**
+ * Calculate the timing and duration for the current shift.
  */
 const dates = computed(() => {
   const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const actions = actionsStore.actions;
-  const headerAction = actions.find(a => a.type === 'start_ascension');
-  if (!headerAction) return null;
 
-  // Time before the plan = header end simulation time - header duration - start offset
-  const headerStartSimTime = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0);
-  const timeBeforePlan = headerStartSimTime - offset;
-  const planDuration = (actions[actions.length - 1].endState.lastStepTime || 0) - headerStartSimTime;
+  // Find the 'header' action for the current group
+  let headerIndex = -1;
+  if (actionsStore.editingGroupId) {
+    headerIndex = actions.findIndex(a => a.id === actionsStore.editingGroupId);
+  } else {
+    for (let i = actions.length - 1; i >= 0; i--) {
+      if ((actions[i].type as string) === 'shift' || actions[i].type === 'start_ascension') {
+        headerIndex = i;
+        break;
+      }
+    }
+  }
 
-  const startMs = startTime + timeBeforePlan * 1000;
-  const endMs = startMs + planDuration * 1000;
+  if (headerIndex === -1) return null;
+
+  const headerAction = actions[headerIndex];
+
+  // Find the end of this shift
+  const nextShiftIndex = actions.findIndex((a, idx) => idx > headerIndex && (a.type as string) === 'shift');
+  const endActionIndex = nextShiftIndex === -1 ? actions.length - 1 : nextShiftIndex - 1;
+
+  // Time before shift = header end simulation time - header duration - start offset
+  const timeBeforeShift = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0) - offset;
+
+  // Total duration of shift group = end action end simulation time - (header end sim time - header duration)
+  const shiftGroupEndSimTime = actions[endActionIndex].endState.lastStepTime || 0;
+  const shiftGroupStartSimTime = (headerAction.endState.lastStepTime || 0) - (headerAction.totalTimeSeconds || 0);
+  const shiftDuration = shiftGroupEndSimTime - shiftGroupStartSimTime;
+
+  const startMs = startTime + timeBeforeShift * 1000;
+  const endMs = startMs + shiftDuration * 1000;
 
   // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
   // these routinely land a sub-microsecond residue short of a whole second.
   return {
     start: new Date(Math.round(startMs)),
     end: new Date(Math.round(endMs)),
-    duration: planDuration,
+    duration: shiftDuration,
   };
 });
 

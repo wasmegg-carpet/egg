@@ -140,3 +140,8 @@ export function applyPlannerStartDefaults(_startAction: Action<'start_ascension'
 export function syncPlannerFarmEgg(_farm: CurrentFarmState, _startAction: Action<'start_ascension'> | undefined): string | undefined {
   return undefined;
 }
+
+/** Enlightenment plans have no shifts to name. */
+export function plannerGroupName(_egg: string): string {
+  return '';
+}

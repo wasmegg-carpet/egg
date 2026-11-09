@@ -450,7 +450,7 @@ import AvailableActions from '@/components/AvailableActions.vue';
 import UndoConfirmationDialog from 'ui/components/planners/UndoConfirmationDialog.vue';
 import PlanFinalSummary from 'ui/components/planners/PlanFinalSummary.vue';
 import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
-import FloatingStats from '@/components/FloatingStats.vue';
+import FloatingStats from 'ui/components/planners/FloatingStats.vue';
 import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
 import PlannerToast from 'ui/components/planners/PlannerToast.vue';
 import WarningDialog from 'ui/components/planners/WarningDialog.vue';

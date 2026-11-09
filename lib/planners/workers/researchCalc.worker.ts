@@ -26,7 +26,7 @@
 import { computeTierMilestoneChain, computeResearchMilestoneChain } from '../calculations/milestoneChain';
 import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '../calculations/smartBuyPreview';
 import { createBaseEngineState } from '../engine/adapter';
-import { sanitizeLongs } from '@planner/lib/artifacts/utils';
+import { sanitizeLongs } from '../artifacts/utils';
 import type { WorkerRequest, WorkerResponse } from './researchCalc.protocol';
 
 // Typed as `Worker` — the DOM-lib interface describing a worker instance as seen from the *main*

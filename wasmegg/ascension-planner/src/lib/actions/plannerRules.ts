@@ -10,7 +10,8 @@ import type { EngineState } from '@/engine/types';
 import type { calculateArtifactModifiers } from '@/lib/artifacts';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { useInitialStateStore } from '@/stores/initialState';
-import { VIRTUE_EGGS } from '@/types';
+import { VIRTUE_EGGS, VIRTUE_EGG_NAMES } from '@/types';
+import { useActionsStore } from '@/stores/actions';
 import { solveForTime } from 'lib/planners/engine/apply/math';
 import { safeImport } from 'lib/planners/import';
 import { countTEThresholdsPassed, eggsNeededForTE } from '@/lib/truthEggs';
@@ -226,4 +227,48 @@ export function syncPlannerFarmEgg(farm: CurrentFarmState, startAction: Action<'
   if (startAction) startAction.payload.initialEgg = egg;
   usePlanStore().setCurrentEgg(egg);
   return egg;
+}
+
+/** The label for the shift being viewed, such as C1 or H2. */
+export function plannerGroupName(egg: VirtueEgg): string {
+  const actionsStore = useActionsStore();
+  const eggName = VIRTUE_EGG_NAMES[egg];
+  const letter = eggName.charAt(0).toUpperCase();
+
+  // Find the 'header' action for the current group
+  let headerAction: Action | undefined;
+
+  if (actionsStore.editingGroupId) {
+    headerAction = actionsStore.getAction(actionsStore.editingGroupId);
+  } else {
+    // If not editing, find the last group header in the entire list
+    const actions = actionsStore.actions;
+    for (let i = actions.length - 1; i >= 0; i--) {
+      if (actions[i].type === 'shift' || actions[i].type === 'start_ascension') {
+        headerAction = actions[i];
+        break;
+      }
+    }
+  }
+
+  if (!headerAction) return `${letter}1`; // Fallback
+
+  // Count how many times we visited this egg up to (and including) this header action
+  // We iterate through all actions, counting visits to 'egg'
+  // A visit starts at 'start_ascension' (if initialEgg matches) or 'shift' (if toEgg matches)
+  let count = 0;
+  for (const action of actionsStore.actions) {
+    if (action.type === 'start_ascension') {
+      const payload = action.payload as StartAscensionPayload;
+      if (payload.initialEgg === egg) count++;
+    } else if (action.type === 'shift') {
+      const payload = action.payload as ShiftPayload;
+      if (payload.toEgg === egg) count++;
+    }
+
+    // Stop when we reach our target header
+    if (action.id === headerAction.id) break;
+  }
+
+  return `${letter}${count || 1}`;
 }

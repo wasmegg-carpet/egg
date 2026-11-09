@@ -28,7 +28,7 @@
  * actual computation is researchCalc.worker.ts's.
  */
 import { onUnmounted } from 'vue';
-import { sanitizeLongs } from '@planner/lib/artifacts/utils';
+import { sanitizeLongs } from '../artifacts/utils';
 import type { MilestoneChainResult } from '../calculations/milestoneChain';
 import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '../calculations/smartBuyPreview';
 import type {

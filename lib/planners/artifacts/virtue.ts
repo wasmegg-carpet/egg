@@ -17,7 +17,7 @@ import {
   researchPriceMultiplierFromArtifacts,
 } from '../../artifacts/virtue_effects';
 import { EquippedArtifact } from '@planner/lib/artifacts/types';
-import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from '@planner/lib/artifacts/utils';
+import { libArtifactToEquippedArtifact, equippedArtifactsToLibArtifacts } from './utils';
 import { calculateArtifactModifiers, createEmptyLoadout, artifactSlotCount, activeSlots } from '@planner/lib/artifacts/calculator';
 import { calculateLayRate } from '../calculations/layRate';
 import {
