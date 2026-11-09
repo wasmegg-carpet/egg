@@ -1,8 +1,8 @@
 import { useActionsStore } from '@planner/stores/actions';
 import { usePlanStore } from '@planner/stores/plan';
-import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { useActionExecutor } from './useActionExecutor';
 import { generateActionId } from '@planner/types';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from '../actions/executor';
 import { useEventWaits as useSharedEventWaits } from './useEventWaits';
 
 /** This planner's stores wired into the shared research sale and 2x earnings waits. */

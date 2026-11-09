@@ -14,7 +14,7 @@ import {
   createEmptyUndoValidation,
   generateActionId,
 } from '@/types';
-import { evaluateAction } from '@/lib/actions/reconciliation';
+import { evaluateAction } from 'lib/planners/actions/reconciliation';
 import { type HabId } from '@/lib/habs';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeDeltas } from '@/lib/actions/snapshot';
@@ -31,7 +31,7 @@ import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from 'lib/p
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
-import { computeDependencies } from '@/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 
 import { ActionsState } from './types';
 import { createDefaultStartAction, calculateActionResult } from './simulation';

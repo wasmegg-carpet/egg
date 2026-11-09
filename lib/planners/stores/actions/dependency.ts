@@ -1,6 +1,6 @@
 import type { Action, BuyResearchPayload, StartAscensionPayload } from '@planner/types';
 import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@planner/calculations/commonResearch';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from '../../actions/executor';
 
 /**
  * Re-build the dependency graph for all actions.

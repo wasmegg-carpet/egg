@@ -81,5 +81,5 @@ describe('max offline earnings loadout', () => {
     expect(wide.ok && wide.offlineEarnings).toBeCloseTo(result.offlineEarnings, -1);
     // The other slots still earn: well above an IHR-only set.
     expect(result.offlineEarnings).toBeGreaterThan(offline(state, [chalice!]).offlineEarnings * 100);
-  });
+  }, 20000); // Runs the search twice, once with a very wide beam, which takes about 5 seconds.
 });

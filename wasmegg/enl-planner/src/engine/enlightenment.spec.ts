@@ -1,3 +1,4 @@
+import { ALL_SHIPS, SHIP_INFO, Spaceship } from '@/lib/missions';
 import { VIEWS } from 'lib/planners/composables/useResearchViews';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
@@ -10,7 +11,7 @@ import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
 import { computeGoalStatuses, nahPopulationTarget, secondsToReachPopulation } from '@/calculations/goals';
 import { createBaseEngineState, getSimulationContext } from './adapter';
 import { computeSnapshot } from './compute';
-import { refreshActionPayload } from './apply/duration';
+import { refreshActionPayload } from 'lib/planners/engine/apply/duration';
 import { applyAction } from './apply/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
@@ -190,4 +191,11 @@ describe('reading a backup', () => {
 
 test('enlightenment has no delivery research view', () => {
   expect(VIEWS.some(view => view.id === 'elr')).toBe(false);
+});
+
+test('ships cost what the wiki says to fund them, in bocks', () => {
+  expect(SHIP_INFO[Spaceship.CHICKEN_ONE].price).toBe(7.2e9);
+  expect(SHIP_INFO[Spaceship.BCR].price).toBe(32e21);
+  expect(SHIP_INFO[Spaceship.ATREGGIES].price).toBe(15e45);
+  expect(ALL_SHIPS.map(ship => SHIP_INFO[ship].price)).toEqual([...ALL_SHIPS.map(ship => SHIP_INFO[ship].price)].sort((a, b) => b - a));
 });

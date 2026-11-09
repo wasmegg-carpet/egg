@@ -111,7 +111,7 @@ import { createCurrencyWaitPayload } from 'lib/planners/actions/currencyWait';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { getBoostAwareTimeToSave } from '@planner/engine/apply';
 import { getSimulationContext } from '@planner/engine/adapter';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 
 const { currency } = usePlannerProfile();
 // Each planner's action types include only the name its own saved plans use.

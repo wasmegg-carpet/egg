@@ -172,8 +172,8 @@ import { VIRTUE_EGG_NAMES } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
 import { safeAsyncComponent } from 'lib/planners/import';
 import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
-import ActionHistoryItem from './ActionHistoryItem.vue';
-import DayGroup from './DayGroup.vue';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
+import DayGroup from 'ui/components/planners/DayGroup.vue';
 
 // Lazy load summary components
 const CuriositySummary = safeAsyncComponent(() => import('./summaries/CuriositySummary.vue'));

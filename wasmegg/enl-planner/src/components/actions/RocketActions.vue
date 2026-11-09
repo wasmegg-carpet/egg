@@ -52,12 +52,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useRocketsStore } from '@/stores/rockets';
+import { useRocketsStore } from 'lib/planners/stores/rockets';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useEarnings } from '@/composables/useEarnings';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
-import { computeDependencies } from '@/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId, FUEL_EGGS, createEmptyFuelAmounts } from '@/types';
 import type { FuelEgg, LaunchMissionEntry } from '@/types';
 import { SHIP_INFO, Spaceship } from '@/lib/missions';
@@ -66,7 +66,7 @@ import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 
 import FuelTankGraphic from 'ui/components/planners/actions/rockets/FuelTankGraphic.vue';
-import MissionGrid from './rockets/MissionGrid.vue';
+import MissionGrid from 'ui/components/planners/actions/rockets/MissionGrid.vue';
 import MissionSummary from 'ui/components/planners/actions/rockets/MissionSummary.vue';
 
 const fuelTankStore = useFuelTankStore();

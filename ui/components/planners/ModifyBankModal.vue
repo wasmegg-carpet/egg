@@ -175,8 +175,8 @@ import { generateActionId } from '@planner/types';
 import type { ModifyBankPayload } from '@planner/types';
 import { usePlanStore } from '@planner/stores/plan';
 import { useActionsStore } from '@planner/stores/actions';
-import { computeDependencies } from '@planner/lib/actions/executor';
-import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { computeDependencies } from 'lib/planners/actions/executor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 import { calculateEarningsForTime } from 'lib/planners/engine/apply/math';
 
 const { currency } = usePlannerProfile();

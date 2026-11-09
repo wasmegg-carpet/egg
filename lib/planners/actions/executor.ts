@@ -16,39 +16,38 @@ import type {
   BuyResearchPayload,
   BuyTrainCarPayload,
   BuySiloPayload,
-  VirtueEgg,
+  FuelEgg,
   StartAscensionPayload,
-} from '@/types';
-import type { BaseExecutorContext, PayloadExecutor } from 'lib/planners/actions/executorTypes';
-import { PROFILE } from '@/lib/profile';
-import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@/calculations/commonResearch';
-import { startAscensionExecutor } from './executors/startAscension';
-import { createBuyVehicleExecutor } from 'lib/planners/actions/executors/buyVehicle';
-import { createBuyHabExecutor } from 'lib/planners/actions/executors/buyHab';
-import { createBuyResearchExecutor } from 'lib/planners/actions/executors/buyResearch';
-import { shiftExecutor } from './executors/shift';
-import { createBuyTrainCarExecutor } from 'lib/planners/actions/executors/buyTrainCar';
-import { changeArtifactsExecutor } from 'lib/planners/actions/executors/changeArtifacts';
-import { buySiloExecutor } from 'lib/planners/actions/executors/buySilo';
-import { storeFuelExecutor } from 'lib/planners/actions/executors/storeFuel';
-import { waitForTEExecutor } from './executors/waitForTE';
-import { launchMissionsExecutor } from 'lib/planners/actions/executors/launchMissions';
-import { toggleSaleExecutor } from 'lib/planners/actions/executors/toggleSale';
-import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
-import { updateArtifactSetExecutor } from './executors/updateArtifactSet';
-import { createWaitForMissionsExecutor } from 'lib/planners/actions/executors/wait_for_missions';
-import { waitForTimeExecutor } from 'lib/planners/actions/executors/wait_for_time';
-import { waitForResearchSaleEndExecutor } from 'lib/planners/actions/executors/waitForResearchSaleEnd';
-import { waitForEarningsBoostEndExecutor } from 'lib/planners/actions/executors/waitForEarningsBoostEnd';
-import { removeFuelExecutor } from 'lib/planners/actions/executors/removeFuel';
-import { waitForFullHabsExecutor } from 'lib/planners/actions/executors/wait_for_full_habs';
-import { toggleEarningsBoostExecutor } from 'lib/planners/actions/executors/toggleEarningsBoost';
-import { waitForResearchSaleExecutor } from 'lib/planners/actions/executors/waitForResearchSale';
-import { waitForEarningsBoostExecutor } from 'lib/planners/actions/executors/waitForEarningsBoost';
-import { createWaitForCurrencyExecutor } from 'lib/planners/actions/executors/waitForCurrency';
-import { createWaitForNoEarningsExecutor } from 'lib/planners/actions/executors/wait_for_no_earnings';
-import { notificationExecutor } from 'lib/planners/actions/executors/notification';
-import { createModifyBankExecutor } from 'lib/planners/actions/executors/modifyBank';
+} from '@planner/types';
+import type { BaseExecutorContext, PayloadExecutor } from './executorTypes';
+import { PROFILE } from '@planner/lib/profile';
+import { getResearchById, TIER_UNLOCK_THRESHOLDS } from '@planner/calculations/commonResearch';
+import { startAscensionExecutor } from '@planner/lib/actions/executors/startAscension';
+import { createBuyVehicleExecutor } from './executors/buyVehicle';
+import { createBuyHabExecutor } from './executors/buyHab';
+import { createBuyResearchExecutor } from './executors/buyResearch';
+import { createBuyTrainCarExecutor } from './executors/buyTrainCar';
+import { changeArtifactsExecutor } from './executors/changeArtifacts';
+import { buySiloExecutor } from './executors/buySilo';
+import { storeFuelExecutor } from './executors/storeFuel';
+import { plannerExecutors } from '@planner/lib/actions/plannerExecutors';
+import { launchMissionsExecutor } from './executors/launchMissions';
+import { toggleSaleExecutor } from './executors/toggleSale';
+import { equipArtifactSetExecutor } from '@planner/lib/actions/executors/equipArtifactSet';
+import { updateArtifactSetExecutor } from '@planner/lib/actions/executors/updateArtifactSet';
+import { createWaitForMissionsExecutor } from './executors/wait_for_missions';
+import { waitForTimeExecutor } from './executors/wait_for_time';
+import { waitForResearchSaleEndExecutor } from './executors/waitForResearchSaleEnd';
+import { waitForEarningsBoostEndExecutor } from './executors/waitForEarningsBoostEnd';
+import { removeFuelExecutor } from './executors/removeFuel';
+import { waitForFullHabsExecutor } from './executors/wait_for_full_habs';
+import { toggleEarningsBoostExecutor } from './executors/toggleEarningsBoost';
+import { waitForResearchSaleExecutor } from './executors/waitForResearchSale';
+import { waitForEarningsBoostExecutor } from './executors/waitForEarningsBoost';
+import { createWaitForCurrencyExecutor } from './executors/waitForCurrency';
+import { createWaitForNoEarningsExecutor } from './executors/wait_for_no_earnings';
+import { notificationExecutor } from './executors/notification';
+import { createModifyBankExecutor } from './executors/modifyBank';
 
 // ============================================================================
 // Executor Interface
@@ -64,12 +63,12 @@ export type ActionExecutor<T extends ActionType> = PayloadExecutor<ActionPayload
  * Context passed to executors with store access: the shared context plus this planner's fuel eggs.
  */
 export interface ExecutorContext extends BaseExecutorContext {
-  addFuel(egg: VirtueEgg, amount: number): boolean;
-  removeFuel(egg: VirtueEgg, amount: number): void;
-  addEggsDelivered(egg: VirtueEgg, amount: number): void;
-  getFuelAmounts(): Record<VirtueEgg, number>;
-  getEggsDelivered(): Record<VirtueEgg, number>;
-  getTEEarned(): Record<VirtueEgg, number>;
+  addFuel(egg: FuelEgg, amount: number): boolean;
+  removeFuel(egg: FuelEgg, amount: number): void;
+  addEggsDelivered(egg: FuelEgg, amount: number): void;
+  getFuelAmounts(): Record<FuelEgg, number>;
+  getEggsDelivered(): Record<FuelEgg, number>;
+  getTEEarned(): Record<FuelEgg, number>;
 }
 
 // ============================================================================
@@ -80,18 +79,16 @@ export interface ExecutorContext extends BaseExecutorContext {
  * Map of action types to their executors.
  * Add new executors here when extending the system.
  */
-const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
+const executorMap = {
   start_ascension: startAscensionExecutor,
   buy_vehicle: createBuyVehicleExecutor(PROFILE),
   buy_hab: createBuyHabExecutor(PROFILE),
   buy_research: createBuyResearchExecutor(PROFILE),
-  shift: shiftExecutor,
   buy_train_car: createBuyTrainCarExecutor(PROFILE),
   change_artifacts: changeArtifactsExecutor,
   buy_silo: buySiloExecutor,
   store_fuel: storeFuelExecutor,
   remove_fuel: removeFuelExecutor,
-  wait_for_te: waitForTEExecutor,
   launch_missions: launchMissionsExecutor,
   toggle_sale: toggleSaleExecutor,
   equip_artifact_set: equipArtifactSetExecutor,
@@ -103,12 +100,13 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   wait_for_research_sale_end: waitForResearchSaleEndExecutor,
   wait_for_earnings_boost: waitForEarningsBoostExecutor,
   wait_for_earnings_boost_end: waitForEarningsBoostEndExecutor,
-  wait_for_gems: createWaitForCurrencyExecutor(PROFILE),
+  [PROFILE.currency.waitActionType]: createWaitForCurrencyExecutor(PROFILE),
   wait_for_no_earnings: createWaitForNoEarningsExecutor(PROFILE),
   toggle_earnings_boost: toggleEarningsBoostExecutor,
   notification: notificationExecutor,
   modify_bank: createModifyBankExecutor(PROFILE),
-};
+  ...plannerExecutors,
+} as unknown as { [K in ActionType]: ActionExecutor<K> };
 
 /**
  * Get the executor for an action type.
@@ -145,7 +143,7 @@ export function computeDependencies(
 
   // 1. Every action depends on the most recent shift/start_ascension (the "group header")
   // This ensures that undoing a shift also undoes all actions performed during that shift.
-  const lastHeader = [...existingActions].reverse().find(a => a.type === 'shift' || a.type === 'start_ascension');
+  const lastHeader = [...existingActions].reverse().find(a => (a.type as string) === 'shift' || a.type === 'start_ascension');
   if (lastHeader) {
     deps.push(lastHeader.id);
   }

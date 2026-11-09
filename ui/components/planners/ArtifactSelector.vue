@@ -120,7 +120,7 @@ import {
   artifactOptions,
   stoneOptions,
   getStone,
-} from '@/lib/artifacts';
+} from '@planner/lib/artifacts';
 
 const props = withDefaults(
   defineProps<{

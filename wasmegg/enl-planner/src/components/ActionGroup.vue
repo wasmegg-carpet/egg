@@ -102,8 +102,8 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import type { Action } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
-import ActionHistoryItem from './ActionHistoryItem.vue';
-import DayGroup from './DayGroup.vue';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
+import DayGroup from 'ui/components/planners/DayGroup.vue';
 
 const props = defineProps<{
   headerAction: Action<'start_ascension'>;

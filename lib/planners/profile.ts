@@ -65,6 +65,10 @@ export interface PlannerProfile {
   maxVehiclesRoiRoute: string;
   /** Whether a plan moves between eggs in shifts. */
   hasShifts: boolean;
+  /** Fuel eggs that don't go in the tank, so they never count against it. */
+  tanklessFuelEggs: string[];
+  /** Whether the fuel tank only lists the farm's egg and eggs that have fuel. */
+  hidesUnusedFuelEggs: boolean;
   /** The egg the Wait for Research Sale button is limited to, or null to always show it. */
   researchSaleEgg: string | null;
   /** Value of one egg before research. */

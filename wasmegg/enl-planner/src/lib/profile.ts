@@ -25,6 +25,8 @@ export const PROFILE: PlannerProfile = {
   hasDeliveryViews: false,
   maxVehiclesRoiRoute: '',
   hasShifts: false,
+  tanklessFuelEggs: [],
+  hidesUnusedFuelEggs: true,
   researchSaleEgg: null,
   baseEggValue: ENLIGHTENMENT_EGG_VALUE,
   fuelEggIconPath: egg => fuelEggIconPath(egg as FuelEgg),

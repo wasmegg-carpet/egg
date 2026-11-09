@@ -7,8 +7,9 @@
 
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import type { FuelEgg } from '@/types';
-import { FUEL_EGGS, createEmptyFuelAmounts } from '@/types';
+import type { FuelEgg } from '@planner/types';
+import { FUEL_EGGS, createEmptyFuelAmounts } from '@planner/types';
+import { PROFILE } from '@planner/lib/profile';
 import {
   type Spaceship,
   type DurationType,
@@ -16,15 +17,15 @@ import {
   ALL_DURATIONS,
   FUEL_REQUIREMENTS,
   getEffectiveDuration,
-} from '@/lib/missions';
-import { useFuelTankStore } from './fuelTank';
+} from '@planner/lib/missions';
+import { useFuelTankStore } from '@planner/stores/fuelTank';
 import {
   scheduleMissions,
   buildMissionSummary,
   type MissionEntry,
   type ScheduleResult,
   type MissionSummaryLine,
-} from 'lib/planners/rockets/scheduler';
+} from '../rockets/scheduler';
 
 export interface QueuedMission {
   ship: Spaceship;
@@ -92,6 +93,7 @@ export const useRocketsStore = defineStore('rockets', () => {
   const isOverBudget = computed<boolean>(() => {
     const fuelTank = useFuelTankStore();
     for (const egg of FUEL_EGGS) {
+      if (PROFILE.tanklessFuelEggs.includes(egg)) continue;
       if (totalFuelCost.value[egg] > fuelTank.fuelAmounts[egg]) return true;
     }
     return false;
@@ -109,6 +111,8 @@ export const useRocketsStore = defineStore('rockets', () => {
 
     let maxCount = Infinity;
     for (const req of fuels) {
+      if (PROFILE.tanklessFuelEggs.includes(req.egg)) continue;
+
       // Budget = tank amount - (total committed for this egg EXCEPT this mission's own commitment)
       const othersCommitted = totalFuelCost.value[req.egg] - req.amount * currentCount;
       const available = fuelTank.fuelAmounts[req.egg] - othersCommitted;

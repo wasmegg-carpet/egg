@@ -18,3 +18,7 @@ export const VIRTUE_EGGS: VirtueEgg[] = ['curiosity', 'integrity', 'humility', '
 export type FuelEgg = VirtueEgg;
 export const FUEL_EGG_NAMES = VIRTUE_EGG_NAMES;
 export const FUEL_EGGS = VIRTUE_EGGS;
+
+export function createEmptyFuelAmounts(): Record<VirtueEgg, number> {
+  return { curiosity: 0, integrity: 0, humility: 0, resilience: 0, kindness: 0 };
+}

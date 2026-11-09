@@ -24,12 +24,12 @@
         </span>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <span v-if="eggsDelivered > 0" class="text-[9px] font-black text-slate-400 tracking-tight">
+        <span v-if="eggsDelivered" class="text-[9px] font-black text-slate-400 tracking-tight">
           {{ formatNumber(eggsDelivered, 2) }} Eggs
         </span>
         <div v-if="totalCost > 0" class="flex items-center gap-1">
           <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatPrice(totalCost) }}</span>
-          <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-2.5 h-2.5" alt="Gems" />
+          <img :src="iconURL(PROFILE.currency.iconPath, 32)" class="w-2.5 h-2.5" :alt="PROFILE.currency.name" />
         </div>
       </div>
     </button>
@@ -56,19 +56,20 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
 import { computed } from 'vue';
 import { iconURL } from 'lib';
-import type { Action } from '@/types';
-import { formatNumber, formatPrice } from '@/lib/format';
-import ActionHistoryItem from './ActionHistoryItem.vue';
+import type { Action } from '@planner/types';
+import { formatNumber, formatPrice } from '@planner/lib/format';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
 
 const props = defineProps<{
   label: string;
   actions: Action[];
-  summaryHeaderAction: Action;
+  summaryHeaderAction?: Action;
   summaryComponent?: unknown;
   totalCost: number;
-  eggsDelivered: number;
+  eggsDelivered?: number;
   // Collapsed by default — the header row above is the "daily summary" this consolidates down to.
   // Owned by the parent ActionGroup so it can force a specific day open (e.g. when a curiosity
   // summary link is clicked for an action that lives inside this day).

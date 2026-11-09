@@ -6,11 +6,11 @@
  */
 
 import { computed } from 'vue';
-import type { Action, CalculationsSnapshot } from '@/types';
-import { useActionsStore } from '@/stores/actions';
-import { replayAction } from '@/lib/actions/replay';
-import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@/lib/actions/snapshot';
-import { safeImport } from 'lib/planners/import';
+import type { Action, CalculationsSnapshot } from '@planner/types';
+import { useActionsStore } from '@planner/stores/actions';
+import { replayAction } from '../actions/replay';
+import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@planner/lib/actions/snapshot';
+import { confirmPastGroupEdit } from '@planner/lib/actions/plannerRules';
 
 export function useActionExecutor() {
   const actionsStore = useActionsStore();
@@ -44,7 +44,7 @@ export function useActionExecutor() {
    * Call this after applying changes to stores.
    */
   async function completeExecution(
-    action: import('@/types').DraftAction,
+    action: import('@planner/types').DraftAction,
     beforeSnapshotArg: CalculationsSnapshot
   ): Promise<void> {
     // Compute the new snapshot after the action
@@ -61,9 +61,7 @@ export function useActionExecutor() {
 
     if (isEditingPastGroup.value) {
       // Check for continuity conflicts
-      const { checkAndHandleContinuity } = await safeImport(() => import('@/lib/continuity'));
-
-      const shouldProceed = await checkAndHandleContinuity(
+      const shouldProceed = await confirmPastGroupEdit(
         actionsStore.actions,
         fullAction,
         actionsStore.editingInsertIndex,

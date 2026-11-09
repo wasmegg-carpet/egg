@@ -196,7 +196,7 @@ import { useInitialStateStore } from '@planner/stores/initialState';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@planner/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId } from '@planner/types';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import {

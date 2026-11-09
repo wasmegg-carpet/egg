@@ -149,7 +149,7 @@ export interface FuelRequirement {
 
 type FuelMap = Record<Spaceship, Record<DurationType, FuelRequirement[]>>;
 
-export const VIRTUE_FUEL_REQUIREMENTS: FuelMap = {
+export const FUEL_REQUIREMENTS: FuelMap = {
   [Spaceship.CHICKEN_ONE]: {
     [DurationType.SHORT]: [{ egg: 'humility', amount: 5e6 }],
     [DurationType.LONG]: [{ egg: 'humility', amount: 10e6 }],
@@ -346,7 +346,7 @@ export function getEffectiveDuration(ship: Spaceship, duration: DurationType, ft
  */
 export function getFuelCosts(ship: Spaceship, duration: DurationType): Partial<Record<VirtueEgg, number>> {
   const costs: Partial<Record<VirtueEgg, number>> = {};
-  for (const req of VIRTUE_FUEL_REQUIREMENTS[ship][duration]) {
+  for (const req of FUEL_REQUIREMENTS[ship][duration]) {
     costs[req.egg] = req.amount;
   }
   return costs;

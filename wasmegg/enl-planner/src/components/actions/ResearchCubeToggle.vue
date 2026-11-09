@@ -64,7 +64,7 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { getArtifact } from '@/lib/artifacts/data';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ArtifactSelector from 'ui/components/planners/ArtifactSelector.vue';
 import {
   researchCubeClarity,
   researchCubeMultiplier,

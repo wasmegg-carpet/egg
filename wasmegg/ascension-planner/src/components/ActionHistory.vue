@@ -62,7 +62,7 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { formatNumber, formatPrice } from '@/lib/format';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
-import ActionHistoryItem from './ActionHistoryItem.vue';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
 import ActionGroup from './ActionGroup.vue';
 
 const emit = defineEmits<{

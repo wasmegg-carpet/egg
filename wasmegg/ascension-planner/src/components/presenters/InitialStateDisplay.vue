@@ -184,7 +184,7 @@
         <!-- Per-Egg TE Progress -->
         <div class="grid grid-cols-1 gap-3">
           <div
-            v-for="egg in VIRTUE_FUEL_ORDER"
+            v-for="egg in FUEL_ORDER"
             :key="egg"
             class="flex flex-col gap-3 p-3 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl transition-all group"
           >
@@ -414,7 +414,7 @@
           <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Stored Inventory</h4>
           <div class="grid grid-cols-1 gap-2">
             <div
-              v-for="egg in VIRTUE_FUEL_ORDER"
+              v-for="egg in FUEL_ORDER"
               :key="egg"
               class="flex items-center gap-4 p-3 bg-white hover:bg-slate-50 border border-slate-50 rounded-2xl transition-all group"
             >
@@ -613,9 +613,9 @@ import type { ResearchLevels, VirtueEgg } from '@/types';
 import { VIRTUE_EGGS, VIRTUE_EGG_NAMES } from '@/types';
 import { epicResearchDefs } from 'lib/planners/epicResearch';
 import type { EquippedArtifact } from '@/lib/artifacts';
-import { TANK_CAPACITIES, VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
+import { TANK_CAPACITIES, FUEL_ORDER } from '@/stores/fuelTank';
 import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ArtifactSelector from 'ui/components/planners/ArtifactSelector.vue';
 import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
 import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
 import { createEmptyLoadout, artifactSlotCount } from '@/lib/artifacts';

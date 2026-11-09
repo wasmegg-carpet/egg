@@ -19,6 +19,8 @@ export const PROFILE: PlannerProfile = {
   hasDeliveryViews: true,
   maxVehiclesRoiRoute: 'gone to Kindness and ',
   hasShifts: true,
+  tanklessFuelEggs: ['humility'],
+  hidesUnusedFuelEggs: false,
   researchSaleEgg: 'curiosity',
   baseEggValue: 1,
   fuelEggIconPath: egg => `egginc/egg_${egg}.png`,

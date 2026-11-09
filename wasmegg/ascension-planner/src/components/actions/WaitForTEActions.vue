@@ -194,11 +194,11 @@ import { iconURL } from 'lib';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
-import { computeDependencies } from '@/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { formatNumber, formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { generateActionId, VIRTUE_EGG_NAMES } from '@/types';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 import { solveForTime } from 'lib/planners/engine/apply/math';
 
 const truthEggsStore = useTruthEggsStore();

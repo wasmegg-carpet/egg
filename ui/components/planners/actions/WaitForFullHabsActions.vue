@@ -81,8 +81,8 @@ import { iconURL } from 'lib';
 import { useActionsStore } from '@planner/stores/actions';
 import { formatNumber, formatDuration } from '@planner/lib/format';
 import { generateActionId } from '@planner/types';
-import { useActionExecutor } from '@planner/composables/useActionExecutor';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution } = useActionExecutor();

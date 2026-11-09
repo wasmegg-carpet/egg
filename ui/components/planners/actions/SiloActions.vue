@@ -200,7 +200,7 @@ import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { useSiloTime } from 'lib/planners/composables/useSiloTime';
 import { useSilosStore } from 'lib/planners/stores/silos';
 import { useActionsStore } from '@planner/stores/actions';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';

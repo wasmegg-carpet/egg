@@ -2,7 +2,7 @@
  * Replay Utility
  *
  * Provides functionality to replay actions after inserting a new action in the middle
- * of the action history.
+ * of the action history. This is needed when editing past shifts.
  */
 
 import type {
@@ -22,9 +22,9 @@ import type {
   FuelEgg,
   RemoveFuelPayload,
   ModifyBankPayload,
-} from '@/types';
-import { type HabId } from '@/lib/habs';
-import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from './snapshot';
+} from '@planner/types';
+import { type HabId } from '@planner/lib/habs';
+import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@planner/lib/actions/snapshot';
 
 // ... (existing imports)
 
@@ -48,14 +48,15 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
     });
   }
 }
-import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
-import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { usePlanStore } from '@/stores/plan';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore } from 'lib/planners/stores/silos';
-import { useFuelTankStore } from '@/stores/fuelTank';
-import { useSalesStore } from 'lib/planners/stores/sales';
+import { useHabCapacityStore } from '../stores/habCapacity';
+import { useShippingCapacityStore } from '../stores/shippingCapacity';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { usePlanStore } from '@planner/stores/plan';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useSilosStore } from '../stores/silos';
+import { useFuelTankStore } from '@planner/stores/fuelTank';
+import { applyPlannerReplayEffect } from '@planner/lib/actions/plannerRules';
+import { useSalesStore } from '../stores/sales';
 
 /**
  * Replay an action on top of a given snapshot state.
@@ -78,6 +79,7 @@ export function replayAction(action: Action, previousSnapshot: CalculationsSnaps
  * This re-executes the changes that the action originally made.
  */
 function applyActionEffect(action: Action): void {
+  applyPlannerReplayEffect(action);
   switch (action.type) {
     case 'start_ascension':
       // start_ascension has no additional effect beyond setting initial state

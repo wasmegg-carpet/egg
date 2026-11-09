@@ -48,8 +48,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useActionsStore } from '@/stores/actions';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { computeDependencies } from '@/lib/actions/executor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { populationTargets } from '@/calculations/goals';
 import { formatNumber, parseNumber } from '@/lib/format';
 import { generateActionId, type WaitForPopulationPayload } from '@/types';

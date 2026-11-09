@@ -161,7 +161,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ArtifactSelector from 'ui/components/planners/ArtifactSelector.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { useWarningStore } from 'lib/planners/stores/warning';
@@ -175,8 +175,8 @@ import {
   artifactSlotCount,
 } from '@/lib/artifacts';
 import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from 'lib/planners/artifacts/virtue';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { computeDependencies } from '@/lib/actions/executor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { getSimulationContext } from '@/engine/adapter';
 import { formatNumber } from '@/lib/format';

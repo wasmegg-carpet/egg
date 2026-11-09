@@ -139,7 +139,7 @@ import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useActionsStore } from '@planner/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId } from '@planner/types';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';

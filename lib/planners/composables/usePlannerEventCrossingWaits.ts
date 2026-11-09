@@ -1,7 +1,7 @@
 import { useActionsStore } from '@planner/stores/actions';
-import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { useActionExecutor } from './useActionExecutor';
 import { generateActionId, type CalculationsSnapshot, type DraftAction } from '@planner/types';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from '../actions/executor';
 import type { CommonResearch } from '@planner/calculations/commonResearch';
 import { getSimulationContext } from '@planner/engine/adapter';
 import { eventCrossingsForPurchase } from '../engine/researchSale';

@@ -29,7 +29,7 @@ import {
 } from '@/calculations/commonResearch';
 import { useResearchViews } from 'lib/planners/composables/useResearchViews';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
-import { getExecutor } from '@/lib/actions/executor';
+import { getExecutor } from 'lib/planners/actions/executor';
 import { createBaseEngineState, getSimulationContext } from './adapter';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';

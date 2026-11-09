@@ -1,16 +1,16 @@
-import { PROFILE } from '@/lib/profile';
+import { PROFILE } from '@planner/lib/profile';
 import {
   currencyWaitTarget,
   isCurrencyWaitType,
   refreshCurrencyWait,
   type CurrencyWaitPayload,
-} from 'lib/planners/actions/currencyWait';
+} from '../../actions/currencyWait';
 import {
   Action,
   CalculationsSnapshot,
   LaunchMissionsPayload,
   StoreFuelPayload,
-} from '@/types';
+} from '@planner/types';
 import {
   BOUNDARY_EPSILON_SECONDS,
   getNextEarningsBoostEnd,
@@ -18,19 +18,20 @@ import {
   getNextSaleEnd,
   isEarningsBoostActive,
   isResearchSaleActive,
-} from 'lib/planners/events';
+} from '../../events';
 import {
   solveForTime,
   integrateRate,
   getTimeToSave,
   boostTransitionsFrom,
-} from 'lib/planners/engine/apply/math';
-import { getResearchById } from '@/calculations/commonResearch';
-import { researchPurchaseAt } from 'lib/planners/engine/researchSale';
-import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';
-import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@/lib/vehicles';
-import { nextSiloCost } from 'lib/planners/stores/silos';
-import type { SimulationContext } from '../types';
+} from './math';
+import { plannerDurationField, refreshPlannerPayload } from '@planner/lib/actions/plannerRules';
+import { getResearchById } from '@planner/calculations/commonResearch';
+import { researchPurchaseAt } from '../researchSale';
+import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@planner/lib/habs';
+import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@planner/lib/vehicles';
+import { nextSiloCost } from '../../stores/silos';
+import type { SimulationContext } from '@planner/engine/types';
 
 /**
  * Recalculate an action's payload based on the state before it executes.
@@ -42,14 +43,14 @@ export function refreshActionPayload(
 ): Action {
   if (context) {
     if (action.type === 'buy_research') {
-      const payload = action.payload as import('@/types').BuyResearchPayload;
+      const payload = action.payload as import('@planner/types').BuyResearchPayload;
       const research = getResearchById(payload.researchId);
       if (research) {
         const refreshedCost = researchPurchaseAt(research, payload.fromLevel, prevSnapshot, context).price;
         if (action.cost !== refreshedCost) action = { ...action, cost: refreshedCost };
       }
     } else if (action.type === 'buy_hab') {
-      const payload = action.payload as import('@/types').BuyHabPayload;
+      const payload = action.payload as import('@planner/types').BuyHabPayload;
       const modifiers = {
         cheaperContractorsLevel: context.epicResearchLevels['cheaper_contractors'] || 0,
         habCostMultiplier: context.colleggtibleModifiers.habCost || 1,
@@ -62,7 +63,7 @@ export function refreshActionPayload(
         if (action.cost !== refreshedCost) action = { ...action, cost: refreshedCost };
       }
     } else if (action.type === 'buy_vehicle') {
-      const payload = action.payload as import('@/types').BuyVehiclePayload;
+      const payload = action.payload as import('@planner/types').BuyVehiclePayload;
       const modifiers = {
         bustUnionsLevel: context.epicResearchLevels['bust_unions'] || 0,
         vehicleCostMultiplier: context.colleggtibleModifiers.vehicleCost || 1,
@@ -77,7 +78,7 @@ export function refreshActionPayload(
       );
       if (action.cost !== refreshedCost) action = { ...action, cost: refreshedCost };
     } else if (action.type === 'buy_train_car') {
-      const payload = action.payload as import('@/types').BuyTrainCarPayload;
+      const payload = action.payload as import('@planner/types').BuyTrainCarPayload;
       const modifiers = {
         bustUnionsLevel: context.epicResearchLevels['bust_unions'] || 0,
         vehicleCostMultiplier: context.colleggtibleModifiers.vehicleCost || 1,
@@ -86,22 +87,14 @@ export function refreshActionPayload(
       const refreshedCost = getDiscountedTrainCarPrice(carIndex, modifiers, prevSnapshot.activeSales.vehicle);
       if (action.cost !== refreshedCost) action = { ...action, cost: refreshedCost };
     } else if (action.type === 'buy_silo') {
-      const payload = action.payload as import('@/types').BuySiloPayload;
+      const payload = action.payload as import('@planner/types').BuySiloPayload;
       const refreshedCost = nextSiloCost(payload.fromCount);
       if (action.cost !== refreshedCost) action = { ...action, cost: refreshedCost };
     }
   }
 
-  if (action.type === 'wait_for_population') {
-    const payload = { ...(action.payload as import('@/types').WaitForPopulationPayload) };
-    payload.currentPopulation = prevSnapshot.population;
-    payload.ihr = prevSnapshot.offlineIHR;
-    payload.reachable = payload.targetPopulation <= prevSnapshot.habCapacity;
-    const target = Math.min(payload.targetPopulation, prevSnapshot.habCapacity);
-    const chickensNeeded = Math.max(0, target - payload.currentPopulation);
-    payload.totalTimeSeconds = payload.ihr > 0 ? chickensNeeded / (payload.ihr / 60) : 0;
-    return { ...action, payload };
-  }
+  const plannerRefresh = refreshPlannerPayload(action, prevSnapshot);
+  if (plannerRefresh) return plannerRefresh;
 
   if (action.type === 'store_fuel') {
     const payload = { ...(action.payload as StoreFuelPayload) };
@@ -117,7 +110,7 @@ export function refreshActionPayload(
       prevSnapshot.habCapacity
     );
 
-    // Variable-speed: bocks earned from the eggs shipped meanwhile
+    // Variable-speed: compute eggs shipped and currency earned during fueling
     if (fuelSpeed < 1.0 && payload.timeSeconds > 0) {
       const remainingR = prevSnapshot.ratePerChickenPerSecond * (1 - fuelSpeed);
       payload.eggsShippedDuringFuel = integrateRate(
@@ -139,14 +132,14 @@ export function refreshActionPayload(
   }
 
   if (action.type === 'wait_for_missions') {
-    const payload = { ...(action.payload as import('@/types').WaitForMissionsPayload) };
+    const payload = { ...(action.payload as import('@planner/types').WaitForMissionsPayload) };
     const maxReturn = Math.max(...payload.missions.map(m => m.returnTimestamp || 0));
     payload.totalTimeSeconds = Math.max(0, maxReturn - prevSnapshot.lastStepTime);
     return { ...action, payload };
   }
 
   if (action.type === 'wait_for_full_habs') {
-    const payload = { ...(action.payload as import('@/types').WaitForFullHabsPayload) };
+    const payload = { ...(action.payload as import('@planner/types').WaitForFullHabsPayload) };
     payload.habCapacity = prevSnapshot.habCapacity;
     payload.currentPopulation = prevSnapshot.population;
     payload.ihr = prevSnapshot.offlineIHR;
@@ -159,8 +152,8 @@ export function refreshActionPayload(
     if (context) {
       const payload = {
         ...(action.payload as
-          | import('@/types').WaitForResearchSalePayload
-          | import('@/types').WaitForEarningsBoostPayload),
+          | import('@planner/types').WaitForResearchSalePayload
+          | import('@planner/types').WaitForEarningsBoostPayload),
       };
       const targetDay = action.type === 'wait_for_research_sale' ? 5 : 1; // Friday or Monday
       const targetHour = 9; // 9 AM
@@ -205,7 +198,7 @@ export function absoluteSimTimeFor(prevSnapshot: CalculationsSnapshot, context: 
   return context.ascensionStartTime + (prevSnapshot.lastStepTime - context.planStartOffset);
 }
 
-/** The wait a bock-costing action is actually charged: `getTimeToSave` across 2x earnings' real boundaries. */
+/** The wait a currency-costing action is actually charged: `getTimeToSave` across 2x earnings' real boundaries. */
 export function getBoostAwareTimeToSave(
   cost: number,
   snapshot: CalculationsSnapshot,
@@ -217,7 +210,7 @@ export function getBoostAwareTimeToSave(
 /**
  * Calculate the duration of an action in seconds.
  *
- * `context`, when provided, makes bock-costing actions boundary-aware: the wait is split at the
+ * `context`, when provided, makes currency-costing actions boundary-aware: the wait is split at the
  * earnings boost's real next start/end (via `boostTransitionsFrom`) instead of assuming
  * `prevSnapshot.earningsBoost.active` holds flat for the whole wait — without it, a wait that
  * starts just before the boost turns on (or off) is mis-priced in time, since `prevSnapshot`'s own
@@ -228,6 +221,9 @@ export function getActionDuration(
   prevSnapshot: CalculationsSnapshot,
   context?: SimulationContext
 ): number {
+  const plannerField = plannerDurationField(action.type);
+  if (plannerField) return (action.payload as unknown as Record<string, number | undefined>)[plannerField] || 0;
+
   if (action.type === 'store_fuel' || isCurrencyWaitType(action.type)) {
     return (action.payload as { timeSeconds?: number }).timeSeconds || 0;
   }
@@ -236,7 +232,6 @@ export function getActionDuration(
     action.type === 'wait_for_missions' ||
     action.type === 'wait_for_time' ||
     action.type === 'wait_for_full_habs' ||
-    action.type === 'wait_for_population' ||
     action.type === 'wait_for_research_sale' ||
     action.type === 'wait_for_research_sale_end' ||
     action.type === 'wait_for_earnings_boost' ||
@@ -257,19 +252,16 @@ export function getActionDuration(
 
   // Priced for when the money is ready, so its wait can run on to a sale start past the save time.
   if (action.type === 'buy_research' && context) {
-    const payload = action.payload as import('@/types').BuyResearchPayload;
+    const payload = action.payload as import('@planner/types').BuyResearchPayload;
     const research = getResearchById(payload.researchId);
     if (research) return researchPurchaseAt(research, payload.fromLevel, prevSnapshot, context).waitSeconds;
   }
 
-  const CASH_COSTING_TYPES = ['buy_research', 'buy_hab', 'buy_vehicle', 'buy_train_car', 'buy_silo'];
-  if (CASH_COSTING_TYPES.includes(action.type) && action.cost > 0) {
+  const COSTING_TYPES = ['buy_research', 'buy_hab', 'buy_vehicle', 'buy_train_car', 'buy_silo'];
+  if (COSTING_TYPES.includes(action.type) && action.cost > 0) {
     return getTimeToSave(action.cost, prevSnapshot, transitions);
   }
 
   return 0;
 }
 
-/**
- * Calculate the number of eggs passively delivered during an action's duration.
- */

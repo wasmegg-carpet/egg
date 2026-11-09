@@ -28,6 +28,10 @@
                 {{ SHIP_INFO[ship].displayName }}
               </span>
             </div>
+            <div class="text-gray-500 text-[11px] font-medium">
+              {{ formatNumber(SHIP_INFO[ship].price, 0) }}
+            </div>
+            <div class="text-gray-400 text-[10px]">Save: {{ formatDuration(saveTime(ship)) }}</div>
           </td>
 
           <!-- Duration cells -->
@@ -78,9 +82,10 @@
 </template>
 
 <script setup lang="ts">
+import { FUEL_EGG_NAMES } from '@planner/types';
 import { iconURL } from 'lib';
-import { useRocketsStore } from '@/stores/rockets';
-import { useActionsStore } from '@/stores/actions';
+import { useRocketsStore } from 'lib/planners/stores/rockets';
+import { useActionsStore } from '@planner/stores/actions';
 import {
   ALL_SHIPS,
   ALL_DURATIONS,
@@ -90,11 +95,10 @@ import {
   getEffectiveDuration,
   type Spaceship,
   type DurationType,
-} from '@/lib/missions';
-import { FUEL_EGG_NAMES } from '@/types';
-import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
-import { getBoostAwareTimeToSave } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
+} from '@planner/lib/missions';
+import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
+import { getBoostAwareTimeToSave } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
 
 const props = defineProps<{
   ftlLevel: number;
@@ -106,6 +110,12 @@ const actionsStore = useActionsStore();
 
 function canAfford(ship: Spaceship): boolean {
   return props.earningsPerSecond > 0;
+}
+
+function saveTime(ship: Spaceship): number {
+  const price = SHIP_INFO[ship].price;
+  const snapshot = actionsStore.effectiveSnapshot;
+  return getBoostAwareTimeToSave(price, snapshot, getSimulationContext());
 }
 
 function maxCount(ship: Spaceship, dur: DurationType): number {

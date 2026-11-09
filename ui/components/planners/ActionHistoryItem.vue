@@ -201,14 +201,14 @@
             v-if="Math.abs(action.bankDelta) >= 0.5 && (!isPurchaseAction || action.type === 'launch_missions')"
             :class="action.bankDelta >= 0.5 ? 'text-emerald-600' : 'text-slate-400'"
           >
-            Gems {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatPrice(action.bankDelta) }}
+            {{ PROFILE.currency.title }} {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatPrice(action.bankDelta) }}
           </span>
         </div>
       </div>
 
       <!-- Cost Section -->
       <div v-if="!isStartAction" class="shrink-0 text-right">
-        <template v-if="action.type === 'shift'">
+        <template v-if="(action.type as string) === 'shift'">
           <div class="flex items-center gap-1 justify-end mt-0.5">
             <span class="text-xs font-bold text-slate-700 font-mono-premium">{{ formatNumber(action.cost, 3) }}</span>
             <img :src="iconURL('egginc/egg_soul.png', 32)" class="w-3 h-3" alt="SE" />
@@ -231,7 +231,7 @@
             </span>
             <img
               v-if="Math.abs(action.bankDelta) >= 0.5"
-              :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+              :src="iconURL(PROFILE.currency.iconPath, 64)"
               class="w-2.5 h-2.5 opacity-60"
             />
           </div>
@@ -253,7 +253,7 @@
             </span>
             <img
               v-if="action.cost >= 0.5 || action.bankDelta >= 0.5"
-              :src="iconURL('egginc/icon_virtue_gem.png', 64)"
+              :src="iconURL(PROFILE.currency.iconPath, 64)"
               class="w-2.5 h-2.5 opacity-60"
             />
           </div>
@@ -264,31 +264,31 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
+import { plannerActionEgg, plannerActionIconPath } from '@planner/lib/actions/plannerRules';
 import { computed } from 'vue';
 import { iconURL } from 'lib';
 import type {
-  Action,
   StartAscensionPayload,
-  ShiftPayload,
+  Action,
   BuyHabPayload,
   BuyVehiclePayload,
   StoreFuelPayload,
-  WaitForTEPayload,
   BuyResearchPayload,
   ToggleSalePayload,
   EquipArtifactSetPayload,
   UpdateArtifactSetPayload,
   WaitForFullHabsPayload,
-} from '@/types';
-import { VIRTUE_EGG_NAMES } from '@/types';
-import { getHabById, type HabId } from '@/lib/habs';
-import { getVehicleType } from '@/lib/vehicles';
-import { getExecutor } from '@/lib/actions';
-import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
+} from '@planner/types';
+import { FUEL_EGG_NAMES } from '@planner/types';
+import { getHabById, type HabId } from '@planner/lib/habs';
+import { getVehicleType } from '@planner/lib/vehicles';
+import { getExecutor } from '@planner/lib/actions';
+import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { getResearchIconPath } from 'lib/planners/assets';
-import { getResearchById } from '@/calculations/commonResearch';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
+import { getResearchById } from '@planner/calculations/commonResearch';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
 
 const props = defineProps<{
   action: Action;
@@ -322,13 +322,7 @@ const isPurchaseAction = computed(() =>
 );
 
 const eggType = computed(() => {
-  if (props.action.type === 'start_ascension') {
-    return (props.action.payload as StartAscensionPayload).initialEgg;
-  }
-  if (props.action.type === 'shift') {
-    return (props.action.payload as ShiftPayload).toEgg;
-  }
-  return null;
+  return plannerActionEgg(props.action);
 });
 
 const actionIconPath = computed(() => {
@@ -355,12 +349,10 @@ const actionIconPath = computed(() => {
   }
   if (props.action.type === 'store_fuel') {
     const payload = props.action.payload as StoreFuelPayload;
-    return `egginc/egg_${payload.egg}.png`;
+    return PROFILE.fuelEggIconPath(payload.egg);
   }
-  if (props.action.type === 'wait_for_te') {
-    // Show truth egg icon for wait_for_te actions
-    return 'egginc/egg_truth.png';
-  }
+  const plannerIcon = plannerActionIconPath(props.action.type);
+  if (plannerIcon) return plannerIcon;
   if (props.action.type === 'toggle_sale') {
     const payload = props.action.payload as ToggleSalePayload;
     switch (payload.saleType) {
@@ -389,10 +381,10 @@ const actionIconPath = computed(() => {
     return 'egginc-extras/icon_research_sale.png';
   }
   if (props.action.type === 'wait_for_earnings_boost' || props.action.type === 'wait_for_earnings_boost_end') {
-    return 'egginc/icon_bock.png';
+    return PROFILE.currency.iconPath;
   }
   if (props.action.type === 'toggle_earnings_boost') {
-    return 'egginc/icon_bock.png';
+    return PROFILE.currency.iconPath;
   }
   if (props.action.type === 'wait_for_no_earnings') {
     return 'egginc-extras/silo.png';
@@ -401,14 +393,14 @@ const actionIconPath = computed(() => {
     return 'egginc/tiny_indicator_waiting.png';
   }
   if (props.action.type === 'modify_bank') {
-    return 'egginc/icon_virtue_gem.png';
+    return PROFILE.currency.iconPath;
   }
   return null;
 });
 
 const eggName = computed(() => {
   if (eggType.value) {
-    return VIRTUE_EGG_NAMES[eggType.value];
+    return FUEL_EGG_NAMES[eggType.value];
   }
   return null;
 });
@@ -445,7 +437,7 @@ const effectDescription = computed(() => {
 });
 
 /**
- * Calculate save duration (time spent accumulating gems)
+ * Calculate save duration (time spent accumulating currency)
  */
 const savingDuration = computed(() => {
   if (props.action.cost <= 0) return 0;

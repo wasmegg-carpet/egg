@@ -5,7 +5,7 @@
  * Cost is 0 currency and 0 seconds.
  */
 
-import type { ActionExecutor, ExecutorContext } from '@planner/lib/actions/executor';
+import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { RemoveFuelPayload } from '@planner/types';
 import { FUEL_EGG_NAMES } from '@planner/types';
 import { formatNumber } from '@planner/lib/format';

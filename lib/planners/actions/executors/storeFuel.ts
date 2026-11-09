@@ -7,7 +7,7 @@
 
 import { fuelEarnings } from '../fuelEarnings';
 import { PROFILE } from '@planner/lib/profile';
-import type { ActionExecutor, ExecutorContext } from '@planner/lib/actions/executor';
+import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { StoreFuelPayload } from '@planner/types';
 import { FUEL_EGG_NAMES } from '@planner/types';
 import { formatNumber, formatDuration } from '@planner/lib/format';

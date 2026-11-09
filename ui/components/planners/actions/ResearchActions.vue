@@ -288,7 +288,7 @@ import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@planner/stores/actions';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { usePlanStore } from '@planner/stores/plan';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId, type Action } from '@planner/types';
 import {
   createNoteAction,

@@ -34,16 +34,16 @@
       <!-- Per-Egg Breakdown -->
       <div class="space-y-2">
         <div
-          v-for="egg in VIRTUE_FUEL_ORDER"
+          v-for="egg in visibleEggs"
           :key="egg"
           class="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group"
         >
           <div
             class="w-8 h-8 flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-100 p-1 group-hover:scale-110 transition-transform"
           >
-            <img :src="iconURL(`egginc/egg_${egg}.png`, 64)" class="w-full h-full object-contain" :alt="egg" />
+            <img :src="iconURL(PROFILE.fuelEggIconPath(egg), 64)" class="w-full h-full object-contain" :alt="egg" />
           </div>
-          <span class="text-xs font-bold text-slate-600 uppercase tracking-tight">{{ VIRTUE_EGG_NAMES[egg] }}</span>
+          <span class="text-xs font-bold text-slate-600 uppercase tracking-tight">{{ FUEL_EGG_NAMES[egg] }}</span>
           <div class="flex-1 flex flex-col items-end">
             <div class="flex items-center gap-1.5">
               <svg
@@ -73,14 +73,14 @@
       <div class="flex items-center gap-3 mb-5">
         <div class="w-10 h-10 flex-shrink-0 bg-slate-50 rounded-xl p-1.5 border border-slate-100 shadow-inner">
           <img
-            :src="iconURL(`egginc/egg_${planStore.currentEgg}.png`, 64)"
+            :src="iconURL(PROFILE.fuelEggIconPath(planStore.currentEgg), 64)"
             class="w-full h-full object-contain drop-shadow-sm"
             :alt="planStore.currentEgg"
           />
         </div>
         <div>
           <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Eggs in Tank</div>
-          <div class="text-sm font-bold text-slate-700">Store {{ VIRTUE_EGG_NAMES[planStore.currentEgg] }} Eggs</div>
+          <div class="text-sm font-bold text-slate-700">Store {{ FUEL_EGG_NAMES[planStore.currentEgg] }} Eggs</div>
         </div>
       </div>
 
@@ -166,8 +166,8 @@
             <span class="text-sm font-mono-premium font-bold text-emerald-600">{{ formatNumber(estimatedEggsShipped, 1) }}</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gems Earned</span>
-            <span class="text-sm font-mono-premium font-bold text-emerald-600">+{{ formatNumber(estimatedGemsEarned, 1) }}</span>
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">{{ PROFILE.currency.title }} Earned</span>
+            <span class="text-sm font-mono-premium font-bold text-emerald-600">+{{ formatNumber(estimatedEarned, 1) }}</span>
           </div>
         </template>
         <div
@@ -212,17 +212,17 @@
       </div>
 
       <div class="space-y-4">
-        <div v-for="egg in VIRTUE_FUEL_ORDER" :key="egg" class="space-y-2">
+        <div v-for="egg in visibleEggs" :key="egg" class="space-y-2">
           <div class="flex items-center gap-2">
             <div class="w-8 h-8 flex-shrink-0 bg-slate-50 rounded-lg p-1 border border-slate-100 shadow-inner">
               <img
-                :src="iconURL(`egginc/egg_${egg}.png`, 64)"
+                :src="iconURL(PROFILE.fuelEggIconPath(egg), 64)"
                 class="w-full h-full object-contain drop-shadow-sm"
                 :alt="egg"
               />
             </div>
             <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest w-16">{{
-              VIRTUE_EGG_NAMES[egg]
+              FUEL_EGG_NAMES[egg]
             }}</span>
 
             <input
@@ -295,18 +295,17 @@
 </template>
 
 <script setup lang="ts">
-import { PROFILE } from '@/lib/profile';
+import { PROFILE } from '@planner/lib/profile';
 import { ref, computed } from 'vue';
 import { iconURL } from 'lib';
-import { useFuelTankStore } from '@/stores/fuelTank';
-import { usePlanStore } from '@/stores/plan';
-import { useActionsStore } from '@/stores/actions';
-import { useTruthEggsStore } from '@/stores/truthEggs';
-import { computeDependencies } from '@/lib/actions/executor';
-import { formatNumber, formatDuration, parseNumber, formatFullNumber } from '@/lib/format';
-import { generateActionId, VIRTUE_EGG_NAMES, type VirtueEgg } from '@/types';
-import { VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useFuelTankStore } from '@planner/stores/fuelTank';
+import { usePlanStore } from '@planner/stores/plan';
+import { useActionsStore } from '@planner/stores/actions';
+import { computeDependencies } from 'lib/planners/actions/executor';
+import { formatNumber, formatDuration, parseNumber, formatFullNumber } from '@planner/lib/format';
+import { generateActionId, FUEL_EGG_NAMES, type FuelEgg } from '@planner/types';
+import { FUEL_ORDER } from '@planner/stores/fuelTank';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 
 import { useLayRate } from 'lib/planners/composables/useLayRate';
 import { useInternalHatcheryRate } from 'lib/planners/composables/useInternalHatcheryRate';
@@ -315,7 +314,6 @@ import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacit
 import { solveForTime, integrateRate } from 'lib/planners/engine/apply/math';
 
 const fuelTankStore = useFuelTankStore();
-const truthEggsStore = useTruthEggsStore();
 const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { output: layRateOutput } = useLayRate();
@@ -335,13 +333,12 @@ const storeMode = ref<'add' | 'fillTo'>('fillTo');
 const removeMode = ref<'remove' | 'drainTo'>('drainTo');
 const fuelSpeed = ref(1.0);
 const amountInput = ref('');
-const removeInputs = ref<Record<string, string>>({
-  curiosity: '',
-  integrity: '',
-  humility: '',
-  resilience: '',
-  kindness: '',
-});
+const removeInputs = ref<Record<string, string>>({});
+const visibleEggs = computed(() =>
+  FUEL_ORDER.filter(
+    egg => !PROFILE.hidesUnusedFuelEggs || egg === planStore.currentEgg || fuelTankStore.fuelAmounts[egg] > 0
+  )
+);
 
 // Parse input amount
 const parsedAmount = computed(() => {
@@ -399,7 +396,7 @@ const estimatedEggsShipped = computed(() => {
   return integrateRate(timeToStoreSeconds.value, P0, I, remainingR, S, H);
 });
 
-const estimatedGemsEarned = computed(() => {
+const estimatedEarned = computed(() => {
   if (estimatedEggsShipped.value <= 0) return 0;
   const snapshot = actionsStore.effectiveSnapshot;
   const valuePerEgg = snapshot.elr > 0 ? snapshot.offlineEarnings / snapshot.elr : 0;
@@ -411,7 +408,7 @@ const exceedsCapacity = computed(() => effectiveStoreAmount.value > fuelTankStor
 const canStore = computed(() => effectiveStoreAmount.value > 0 && !exceedsCapacity.value && isFinite(timeToStoreSeconds.value));
 
 // Parse a per-egg remove input
-function parsedRemoveAmount(egg: VirtueEgg): number {
+function parsedRemoveAmount(egg: FuelEgg): number {
   const input = removeInputs.value[egg];
   if (!input || !input.trim()) return 0;
   const parsed = parseNumber(input);
@@ -419,17 +416,17 @@ function parsedRemoveAmount(egg: VirtueEgg): number {
 }
 
 // Drain To mode: compute how much to remove to reach target remaining
-function drainDelta(egg: VirtueEgg): number {
+function drainDelta(egg: FuelEgg): number {
   return Math.max(0, fuelTankStore.fuelAmounts[egg] - parsedRemoveAmount(egg));
 }
 
 // The effective amount to remove for a given egg
-function effectiveRemoveAmount(egg: VirtueEgg): number {
+function effectiveRemoveAmount(egg: FuelEgg): number {
   if (removeMode.value === 'drainTo') return drainDelta(egg);
   return parsedRemoveAmount(egg);
 }
 
-function canRemove(egg: VirtueEgg) {
+function canRemove(egg: FuelEgg) {
   const amount = effectiveRemoveAmount(egg);
   return amount > 0 && fuelTankStore.fuelAmounts[egg] > 0;
 }
@@ -446,7 +443,7 @@ function handleStoreFuel() {
     timeSeconds: timeToStoreSeconds.value,
     fuelSpeed: fuelSpeed.value,
     eggsShippedDuringFuel: estimatedEggsShipped.value,
-    [PROFILE.currency.fuelEarningsField]: estimatedGemsEarned.value,
+    [PROFILE.currency.fuelEarningsField]: estimatedEarned.value,
   };
 
   const dependencies = computeDependencies(
@@ -476,7 +473,7 @@ function handleStoreFuel() {
   amountInput.value = '';
 }
 
-async function handleRemoveFuel(egg: VirtueEgg) {
+async function handleRemoveFuel(egg: FuelEgg) {
   if (!canRemove(egg)) return;
 
   // Compute actual amount to remove

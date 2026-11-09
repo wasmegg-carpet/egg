@@ -65,9 +65,9 @@ import { PROFILE } from '@planner/lib/profile';
 import { computed } from 'vue';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useActionsStore } from '@planner/stores/actions';
-import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 import { generateActionId, type ActiveMissionInfo } from '@planner/types';
-import { computeDependencies } from '@planner/lib/actions/executor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { usePlanStore } from '@planner/stores/plan';
 import ActiveMissionsDisplay from 'ui/components/planners/actions/rockets/ActiveMissionsDisplay.vue';
 
