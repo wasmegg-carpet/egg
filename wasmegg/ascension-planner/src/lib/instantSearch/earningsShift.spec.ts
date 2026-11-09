@@ -1,16 +1,13 @@
 /** The earnings shift from a save's artifacts, and the table read with it (table.ts `shiftedLookup`). */
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { AfxName, AfxRarity, invArtifact, invStone, syntheticBackup } from '@/auto/loadout/testBackup';
 import { MAXED_DELIVERY, maxedLoadoutInputs } from '@/buildTable/maxedAccount';
 import { chainFinderLoadoutFromBackup, deliveryMatchesTable, earningsShift } from './earningsShift';
 import { canonicalDelivered, rebase, tailTo } from './precomputedLeg';
-import { readTable, shiftedLookup } from './table';
+import { loadSpecTable } from './specTable';
+import { shiftedLookup } from './table';
 
-const gz = readFileSync(new URL('../../../public/instant/table.bin.gz', import.meta.url));
-const bytes = gunzipSync(gz);
-const table = readTable(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+const table = await loadSpecTable();
 
 /** A pro-permit save with the four earnings artifacts at `tiers` (T4L unless named) and 12 T4 lunar stones. */
 function save(downgrade: Partial<Record<'ankh' | 'necklace' | 'totem' | 'cube', [number, number]>> = {}) {

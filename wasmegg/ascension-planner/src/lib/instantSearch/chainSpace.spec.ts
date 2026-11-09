@@ -1,8 +1,6 @@
 /**
- * Chain comparison's chain space on the deployed maxed table (public/instant/table.bin.gz).
+ * Chain comparison's chain space on a frozen maxed table (specTable.ts).
  */
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { chainPricer, findRoutes, polishFound, type FindOptions, type Route } from './routeFinder';
@@ -16,11 +14,9 @@ import {
   type LegHours,
 } from './chainSpace';
 import { hoursBlocked } from './blockedTime';
-import { readTable } from './table';
+import { loadSpecTable } from './specTable';
 
-const gz = readFileSync(new URL('../../../public/instant/table.bin.gz', import.meta.url));
-const bytes = gunzipSync(gz);
-const table = readTable(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+const table = await loadSpecTable();
 const pt = (date: string, time: string) => getLocalTimestampInTimezone(date, time, PACIFIC_TIMEZONE);
 const DAY = 86400;
 

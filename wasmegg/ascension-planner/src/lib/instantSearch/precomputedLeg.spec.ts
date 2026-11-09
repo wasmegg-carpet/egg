@@ -1,13 +1,9 @@
-/** `tailTo` (one target) against `sweepTails` (every target at once) on the deployed table. */
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
+/** `tailTo` (one target) against `sweepTails` (every target at once) on a frozen maxed table (specTable.ts). */
 import { describe, expect, it } from 'vitest';
 import { canonicalDelivered, rebase, sweepTails, tailTo } from './precomputedLeg';
-import { readTable } from './table';
+import { loadSpecTable } from './specTable';
 
-const gz = readFileSync(new URL('../../../public/instant/table.bin.gz', import.meta.url));
-const bytes = gunzipSync(gz);
-const table = readTable(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+const table = await loadSpecTable();
 
 describe('tailTo', () => {
   it("gives sweepTails' numbers to the bit, for every target", () => {

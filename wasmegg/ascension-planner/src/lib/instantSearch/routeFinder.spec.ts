@@ -1,10 +1,8 @@
 /**
- * Chain Finder on the deployed maxed table (public/instant/table.bin.gz). The pinned answers were
- * checked against AutoAutoAP's own findRoutes + polishFound (ascension-chain-search at f93e05f0) on
- * the same table, route for route and to the second.
+ * Chain Finder on a frozen maxed table (specTable.ts). The pinned answers were checked against
+ * AutoAutoAP's own findRoutes + polishFound (ascension-chain-search at f93e05f0) on the same table,
+ * route for route and to the second.
  */
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { runContinueCurrent } from '@/auto/ascension';
@@ -27,11 +25,9 @@ import {
   type Route,
 } from './routeFinder';
 import { hoursBlocked, nextDate } from './blockedTime';
-import { readTable } from './table';
+import { loadSpecTable } from './specTable';
 
-const gz = readFileSync(new URL('../../../public/instant/table.bin.gz', import.meta.url));
-const bytes = gunzipSync(gz);
-const table = readTable(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+const table = await loadSpecTable();
 const pt = (date: string, time: string) => getLocalTimestampInTimezone(date, time, PACIFIC_TIMEZONE);
 
 function search(o: Parameters<typeof findRoutes>[1]) {
