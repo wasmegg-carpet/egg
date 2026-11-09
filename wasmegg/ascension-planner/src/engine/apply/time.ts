@@ -50,18 +50,3 @@ export function applyTime(
     bankValue: newBankValue,
   };
 }
-
-/**
- * Apply passive egg delivery to an engine state.
- */
-export function applyPassiveEggs(state: EngineState, passiveEggs: number): EngineState {
-  if (passiveEggs <= 0) return state;
-  const egg = state.currentEgg;
-  return {
-    ...state,
-    eggsDelivered: {
-      ...state.eggsDelivered,
-      [egg]: (state.eggsDelivered[egg] || 0) + passiveEggs,
-    },
-  };
-}

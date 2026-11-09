@@ -108,14 +108,15 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { computed } from 'vue';
-import { type CommonResearch } from '@/calculations/commonResearch';
-import { type ViewType, type ElrRoiDisplayMode } from '@/composables/useResearchViews';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
-import { formatAbsoluteTime } from '@/lib/format';
-import { type PurchaseEventCrossings } from '@/calculations/researchROI';
+import { type CommonResearch } from '@planner/calculations/commonResearch';
+import { type ViewType, type ElrRoiDisplayMode } from '@planner/composables/useResearchViews';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
+import { formatAbsoluteTime } from '@planner/lib/format';
+import { type PurchaseEventCrossings } from 'lib/planners/calculations/researchROI';
 import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
 
 interface SortedResearchItem {
@@ -161,7 +162,8 @@ const props = defineProps<{
 }>();
 
 const initialStateStore = useInitialStateStore();
-const isMissingRealisticData = computed(() => false);
+const { hasDeliveryViews } = usePlannerProfile();
+const isMissingRealisticData = computed(() => hasDeliveryViews && props.view === 'elr' && !initialStateStore.rawBackup);
 
 const actionsStore = useActionsStore();
 const planStore = usePlanStore();

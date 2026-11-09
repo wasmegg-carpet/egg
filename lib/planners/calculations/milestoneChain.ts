@@ -2,10 +2,10 @@ import {
   type CommonResearch,
   getCommonResearches,
   getResearchById,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
-} from './commonResearch';
+} from '@planner/calculations/commonResearch';
 import {
   getSaleAwareTimeToSave,
   calculateResearchROI,
@@ -19,15 +19,15 @@ import {
   reorderPurchaseListByROI,
   type SequencedPurchase,
   type ResearchRankingItem,
-} from './researchRanking';
-import { simulateSaleAwareBuy } from './smartBuyPreview';
-import type { EngineState, SimulationContext } from '@/engine/types';
-import type { CalculationsSnapshot } from '@/types';
-import { computeSnapshot } from '@/engine/compute';
-import { createBaseEngineState } from '@/engine/adapter';
-import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
-import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from 'lib/planners/events';
-import { DEBUG_MILESTONE_CHAIN } from 'lib/planners/debugFlags';
+} from '@planner/calculations/researchRanking';
+import { simulateSaleAwareBuy } from '@planner/calculations/smartBuyPreview';
+import type { EngineState, SimulationContext } from '@planner/engine/types';
+import type { CalculationsSnapshot } from '@planner/types';
+import { computeSnapshot } from '@planner/engine/compute';
+import { createBaseEngineState } from '@planner/engine/adapter';
+import { applyAction, applyTime, boostTransitionsFrom } from '@planner/engine/apply';
+import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from '../events';
+import { DEBUG_MILESTONE_CHAIN } from '../debugFlags';
 
 export type MilestoneTarget =
   | { kind: 'tier'; tier: number }
@@ -171,7 +171,7 @@ function sweepUntilNextSale(
   // for) turned out, once accumulated earnings actually caught up purchase-by-purchase, to be
   // cheaper bought immediately at full price instead, well before the sale even started. Trusting
   // the batch numbers meant the preview didn't just show a slightly-off ETA, it showed a wrong
-  // `duringSale` flag and an understated gems-spent total for those purchases. Re-deriving each
+  // `duringSale` flag and an understated currency-spent total for those purchases. Re-deriving each
   // number from THIS function's own accumulating `resultState`/`resultSnapshot` — the same one the
   // milestone chain actually returns — keeps the preview and the eventual live execution answering
   // the identical question at each step, instead of two independent (and occasionally
@@ -671,7 +671,7 @@ export function simulateCheapestFirstTierChain(
       .filter(r => (levels[r.id] || 0) < r.levels && isTierUnlocked(levels, r.tier))
       .map(r => {
         const level = levels[r.id] || 0;
-        return { research: r, level, price: getDiscountedVirtuePrice(r, level, mods, isSale) };
+        return { research: r, level, price: getDiscountedResearchPrice(r, level, mods, isSale) };
       });
 
     if (candidates.length === 0) break;
@@ -763,7 +763,7 @@ export function isCheapestTierPurchaseAffordable(
     .filter(r => (researchLevels[r.id] || 0) < r.levels && isTierUnlocked(researchLevels, r.tier))
     .map(r => {
       const level = researchLevels[r.id] || 0;
-      return { research: r, level, price: getDiscountedVirtuePrice(r, level, mods, isSale) };
+      return { research: r, level, price: getDiscountedResearchPrice(r, level, mods, isSale) };
     });
 
   if (candidates.length === 0) return false;

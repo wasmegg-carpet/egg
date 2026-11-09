@@ -1,21 +1,21 @@
-import { getDiscountedResearchPrice, type CommonResearch, type ResearchCostModifiers } from './commonResearch';
-import type { CalculationsSnapshot } from '@/types';
-import type { SimulationContext } from '@/engine/types';
-import { createBaseEngineState } from '@/engine/adapter';
+import { getDiscountedResearchPrice, type CommonResearch, type ResearchCostModifiers } from '@planner/calculations/commonResearch';
+import type { CalculationsSnapshot } from '@planner/types';
+import type { SimulationContext } from '@planner/engine/types';
+import { createBaseEngineState } from '@planner/engine/adapter';
 import {
   applyAction,
   getTimeToSave,
   calculateEarningsForTime,
   boostTransitionsFrom,
   type EarningsRateTransition,
-} from '@/engine/apply';
-import { computeSnapshot } from '@/engine/compute';
-import { createSimAction } from '@/types/actions/meta';
+} from '@planner/engine/apply';
+import { computeSnapshot } from '@planner/engine/compute';
+import { createSimAction } from '@planner/types/actions/meta';
 import {
   getNextSaleStart,
   getNextSaleEnd,
   isResearchSaleActive,
-} from 'lib/planners/events';
+} from '../events';
 
 // See the comment where this is used in `calculateResearchROI` for why the ROI-payback horizon is
 // deliberately much shorter than `boostTransitionsFrom`'s own multi-year default.
@@ -185,7 +185,7 @@ export {
   findEventCrossings,
   type EventCrossing,
   type PurchaseEventCrossings,
-} from 'lib/planners/calculations/eventCrossings';
+} from './eventCrossings';
 
 /**
  * Whether a purchase modeled as completing "during a sale" (`modeledDuringSale` — e.g.

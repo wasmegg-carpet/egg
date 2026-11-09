@@ -2,7 +2,7 @@ import {
   type CommonResearch,
   type ResearchCostModifiers,
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   getResearchById,
   getResearchByTier,
   isTierUnlocked,
@@ -13,8 +13,8 @@ import {
   buyWhilePassingCheck,
   buyUntilRealSaleStarts,
 } from './researchRanking';
-import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
-import { findSmartBuyCandidate } from './smartBuyCandidate';
+import { meetsROIByDeadline, getSaleAwareTimeToSave } from 'lib/planners/calculations/researchROI';
+import { findSmartBuyCandidate } from 'lib/planners/calculations/smartBuyCandidate';
 import {
   type DeliveryLevelSet,
   deliveryPlanCost,
@@ -518,7 +518,7 @@ function nextDeliveryLevel(
   mods: ResearchCostModifiers,
   isSale: boolean
 ): CommonResearch {
-  const priceOf = (r: CommonResearch) => getDiscountedVirtuePrice(r, state.researchLevels[r.id] || 0, mods, isSale);
+  const priceOf = (r: CommonResearch) => getDiscountedResearchPrice(r, state.researchLevels[r.id] || 0, mods, isSale);
   const earningsPerGem = (r: CommonResearch) => {
     const levels = { ...state.researchLevels, [r.id]: (state.researchLevels[r.id] || 0) + 1 };
     const next = computeSnapshot({ ...state, researchLevels: levels }, context, { skipEpochConversion: true });

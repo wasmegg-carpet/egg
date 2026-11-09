@@ -1,3 +1,4 @@
+import { PROFILE } from '@/lib/profile';
 import { ref, computed, watch, watchEffect } from 'vue';
 import {
   getCommonResearches,
@@ -38,9 +39,9 @@ import {
   isMilestoneReached,
   computeMilestoneBaseline,
   computeMilestoneSummaryCore,
-} from '@/calculations/milestoneChain';
+} from 'lib/planners/calculations/milestoneChain';
 import { type ResearchRankingItem, rankResearchByROI, rankResearchByELRImpact } from '@/calculations/researchRanking';
-import { type PurchaseEventCrossings, isActuallyDuringSale } from '@/calculations/researchROI';
+import { type PurchaseEventCrossings, isActuallyDuringSale } from 'lib/planners/calculations/researchROI';
 import {
   summarizeResearchLevelChanges,
   type SaleAwareBuyPlan,
@@ -50,7 +51,7 @@ import { useResearchCalcWorker } from '@/composables/useResearchCalcWorker';
 import type { SimulationContext } from '@/engine/types';
 import { ei } from 'lib';
 
-export type { MilestoneTarget } from '@/calculations/milestoneChain';
+export type { MilestoneTarget } from 'lib/planners/calculations/milestoneChain';
 
 export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'smart_buy';
 export type ElrSortMode = 'efficiency' | 'impact';
@@ -118,7 +119,7 @@ export interface ResearchViewItem {
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
 }
 
-export const VIEWS = [
+const ALL_VIEWS = [
   { id: 'game', label: 'Game View', description: 'Grouped by tier, exactly like the game.' },
   // Hidden for now (not removed in case someone asks for it back):
   // { id: 'cheapest', label: 'Cheapest First', description: 'All unpurchased researches sorted by price.' },
@@ -131,6 +132,8 @@ export const VIEWS = [
     description: 'Auto-buy research: sale-aware and threshold-based buying in one place.',
   },
 ] as const;
+
+export const VIEWS = ALL_VIEWS.filter(view => view.id !== 'elr' || PROFILE.hasDeliveryViews);
 
 const RESEARCH_VIEW_STORAGE_KEY = 'enl_research_view';
 const ELR_SORT_MODE_STORAGE_KEY = 'enl_research_elr_sort_mode';
@@ -944,7 +947,7 @@ export function useResearchViews() {
     summarizeResearchLevelChanges(commonResearchStore.researchLevels, saleAwarePlan70.value.endLevels)
   );
 
-  // Dry-run plan for "Buy Until Sale Ends" — only computed while a sale is actually active, same
+  // Dry-run plan for "Buy Until Sale Ends" — only computed while its card is showing and a sale is actually active, same
   // gating `canBuyUntilSaleDeadline` already applies (there's nothing meaningful to preview
   // otherwise). Same worker treatment as `saleAwarePlan70` above, for the same reason — its own
   // `isComputingSaleEndsPlan` flag scopes the spinner to the "Buy Delivery Research" card. The
@@ -972,9 +975,11 @@ export function useResearchViews() {
     }
 
     const isSaleActive = isResearchSaleActive.value;
+    // This plan only feeds the Delivery card, and it can take a while, so it waits until the card is showing.
+    const isDeliveryCardVisible = PROFILE.hasDeliveryViews && currentView.value === 'smart_buy';
     const generation = ++saleEndsPlanGeneration;
 
-    if (!isSaleActive) {
+    if (!isSaleActive || !isDeliveryCardVisible) {
       saleEndsPlanRef.value = {
         researchIds: [],
         earningsResearchIds: [],

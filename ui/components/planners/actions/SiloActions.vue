@@ -197,8 +197,8 @@
 
 <script setup lang="ts">
 import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
-import { useSiloTime } from '@planner/composables/useSiloTime';
-import { useSilosStore } from '@planner/stores/silos';
+import { useSiloTime } from 'lib/planners/composables/useSiloTime';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { useActionsStore } from '@planner/stores/actions';
 import { computeDependencies } from '@planner/lib/actions/executor';
 import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';

@@ -20,13 +20,13 @@ import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeDeltas } from '@/lib/actions/snapshot';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useEventsStore } from 'lib/planners/stores/events';
 
-import { simulateAsync } from '@/engine/simulate';
+import { simulateAsync } from 'lib/planners/engine/simulate';
 import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '@/engine/researchSale';
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { computeSnapshot } from '@/engine/compute';
@@ -35,7 +35,7 @@ import { computeDependencies } from '@/lib/actions/executor';
 
 import { ActionsState } from './types';
 import { createDefaultStartAction, calculateActionResult } from './simulation';
-import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from './dependency';
+import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from 'lib/planners/stores/actions/dependency';
 import { exportPlanLogic, importPlanLogic, exportPlanData } from './io';
 
 export const useActionsStore = defineStore('actions', {

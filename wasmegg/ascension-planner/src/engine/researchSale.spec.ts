@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import {
@@ -23,7 +24,7 @@ import { computeSnapshot } from './compute';
 import { boostTransitionsFrom, getTimeToSave } from './apply';
 import {
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   type CommonResearch,
 } from '@/calculations/commonResearch';
 import { useResearchViews } from '@/composables/useResearchViews';
@@ -248,10 +249,10 @@ describe('a research purchase crossing a sale boundary', () => {
     const transitions = boostTransitionsFrom(snapshot, start);
     for (const research of getCommonResearches()) {
       for (let level = 0; level < research.levels; level++) {
-        const fullPrice = getDiscountedVirtuePrice(research, level, mods, false);
+        const fullPrice = getDiscountedResearchPrice(research, level, mods, false);
         const fullWait = getTimeToSave(fullPrice, snapshot, transitions);
         if (fullWait < minSeconds || fullWait > maxSeconds) continue;
-        const salePrice = getDiscountedVirtuePrice(research, level, mods, true);
+        const salePrice = getDiscountedResearchPrice(research, level, mods, true);
         return { research, level, fullPrice, salePrice, fullWait, saleWait: getTimeToSave(salePrice, snapshot, transitions) };
       }
     }
@@ -397,8 +398,8 @@ describe('a research purchase crossing a sale boundary', () => {
     const snapshot = measured.currentSnapshot;
     const mods = researchCostModifiersAt(snapshot, context);
     const transitions = boostTransitionsFrom(snapshot, probeAt);
-    const fullPrice = getDiscountedVirtuePrice(research, level, mods, false);
-    const salePrice = getDiscountedVirtuePrice(research, level, mods, true);
+    const fullPrice = getDiscountedResearchPrice(research, level, mods, false);
+    const salePrice = getDiscountedResearchPrice(research, level, mods, true);
     setActivePinia(createPinia());
     return {
       research,
@@ -479,7 +480,7 @@ describe('a research purchase crossing a sale boundary', () => {
           setActivePinia(createPinia());
           const measured = await startEarningPlan(start, 100, { [research.id]: level });
           const snapshot = measured.currentSnapshot;
-          const salePrice = getDiscountedVirtuePrice(
+          const salePrice = getDiscountedResearchPrice(
             research,
             level,
             researchCostModifiersAt(snapshot, getSimulationContext()),
@@ -573,7 +574,7 @@ describe('a research purchase crossing a sale boundary', () => {
           setActivePinia(createPinia());
           const measured = await startEarningPlan(start, 100, { [research.id]: level });
           const snapshot = measured.currentSnapshot;
-          const price = getDiscountedVirtuePrice(research, level, researchCostModifiersAt(snapshot, getSimulationContext()), true);
+          const price = getDiscountedResearchPrice(research, level, researchCostModifiersAt(snapshot, getSimulationContext()), true);
           const wait = getTimeToSave(price, snapshot, boostTransitionsFrom(snapshot, start));
           if (wait > 7 * 86400 && wait < 60 * 86400) return { research, level };
         }
@@ -609,7 +610,7 @@ describe('a research purchase crossing a sale boundary', () => {
     setActivePinia(createPinia());
     const measured = await startEarningPlan(monday - 86400, 100, { [research.id]: level });
     const measuredSnapshot = measured.currentSnapshot;
-    const price = getDiscountedVirtuePrice(research, level, researchCostModifiersAt(measuredSnapshot, getSimulationContext()), false);
+    const price = getDiscountedResearchPrice(research, level, researchCostModifiersAt(measuredSnapshot, getSimulationContext()), false);
     const flatWait = getTimeToSave(price, measuredSnapshot);
     expect(flatWait).toBeGreaterThan(600);
 
@@ -660,6 +661,41 @@ describe('a research purchase crossing a sale boundary', () => {
     }
     return seconds;
   }
+
+  function countDeliveryPlanRequests() {
+    const kinds: string[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class {
+        onmessage = null;
+        onerror = null;
+        postMessage(message: { kind: string }) {
+          kinds.push(message.kind);
+        }
+        terminate() {}
+      }
+    );
+    return () => kinds.filter(kind => kind === 'saleEndsBuy').length;
+  }
+
+  test('the delivery plan is only calculated while its card is showing', async () => {
+    const requests = countDeliveryPlanRequests();
+    await startEarningPlan(friday + 3600);
+    const views = useResearchViews();
+    views.currentView.value = 'game';
+    await nextTick();
+    const whileHidden = requests();
+
+    views.currentView.value = 'smart_buy';
+    await nextTick();
+    expect(requests()).toBe(whileHidden + 1);
+    expect(views.isComputingSaleEndsPlan.value).toBe(true);
+
+    views.currentView.value = 'game';
+    await nextTick();
+    expect(requests()).toBe(whileHidden + 1);
+    expect(views.isComputingSaleEndsPlan.value).toBe(false);
+  });
 
   test('game view max times match what buying every level takes across the boundary', async () => {
     const research = getCommonResearches().find(r => r.tier === 1 && r.levels > 1)!;

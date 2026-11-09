@@ -9,7 +9,7 @@ import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useNotesStore } from 'lib/planners/stores/notes';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { createEmptySnapshot, type VirtueEgg, type Action, type CalculationsSnapshot } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { redactBackupForStorage } from '@/lib/artifacts';

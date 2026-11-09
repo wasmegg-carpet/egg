@@ -1,9 +1,15 @@
+import { PROFILE } from '@/lib/profile';
+import {
+  currencyWaitTarget,
+  isCurrencyWaitType,
+  refreshCurrencyWait,
+  type CurrencyWaitPayload,
+} from 'lib/planners/actions/currencyWait';
 import {
   Action,
   CalculationsSnapshot,
   LaunchMissionsPayload,
   StoreFuelPayload,
-  WaitForCashPayload,
 } from '@/types';
 import {
   BOUNDARY_EPSILON_SECONDS,
@@ -23,7 +29,7 @@ import { getResearchById } from '@/calculations/commonResearch';
 import { researchPurchaseAt } from '../researchSale';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';
 import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@/lib/vehicles';
-import { nextSiloCost } from '@/stores/silos';
+import { nextSiloCost } from 'lib/planners/stores/silos';
 import type { SimulationContext } from '../types';
 
 /**
@@ -123,10 +129,10 @@ export function refreshActionPayload(
         prevSnapshot.habCapacity
       );
       const valuePerEgg = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
-      payload.cashEarnedDuringFuel = payload.eggsShippedDuringFuel * valuePerEgg;
+      payload[PROFILE.currency.fuelEarningsField] = payload.eggsShippedDuringFuel * valuePerEgg;
     } else {
       payload.eggsShippedDuringFuel = 0;
-      payload.cashEarnedDuringFuel = 0;
+      payload[PROFILE.currency.fuelEarningsField] = 0;
     }
 
     return { ...action, payload };
@@ -178,14 +184,13 @@ export function refreshActionPayload(
     return { ...action, payload: { ...action.payload, totalTimeSeconds: running ? end - absoluteSimTime : 0 } };
   }
 
-  if (action.type === 'wait_for_cash') {
-    const payload = { ...(action.payload as WaitForCashPayload) };
-    payload.currentCash = prevSnapshot.bankValue;
-    payload.requiredCash = Math.max(0, payload.targetCash - payload.currentCash);
-    payload.timeSeconds = context
-      ? getBoostAwareTimeToSave(payload.targetCash, prevSnapshot, context)
-      : getTimeToSave(payload.targetCash, prevSnapshot);
-    return { ...action, payload };
+  if (isCurrencyWaitType(action.type)) {
+    const payload = action.payload as CurrencyWaitPayload;
+    const target = currencyWaitTarget(payload);
+    const timeSeconds = context
+      ? getBoostAwareTimeToSave(target, prevSnapshot, context)
+      : getTimeToSave(target, prevSnapshot);
+    return { ...action, payload: refreshCurrencyWait(payload, prevSnapshot.bankValue, timeSeconds) } as Action;
   }
 
   return action;
@@ -223,7 +228,7 @@ export function getActionDuration(
   prevSnapshot: CalculationsSnapshot,
   context?: SimulationContext
 ): number {
-  if (action.type === 'store_fuel' || action.type === 'wait_for_cash') {
+  if (action.type === 'store_fuel' || isCurrencyWaitType(action.type)) {
     return (action.payload as { timeSeconds?: number }).timeSeconds || 0;
   }
 

@@ -153,7 +153,7 @@ import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { getSimulationContext } from '@/engine/adapter';
 import { getArtifactLoadoutFromBackup, getOptimalEarningsSet, activeSlots, artifactSlotCount } from '@/lib/artifacts';
 import { useEarningsClothedTE } from '@/composables/useEarningsClothedTE';

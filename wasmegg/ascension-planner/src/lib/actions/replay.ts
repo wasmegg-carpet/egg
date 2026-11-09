@@ -55,7 +55,7 @@ import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useSalesStore } from 'lib/planners/stores/sales';

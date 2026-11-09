@@ -9,10 +9,10 @@
  */
 
 import { defineStore } from 'pinia';
-import { useInitialStateStore } from './initialState';
-import type { SilosState } from 'lib/planners/silos';
-import { MIN_SILOS, MAX_SILOS, maxSilos } from 'lib/planners/silos';
-export type { SilosState } from 'lib/planners/silos';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import type { SilosState } from '../silos';
+import { MIN_SILOS, MAX_SILOS, maxSilos } from '../silos';
+export type { SilosState } from '../silos';
 export {
   MIN_SILOS,
   MAX_SILOS,
@@ -25,7 +25,7 @@ export {
   awayTimePerSilo,
   totalAwayTime,
   formatSiloTime,
-} from 'lib/planners/silos';
+} from '../silos';
 
 export const useSilosStore = defineStore('silos', {
   state: (): SilosState => ({

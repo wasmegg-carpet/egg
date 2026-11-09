@@ -59,7 +59,7 @@
          leaving the Smart Buy view for the Wait tab. -->
     <WaitForResearchSaleButton v-if="!isResearchSaleActive" />
 
-    <SmartBuyCard title="Buy Delivery Research" :loading="saleEndsLoading">
+    <SmartBuyCard v-if="PROFILE.hasDeliveryViews" title="Buy Delivery Research" :loading="saleEndsLoading">
       <template #icon>
         <img
           :src="iconURL('egginc-extras/icon_research_sale.png', 64)"
@@ -110,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@/lib/profile';
 import { iconURL } from 'lib';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
 import QuickBuy from 'ui/components/planners/actions/QuickBuy.vue';

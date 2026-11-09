@@ -44,7 +44,7 @@ import { useFuelTankStore } from '@/stores/fuelTank';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
 import type { FuelEgg } from '@/types';
 

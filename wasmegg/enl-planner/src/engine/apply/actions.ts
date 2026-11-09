@@ -1,3 +1,4 @@
+import { fuelEarnings } from 'lib/planners/actions/fuelEarnings';
 import {
   SimulatedAction,
   ActionType,
@@ -114,7 +115,7 @@ export function applyAction(
       return {
         ...state,
         fuelTankAmounts: newFuelAmounts,
-        bankValue: (state.bankValue || 0) + (payload.cashEarnedDuringFuel ?? 0),
+        bankValue: (state.bankValue || 0) + fuelEarnings(payload),
       };
     }
 

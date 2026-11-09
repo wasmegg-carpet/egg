@@ -7,10 +7,10 @@
 import type { CalculationsSnapshot, CalculationsFullOutputs, VehicleSlot, ResearchLevels } from '@/types';
 import { type HabId } from '@/lib/habs';
 import { activeSlots } from '@/lib/artifacts/calculator';
-import { useEggValue } from '@/composables/useEggValue';
-import { useHabCapacity } from '@/composables/useHabCapacity';
-import { useLayRate } from '@/composables/useLayRate';
-import { useShippingCapacity } from '@/composables/useShippingCapacity';
+import { useEggValue } from 'lib/planners/composables/useEggValue';
+import { useHabCapacity } from 'lib/planners/composables/useHabCapacity';
+import { useLayRate } from 'lib/planners/composables/useLayRate';
+import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
 import { useEffectiveLayRate } from '@/composables/useEffectiveLayRate';
 import { useEarnings } from '@/composables/useEarnings';
 import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
@@ -20,7 +20,7 @@ import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore, totalAwayTime } from '@/stores/silos';
+import { useSilosStore, totalAwayTime } from 'lib/planners/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useSalesStore } from 'lib/planners/stores/sales';
 
@@ -79,8 +79,8 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     tankLevel: fuelTankStore.tankLevel,
     proPermit: initialStateStore.proPermit,
     fuelTankAmounts: { ...fuelTankStore.fuelAmounts },
-
-    // Truth Eggs state
+    currentEgg: 'enlightenment',
+    eggsDelivered: {},
 
     // Store state for reconstruction
     vehicles: [...shippingCapacityStore.vehicles],

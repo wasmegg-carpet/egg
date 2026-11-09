@@ -1,3 +1,4 @@
+import { fuelEarnings } from 'lib/planners/actions/fuelEarnings';
 import {
   SimulatedAction,
   ActionType,
@@ -133,7 +134,7 @@ export function applyAction(
 
       // Variable-speed fueling: apply shipped eggs and gems earned
       const shippedEggs = payload.eggsShippedDuringFuel ?? 0;
-      const gemsEarned = payload.gemsEarnedDuringFuel ?? 0;
+      const gemsEarned = fuelEarnings(payload);
 
       const newEggsDelivered = shippedEggs > 0
         ? { ...state.eggsDelivered, [payload.egg]: (state.eggsDelivered[payload.egg] || 0) + shippedEggs }

@@ -6,7 +6,7 @@
  * to the slot with the least total time.
  */
 
-import { type Spaceship, type DurationType, SHIP_INFO, DURATION_NAMES } from '@/lib/missions';
+import { type Spaceship, type DurationType, SHIP_INFO, DURATION_NAMES } from '@planner/lib/missions';
 
 export interface MissionEntry {
   ship: Spaceship;

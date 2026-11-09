@@ -1,4 +1,4 @@
-import { getCommonResearches, getDiscountedVirtuePrice, isTierUnlocked } from './commonResearch';
+import { getCommonResearches, getDiscountedResearchPrice, isTierUnlocked } from './commonResearch';
 import type { CommonResearch, ResearchCostModifiers } from './commonResearch';
 import { computeRealisticELR } from './realisticELR';
 import { DELIVERY_IMPACT_CATEGORIES } from './researchRanking';
@@ -160,7 +160,7 @@ function unbeatenSpends(
       let price = Infinity;
       for (const r of group.members) {
         if (owned[r.id] >= r.levels) continue;
-        const p = getDiscountedVirtuePrice(r, owned[r.id], mods, isSale);
+        const p = getDiscountedResearchPrice(r, owned[r.id], mods, isSale);
         if (p < price) {
           next = r;
           price = p;
@@ -219,7 +219,7 @@ export function createDeliveryLevelSearch(
 
   return (budget, maxResults) => {
     // Unlocking a tier depends on how many levels get bought, which comparing spends can't see.
-    if (locked.some(r => getDiscountedVirtuePrice(r, startLevels[r.id] || 0, mods, isSale) <= budget)) {
+    if (locked.some(r => getDiscountedResearchPrice(r, startLevels[r.id] || 0, mods, isSale) <= budget)) {
       return searchEveryDeliveryCombination(startLevels, budget, mods, isSale, rateOf, maxResults);
     }
     if (!sides) {
@@ -316,7 +316,7 @@ export function searchEveryDeliveryCombination(
         r =>
           levels[r.id] < r.levels &&
           isUnlocked(r.tier) &&
-          gems + getDiscountedVirtuePrice(r, levels[r.id], mods, isSale) <= budget
+          gems + getDiscountedResearchPrice(r, levels[r.id], mods, isSale) <= budget
       );
       if (!hasRoom) found.push({ levels: { ...levels }, rate: rateOf(levels), gems });
       return true;
@@ -327,7 +327,7 @@ export function searchEveryDeliveryCombination(
     let total = gems;
     let ok = visit(index + 1, total);
     while (ok && isUnlocked(r.tier) && levels[r.id] < r.levels) {
-      total += getDiscountedVirtuePrice(r, levels[r.id], mods, isSale);
+      total += getDiscountedResearchPrice(r, levels[r.id], mods, isSale);
       if (total > budget) break;
       levels[r.id]++;
       ok = visit(index + 1, total);
@@ -365,7 +365,7 @@ export function dropLevelsNotWorthTheirTime(
     for (const r of bought) {
       const levels = { ...current.levels, [r.id]: current.levels[r.id] - 1 };
       if (!bought.every(b => levels[b.id] <= (startLevels[b.id] || 0) || isTierUnlocked(levels, b.tier))) continue;
-      const gems = current.gems - getDiscountedVirtuePrice(r, levels[r.id], mods, isSale);
+      const gems = current.gems - getDiscountedResearchPrice(r, levels[r.id], mods, isSale);
       const rawRate = rateOf(levels);
       // Rounding mustn't make a level look like it helps.
       const rate = Math.abs(rawRate - current.rate) <= current.rate * RATE_TOLERANCE ? current.rate : rawRate;

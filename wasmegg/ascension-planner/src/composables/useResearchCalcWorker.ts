@@ -29,7 +29,7 @@
  */
 import { onUnmounted } from 'vue';
 import { sanitizeLongs } from '@/lib/artifacts/utils';
-import type { MilestoneChainResult } from '@/calculations/milestoneChain';
+import type { MilestoneChainResult } from 'lib/planners/calculations/milestoneChain';
 import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '@/calculations/smartBuyPreview';
 import type {
   WorkerRequest,

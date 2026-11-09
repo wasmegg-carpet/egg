@@ -19,7 +19,7 @@ import {
   buildSaleAwareBuyNotePayload,
   buildSaleEndsBuyNotePayload,
   buildFinalSaleGapBuyNotePayload,
-} from '@/lib/actions/notes';
+} from 'lib/planners/actions/notes';
 import {
   isResearchSaleActive,
   getNextSaleStart,

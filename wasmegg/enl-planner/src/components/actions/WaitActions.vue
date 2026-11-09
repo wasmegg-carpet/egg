@@ -123,7 +123,7 @@
         </svg>
       </button>
       <div v-show="bocksExpanded" class="p-6 border-t border-slate-50">
-        <WaitForCashActions ref="bocksActionsRef" />
+        <WaitForCurrencyActions ref="bocksActionsRef" />
       </div>
     </div>
 
@@ -236,7 +236,7 @@ import WaitForPopulationActions from './WaitForPopulationActions.vue';
 import WaitForMissionsActions from './WaitForMissionsActions.vue';
 import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
 import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
-import WaitForCashActions from './WaitForCashActions.vue';
+import WaitForCurrencyActions from 'ui/components/planners/actions/WaitForCurrencyActions.vue';
 import WaitWithoutEarningsActions from 'ui/components/planners/actions/WaitWithoutEarningsActions.vue';
 import WaitForEventActions from './WaitForEventActions.vue';
 
@@ -251,7 +251,7 @@ const noEarningsExpanded = ref(false);
 const eventsExpanded = ref(false);
 
 const populationActionsRef = ref<InstanceType<typeof WaitForPopulationActions> | null>(null);
-const bocksActionsRef = ref<InstanceType<typeof WaitForCashActions> | null>(null);
+const bocksActionsRef = ref<InstanceType<typeof WaitForCurrencyActions> | null>(null);
 const timeActionsRef = ref<InstanceType<typeof WaitForTimeActions> | null>(null);
 const noEarningsActionsRef = ref<InstanceType<typeof WaitWithoutEarningsActions> | null>(null);
 

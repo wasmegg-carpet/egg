@@ -1,7 +1,7 @@
 import {
   type CommonResearch,
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
 } from './commonResearch';
@@ -15,7 +15,7 @@ import {
   MAX_ROI_PAYBACK_SEARCH_SECONDS,
   findEventCrossings,
   type PurchaseEventCrossings,
-} from './researchROI';
+} from 'lib/planners/calculations/researchROI';
 import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
 import { getOptimalELRSetFromSource, type DeliverySource } from '@/lib/artifacts/virtue';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
@@ -649,9 +649,9 @@ export function rankResearchByELRImpact(
           const highestImpact =
             (statsAt({ ...researchLevels, [r.id]: r.levels }).effectiveRate - baseline.effectiveRate) /
             baseline.effectiveRate;
-          let totalPriceForN = getDiscountedVirtuePrice(r, level, mods, withBankPurchase.duringSale);
+          let totalPriceForN = getDiscountedResearchPrice(r, level, mods, withBankPurchase.duringSale);
           for (let n = 2; n <= r.levels - level && highestImpact > 0; n++) {
-            totalPriceForN += getDiscountedVirtuePrice(r, level + n - 1, mods, withBankPurchase.duringSale);
+            totalPriceForN += getDiscountedResearchPrice(r, level + n - 1, mods, withBankPurchase.duringSale);
             const totalSecondsForN = getTimeToSave(totalPriceForN, noBankSnapshot, transitions);
             const totalHoursForN = totalSecondsForN / 3600;
             const helps = impact > 0 || lookahead !== undefined;
@@ -693,7 +693,7 @@ export function rankResearchByELRImpact(
           for (const other of buyableDeliveryResearch) {
             if (other === r) continue;
             const otherLevel = researchLevels[other.id] || 0;
-            const otherPrice = getDiscountedVirtuePrice(other, otherLevel, mods, withBankPurchase.duringSale);
+            const otherPrice = getDiscountedResearchPrice(other, otherLevel, mods, withBankPurchase.duringSale);
             const laStats = statsAt({ ...researchLevels, [r.id]: level + 1, [other.id]: otherLevel + 1 });
             const laImpact = (laStats.effectiveRate - baseline.effectiveRate) / baseline.effectiveRate;
             if (laImpact <= 0) continue;

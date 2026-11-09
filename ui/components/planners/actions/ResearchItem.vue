@@ -283,7 +283,7 @@ import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@planner/stores/actions';
 import { usePlanStore } from '@planner/stores/plan';
-import { type PurchaseEventCrossings } from '@planner/calculations/researchROI';
+import { type PurchaseEventCrossings } from 'lib/planners/calculations/researchROI';
 
 const { currency } = usePlannerProfile();
 

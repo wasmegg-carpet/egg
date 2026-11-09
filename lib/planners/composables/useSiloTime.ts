@@ -5,8 +5,8 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore, awayTimePerSilo, totalAwayTime, formatSiloTime, maxSilos, nextSiloCost } from '@/stores/silos';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useSilosStore, awayTimePerSilo, totalAwayTime, formatSiloTime, maxSilos, nextSiloCost } from '../stores/silos';
 
 /**
  * Input for silo time calculation.

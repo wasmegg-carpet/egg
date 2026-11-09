@@ -156,7 +156,7 @@
         </svg>
       </button>
       <div v-show="gemsExpanded" class="p-6 border-t border-slate-50">
-        <WaitForGemsActions ref="gemsActionsRef" />
+        <WaitForCurrencyActions ref="gemsActionsRef" />
       </div>
     </div>
 
@@ -271,7 +271,7 @@ import BulkWaitForTEActions from './BulkWaitForTEActions.vue';
 import WaitForMissionsActions from './WaitForMissionsActions.vue';
 import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
 import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
-import WaitForGemsActions from './WaitForGemsActions.vue';
+import WaitForCurrencyActions from 'ui/components/planners/actions/WaitForCurrencyActions.vue';
 import WaitWithoutEarningsActions from 'ui/components/planners/actions/WaitWithoutEarningsActions.vue';
 import WaitForEventActions from './WaitForEventActions.vue';
 
@@ -291,7 +291,7 @@ const eventsExpanded = ref(false);
 
 const teActionsRef = ref<InstanceType<typeof WaitForTEActions> | null>(null);
 const bulkTEActionsRef = ref<InstanceType<typeof BulkWaitForTEActions> | null>(null);
-const gemsActionsRef = ref<InstanceType<typeof WaitForGemsActions> | null>(null);
+const gemsActionsRef = ref<InstanceType<typeof WaitForCurrencyActions> | null>(null);
 const timeActionsRef = ref<InstanceType<typeof WaitForTimeActions> | null>(null);
 const noEarningsActionsRef = ref<InstanceType<typeof WaitWithoutEarningsActions> | null>(null);
 

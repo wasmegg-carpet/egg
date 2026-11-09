@@ -8,7 +8,7 @@ import type {
   IHRInput,
 } from '@/types';
 import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
-import { totalAwayTime } from '@/stores/silos';
+import { totalAwayTime } from 'lib/planners/stores/silos';
 import { integrateRate } from 'lib/planners/engine/apply/math';
 
 import { calculateEggValue } from '@/calculations/eggValue';

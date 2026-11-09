@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
@@ -665,6 +666,32 @@ describe('a research purchase crossing a sale boundary', () => {
     }
     return seconds;
   }
+
+  function countDeliveryPlanRequests() {
+    const kinds: string[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class {
+        onmessage = null;
+        onerror = null;
+        postMessage(message: { kind: string }) {
+          kinds.push(message.kind);
+        }
+        terminate() {}
+      }
+    );
+    return () => kinds.filter(kind => kind === 'saleEndsBuy').length;
+  }
+
+  test('the delivery plan is never calculated on an enlightenment farm', async () => {
+    const requests = countDeliveryPlanRequests();
+    await startEarningPlan(friday + 3600);
+    const views = useResearchViews();
+    views.currentView.value = 'smart_buy';
+    await nextTick();
+    expect(requests()).toBe(0);
+    expect(views.isComputingSaleEndsPlan.value).toBe(false);
+  });
 
   test('game view max times match what buying every level takes across the boundary', async () => {
     const research = getCommonResearches().find(r => r.tier === 1 && r.levels > 1)!;

@@ -6,11 +6,11 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useEggValueStore } from '@/stores/eggValue';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { calculateEggValue } from '@/calculations/eggValue';
-import type { EggValueInput, EggValueOutput } from '@/types';
+import { useEggValueStore } from '@planner/stores/eggValue';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { calculateEggValue } from '@planner/calculations/eggValue';
+import type { EggValueInput, EggValueOutput } from '@planner/types';
 
 /**
  * Composable that provides reactive egg value calculations.

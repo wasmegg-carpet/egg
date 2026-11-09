@@ -13,8 +13,8 @@ import {
   buyWhilePassingCheck,
   buyUntilRealSaleStarts,
 } from './researchRanking';
-import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
-import { findSmartBuyCandidate } from './smartBuyCandidate';
+import { meetsROIByDeadline, getSaleAwareTimeToSave } from 'lib/planners/calculations/researchROI';
+import { findSmartBuyCandidate } from 'lib/planners/calculations/smartBuyCandidate';
 import type { CalculationsSnapshot } from '@/types';
 import type { SimulationContext, EngineState } from '@/engine/types';
 import { createBaseEngineState } from '@/engine/adapter';

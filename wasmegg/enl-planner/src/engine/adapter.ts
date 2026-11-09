@@ -2,7 +2,7 @@ import type { EngineState, SimulationContext } from './types';
 import type { CalculationsSnapshot } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
@@ -64,6 +64,9 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
         stones: [...slot.stones],
       })),
       fuelTankAmounts: { ...initialSnapshot.fuelTankAmounts },
+      currentEgg: 'enlightenment',
+      // Absent from plans saved before enlightenment tracked delivery.
+      eggsDelivered: { ...(initialSnapshot.eggsDelivered ?? {}) },
       activeArtifactSet: initialSnapshot.activeArtifactSet,
       artifactSets: JSON.parse(JSON.stringify(initialSnapshot.artifactSets)),
       population: initialSnapshot.population,
@@ -104,6 +107,8 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
     // Progress state starts from what was in the backup
     fuelTankAmounts: { ...initialStateStore.initialFuelAmounts },
+    currentEgg: 'enlightenment',
+    eggsDelivered: {},
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
 

@@ -6,13 +6,13 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useLayRateStore } from 'lib/planners/stores/layRate';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { usePlanStore } from '@/stores/plan';
-import { useHabCapacity } from '@/composables/useHabCapacity';
-import { calculateLayRate, convertRate } from 'lib/planners/calculations/layRate';
-import type { LayRateInput, LayRateOutput, TimeUnit } from '@/types';
+import { useLayRateStore } from '../stores/layRate';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { usePlanStore } from '@planner/stores/plan';
+import { useHabCapacity } from './useHabCapacity';
+import { calculateLayRate, convertRate } from '../calculations/layRate';
+import type { LayRateInput, LayRateOutput, TimeUnit } from '@planner/types';
 
 /**
  * Extended output with time-converted rates

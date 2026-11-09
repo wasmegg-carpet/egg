@@ -15,7 +15,7 @@ import {
   MAX_ROI_PAYBACK_SEARCH_SECONDS,
   findEventCrossings,
   type PurchaseEventCrossings,
-} from './researchROI';
+} from 'lib/planners/calculations/researchROI';
 import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import type { SimulationContext, EngineState } from '@/engine/types';

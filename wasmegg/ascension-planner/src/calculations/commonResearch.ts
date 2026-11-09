@@ -32,7 +32,7 @@ export {
  * Get the base virtue price for a research at a specific level (0-indexed).
  * Returns the price to buy level (currentLevel + 1).
  */
-export function getBaseVirtuePrice(research: CommonResearch, currentLevel: number): number {
+export function getBaseResearchPrice(research: CommonResearch, currentLevel: number): number {
   if (currentLevel >= research.levels) return Infinity;
   if (currentLevel < 0) return research.virtue_prices[0] || 0;
   return research.virtue_prices[currentLevel] || 0;
@@ -41,13 +41,13 @@ export function getBaseVirtuePrice(research: CommonResearch, currentLevel: numbe
 /**
  * Get the discounted virtue price for a research at a specific level.
  */
-export function getDiscountedVirtuePrice(
+export function getDiscountedResearchPrice(
   research: CommonResearch,
   currentLevel: number,
   modifiers: ResearchCostModifiers,
   isActiveSale: boolean = false
 ): number {
-  const basePrice = getBaseVirtuePrice(research, currentLevel);
+  const basePrice = getBaseResearchPrice(research, currentLevel);
   if (!isFinite(basePrice)) return Infinity;
   return applyDiscountCeil(basePrice, calculateCostMultiplier(modifiers, isActiveSale));
 }

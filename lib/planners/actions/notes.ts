@@ -1,6 +1,7 @@
-import type { DraftAction, NotificationPayload } from '@/types';
-import { generateActionId } from '@/types';
-import { formatDuration, formatPrice } from '@/lib/format';
+import { PROFILE } from '@planner/lib/profile';
+import type { DraftAction, NotificationPayload } from '@planner/types';
+import { generateActionId } from '@planner/types';
+import { formatDuration, formatPrice } from '@planner/lib/format';
 
 /**
  * Builds a ready-to-push `DraftAction` for an inline note — the 'notification' action type. A note
@@ -26,12 +27,12 @@ export function createNoteAction(payload: NotificationPayload, dependsOn: string
   };
 }
 
-/** Shared "N purchase(s) over <duration>, <bocks> bocks spent" phrasing every Smart Buy note's
+/** Shared "N purchase(s) over <duration>, <currency> currency spent" phrasing every Smart Buy note's
  *  submessage builds on. */
 function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalSpent: number): string {
   return `${purchaseCount} purchase${purchaseCount === 1 ? '' : 's'} over ${formatDuration(
     seconds
-  )}, ${formatPrice(totalSpent)} bocks spent`;
+  )}, ${formatPrice(totalSpent)} ${PROFILE.currency.name} spent`;
 }
 
 /**

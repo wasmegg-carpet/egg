@@ -19,7 +19,7 @@ import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext } from '../../types';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction, calculateEggsDeliveredForTime } from '../../../engine/apply';
-import { totalAwayTime } from '@/stores/silos';
+import { totalAwayTime } from 'lib/planners/stores/silos';
 import {
   isResearchSaleActive,
   getNextSaleStart,
@@ -261,7 +261,7 @@ export function advanceTimeWithBoundaries(
         saleType: 'research',
         active: isSaleNow,
         multiplier: 0.3, // 70% off — matches every other toggle_sale creator (commonResearch.ts's
-        // getDiscountedVirtuePrice is the actual price authority and is independently hardcoded to
+        // getDiscountedResearchPrice is the actual price authority and is independently hardcoded to
         // the same 0.3; this field is purely descriptive/display, but 0.35 here was inconsistent
         // with it and with every other call site (ResearchActions.vue, ShiftActions.vue,
         // WaitForEventActions.vue, actionHelpers.ts).

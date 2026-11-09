@@ -24,7 +24,7 @@ import {
   type MissionEntry,
   type ScheduleResult,
   type MissionSummaryLine,
-} from '@/lib/rockets/scheduler';
+} from 'lib/planners/rockets/scheduler';
 
 export interface QueuedMission {
   ship: Spaceship;

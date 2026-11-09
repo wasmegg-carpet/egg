@@ -3,7 +3,7 @@ import { CalculationsSnapshot, VIRTUE_EGGS, VirtueEgg } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
-import { useSilosStore } from '@/stores/silos';
+import { useSilosStore } from 'lib/planners/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useActionsStore } from '@/stores/actions';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';

@@ -3,7 +3,7 @@ import { createSimAction } from '@/types/actions/meta';
 import type { NotificationPayload } from '@/types';
 import type { EngineState, SimulationContext, ShiftResult } from '../../types';
 import { getResearchById, isTierUnlocked, type ResearchCostModifiers } from '../../../calculations/commonResearch';
-import { findSmartBuyCandidate } from '../../../calculations/smartBuyCandidate';
+import { findSmartBuyCandidate } from 'lib/planners/calculations/smartBuyCandidate';
 import {
   computeTierMilestoneChain,
   computeResearchMilestoneChain,
@@ -11,14 +11,14 @@ import {
   computeMilestoneSummaryCore,
   isCheapestTierPurchaseAffordable,
   type MilestoneChainItem,
-} from '../../../calculations/milestoneChain';
-import { getSaleAwareTimeToSave, shouldDeferToNextSale } from '../../../calculations/researchROI';
+} from 'lib/planners/calculations/milestoneChain';
+import { getSaleAwareTimeToSave, shouldDeferToNextSale } from 'lib/planners/calculations/researchROI';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import { computeSnapshot } from '../../../engine/compute';
 import { applyAction, boostTransitionsFrom } from '../../../engine/apply';
 import { advanceTimeWithBoundaries } from './advanceTime';
 import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from 'lib/planners/events';
-import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from '@/lib/actions/notes';
+import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from 'lib/planners/actions/notes';
 import { runWithEarningsEventDeferral } from './earningsEventDeferral';
 import type { DeferralCheckpoint, EarningsEventDeferralHost } from './earningsEventDeferral';
 

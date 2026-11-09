@@ -6,7 +6,7 @@ import { formatPrice } from '@/lib/format';
 
 /** How the enlightenment planner fills in the parts shared planner code leaves open. */
 export const PROFILE: PlannerProfile = {
-  currency: { name: 'bocks', iconPath: 'egginc/icon_bock.png', formatPrice: formatPrice },
+  currency: { name: 'bocks', singular: 'bock', title: 'Bocks', waitActionType: 'wait_for_cash', fuelEarningsField: 'cashEarnedDuringFuel', iconPath: 'egginc/icon_bock.png', formatPrice: formatPrice },
   missions: { noun: 'mission', activeHeading: 'Active Missions', showCurrencyBadge: false },
   pricing: {
     hab: getDiscountedHabPrice,
@@ -16,4 +16,6 @@ export const PROFILE: PlannerProfile = {
   },
   // 1.01^TE on an enlightenment farm
   ihrTruthEggBase: 1.01,
+  storagePrefix: 'enl',
+  hasDeliveryViews: false,
 };

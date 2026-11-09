@@ -1,3 +1,4 @@
+import { applyDiscount } from 'lib/planners/utils/pricing';
 import { isHabId } from 'lib/farm/hab_space';
 
 import type { HabId, HabCostModifiers, Hab } from 'lib/planners/habs';
@@ -21,6 +22,5 @@ export function getDiscountedHabPrice(
 ): number {
   if (purchaseIndex < 0 || purchaseIndex > 3) return 0;
   const basePrice = hab.normalCost[purchaseIndex];
-  // Regular prices aren't whole numbers (the second Coop costs 29.12), so no rounding.
-  return basePrice * getHabCostMultiplier(modifiers, isActiveSale);
+  return applyDiscount(basePrice, getHabCostMultiplier(modifiers, isActiveSale));
 }

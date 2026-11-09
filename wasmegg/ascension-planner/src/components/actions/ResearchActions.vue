@@ -274,11 +274,12 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@/lib/profile';
 import { computed, ref, watch, watchEffect } from 'vue';
 import { getResearchById, type CommonResearch } from '@/calculations/commonResearch';
 import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
-import type { SaleAwarePurchase } from '@/calculations/researchROI';
+import type { SaleAwarePurchase } from 'lib/planners/calculations/researchROI';
 import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
@@ -292,7 +293,7 @@ import {
   buildSaleAwareBuyNotePayload,
   buildSaleEndsBuyNotePayload,
   buildMilestoneNotePayload,
-} from '@/lib/actions/notes';
+} from 'lib/planners/actions/notes';
 import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from '@/composables/useResearchViews';
 import { getTimeToSave, boostTransitionsFrom } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
@@ -301,7 +302,7 @@ import {
   getSaleAwareTimeToSave,
   shouldDeferToNextSale,
   findEventCrossings,
-} from '@/calculations/researchROI';
+} from 'lib/planners/calculations/researchROI';
 import { getNextSaleStart } from 'lib/planners/events';
 import {
   simulateThresholdBuy,
@@ -316,8 +317,8 @@ import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 // Sub-components
 import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
 import ResearchViewSelector from 'ui/components/planners/actions/ResearchViewSelector.vue';
-import ResearchGameView from './ResearchGameView.vue';
-import ResearchFlatView from './ResearchFlatView.vue';
+import ResearchGameView from 'ui/components/planners/actions/ResearchGameView.vue';
+import ResearchFlatView from 'ui/components/planners/actions/ResearchFlatView.vue';
 import ElrViewControls from './ElrViewControls.vue';
 import RoiViewControls from './RoiViewControls.vue';
 import SmartBuyView from './SmartBuyView.vue';
@@ -948,7 +949,9 @@ const nextElrCandidate = computed(() =>
   elrRankedResearches.value.find(item => item.canBuy && !item.isMaxed && !item.showDeadlineWarning)
 );
 
-const canBuyUntilSaleDeadline = computed(() => isResearchSaleActive.value && !!nextElrCandidate.value);
+const canBuyUntilSaleDeadline = computed(
+  () => PROFILE.hasDeliveryViews && isResearchSaleActive.value && !!nextElrCandidate.value
+);
 
 // Executes the precomputed sale-ends plan (`saleEndsPlan` — same plan the preview under the
 // button displays). Candidate selection comes from the plan; buying still goes through the real

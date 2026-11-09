@@ -8,7 +8,7 @@ import type {
   IHRInput,
 } from '@/types';
 import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
-import { totalAwayTime } from '@/stores/silos';
+import { totalAwayTime } from 'lib/planners/stores/silos';
 import { integrateRate } from 'lib/planners/engine/apply/math';
 
 import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
@@ -156,6 +156,7 @@ export function computeSnapshot(
   // and we were offline.
   // We use 1e9 as a threshold to distinguish between 0-based simulation time
   // and absolute Unix timestamps from a backup.
+  let extraEggs = 0;
   if (
     state.lastStepTime > 1e9 &&
     context.ascensionStartTime > state.lastStepTime &&
@@ -165,7 +166,7 @@ export function computeSnapshot(
     const elapsedSeconds = context.ascensionStartTime - state.lastStepTime;
 
     // Accurate catch-up using integrated rate (accounts for population growth)
-    const extraEggs = integrateRate(
+    extraEggs = integrateRate(
       elapsedSeconds,
       startPopulation,
       ihrOutput.offlineRate / 60,
@@ -213,6 +214,11 @@ export function computeSnapshot(
     tankLevel: state.tankLevel,
     proPermit: state.proPermit,
     fuelTankAmounts: state.fuelTankAmounts,
+    currentEgg: state.currentEgg,
+    eggsDelivered:
+      extraEggs > 0
+        ? { ...state.eggsDelivered, [state.currentEgg]: (state.eggsDelivered[state.currentEgg] || 0) + extraEggs }
+        : state.eggsDelivered,
     vehicles: state.vehicles,
     habIds: state.habIds,
     researchLevels: state.researchLevels,

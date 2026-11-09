@@ -295,6 +295,7 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@/lib/profile';
 import { ref, computed } from 'vue';
 import { iconURL } from 'lib';
 import { useFuelTankStore } from '@/stores/fuelTank';
@@ -307,10 +308,10 @@ import { fuelEggIconPath } from '@/lib/missions';
 import { FUEL_ORDER } from '@/stores/fuelTank';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 
-import { useLayRate } from '@/composables/useLayRate';
+import { useLayRate } from 'lib/planners/composables/useLayRate';
 import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
-import { useHabCapacity } from '@/composables/useHabCapacity';
-import { useShippingCapacity } from '@/composables/useShippingCapacity';
+import { useHabCapacity } from 'lib/planners/composables/useHabCapacity';
+import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
 import { solveForTime, integrateRate } from 'lib/planners/engine/apply/math';
 
 const fuelTankStore = useFuelTankStore();
@@ -443,7 +444,7 @@ function handleStoreFuel() {
     timeSeconds: timeToStoreSeconds.value,
     fuelSpeed: fuelSpeed.value,
     eggsShippedDuringFuel: estimatedEggsShipped.value,
-    cashEarnedDuringFuel: estimatedBocksEarned.value,
+    [PROFILE.currency.fuelEarningsField]: estimatedBocksEarned.value,
   };
 
   const dependencies = computeDependencies(

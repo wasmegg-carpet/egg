@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <p class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-6 leading-relaxed">
-      Wait until you have accumulated a target amount of bocks.
+      Wait until you have accumulated a target amount of {{ currency.name }}.
     </p>
 
     <!-- Current State -->
@@ -10,13 +10,13 @@
         <div
           class="w-12 h-12 rounded-2xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-2"
         >
-          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Bocks" />
+          <img :src="iconURL(currency.iconPath, 64)" class="w-full h-full object-contain" :alt="currency.name" />
         </div>
         <div>
           <div class="text-sm font-bold text-slate-800">
             {{ formatNumber(planStore.bankValue, 3) }}
           </div>
-          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Bocks in Bank</div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current {{ currency.name }} in Bank</div>
         </div>
       </div>
     </div>
@@ -27,9 +27,9 @@
         <div
           class="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center p-1.5 shadow-lg border border-slate-800"
         >
-          <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-full h-full object-contain" alt="Bocks" />
+          <img :src="iconURL(currency.iconPath, 64)" class="w-full h-full object-contain" :alt="currency.name" />
         </div>
-        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target Bock Count </span>
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-tight"> Set Target {{ currency.singular }} Count </span>
       </div>
 
       <!-- Target input -->
@@ -84,32 +84,38 @@
       <button
         class="btn-premium btn-primary w-full mt-6 py-4 flex items-center justify-center gap-2 group disabled:opacity-20 shadow-lg shadow-slate-900/10"
         :disabled="!canWait"
-        @click="handleWaitForCash"
+        @click="handleWaitForCurrency"
       >
         <img
-          :src="iconURL('egginc/icon_bock.png', 64)"
+          :src="iconURL(currency.iconPath, 64)"
           class="w-5 h-5 object-contain group-hover:scale-110 transition-transform"
-          alt="Bocks"
+          :alt="currency.name"
         />
-        <span>Wait for Bocks</span>
+        <span>Wait for {{ currency.title }}</span>
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { ref, computed } from 'vue';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { iconURL } from 'lib';
-import { usePlanStore } from '@/stores/plan';
-import { useActionsStore } from '@/stores/actions';
-import { formatNumber, formatDuration, parseNumber, formatAbsoluteTime } from '@/lib/format';
-import { generateActionId } from '@/types';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
-import { getBoostAwareTimeToSave } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
-import { computeDependencies } from '@/lib/actions/executor';
+import { usePlanStore } from '@planner/stores/plan';
+import { useActionsStore } from '@planner/stores/actions';
+import { formatNumber, formatDuration, parseNumber, formatAbsoluteTime } from '@planner/lib/format';
+import { generateActionId, type ActionType } from '@planner/types';
+import { createCurrencyWaitPayload } from 'lib/planners/actions/currencyWait';
+import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+import { getBoostAwareTimeToSave } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
+import { computeDependencies } from '@planner/lib/actions/executor';
+
+const { currency } = usePlannerProfile();
+// Each planner's action types include only the name its own saved plans use.
+const waitType = currency.waitActionType as ActionType;
 
 const planStore = usePlanStore();
 const actionsStore = useActionsStore();
@@ -157,34 +163,33 @@ const canWait = computed(
   () => parsedTarget.value !== null && parsedTarget.value > planStore.bankValue && isFinite(timeToSaveSeconds.value)
 );
 
-function handleWaitForCash() {
+function handleWaitForCurrency() {
   if (!canWait.value || parsedTarget.value === null) return;
-  const targetCash = parsedTarget.value;
+  const target = parsedTarget.value;
 
   batch(async () => {
     prepareExecution();
-    insertBoostCrossingWaits(targetCash);
+    insertBoostCrossingWaits(target);
     if (isEditingPastGroup.value) await settled();
-    addBocksWait(targetCash);
+    addCurrencyWait(target);
   });
 
   targetInput.value = '';
 }
 
 // After any 2x waits, so everything is measured from where those leave the plan.
-function addBocksWait(targetCash: number) {
+function addCurrencyWait(target: number) {
   const beforeSnapshot = prepareExecution();
 
-  const payload = {
-    targetCash,
-    currentCash: beforeSnapshot.bankValue,
-    requiredCash: Math.max(0, targetCash - beforeSnapshot.bankValue),
+  const payload = createCurrencyWaitPayload(currency.waitActionType, {
+    target,
+    bankValue: beforeSnapshot.bankValue,
     earningsPerSecond: beforeSnapshot.offlineEarnings,
-    timeSeconds: getBoostAwareTimeToSave(targetCash, beforeSnapshot, getSimulationContext()),
-  };
+    timeSeconds: getBoostAwareTimeToSave(target, beforeSnapshot, getSimulationContext()),
+  }) as never;
 
   const dependencies = computeDependencies(
-    'wait_for_cash',
+    waitType,
     payload,
     actionsStore.actionsBeforeInsertion,
     actionsStore.initialSnapshot.researchLevels
@@ -196,18 +201,12 @@ function addBocksWait(targetCash: number) {
   // We'll use applyTime logic here to update the store state.
   
   // Update bank value manually in the plan store
-  planStore.setBankValue(targetCash);
-  // Also need to update population if we want to be accurate, but usually 
-  // executors handle store updates. 
-  // Wait, wait. Action executors' `execute` method should handle this.
-  
-  // Let's go back and update lib/actions/executors/waitForCash.ts to actually DO something!
-  
+  planStore.setBankValue(target);
   completeExecution(
     {
       id: generateActionId(),
       timestamp: Date.now(),
-      type: 'wait_for_cash',
+      type: waitType,
       payload,
       cost: 0,
       dependsOn: dependencies,

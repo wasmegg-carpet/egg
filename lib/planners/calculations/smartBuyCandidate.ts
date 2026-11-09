@@ -1,12 +1,12 @@
 import {
   type CommonResearch,
   getCommonResearches,
-  getDiscountedVirtuePrice,
+  getDiscountedResearchPrice,
   isTierUnlocked,
   type ResearchCostModifiers,
-} from './commonResearch';
-import type { CalculationsSnapshot } from '@/types';
-import { getTimeToSave } from '@/engine/apply';
+} from '@planner/calculations/commonResearch';
+import type { CalculationsSnapshot } from '@planner/types';
+import { getTimeToSave } from '@planner/engine/apply';
 import { getSaleAwareTimeToSave } from './researchROI';
 
 export interface SmartBuyCandidate {
@@ -17,8 +17,8 @@ export interface SmartBuyCandidate {
 
 /**
  * Cheapest unpurchased, unlocked research level that can be saved up for in
- * `<= thresholdSeconds` of pure earning time (existing bank/gems are ignored — see
- * `ResearchActions.vue`'s "Smart Buy will never spend gems from your bank" note).
+ * `<= thresholdSeconds` of pure earning time (existing bank/currency are ignored — see
+ * `ResearchActions.vue`'s "Smart Buy will never spend currency from your bank" note).
  *
  * `currentAbsoluteTime` is optional and controls sale-awareness: pass it only if the caller will
  * actually simulate the resulting `secondsToSave` wait before buying (e.g. the auto planner's
@@ -40,7 +40,7 @@ export function findSmartBuyCandidate(
 ): SmartBuyCandidate | null {
   if (snapshot.offlineEarnings <= 0) return null;
 
-  // Ignore bank so smart buy never factors in saved gems.
+  // Ignore bank so smart buy never factors in saved currency.
   const noBankSnapshot = { ...snapshot, bankValue: 0 };
 
   const candidates = getCommonResearches()
@@ -54,7 +54,7 @@ export function findSmartBuyCandidate(
         const purchase = getSaleAwareTimeToSave(r, level, mods, isSale, currentAbsoluteTime, noBankSnapshot, []);
         return { research: r, price: purchase.price, secondsToSave: purchase.waitSeconds };
       }
-      const price = getDiscountedVirtuePrice(r, level, mods, isSale);
+      const price = getDiscountedResearchPrice(r, level, mods, isSale);
       return { research: r, price, secondsToSave: getTimeToSave(price, noBankSnapshot) };
     });
 

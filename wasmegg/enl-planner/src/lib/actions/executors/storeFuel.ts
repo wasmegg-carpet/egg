@@ -5,6 +5,8 @@
  * Cost is 0 (free action, just time-based).
  */
 
+import { fuelEarnings } from 'lib/planners/actions/fuelEarnings';
+import { PROFILE } from '@/lib/profile';
 import type { ActionExecutor, ExecutorContext } from '../executor';
 import type { StoreFuelPayload } from '@/types';
 import { FUEL_EGG_NAMES } from '@/types';
@@ -32,8 +34,8 @@ export const storeFuelExecutor: ActionExecutor<'store_fuel'> = {
     let desc = `+${formatNumber(payload.amount, 1)} eggs (${formatDuration(payload.timeSeconds)})`;
     if (speed < 1.0 && (payload.eggsShippedDuringFuel ?? 0) > 0) {
       desc += ` · Ship ${formatNumber(payload.eggsShippedDuringFuel!, 1)}`;
-      if ((payload.cashEarnedDuringFuel ?? 0) > 0) {
-        desc += ` · +${formatNumber(payload.cashEarnedDuringFuel!, 1)} bocks`;
+      if (fuelEarnings(payload) > 0) {
+        desc += ` · +${formatNumber(fuelEarnings(payload), 1)} ${PROFILE.currency.name}`;
       }
     }
     return desc;

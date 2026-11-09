@@ -6,11 +6,11 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
-import type { HabCapacityInput, HabCapacityOutput } from '@/types';
+import { useHabCapacityStore } from '../stores/habCapacity';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { calculateHabCapacity_Full } from '../calculations/habCapacity';
+import type { HabCapacityInput, HabCapacityOutput } from '@planner/types';
 
 /**
  * Composable that provides reactive hab capacity calculations.

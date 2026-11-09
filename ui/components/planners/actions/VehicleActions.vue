@@ -191,7 +191,7 @@ import {
 } from '@planner/lib/vehicles';
 import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useShippingCapacity } from '@planner/composables/useShippingCapacity';
+import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@planner/stores/actions';

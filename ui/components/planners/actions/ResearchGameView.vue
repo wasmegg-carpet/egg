@@ -70,13 +70,14 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { ref, watch, computed } from 'vue';
-import { type CommonResearch } from '@/calculations/commonResearch';
+import { type CommonResearch } from '@planner/calculations/commonResearch';
 import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
-import { formatAbsoluteTime } from '@/lib/format';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
-import type { TierSummary } from '@/calculations/commonResearch';
+import { formatAbsoluteTime } from '@planner/lib/format';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
+import type { TierSummary } from '@planner/calculations/commonResearch';
 
 const props = defineProps<{
   tiers: number[];
@@ -99,7 +100,7 @@ const props = defineProps<{
 
 defineEmits(['buy', 'max', 'max-tier']);
 
-const EXPANDED_TIERS_STORAGE_KEY = 'ascension_research_expanded_tiers';
+const EXPANDED_TIERS_STORAGE_KEY = `${usePlannerProfile().storagePrefix}_research_expanded_tiers`;
 
 function loadStoredExpandedTiers(): Set<number> | null {
   const stored = localStorage.getItem(EXPANDED_TIERS_STORAGE_KEY);

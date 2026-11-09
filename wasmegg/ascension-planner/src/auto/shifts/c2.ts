@@ -2,9 +2,9 @@ import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { getResearchById, isTierUnlocked } from '../../calculations/commonResearch';
 import { rankResearchByROI } from '../../calculations/researchRanking';
 import { computeSnapshot } from '../../engine/compute';
-import { maxSilos } from '@/stores/silos';
+import { maxSilos } from 'lib/planners/stores/silos';
 import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
-import { buildR1LookaheadNotePayload } from '@/lib/actions/notes';
+import { buildR1LookaheadNotePayload } from 'lib/planners/actions/notes';
 import type { DeferralCheckpoint } from './helpers/earningsEventDeferral';
 import { applyShiftIfNeeded } from './helpers/actionHelpers';
 import {

@@ -23,7 +23,7 @@
  * Loaded via Vite's native worker support — no bundler config needed:
  *   new Worker(new URL('./researchCalc.worker.ts', import.meta.url), { type: 'module' })
  */
-import { computeTierMilestoneChain, computeResearchMilestoneChain } from '@/calculations/milestoneChain';
+import { computeTierMilestoneChain, computeResearchMilestoneChain } from 'lib/planners/calculations/milestoneChain';
 import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '@/calculations/smartBuyPreview';
 import { createBaseEngineState } from '@/engine/adapter';
 import { sanitizeLongs } from '@/lib/artifacts/utils';

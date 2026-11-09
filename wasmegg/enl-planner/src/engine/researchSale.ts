@@ -12,7 +12,7 @@ import {
   getSaleAwareTimeToSave,
   type PurchaseEventCrossings,
   type SaleAwarePurchase,
-} from '@/calculations/researchROI';
+} from 'lib/planners/calculations/researchROI';
 import { boostTransitionsFrom } from 'lib/planners/engine/apply/math';
 import { isResearchSaleAtSimTime } from 'lib/planners/engine/calendarEvents';
 import type { SimulationContext } from './types';

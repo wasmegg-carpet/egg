@@ -9,7 +9,7 @@ import { allModifiersFromColleggtibles } from 'lib/collegtibles';
 import { activeSlots, artifactSlotCount, summarizeLoadout } from '@/lib/artifacts';
 import { calculateClothedTEForSet, getOptimalEarningsSet, getOptimalELRSet } from '@/lib/artifacts/virtue';
 import { calculateEarnings } from '@/calculations/earnings';
-import { maxSilos, nextSiloCost, MAX_SILOS } from '@/stores/silos';
+import { maxSilos, nextSiloCost, MAX_SILOS } from 'lib/planners/stores/silos';
 import { applyAction } from '@/engine/apply';
 import type { EngineState } from '@/engine/types';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';

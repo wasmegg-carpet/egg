@@ -4,8 +4,8 @@
  */
 
 import { computed, type ComputedRef } from 'vue';
-import { useLayRate } from './useLayRate';
-import { useShippingCapacity } from './useShippingCapacity';
+import { useLayRate } from 'lib/planners/composables/useLayRate';
+import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
 import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import type { EffectiveLayRateOutput } from '@/types';
 

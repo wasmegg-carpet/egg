@@ -44,7 +44,7 @@ import { waitForFullHabsExecutor } from 'lib/planners/actions/executors/wait_for
 import { toggleEarningsBoostExecutor } from 'lib/planners/actions/executors/toggleEarningsBoost';
 import { waitForResearchSaleExecutor } from 'lib/planners/actions/executors/waitForResearchSale';
 import { waitForEarningsBoostExecutor } from 'lib/planners/actions/executors/waitForEarningsBoost';
-import { waitForCashExecutor } from './executors/waitForCash';
+import { createWaitForCurrencyExecutor } from 'lib/planners/actions/executors/waitForCurrency';
 import { createWaitForNoEarningsExecutor } from 'lib/planners/actions/executors/wait_for_no_earnings';
 import { notificationExecutor } from 'lib/planners/actions/executors/notification';
 import { createModifyBankExecutor } from 'lib/planners/actions/executors/modifyBank';
@@ -101,7 +101,7 @@ const executorMap: { [K in ActionType]: ActionExecutor<K> } = {
   wait_for_research_sale_end: waitForResearchSaleEndExecutor,
   wait_for_earnings_boost: waitForEarningsBoostExecutor,
   wait_for_earnings_boost_end: waitForEarningsBoostEndExecutor,
-  wait_for_cash: waitForCashExecutor,
+  wait_for_cash: createWaitForCurrencyExecutor(PROFILE),
   wait_for_no_earnings: createWaitForNoEarningsExecutor(PROFILE),
   toggle_earnings_boost: toggleEarningsBoostExecutor,
   notification: notificationExecutor,

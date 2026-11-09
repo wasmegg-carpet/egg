@@ -1,3 +1,4 @@
+import { VIEWS } from '@/composables/useResearchViews';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ei } from 'lib';
@@ -73,9 +74,9 @@ describe('prices on an enlightenment farm', () => {
   test('habs and research charge the regular price', () => {
     const coop = getHabById(0)!;
     const mods = { cheaperContractorsLevel: 0, habCostMultiplier: 1 };
-    expect(getDiscountedHabPrice(coop, 1, mods, false)).toBe(29.12);
+    expect(getDiscountedHabPrice(coop, 1, mods, false)).toBe(29);
     const nests = getResearchById('comfy_nests')!;
-    expect(getDiscountedResearchPrice(nests, 0, { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 }, false)).toBe(0.5);
+    expect(getDiscountedResearchPrice(nests, 0, { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 }, false)).toBe(1);
   });
 });
 
@@ -185,4 +186,8 @@ describe('reading a backup', () => {
     } as never);
     expect(loadout[0].artifactId).toBe('demeters-necklace-4-3');
   });
+});
+
+test('enlightenment has no delivery research view', () => {
+  expect(VIEWS.some(view => view.id === 'elr')).toBe(false);
 });

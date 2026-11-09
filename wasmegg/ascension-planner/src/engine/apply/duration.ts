@@ -1,10 +1,16 @@
+import { PROFILE } from '@/lib/profile';
+import {
+  currencyWaitTarget,
+  isCurrencyWaitType,
+  refreshCurrencyWait,
+  type CurrencyWaitPayload,
+} from 'lib/planners/actions/currencyWait';
 import {
   Action,
   CalculationsSnapshot,
   LaunchMissionsPayload,
   WaitForTEPayload,
   StoreFuelPayload,
-  WaitForGemsPayload,
 } from '@/types';
 import {
   BOUNDARY_EPSILON_SECONDS,
@@ -18,7 +24,6 @@ import {
   solveForTime,
   integrateRate,
   getTimeToSave,
-  calculateEggsDeliveredForTime,
   boostTransitionsFrom,
 } from 'lib/planners/engine/apply/math';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
@@ -26,7 +31,7 @@ import { getResearchById } from '@/calculations/commonResearch';
 import { researchPurchaseAt } from '../researchSale';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';
 import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@/lib/vehicles';
-import { nextSiloCost } from '@/stores/silos';
+import { nextSiloCost } from 'lib/planners/stores/silos';
 import type { SimulationContext } from '../types';
 
 /**
@@ -136,10 +141,10 @@ export function refreshActionPayload(
         prevSnapshot.habCapacity
       );
       const valuePerEgg = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
-      payload.gemsEarnedDuringFuel = payload.eggsShippedDuringFuel * valuePerEgg;
+      payload[PROFILE.currency.fuelEarningsField] = payload.eggsShippedDuringFuel * valuePerEgg;
     } else {
       payload.eggsShippedDuringFuel = 0;
-      payload.gemsEarnedDuringFuel = 0;
+      payload[PROFILE.currency.fuelEarningsField] = 0;
     }
 
     return { ...action, payload };
@@ -191,14 +196,13 @@ export function refreshActionPayload(
     return { ...action, payload: { ...action.payload, totalTimeSeconds: running ? end - absoluteSimTime : 0 } };
   }
 
-  if (action.type === 'wait_for_gems') {
-    const payload = { ...(action.payload as WaitForGemsPayload) };
-    payload.currentGems = prevSnapshot.bankValue;
-    payload.requiredGems = Math.max(0, payload.targetGems - payload.currentGems);
-    payload.timeSeconds = context
-      ? getBoostAwareTimeToSave(payload.targetGems, prevSnapshot, context)
-      : getTimeToSave(payload.targetGems, prevSnapshot);
-    return { ...action, payload };
+  if (isCurrencyWaitType(action.type)) {
+    const payload = action.payload as CurrencyWaitPayload;
+    const target = currencyWaitTarget(payload);
+    const timeSeconds = context
+      ? getBoostAwareTimeToSave(target, prevSnapshot, context)
+      : getTimeToSave(target, prevSnapshot);
+    return { ...action, payload: refreshCurrencyWait(payload, prevSnapshot.bankValue, timeSeconds) } as Action;
   }
 
   return action;
@@ -236,7 +240,7 @@ export function getActionDuration(
   prevSnapshot: CalculationsSnapshot,
   context?: SimulationContext
 ): number {
-  if (action.type === 'store_fuel' || action.type === 'wait_for_te' || action.type === 'wait_for_gems') {
+  if (action.type === 'store_fuel' || action.type === 'wait_for_te' || isCurrencyWaitType(action.type)) {
     return (action.payload as { timeSeconds?: number }).timeSeconds || 0;
   }
 
@@ -277,34 +281,3 @@ export function getActionDuration(
   return 0;
 }
 
-/**
- * Calculate the number of eggs passively delivered during an action's duration.
- */
-export function computePassiveEggsDelivered(
-  action: Action,
-  prevSnapshot: CalculationsSnapshot,
-  context?: SimulationContext
-): number {
-  const NO_PASSIVE_TYPES = [
-    'store_fuel',
-    'wait_for_te',
-    'start_ascension',
-    'shift',
-    'change_artifacts',
-    'toggle_sale',
-    'equip_artifact_set',
-    'update_artifact_set',
-    'remove_fuel',
-    'toggle_earnings_boost',
-    'notification',
-    'wait_for_no_earnings',
-    'modify_bank',
-  ];
-  if (NO_PASSIVE_TYPES.includes(action.type)) return 0;
-
-  const durationSeconds = getActionDuration(action, prevSnapshot, context);
-  if (durationSeconds > 0) {
-    return calculateEggsDeliveredForTime(durationSeconds, prevSnapshot);
-  }
-  return 0;
-}

@@ -2,6 +2,7 @@
  * Common research calculations including tier unlock logic and cost discounts.
  */
 
+import { applyDiscountCeil } from 'lib/planners/utils/pricing';
 import type { ResearchLevels } from '@/types';
 
 import type { ResearchCostModifiers, TierSummary, CommonResearch } from 'lib/planners/calculations/commonResearch';
@@ -48,8 +49,7 @@ export function getDiscountedResearchPrice(
 ): number {
   const basePrice = getBaseResearchPrice(research, currentLevel);
   if (!isFinite(basePrice)) return Infinity;
-  // Regular prices aren't whole numbers (the first level of Comfortable Nests costs 0.5), so no rounding.
-  return basePrice * calculateCostMultiplier(modifiers, isActiveSale);
+  return applyDiscountCeil(basePrice, calculateCostMultiplier(modifiers, isActiveSale));
 }
 
 /**
@@ -66,7 +66,7 @@ export function getTotalCostToMax(
 
   for (let level = currentLevel; level < research.levels; level++) {
     const basePrice = research.prices[level] || 0;
-    total += basePrice * multiplier;
+    total += applyDiscountCeil(basePrice, multiplier);
   }
 
   return total;

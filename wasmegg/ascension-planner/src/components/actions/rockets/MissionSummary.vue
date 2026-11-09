@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ScheduleResult, MissionSummaryLine } from '@/lib/rockets/scheduler';
+import type { ScheduleResult, MissionSummaryLine } from 'lib/planners/rockets/scheduler';
 import { formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
