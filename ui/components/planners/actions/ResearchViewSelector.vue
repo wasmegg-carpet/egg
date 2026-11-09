@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { ChevronDownIcon } from '@heroicons/vue/solid';
-import { type ViewType } from '@/composables/useResearchViews';
+import { type ViewType } from '@planner/composables/useResearchViews';
 
 const props = defineProps<{
   modelValue: ViewType;

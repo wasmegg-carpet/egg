@@ -166,7 +166,7 @@
 import { ref, computed, watch, nextTick, type Component } from 'vue';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import type { Action, VirtueEgg, StartAscensionPayload, ShiftPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
@@ -209,7 +209,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 // Internal state for manually collapsing/expanding the current group
 // This is now managed by the store, but we keep the ref if needed for transition (actually we can remove it)
@@ -328,7 +328,7 @@ function handleDayUndo(action: Action, options: { skipConfirmation: boolean }) {
  * hover tooltip — anchors the plan's simulated time to the ascension's actual start time.
  */
 function actionAbsoluteTime(action: Action): Date {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const simTime = action.endState.lastStepTime || 0;
   // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):

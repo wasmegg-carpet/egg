@@ -135,7 +135,7 @@
                 @click="handleAddTrainCar(index)"
               >
                 <span class="text-[10px] font-black text-blue-700 uppercase tracking-tight group-hover:text-blue-800"
-                  >+1 Car ({{ formatBockPrice(getNextCarCost(slot)) }})</span
+                  >+1 Car ({{ formatPrice(getNextCarCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getCarTimeToBuy(slot) }}</span>
               </button>
@@ -148,7 +148,7 @@
               >
                 <span
                   class="text-[10px] font-black text-indigo-700 uppercase tracking-tight group-hover:text-indigo-800"
-                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatBockPrice(getTotalCarsCost(slot)) }})</span
+                  >Max (+{{ getRemainingCars(slot, index) }}) ({{ formatPrice(getTotalCarsCost(slot)) }})</span
                 >
                 <span class="text-[9px] font-medium text-slate-400 opacity-80">{{ getMaxCarsTimeToBuy(slot) }}</span>
               </button>
@@ -188,26 +188,26 @@ import {
   MAX_TRAIN_LENGTH,
   type VehicleCostModifiers,
   type VehicleType,
-} from '@/lib/vehicles';
-import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
+} from '@planner/lib/vehicles';
+import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useShippingCapacity } from '@/composables/useShippingCapacity';
-import { useInitialStateStore } from '@/stores/initialState';
+import { useShippingCapacity } from '@planner/composables/useShippingCapacity';
+import { useInitialStateStore } from '@planner/stores/initialState';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useActionsStore } from '@/stores/actions';
+import { useActionsStore } from '@planner/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
-import { computeDependencies } from '@/lib/actions/executor';
-import { generateActionId } from '@/types';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import { generateActionId } from '@planner/types';
+import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
 import {
   calculateShippingMultipliers,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
 } from 'lib/planners/calculations/shippingCapacity';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
-import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from '@/calculations/vehiclePurchasePlan';
+import { calculateArtifactModifiers } from '@planner/lib/artifacts';
+import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
+import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from '@planner/calculations/vehiclePurchasePlan';
 
 const shippingStore = useShippingCapacityStore();
 const initialStateStore = useInitialStateStore();

@@ -62,7 +62,7 @@ export interface VirtueState {
   population: number; // Current chickens on farm
 }
 
-export const useVirtueStore = defineStore('virtue', {
+export const usePlanStore = defineStore('virtue', {
   state: (): VirtueState => ({
     currentEgg: 'curiosity',
     shiftCount: 0,

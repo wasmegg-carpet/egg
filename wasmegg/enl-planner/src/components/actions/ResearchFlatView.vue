@@ -116,7 +116,7 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { formatAbsoluteTime } from '@/lib/format';
 import { type PurchaseEventCrossings } from '@/calculations/researchROI';
-import ResearchItem from './ResearchItem.vue';
+import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
 
 interface SortedResearchItem {
   research: CommonResearch;

@@ -14,7 +14,7 @@
         </div>
         <div>
           <div class="text-sm font-bold text-slate-800">
-            {{ formatNumber(virtueStore.bankValue, 3) }}
+            {{ formatNumber(planStore.bankValue, 3) }}
           </div>
           <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Gems in Bank</div>
         </div>
@@ -49,7 +49,7 @@
 
       <!-- Calculated values -->
       <div
-        v-if="parsedTarget !== null && parsedTarget > virtueStore.bankValue"
+        v-if="parsedTarget !== null && parsedTarget > planStore.bankValue"
         class="space-y-3 bg-slate-50/30 rounded-xl p-4 border border-slate-50"
       >
         <div class="flex justify-between items-center text-[10px]">
@@ -74,7 +74,7 @@
       </div>
 
       <div
-        v-else-if="parsedTarget !== null && parsedTarget <= virtueStore.bankValue"
+        v-else-if="parsedTarget !== null && parsedTarget <= planStore.bankValue"
         class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-emerald-700 text-[10px] font-bold uppercase tracking-tight"
       >
         Target already reached!
@@ -102,7 +102,7 @@ import { ref, computed } from 'vue';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { iconURL } from 'lib';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { formatNumber, formatDuration, parseNumber, formatAbsoluteTime } from '@/lib/format';
 import { generateActionId } from '@/types';
@@ -111,7 +111,7 @@ import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 import { computeDependencies } from '@/lib/actions/executor';
 
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
   useEventCrossingWaits();
@@ -125,7 +125,7 @@ const parsedTarget = computed(() => {
 
 const requiredToEarn = computed(() => {
   if (parsedTarget.value === null) return 0;
-  return Math.max(0, parsedTarget.value - virtueStore.bankValue);
+  return Math.max(0, parsedTarget.value - planStore.bankValue);
 });
 
 const earningsPerSecond = computed(() => {
@@ -134,7 +134,7 @@ const earningsPerSecond = computed(() => {
 });
 
 const timeToSaveSeconds = computed(() => {
-  if (parsedTarget.value === null || parsedTarget.value <= virtueStore.bankValue) return 0;
+  if (parsedTarget.value === null || parsedTarget.value <= planStore.bankValue) return 0;
   
   // Accounts for population growth and 2x earnings, as the wait itself does
   const time = getBoostAwareTimeToSave(parsedTarget.value, actionsStore.effectiveSnapshot, getSimulationContext());
@@ -142,7 +142,7 @@ const timeToSaveSeconds = computed(() => {
 });
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
@@ -150,11 +150,11 @@ const baseTimestamp = computed(() => {
 
 const formattedAbsoluteTime = computed(() => {
   if (timeToSaveSeconds.value === 0 || !isFinite(timeToSaveSeconds.value)) return 'N/A';
-  return formatAbsoluteTime(timeToSaveSeconds.value, baseTimestamp.value, virtueStore.ascensionTimezone);
+  return formatAbsoluteTime(timeToSaveSeconds.value, baseTimestamp.value, planStore.ascensionTimezone);
 });
 
 const canWait = computed(
-  () => parsedTarget.value !== null && parsedTarget.value > virtueStore.bankValue && isFinite(timeToSaveSeconds.value)
+  () => parsedTarget.value !== null && parsedTarget.value > planStore.bankValue && isFinite(timeToSaveSeconds.value)
 );
 
 function handleWaitForGems() {
@@ -196,7 +196,7 @@ function addGemsWait(targetGems: number) {
   // We'll use applyTime logic here to update the store state.
   
   // Update bank value manually in virtue store
-  virtueStore.setBankValue(targetGems);
+  planStore.setBankValue(targetGems);
   // Also need to update population if we want to be accurate, but usually 
   // executors handle store updates. 
   // Wait, wait. Action executors' `execute` method should handle this.

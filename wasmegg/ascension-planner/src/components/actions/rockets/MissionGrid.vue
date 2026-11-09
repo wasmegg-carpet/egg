@@ -95,7 +95,7 @@ import {
   type Spaceship,
   type DurationType,
 } from '@/lib/missions';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 

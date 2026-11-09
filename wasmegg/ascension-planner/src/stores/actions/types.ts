@@ -10,7 +10,7 @@ export interface ActionsState {
   isRecalculating: boolean;
   // True from the start of resetAllStores() through the end of setInitialSnapshot() — i.e. the
   // whole "switching to a new mode" window during which stores are mutated in several separate,
-  // individually-observable steps and can briefly disagree with each other (e.g. virtueStore
+  // individually-observable steps and can briefly disagree with each other (e.g. planStore
   // already reset while actionsStore still holds the previous plan's snapshot). Reactive consumers
   // that derive absolute timestamps from multiple stores (like the milestone chain watchEffect in
   // useResearchViews.ts) must not compute against that transitional state — doing so has produced

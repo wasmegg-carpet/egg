@@ -201,7 +201,7 @@
             v-if="Math.abs(action.bankDelta) >= 0.5 && (!isPurchaseAction || action.type === 'launch_missions')"
             :class="action.bankDelta >= 0.5 ? 'text-emerald-600' : 'text-slate-400'"
           >
-            Gems {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatGemPrice(action.bankDelta) }}
+            Gems {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatPrice(action.bankDelta) }}
           </span>
         </div>
       </div>
@@ -227,7 +227,7 @@
               "
             >
               {{ action.bankDelta >= 0.5 ? '+' : action.bankDelta <= -0.5 ? '-' : ''
-              }}{{ formatGemPrice(Math.abs(action.bankDelta)) }}
+              }}{{ formatPrice(Math.abs(action.bankDelta)) }}
             </span>
             <img
               v-if="Math.abs(action.bankDelta) >= 0.5"
@@ -249,7 +249,7 @@
               ]"
             >
               {{ action.bankDelta >= 0.5 && action.cost < 0.5 ? '+' : ''
-              }}{{ formatGemPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
+              }}{{ formatPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
             </span>
             <img
               v-if="action.cost >= 0.5 || action.bankDelta >= 0.5"
@@ -284,11 +284,11 @@ import { VIRTUE_EGG_NAMES } from '@/types';
 import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { getExecutor } from '@/lib/actions';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
 import { getResearchIconPath } from 'lib/planners/assets';
 import { getResearchById } from '@/calculations/commonResearch';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 
 const props = defineProps<{
   action: Action;
@@ -300,7 +300,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const isStartAction = computed(() => props.action.type === 'start_ascension');
 const isContinued = computed(() => {
@@ -470,7 +470,7 @@ const waitDurationFormatted = computed(() => formatDuration(waitDuration.value))
  * The absolute end time of this action, calculated from the ascension start time.
  */
 const absoluteEndTime = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const simTime = props.action.endState.lastStepTime || 0;
 

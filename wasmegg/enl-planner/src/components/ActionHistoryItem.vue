@@ -201,7 +201,7 @@
             v-if="Math.abs(action.bankDelta) >= 0.5 && (!isPurchaseAction || action.type === 'launch_missions')"
             :class="action.bankDelta >= 0.5 ? 'text-emerald-600' : 'text-slate-400'"
           >
-            Bocks {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatBockPrice(action.bankDelta) }}
+            Bocks {{ action.bankDelta >= 0.5 ? '+' : '' }}{{ formatPrice(action.bankDelta) }}
           </span>
         </div>
       </div>
@@ -221,7 +221,7 @@
               "
             >
               {{ action.bankDelta >= 0.5 ? '+' : action.bankDelta <= -0.5 ? '-' : ''
-              }}{{ formatBockPrice(Math.abs(action.bankDelta)) }}
+              }}{{ formatPrice(Math.abs(action.bankDelta)) }}
             </span>
             <img
               v-if="Math.abs(action.bankDelta) >= 0.5"
@@ -243,7 +243,7 @@
               ]"
             >
               {{ action.bankDelta >= 0.5 && action.cost < 0.5 ? '+' : ''
-              }}{{ formatBockPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
+              }}{{ formatPrice(action.cost >= 0.5 ? action.cost : action.bankDelta >= 0.5 ? action.bankDelta : 0) }}
             </span>
             <img
               v-if="action.cost >= 0.5 || action.bankDelta >= 0.5"
@@ -277,7 +277,7 @@ import { fuelEggIconPath } from '@/lib/missions';
 import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { getExecutor } from '@/lib/actions';
-import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
 import { getResearchIconPath } from 'lib/planners/assets';
 import { getResearchById } from '@/calculations/commonResearch';
 import { useActionsStore } from '@/stores/actions';

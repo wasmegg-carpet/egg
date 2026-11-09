@@ -162,7 +162,7 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { iconURL } from 'lib';
 import { formatNumber } from '@/lib/format';
-import ModifyBankModal from './ModifyBankModal.vue';
+import ModifyBankModal from 'ui/components/planners/ModifyBankModal.vue';
 
 const showModifyBankModal = ref(false);
 

@@ -567,7 +567,7 @@ import { getSavedPlayerID, savePlayerID, requestFirstContact, resolveColleggtibl
 import ThePlayerIdForm from 'ui/components/PlayerIdForm.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useUIStore, tabFromSearch, searchWithTab, type PlannerTab } from '@/stores/ui';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
@@ -585,10 +585,10 @@ import FloatingStats from '@/components/FloatingStats.vue';
 import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
 import PlannerToast from 'ui/components/planners/PlannerToast.vue';
 import WarningDialog from 'ui/components/planners/WarningDialog.vue';
-import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
+import RecalculationOverlay from 'ui/components/planners/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
 import PlanLibrary from '@/components/PlanLibrary.vue';
-import PlanSelectionDialog from '@/components/PlanSelectionDialog.vue';
+import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
 import AutomaticPlanner from '@/components/auto/AutomaticPlanner.vue';
 // The Table Builder lives in components/chainFinder/ and the Chain Finder in components/instantSearch/
 // (their names before the tabs were renamed).
@@ -627,7 +627,7 @@ const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const uiStore = useUIStore();
 const { plannerTab, isHeaderCollapsed, isFooterCollapsed, loading, error } = storeToRefs(uiStore);
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
 const eventsStore = useEventsStore();

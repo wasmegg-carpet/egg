@@ -1,5 +1,5 @@
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useActionsStore } from '@/stores/actions';
@@ -43,8 +43,8 @@ export function loadAndSyncBackup(
   const backupData = initialStateStore.loadFromBackup(playerId, backup, mode);
 
   // 1. Sync Virtue Store
-  const virtueStore = useVirtueStore();
-  virtueStore.setInitialState(backupData.initialShiftCount, backupData.initialTE);
+  const planStore = usePlanStore();
+  planStore.setInitialState(backupData.initialShiftCount, backupData.initialTE);
 
   // 2. Sync Fuel Tank Store
   const fuelTankStore = useFuelTankStore();
@@ -147,7 +147,7 @@ export function catchUpFarmState(
 export function rollUpPendingTE() {
   const initialStateStore = useInitialStateStore();
   const truthEggsStore = useTruthEggsStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
 
   for (const egg of Object.keys(initialStateStore.initialTePending) as VirtueEgg[]) {
     const pending = initialStateStore.initialTePending[egg];
@@ -164,8 +164,8 @@ export function rollUpPendingTE() {
     initialStateStore.setInitialEggsDelivered(egg, truthEggsStore.eggsDelivered[egg]);
     initialStateStore.setInitialTeEarned(egg, truthEggsStore.teEarned[egg]);
   }
-  virtueStore.setTE(truthEggsStore.totalTE);
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
 }
 
 /**

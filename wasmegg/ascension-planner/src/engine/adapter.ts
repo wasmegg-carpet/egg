@@ -1,7 +1,7 @@
 import type { EngineState, SimulationContext } from './types';
 import { CalculationsSnapshot, VIRTUE_EGGS, VirtueEgg } from '@/types';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
@@ -16,13 +16,13 @@ import { getLocalTimestampInTimezone } from 'lib/planners/events';
  */
 export function getSimulationContext(): SimulationContext {
   const initialStateStore = useInitialStateStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
 
   // Convert ascension date/time/timezone to Unix timestamp (seconds)
   const ascensionStartTime = getLocalTimestampInTimezone(
-    virtueStore.ascensionDate,
-    virtueStore.ascensionTime,
-    virtueStore.ascensionTimezone
+    planStore.ascensionDate,
+    planStore.ascensionTime,
+    planStore.ascensionTimezone
   );
 
   return {
@@ -77,7 +77,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
     };
   }
 
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
@@ -89,8 +89,8 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
     currentEgg: (isContinuing && initialStateStore.currentFarmState?.eggType
       ? VIRTUE_EGGS[initialStateStore.currentFarmState.eggType - 50]
       : 'curiosity') as VirtueEgg,
-    shiftCount: virtueStore.initialShiftCount,
-    te: virtueStore.initialTE,
+    shiftCount: planStore.initialShiftCount,
+    te: planStore.initialTE,
     soulEggs: initialStateStore.soulEggs,
 
     vehicles: (isContinuing && initialStateStore.currentFarmState?.vehicles) || [{ vehicleId: 0, trainLength: 1 }],
@@ -117,7 +117,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
     population: (isContinuing && initialStateStore.currentFarmState?.population) || 0,
     lastStepTime: (isContinuing && initialStateStore.currentFarmState?.lastStepTime) || 0,
-    bankValue: (isContinuing && initialStateStore.currentFarmState?.cash) || virtueStore.bankValue || 0,
+    bankValue: (isContinuing && initialStateStore.currentFarmState?.cash) || planStore.bankValue || 0,
     activeSales: {
       research: false,
       hab: false,

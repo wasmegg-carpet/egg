@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useActionsStore } from '@/stores/actions';
+import { useActionsStore } from '@planner/stores/actions';
 
 const actionsStore = useActionsStore();
 const isRecalculating = computed(() => actionsStore.isRecalculating);

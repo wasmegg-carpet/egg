@@ -924,7 +924,7 @@ export interface MilestoneSummaryCore {
   optimizedSeconds?: number;
   timeSavedSeconds?: number;
   purchaseCount?: number;
-  gemsSpent?: number;
+  totalSpent?: number;
   // Only set when truncated. However far the optimized chain actually got before giving up —
   // either it hit MILESTONE_MAX_STEPS with real progress still being made (the common "this
   // milestone is just very far away" case, where these are genuinely useful lower bounds: "at
@@ -953,6 +953,6 @@ export function computeMilestoneSummaryCore(
     optimizedSeconds: chain.totalSeconds,
     timeSavedSeconds: baseline.totalSeconds - chain.totalSeconds,
     purchaseCount: chain.items.length,
-    gemsSpent: chain.items.reduce((sum, item) => sum + item.price, 0),
+    totalSpent: chain.items.reduce((sum, item) => sum + item.price, 0),
   };
 }

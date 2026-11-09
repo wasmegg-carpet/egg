@@ -89,7 +89,7 @@ export interface SimpleBuyPlan {
   totalSecondsToSave?: number;
   /** Sum of each purchase's price — the Quick Buy note's "bocks spent" figure. Only populated by
    *  `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
-  totalBocksSpent?: number;
+  totalSpent?: number;
 }
 
 /**
@@ -725,7 +725,7 @@ export function simulateSaleEndsBuy(
 
   const earningsResearchIds = checkpoints[bestK].purchases.map(p => p.researchId);
   const deliveryResearchIds = bestRun.purchases.map(p => p.researchId);
-  const totalBocksSpent =
+  const totalSpent =
     checkpoints[bestK].purchases.reduce((sum, p) => sum + p.price, 0) +
     bestRun.purchases.reduce((sum, p) => sum + p.price, 0);
   // The delivery run's own last purchase if it bought anything, else wherever the (possibly-trimmed)
@@ -745,7 +745,7 @@ export function simulateSaleEndsBuy(
     earningsEndSnapshot: checkpoints[bestK].snapshot,
     endLevels: bestRun.endLevels,
     endSnapshot: bestRun.endSnapshot,
-    totalBocksSpent,
+    totalSpent,
     lastPurchaseTimestamp,
     endDeliveryRate: null,
   };
@@ -984,7 +984,7 @@ export function simulateThresholdBuy(
   let simSnapshot = snapshot;
   const researchIds: string[] = [];
   let totalSecondsToSave = 0;
-  let totalBocksSpent = 0;
+  let totalSpent = 0;
 
   for (let i = 0; i < MAX_SIMULATED_PURCHASES; i++) {
     const candidate = findSmartBuyCandidate(simState.researchLevels, mods, isSale, simSnapshot, thresholdSeconds);
@@ -996,7 +996,7 @@ export function simulateThresholdBuy(
     simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
     researchIds.push(candidate.research.id);
     totalSecondsToSave += candidate.secondsToSave;
-    totalBocksSpent += candidate.price;
+    totalSpent += candidate.price;
   }
 
   return {
@@ -1004,7 +1004,7 @@ export function simulateThresholdBuy(
     endLevels: simState.researchLevels,
     endSnapshot: simSnapshot,
     totalSecondsToSave,
-    totalBocksSpent,
+    totalSpent,
   };
 }
 

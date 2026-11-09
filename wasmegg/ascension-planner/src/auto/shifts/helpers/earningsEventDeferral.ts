@@ -58,7 +58,7 @@ export interface EarningsEventDeferralHost {
 
 interface Tally {
   executedCount: number;
-  totalGemsSpent: number;
+  totalSpent: number;
 }
 
 interface UndoablePurchase<T> {
@@ -87,7 +87,7 @@ interface Candidate {
  * `items` can contain entries already satisfied by an earlier one (see `executePlanToLevels`'s own
  * call site for why it needs this and `executeChain`'s for why it doesn't).
  *
- * Returns the same `{ executedCount, totalGemsSpent }` shape every caller already builds its own
+ * Returns the same `{ executedCount, totalSpent }` shape every caller already builds its own
  * note payload from.
  */
 export function runWithEarningsEventDeferral<T>(
@@ -99,7 +99,7 @@ export function runWithEarningsEventDeferral<T>(
   timeLimit: number,
   shouldSkip?: (item: T) => boolean
 ): Tally {
-  let tally: Tally = { executedCount: 0, totalGemsSpent: 0 };
+  let tally: Tally = { executedCount: 0, totalSpent: 0 };
 
   if (!context.deferForEarningsMode) {
     for (const item of items) {
@@ -107,7 +107,7 @@ export function runWithEarningsEventDeferral<T>(
       const paid = executeItem(item, timeLimit);
       if (paid === false) break;
       tally.executedCount++;
-      tally.totalGemsSpent += paid;
+      tally.totalSpent += paid;
     }
     return tally;
   }
@@ -132,7 +132,7 @@ export function runWithEarningsEventDeferral<T>(
   const executeTracked = (item: T): boolean => {
     const paid = executeItem(item, timeLimit);
     if (paid === false) return false;
-    tally = { executedCount: tally.executedCount + 1, totalGemsSpent: tally.totalGemsSpent + paid };
+    tally = { executedCount: tally.executedCount + 1, totalSpent: tally.totalSpent + paid };
     return true;
   };
 

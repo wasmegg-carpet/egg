@@ -53,7 +53,7 @@ export function replayActionsFromIndex(actions: Action[], startIndex: number): v
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
@@ -112,9 +112,9 @@ function applyActionEffect(action: Action): void {
 
     case 'shift': {
       const payload = action.payload as ShiftPayload;
-      const virtueStore = useVirtueStore();
-      virtueStore.setCurrentEgg(payload.toEgg);
-      virtueStore.setShiftCount(payload.newShiftCount);
+      const planStore = usePlanStore();
+      planStore.setCurrentEgg(payload.toEgg);
+      planStore.setShiftCount(payload.newShiftCount);
       break;
     }
 
@@ -162,11 +162,11 @@ function applyActionEffect(action: Action): void {
     case 'wait_for_te': {
       const payload = action.payload as WaitForTEPayload;
       const truthEggsStore = useTruthEggsStore();
-      const virtueStore = useVirtueStore();
+      const planStore = usePlanStore();
       // Add eggs delivered
       truthEggsStore.addEggsDelivered(payload.egg, payload.eggsToLay);
       // Update TE
-      virtueStore.setTE(virtueStore.te + payload.teGained);
+      planStore.setTE(planStore.te + payload.teGained);
       break;
     }
 
@@ -212,9 +212,9 @@ function applyActionEffect(action: Action): void {
 
     case 'modify_bank': {
       const payload = action.payload as ModifyBankPayload;
-      const virtueStore = useVirtueStore();
-      const newValue = payload.mode === 'set' ? payload.amount : virtueStore.bankValue + payload.amount;
-      virtueStore.setBankValue(newValue);
+      const planStore = usePlanStore();
+      const newValue = payload.mode === 'set' ? payload.amount : planStore.bankValue + payload.amount;
+      planStore.setBankValue(newValue);
       break;
     }
 

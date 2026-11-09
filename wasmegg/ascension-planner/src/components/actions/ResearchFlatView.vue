@@ -113,10 +113,10 @@ import { type CommonResearch } from '@/calculations/commonResearch';
 import { type ViewType, type ElrRoiDisplayMode } from '@/composables/useResearchViews';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatAbsoluteTime } from '@/lib/format';
 import { type PurchaseEventCrossings } from '@/calculations/researchROI';
-import ResearchItem from './ResearchItem.vue';
+import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
 
 interface SortedResearchItem {
   research: CommonResearch;
@@ -164,10 +164,10 @@ const initialStateStore = useInitialStateStore();
 const isMissingRealisticData = computed(() => props.view === 'elr' && !initialStateStore.rawBackup);
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const baseTimestamp = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   // Wall clock time = (Plan Start) + (Current Sim Time - Initial Sim Time)
   return startTime + (actionsStore.effectiveSnapshot.lastStepTime - offset) * 1000;
@@ -189,7 +189,7 @@ const unlockNextTier = computed(() => {
     canBuy: target.canBuyToHere,
     absoluteTime:
       target.buyToHereSeconds !== undefined
-        ? formatAbsoluteTime(target.buyToHereSeconds, baseTimestamp.value, virtueStore.ascensionTimezone)
+        ? formatAbsoluteTime(target.buyToHereSeconds, baseTimestamp.value, planStore.ascensionTimezone)
         : undefined,
   };
 });

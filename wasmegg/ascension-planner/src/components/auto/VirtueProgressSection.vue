@@ -151,7 +151,7 @@ import { useTruthEggsStore, VIRTUE_TE_ORDER } from '@/stores/truthEggs';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useSilosStore } from '@/stores/silos';
 import { getSimulationContext } from '@/engine/adapter';
@@ -189,7 +189,7 @@ const VIRTUE_EGGS_MAP: Record<number, VirtueEgg> = {
 const truthEggsStore = useTruthEggsStore();
 const actionsStore = useActionsStore();
 const initialStateStore = useInitialStateStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
 const silosStore = useSilosStore();
 const autoPlannerStore = useAutoPlannerStore();
@@ -231,8 +231,8 @@ const currentELR = computed(() => {
 
   const continueState: import('@/engine/types').EngineState = {
     currentEgg: (VIRTUE_EGGS_MAP[farmState.eggType] || 'curiosity') as VirtueEgg,
-    shiftCount: virtueStore.initialShiftCount,
-    te: virtueStore.initialTE,
+    shiftCount: planStore.initialShiftCount,
+    te: planStore.initialTE,
     soulEggs: initialStateStore.soulEggs,
     vehicles: farmState.vehicles || [{ vehicleId: 0, trainLength: 1 }],
     habIds: farmState.habs || [0, null, null, null],

@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Description, Bock Cost -->
+    <!-- Row 2: Description, Price -->
     <div class="flex items-start justify-between w-full pl-[38px] gap-4">
       <!-- Description -->
       <div class="text-[10px] text-gray-500 leading-snug">
@@ -55,12 +55,12 @@
         </div>
       </div>
 
-      <!-- Bock Cost -->
+      <!-- Price -->
       <div class="text-right shrink-0">
         <template v-if="!isMaxed">
           <div class="flex items-center justify-end gap-1 text-[11px] font-mono text-amber-600 font-bold">
-            {{ formatBockPrice(price) }}
-            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-2.5 h-2.5 object-contain opacity-80" alt="Bock" />
+            {{ formatPrice(price) }}
+            <img :src="iconURL(currency.iconPath, 64)" class="w-2.5 h-2.5 object-contain opacity-80" :alt="currency.name" />
           </div>
           <div v-if="duringSale || duringEarningsBoost" class="flex items-center justify-end gap-1 mt-0.5">
             <span
@@ -275,14 +275,17 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { computed } from 'vue';
-import type { CommonResearch } from '@/calculations/commonResearch';
-import { formatNumber, formatBockPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@/lib/format';
+import type { CommonResearch } from '@planner/calculations/commonResearch';
+import { formatNumber, formatPrice, formatAbsoluteTime, formatDuration, formatWithReference } from '@planner/lib/format';
 import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
-import { type PurchaseEventCrossings } from '@/calculations/researchROI';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
+import { type PurchaseEventCrossings } from '@planner/calculations/researchROI';
+
+const { currency } = usePlannerProfile();
 
 const props = defineProps<{
   research: CommonResearch;

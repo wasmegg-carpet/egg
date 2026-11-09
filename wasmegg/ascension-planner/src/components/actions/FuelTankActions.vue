@@ -73,14 +73,14 @@
       <div class="flex items-center gap-3 mb-5">
         <div class="w-10 h-10 flex-shrink-0 bg-slate-50 rounded-xl p-1.5 border border-slate-100 shadow-inner">
           <img
-            :src="iconURL(`egginc/egg_${virtueStore.currentEgg}.png`, 64)"
+            :src="iconURL(`egginc/egg_${planStore.currentEgg}.png`, 64)"
             class="w-full h-full object-contain drop-shadow-sm"
-            :alt="virtueStore.currentEgg"
+            :alt="planStore.currentEgg"
           />
         </div>
         <div>
           <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Eggs in Tank</div>
-          <div class="text-sm font-bold text-slate-700">Store {{ VIRTUE_EGG_NAMES[virtueStore.currentEgg] }} Eggs</div>
+          <div class="text-sm font-bold text-slate-700">Store {{ VIRTUE_EGG_NAMES[planStore.currentEgg] }} Eggs</div>
         </div>
       </div>
 
@@ -298,7 +298,7 @@
 import { ref, computed } from 'vue';
 import { iconURL } from 'lib';
 import { useFuelTankStore } from '@/stores/fuelTank';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -315,7 +315,7 @@ import { solveForTime, integrateRate } from 'lib/planners/engine/apply/math';
 
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { output: layRateOutput } = useLayRate();
 const { output: ihrOutput } = useInternalHatcheryRate();
@@ -364,7 +364,7 @@ function getRoundingShortfall(actual: number): number {
 }
 
 // Fill To mode: current fuel for the active egg and the delta needed
-const currentEggFuel = computed(() => fuelTankStore.fuelAmounts[virtueStore.currentEgg] || 0);
+const currentEggFuel = computed(() => fuelTankStore.fuelAmounts[planStore.currentEgg] || 0);
 const fillDelta = computed(() => Math.max(0, parsedAmount.value - currentEggFuel.value));
 
 // The actual amount to store: in Fill To mode it's the delta, in Add mode it's the raw input
@@ -376,7 +376,7 @@ const effectiveStoreAmount = computed(() => {
 // Time calculation (scaled by fuel speed)
 const timeToStoreSeconds = computed(() => {
   if (effectiveStoreAmount.value <= 0) return 0;
-  const P0 = virtueStore.population;
+  const P0 = planStore.population;
   const I = ihrOutput.value.offlineRate / 60; // chickens/sec
   const R = layRateOutput.value.ratePerChickenPerSecond * fuelSpeed.value; // scaled by speed
   const H = habCapacityOutput.value.totalFinalCapacity; // max chickens
@@ -390,7 +390,7 @@ const timeToStoreSeconds = computed(() => {
 // Variable-speed estimates for the UI preview
 const estimatedEggsShipped = computed(() => {
   if (fuelSpeed.value >= 1.0 || timeToStoreSeconds.value <= 0) return 0;
-  const P0 = virtueStore.population;
+  const P0 = planStore.population;
   const I = ihrOutput.value.offlineRate / 60;
   const remainingR = layRateOutput.value.ratePerChickenPerSecond * (1 - fuelSpeed.value);
   const S = shippingOutput.value.totalFinalCapacity; // eggs/sec shipping cap

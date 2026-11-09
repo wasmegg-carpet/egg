@@ -269,10 +269,10 @@ import { useActionsStore } from '@/stores/actions';
 import WaitForTEActions from './WaitForTEActions.vue';
 import BulkWaitForTEActions from './BulkWaitForTEActions.vue';
 import WaitForMissionsActions from './WaitForMissionsActions.vue';
-import WaitForTimeActions from './WaitForTimeActions.vue';
-import WaitForFullHabsActions from './WaitForFullHabsActions.vue';
+import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
+import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
 import WaitForGemsActions from './WaitForGemsActions.vue';
-import WaitWithoutEarningsActions from './WaitWithoutEarningsActions.vue';
+import WaitWithoutEarningsActions from 'ui/components/planners/actions/WaitWithoutEarningsActions.vue';
 import WaitForEventActions from './WaitForEventActions.vue';
 
 const actionsStore = useActionsStore();

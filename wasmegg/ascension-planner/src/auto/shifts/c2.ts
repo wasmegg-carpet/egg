@@ -159,14 +159,14 @@ export function runR1LookaheadEarningsBuy(
   const helpers = createMilestoneShiftHelpers(startState, context);
 
   const baseline = scoreThroughR1(startState, context, 0);
-  let best: { score: ThroughR1Score; checkpoint: DeferralCheckpoint; purchaseCount: number; gemsSpent: number } = {
+  let best: { score: ThroughR1Score; checkpoint: DeferralCheckpoint; purchaseCount: number; totalSpent: number } = {
     score: baseline,
     checkpoint: helpers.deferralHost.checkpoint(),
     purchaseCount: 0,
-    gemsSpent: 0,
+    totalSpent: 0,
   };
   let purchaseCount = 0;
-  let gemsSpent = 0;
+  let totalSpent = 0;
 
   const siloCap = maxSilos(startState.proPermit);
   while (!(best.score.siloCount >= siloCap && helpers.getElapsedSeconds() >= best.score.totalSeconds)) {
@@ -196,11 +196,11 @@ export function runR1LookaheadEarningsBuy(
 
     const actions = helpers.getActions();
     purchaseCount++;
-    gemsSpent += actions[actions.length - 1].cost;
+    totalSpent += actions[actions.length - 1].cost;
 
     const score = scoreThroughR1(helpers.getState(), context, helpers.getElapsedSeconds());
     if (isBetterScore(score, best.score)) {
-      best = { score, checkpoint: helpers.deferralHost.checkpoint(), purchaseCount, gemsSpent };
+      best = { score, checkpoint: helpers.deferralHost.checkpoint(), purchaseCount, totalSpent };
     }
   }
 
@@ -209,7 +209,7 @@ export function runR1LookaheadEarningsBuy(
   const notePayload = buildR1LookaheadNotePayload(
     best.purchaseCount,
     helpers.getElapsedSeconds(),
-    best.gemsSpent,
+    best.totalSpent,
     best.score.siloCount - baseline.siloCount,
     baseline.totalSeconds - best.score.totalSeconds
   );

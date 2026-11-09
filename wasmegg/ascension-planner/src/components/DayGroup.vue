@@ -28,7 +28,7 @@
           {{ formatNumber(eggsDelivered, 2) }} Eggs
         </span>
         <div v-if="totalCost > 0" class="flex items-center gap-1">
-          <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatGemPrice(totalCost) }}</span>
+          <span class="text-[9px] font-black text-amber-600 tracking-tight">{{ formatPrice(totalCost) }}</span>
           <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-2.5 h-2.5" alt="Gems" />
         </div>
       </div>
@@ -59,7 +59,7 @@
 import { computed } from 'vue';
 import { iconURL } from 'lib';
 import type { Action } from '@/types';
-import { formatNumber, formatGemPrice } from '@/lib/format';
+import { formatNumber, formatPrice } from '@/lib/format';
 import ActionHistoryItem from './ActionHistoryItem.vue';
 
 const props = defineProps<{

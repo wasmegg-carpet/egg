@@ -150,7 +150,7 @@ const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { iconURL, shiftCost } from 'lib';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -160,7 +160,7 @@ import { TE_BREAKPOINTS, countTEThresholdsPassed, MAX_TE, eggsNeededForTE } from
 import { integrateRate } from 'lib/planners/engine/apply/math';
 
 const truthEggsStore = useTruthEggsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 
 const totalTEToGain = ref(15);

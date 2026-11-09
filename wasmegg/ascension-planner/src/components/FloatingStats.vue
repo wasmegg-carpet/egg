@@ -168,17 +168,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { iconURL } from 'lib';
 import { formatNumber } from '@/lib/format';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import type { VirtueEgg, Action, StartAscensionPayload, ShiftPayload } from '@/types';
-import ModifyBankModal from './ModifyBankModal.vue';
+import ModifyBankModal from 'ui/components/planners/ModifyBankModal.vue';
 
 const showModifyBankModal = ref(false);
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const isCollapsed = ref(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
 
@@ -272,7 +272,7 @@ const shiftName = computed(() => {
  * Calculate the timing and duration for the current shift.
  */
 const dates = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const actions = actionsStore.actions;
 

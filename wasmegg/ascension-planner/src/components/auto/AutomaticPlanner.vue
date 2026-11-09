@@ -255,7 +255,7 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAutoPlannerStore, type VariantKey } from '@/stores/autoPlanner';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
@@ -282,7 +282,7 @@ import { formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 import type { VirtueEgg } from '@/types';
 
 const autoPlannerStore = useAutoPlannerStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const truthEggsStore = useTruthEggsStore();
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
@@ -327,7 +327,7 @@ if (cachedSchedule) {
 
 // Initialize timezone default
 if (!timezone.value) {
-  timezone.value = virtueStore.ascensionTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  timezone.value = planStore.ascensionTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
 // Initialize start date/time defaults

@@ -4,12 +4,12 @@
     :has-data="store.hasData"
     :epic-research-levels="store.epicResearchLevels"
     :artifact-loadout="store.artifactLoadout"
-    :initial-shift-count="virtueStore.initialShiftCount"
+    :initial-shift-count="planStore.initialShiftCount"
     :initial-egg="startAction?.payload.initialEgg ?? 'curiosity'"
-    :te="virtueStore.te"
-    :ascension-date="virtueStore.ascensionDate"
-    :ascension-time="virtueStore.ascensionTime"
-    :ascension-timezone="virtueStore.ascensionTimezone"
+    :te="planStore.te"
+    :ascension-date="planStore.ascensionDate"
+    :ascension-time="planStore.ascensionTime"
+    :ascension-timezone="planStore.ascensionTimezone"
     :tank-level="fuelTankStore.tankLevel"
     :fuel-amounts="store.initialFuelAmounts"
     :tank-capacity="fuelTankStore.tankCapacity"
@@ -55,7 +55,7 @@
  */
 import { computed, ref } from 'vue';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
@@ -70,7 +70,7 @@ import type { EquippedArtifact } from '@/lib/artifacts';
 import { calculateClothedTEForSet } from '@/lib/artifacts';
 
 const store = useInitialStateStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
@@ -128,7 +128,7 @@ function handleSetInitialEgg(egg: VirtueEgg) {
   actionsStore.setInitialEgg(egg);
 
   // Update the virtue store's current egg
-  virtueStore.setCurrentEgg(egg);
+  planStore.setCurrentEgg(egg);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -160,8 +160,8 @@ function handleSetEggsDelivered(egg: VirtueEgg, amount: number) {
   }
 
   // Also update the virtue store's total TE and initial TE baseline
-  virtueStore.setTE(truthEggsStore.totalTE);
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -181,8 +181,8 @@ function handleSetTEEarned(egg: VirtueEgg, count: number) {
   }
 
   // Also update the virtue store's total TE and initial TE baseline
-  virtueStore.setTE(truthEggsStore.totalTE);
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -219,43 +219,43 @@ function handleIncludePendingTe() {
     }
 
     // Update virtue store
-    virtueStore.setTE(truthEggsStore.totalTE);
-    virtueStore.setInitialTE(truthEggsStore.totalTE);
+    planStore.setTE(truthEggsStore.totalTE);
+    planStore.setInitialTE(truthEggsStore.totalTE);
 
     updateInitialSnapshotAndRecalculate();
   }
 }
 
 function handleSetTE(te: number) {
-  virtueStore.setTE(te);
-  virtueStore.setInitialTE(te);
+  planStore.setTE(te);
+  planStore.setInitialTE(te);
   updateInitialSnapshotAndRecalculate();
 }
 
 function handleSetInitialShiftCount(count: number) {
-  virtueStore.setInitialShiftCount(count);
+  planStore.setInitialShiftCount(count);
   updateInitialSnapshotAndRecalculate();
 }
 
 function handleSetAscensionDate(date: string) {
-  virtueStore.setAscensionDate(date);
+  planStore.setAscensionDate(date);
   actionsStore.recalculateFrom(0);
 }
 
 function handleSetAscensionTime(time: string) {
-  virtueStore.setAscensionTime(time);
+  planStore.setAscensionTime(time);
   actionsStore.recalculateFrom(0);
 }
 
 function handleSetAscensionTimezone(timezone: string) {
-  virtueStore.setAscensionTimezone(timezone);
+  planStore.setAscensionTimezone(timezone);
   actionsStore.recalculateFrom(0);
 }
 
 function handleApplyAscensionSettings(date: string, time: string, timezone: string) {
-  virtueStore.setAscensionDate(date);
-  virtueStore.setAscensionTime(time);
-  virtueStore.setAscensionTimezone(timezone);
+  planStore.setAscensionDate(date);
+  planStore.setAscensionTime(time);
+  planStore.setAscensionTimezone(timezone);
   actionsStore.recalculateFrom(0);
 }
 

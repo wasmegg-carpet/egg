@@ -11,14 +11,14 @@
           class="w-12 h-12 rounded-2xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-2"
         >
           <img
-            :src="iconURL(`egginc/egg_${virtueStore.currentEgg}.png`, 64)"
+            :src="iconURL(`egginc/egg_${planStore.currentEgg}.png`, 64)"
             class="w-full h-full object-contain"
-            :alt="virtueStore.currentEgg"
+            :alt="planStore.currentEgg"
           />
         </div>
         <div>
           <div class="text-sm font-bold text-slate-800">
-            {{ VIRTUE_EGG_NAMES[virtueStore.currentEgg] }}
+            {{ VIRTUE_EGG_NAMES[planStore.currentEgg] }}
           </div>
           <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Egg</div>
         </div>
@@ -77,7 +77,7 @@
           <img :src="iconURL('egginc/egg_truth.png', 64)" class="w-full h-full object-contain" alt="Truth Egg" />
         </div>
         <span class="text-xs font-bold text-slate-700 uppercase tracking-tight">
-          Gain Additional TE on {{ VIRTUE_EGG_NAMES[virtueStore.currentEgg] }}
+          Gain Additional TE on {{ VIRTUE_EGG_NAMES[planStore.currentEgg] }}
         </span>
       </div>
 
@@ -179,7 +179,7 @@
         </svg>
       </div>
       <p class="text-[11px] font-bold text-emerald-700 uppercase tracking-tight">
-        You have reached the maximum TE (98) for {{ VIRTUE_EGG_NAMES[virtueStore.currentEgg] }}!
+        You have reached the maximum TE (98) for {{ VIRTUE_EGG_NAMES[planStore.currentEgg] }}!
       </p>
     </div>
 
@@ -192,7 +192,7 @@ const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { iconURL } from 'lib';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { formatNumber, formatDuration, formatAbsoluteTime } from '@/lib/format';
@@ -202,7 +202,7 @@ import { useActionExecutor } from '@/composables/useActionExecutor';
 import { solveForTime } from 'lib/planners/engine/apply/math';
 
 const truthEggsStore = useTruthEggsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 
@@ -212,18 +212,18 @@ const { prepareExecution, completeExecution } = useActionExecutor();
 const snapshot = computed(() => actionsStore.effectiveSnapshot);
 
 // Current egg state
-const currentEggsDelivered = computed(() => truthEggsStore.eggsDelivered[virtueStore.currentEgg]);
+const currentEggsDelivered = computed(() => truthEggsStore.eggsDelivered[planStore.currentEgg]);
 const currentTE = computed(() => {
   // Use the higher of thresholds passed (for pending TE) and claimed TE (for baseline)
-  const claimed = truthEggsStore.teEarned[virtueStore.currentEgg] || 0;
+  const claimed = truthEggsStore.teEarned[planStore.currentEgg] || 0;
   const passed = countTEThresholdsPassed(currentEggsDelivered.value);
   return Math.max(claimed, passed);
 });
-const pendingTE = computed(() => truthEggsStore.pendingTEForEgg(virtueStore.currentEgg));
-const claimedTE = computed(() => truthEggsStore.teEarned[virtueStore.currentEgg] || 0);
+const pendingTE = computed(() => truthEggsStore.pendingTEForEgg(planStore.currentEgg));
+const claimedTE = computed(() => truthEggsStore.teEarned[planStore.currentEgg] || 0);
 
 // Initial state from backup (for comparative display)
-const initialEggsDelivered = computed(() => actionsStore.initialSnapshot.eggsDelivered[virtueStore.currentEgg]);
+const initialEggsDelivered = computed(() => actionsStore.initialSnapshot.eggsDelivered[planStore.currentEgg]);
 
 // Additional TE selection (user wants relative target)
 const teToGain = ref(1);
@@ -231,7 +231,7 @@ const targetTENumber = computed(() => Math.min(98, currentTE.value + teToGain.va
 
 // Reset selection when egg changes
 watch(
-  () => virtueStore.currentEgg,
+  () => planStore.currentEgg,
   () => {
     teToGain.value = 1;
   }
@@ -277,11 +277,11 @@ const elrPerDay = computed(() => snapshot.value.elr * 86400);
 
 function getAbsoluteEarnedTime(timeSecs: number): string {
   if (!isFinite(timeSecs)) return 'Never';
-  const planStartSeconds = virtueStore.planStartTime.getTime() / 1000;
+  const planStartSeconds = planStore.planStartTime.getTime() / 1000;
   const currentStepTime = snapshot.value.lastStepTime || planStartSeconds;
   const totalSeconds = currentStepTime + timeSecs;
   const relativeSeconds = totalSeconds - planStartSeconds;
-  return formatAbsoluteTime(relativeSeconds, virtueStore.planStartTime.getTime(), virtueStore.ascensionTimezone);
+  return formatAbsoluteTime(relativeSeconds, planStore.planStartTime.getTime(), planStore.ascensionTimezone);
 }
 
 const absoluteEarnedTime = computed(() => getAbsoluteEarnedTime(timeToLaySeconds.value));

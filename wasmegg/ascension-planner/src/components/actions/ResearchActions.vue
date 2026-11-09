@@ -133,7 +133,7 @@
                 >Gems Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
-                {{ formatGemPrice(milestoneSummary.gemsSpent) }}
+                {{ formatPrice(milestoneSummary.totalSpent) }}
               </span>
             </div>
           </div>
@@ -279,11 +279,11 @@ import { getResearchById, type CommonResearch } from '@/calculations/commonResea
 import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from '@/calculations/researchROI';
-import { formatDuration, formatNumber, formatGemPrice, formatAbsoluteTime } from '@/lib/format';
+import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useEventWaits } from '@/composables/useEventWaits';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, type Action } from '@/types';
 import {
@@ -315,18 +315,18 @@ import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 // Sub-components
 import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
-import ResearchViewSelector from './ResearchViewSelector.vue';
+import ResearchViewSelector from 'ui/components/planners/actions/ResearchViewSelector.vue';
 import ResearchGameView from './ResearchGameView.vue';
 import ResearchFlatView from './ResearchFlatView.vue';
 import ElrViewControls from './ElrViewControls.vue';
 import RoiViewControls from './RoiViewControls.vue';
 import SmartBuyView from './SmartBuyView.vue';
-import MilestoneTargetPicker from './MilestoneTargetPicker.vue';
+import MilestoneTargetPicker from 'ui/components/planners/actions/MilestoneTargetPicker.vue';
 
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const { secondsUntilNextSale, secondsUntilSaleEnd, toggleResearchSale } = useEventWaits();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const {
   prepareExecution,
   completeExecution,
@@ -404,7 +404,7 @@ const {
 // (it already works from an elapsed-seconds/base-timestamp pair) but is the natural way to format an
 // already-absolute value with this helper.
 const smartBuyDeadlineLabel = computed(() =>
-  formatAbsoluteTime(0, smartBuyFullRoiDeadline.value * 1000, virtueStore.ascensionTimezone)
+  formatAbsoluteTime(0, smartBuyFullRoiDeadline.value * 1000, planStore.ascensionTimezone)
 );
 
 // Quick Buy's own live threshold (separate from Auto Buy's) — fed up from QuickBuy.vue's input so
@@ -485,7 +485,7 @@ const quickBuyEarningsSummary = computed(() => ({
 const quickBuyStats = computed(() => ({
   purchaseCount: quickBuyPlan.value.researchIds.length,
   seconds: quickBuyPlan.value.totalSecondsToSave ?? 0,
-  gems: quickBuyPlan.value.totalGemsSpent ?? 0,
+  spent: quickBuyPlan.value.totalSpent ?? 0,
 }));
 
 // The same resolver the action itself is charged and timed by, so what's shown is what's paid.
@@ -589,7 +589,7 @@ function buyOneLevel(research: CommonResearch): boolean {
  * corresponds to — same formula `WaitForEventActions.vue`/`useResearchViews.ts` use everywhere else.
  */
 function absoluteSimTimeAt(lastStepTime: number): number {
-  const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+  const baseTimestamp = planStore.planStartTime.getTime() / 1000;
   return baseTimestamp + (lastStepTime - actionsStore.planStartOffset);
 }
 
@@ -975,7 +975,7 @@ async function handleBuyUntilSaleDeadline() {
       const notePayload = buildSaleEndsBuyNotePayload(
         plan.length,
         saleEndsPlan.value.lastPurchaseTimestamp - startAbsoluteTime,
-        saleEndsPlan.value.totalGemsSpent ?? 0
+        saleEndsPlan.value.totalSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();
@@ -1042,7 +1042,7 @@ async function handleThresholdBuy(threshold: number) {
         threshold,
         plan.researchIds.length,
         plan.totalSecondsToSave ?? 0,
-        plan.totalGemsSpent ?? 0
+        plan.totalSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();

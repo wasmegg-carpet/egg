@@ -84,8 +84,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ChevronDownIcon, LockOpenIcon } from '@heroicons/vue/solid';
-import { type CommonResearch } from '@/calculations/commonResearch';
-import { type MilestoneTarget } from '@/composables/useResearchViews';
+import { type CommonResearch } from '@planner/calculations/commonResearch';
+import { type MilestoneTarget } from '@planner/composables/useResearchViews';
 import { getResearchIconPath } from 'lib/planners/assets';
 import { iconURL } from 'lib';
 

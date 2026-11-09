@@ -627,7 +627,7 @@ export function useResearchViews() {
       optimizedSeconds: core.optimizedSeconds!,
       timeSavedSeconds: core.timeSavedSeconds!,
       purchaseCount: core.purchaseCount!,
-      bocksSpent: core.bocksSpent!,
+      totalSpent: core.totalSpent!,
       finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, planStore.ascensionTimezone),
       baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, planStore.ascensionTimezone),
     };
@@ -1070,7 +1070,7 @@ export function useResearchViews() {
     return {
       purchaseCount: entries.length,
       seconds: Math.max(0, lastPurchaseTimestamp - absoluteSimTime),
-      bocks: entries.reduce((sum, entry) => sum + entry.price, 0),
+      spent: entries.reduce((sum, entry) => sum + entry.price, 0),
     };
   });
 
@@ -1099,7 +1099,7 @@ export function useResearchViews() {
     return {
       purchaseCount: saleEndsPlan.value.researchIds.length,
       seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
-      bocks: saleEndsPlan.value.totalBocksSpent ?? 0,
+      spent: saleEndsPlan.value.totalSpent ?? 0,
     };
   });
 

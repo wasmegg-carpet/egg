@@ -1,6 +1,6 @@
 import type { DraftAction, NotificationPayload } from '@/types';
 import { generateActionId } from '@/types';
-import { formatDuration, formatBockPrice } from '@/lib/format';
+import { formatDuration, formatPrice } from '@/lib/format';
 
 /**
  * Builds a ready-to-push `DraftAction` for an inline note — the 'notification' action type. A note
@@ -28,10 +28,10 @@ export function createNoteAction(payload: NotificationPayload, dependsOn: string
 
 /** Shared "N purchase(s) over <duration>, <bocks> bocks spent" phrasing every Smart Buy note's
  *  submessage builds on. */
-function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalBocksSpent: number): string {
+function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalSpent: number): string {
   return `${purchaseCount} purchase${purchaseCount === 1 ? '' : 's'} over ${formatDuration(
     seconds
-  )}, ${formatBockPrice(totalBocksSpent)} bocks spent`;
+  )}, ${formatPrice(totalSpent)} bocks spent`;
 }
 
 /**
@@ -47,13 +47,13 @@ export function buildQuickBuyNotePayload(
   thresholdSeconds: number,
   purchaseCount: number,
   totalSecondsToSave: number,
-  totalBocksSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: `${formatDuration(thresholdSeconds)} Quick Buy`,
-    submessage: formatPurchasesOverDuration(purchaseCount, totalSecondsToSave, totalBocksSpent),
+    submessage: formatPurchasesOverDuration(purchaseCount, totalSecondsToSave, totalSpent),
   };
 }
 
@@ -77,13 +77,13 @@ export function buildSaleAwareBuyNotePayload(
   purchaseCount: number,
   saleCount: number,
   secondsUntilNextSale: number,
-  totalBocksSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: `${saleCount}-sale Earnings Buy`,
-    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilNextSale, totalBocksSpent)}, before next sale`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilNextSale, totalSpent)}, before next sale`,
   };
 }
 
@@ -98,13 +98,13 @@ export function buildSaleAwareBuyNotePayload(
 export function buildSaleEndsBuyNotePayload(
   purchaseCount: number,
   secondsUntilSaleEnd: number,
-  totalBocksSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: 'Buy Until Sale Ends',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilSaleEnd, totalBocksSpent)}, until sale ends`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilSaleEnd, totalSpent)}, until sale ends`,
   };
 }
 
@@ -119,13 +119,13 @@ export function buildSaleEndsBuyNotePayload(
 export function buildFinalSaleGapBuyNotePayload(
   purchaseCount: number,
   elapsedSeconds: number,
-  totalBocksSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: 'Final Sale Gap Buy',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalBocksSpent)}, before final sale`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalSpent)}, before final sale`,
   };
 }
 
@@ -143,7 +143,7 @@ export function buildFinalSaleGapBuyNotePayload(
 export function buildR1LookaheadNotePayload(
   purchaseCount: number,
   elapsedSeconds: number,
-  totalBocksSpent: number,
+  totalSpent: number,
   extraSilos: number,
   timeSavedSeconds: number
 ): NotificationPayload | null {
@@ -156,7 +156,7 @@ export function buildR1LookaheadNotePayload(
 
   return {
     message: 'R1 Lookahead Earnings Buy',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalBocksSpent)}, ${outcome}`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalSpent)}, ${outcome}`,
   };
 }
 
@@ -178,7 +178,7 @@ export function buildMilestoneNotePayload(
   targetLabel: string,
   purchaseCount: number,
   totalSeconds: number,
-  totalBocksSpent: number,
+  totalSpent: number,
   timeSavedSeconds?: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
@@ -188,6 +188,6 @@ export function buildMilestoneNotePayload(
 
   return {
     message: `Milestone: ${targetLabel}`,
-    submessage: `${formatPurchasesOverDuration(purchaseCount, totalSeconds, totalBocksSpent)}${savedPart}`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, totalSeconds, totalSpent)}${savedPart}`,
   };
 }

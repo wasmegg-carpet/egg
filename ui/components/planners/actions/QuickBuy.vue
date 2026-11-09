@@ -1,5 +1,5 @@
 <template>
-  <SmartBuyCard title="Quick Buy" note="Quick Buy will never spend bocks from your bank." :loading="loading">
+  <SmartBuyCard title="Quick Buy" :note="`Quick Buy will never spend ${currency.name} from your bank.`" :loading="loading">
     <template #icon>
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -39,26 +39,29 @@
       </button>
 
       <ResearchPurchasePreview :items="previewItems" empty-text="Nothing to buy right now" />
-      <SmartBuyStats :purchase-count="stats.purchaseCount" :seconds="stats.seconds" :cost="stats.bocks" />
+      <SmartBuyStats :purchase-count="stats.purchaseCount" :seconds="stats.seconds" :cost="stats.spent" />
       <RatePreviewDelta label="Earnings" :before="earningsSummary.before" :after="earningsSummary.after" unit="/hr" />
     </div>
   </SmartBuyCard>
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { ref, computed, watch } from 'vue';
-import { formatDuration, parseDuration } from '@/lib/format';
+import { formatDuration, parseDuration } from '@planner/lib/format';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
-import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
+import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
-import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
+import type { ResearchSummaryItem } from '@planner/calculations/smartBuyPreview';
+
+const { currency } = usePlannerProfile();
 
 defineProps<{
   previewItems: ResearchSummaryItem[];
   earningsSummary: { before: number; after: number };
-  stats: { purchaseCount: number; seconds: number; bocks: number };
+  stats: { purchaseCount: number; seconds: number; spent: number };
   /** Whether the preview plan above is currently being (re)computed. */
   loading?: boolean;
   /** Whether a Buy Now click is still being applied. */

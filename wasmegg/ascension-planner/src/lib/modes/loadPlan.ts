@@ -23,7 +23,7 @@ export async function initLoadPlan(plan: PlanData): Promise<void> {
   await resetAllStores();
 
   // 2. Load the plan — importPlan internally calls importPlanLogic which:
-  //    - Hydrates initialStateStore, virtueStore, fuelTankStore, truthEggsStore, notesStore
+  //    - Hydrates initialStateStore, planStore, fuelTankStore, truthEggsStore, notesStore
   //    - Sets actions from the plan
   //    - Computes initial snapshot from hydrated stores
   //    - Recalculates (or skips if pre-calculated)

@@ -13,7 +13,7 @@ import { formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
@@ -262,7 +262,7 @@ export function useResearchViews() {
   const commonResearchStore = useCommonResearchStore();
   const initialStateStore = useInitialStateStore();
   const actionsStore = useActionsStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   // Owns the one Web Worker all four heavy research-plan simulations below run on — see
   // useResearchCalcWorker.ts's doc comment for why (keeps a large computation from tripping
   // Chrome's main-thread-only "Page Unresponsive" hang detector). `computeThresholdBuy` is unused
@@ -400,14 +400,14 @@ export function useResearchViews() {
   });
 
   const researchSaleDeadline = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return getNextPacificTime(6, 9, absoluteSimTime);
   });
 
   const nextSaleStart = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return getNextPacificTime(5, 9, absoluteSimTime);
@@ -579,7 +579,7 @@ export function useResearchViews() {
   watchEffect(async () => {
     // Must be the first read so Vue tracks it and re-runs this effect once mode-init settles.
     // While a mode switch (start from scratch / plan future / reconcile / load plan / etc.) is
-    // resetting stores, they briefly disagree with each other (e.g. virtueStore already reset while
+    // resetting stores, they briefly disagree with each other (e.g. planStore already reset while
     // actionsStore still holds the previous plan's snapshot) — computing a milestone chain against
     // that transitional mix has produced nonsensical absolute timestamps and hung the tab.
     if (actionsStore.isPlanInitializing) {
@@ -612,7 +612,7 @@ export function useResearchViews() {
     const startSnapshot = actionsStore.effectiveSnapshot;
     const mods = costModifiers.value;
     const deadline = researchSaleDeadline.value;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -656,7 +656,7 @@ export function useResearchViews() {
 
     const context = getSimulationContext();
     const startSnapshot = actionsStore.effectiveSnapshot;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
     return computeMilestoneBaseline(target, startSnapshot, context, costModifiers.value, absoluteSimTime);
@@ -689,7 +689,7 @@ export function useResearchViews() {
     }
 
     const baseTimestamp =
-      virtueStore.planStartTime.getTime() +
+      planStore.planStartTime.getTime() +
       (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset) * 1000;
 
     return {
@@ -698,9 +698,9 @@ export function useResearchViews() {
       optimizedSeconds: core.optimizedSeconds!,
       timeSavedSeconds: core.timeSavedSeconds!,
       purchaseCount: core.purchaseCount!,
-      gemsSpent: core.gemsSpent!,
-      finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
-      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, virtueStore.ascensionTimezone),
+      totalSpent: core.totalSpent!,
+      finishAbsoluteTime: formatAbsoluteTime(core.optimizedSeconds!, baseTimestamp, planStore.ascensionTimezone),
+      baselineFinishAbsoluteTime: formatAbsoluteTime(core.baselineSeconds!, baseTimestamp, planStore.ascensionTimezone),
     };
   });
 
@@ -809,7 +809,7 @@ export function useResearchViews() {
     const context = getSimulationContext();
     const effectiveSnapshot = actionsStore.effectiveSnapshot;
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (effectiveSnapshot.lastStepTime - offset);
 
@@ -836,7 +836,7 @@ export function useResearchViews() {
     const mods = costModifiers.value;
     const context = getSimulationContext();
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
 
@@ -860,7 +860,7 @@ export function useResearchViews() {
   // file already repeats inline (`nextSaleStart`/`researchSaleDeadline` above, etc.); kept as its own
   // small helper here since the sale-count stepper logic below reads it from three separate places.
   function smartBuyAbsoluteSimTime(): number {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     return baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
   }
@@ -967,7 +967,7 @@ export function useResearchViews() {
     const deadline = researchSaleDeadline.value;
     const saleStart = smartBuyStructuralDeadline.value;
     const fullRoiDeadline = smartBuyFullRoiDeadline.value;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -1071,7 +1071,7 @@ export function useResearchViews() {
     const mode = elrViewMode.value;
     const sort = elrSortMode.value;
     const rawBackup = initialStateStore.rawBackup;
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - offset);
 
@@ -1139,7 +1139,7 @@ export function useResearchViews() {
   // "6d 22h" every single time regardless of what was actually bought. Falls back to `0` when the
   // plan is empty (nothing to span).
   const saleAwareStats70 = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     const entries = saleAwarePlan70.value.entries;
@@ -1147,7 +1147,7 @@ export function useResearchViews() {
     return {
       purchaseCount: entries.length,
       seconds: Math.max(0, lastPurchaseTimestamp - absoluteSimTime),
-      gems: entries.reduce((sum, entry) => sum + entry.price, 0),
+      spent: entries.reduce((sum, entry) => sum + entry.price, 0),
     };
   });
 
@@ -1170,13 +1170,13 @@ export function useResearchViews() {
   // before the sale ends, and should say so (same fix as `saleAwareStats70` above, for the same
   // reason — see that computed's own comment).
   const saleEndsStats = computed(() => {
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
     return {
       purchaseCount: saleEndsPlan.value.researchIds.length,
       seconds: Math.max(0, saleEndsPlan.value.lastPurchaseTimestamp - absoluteSimTime),
-      gems: saleEndsPlan.value.totalGemsSpent ?? 0,
+      spent: saleEndsPlan.value.totalSpent ?? 0,
     };
   });
 
@@ -1217,7 +1217,7 @@ export function useResearchViews() {
     const isSale = isResearchSaleActive.value;
     const mods = costModifiers.value;
 
-    const baseTimestamp = virtueStore.planStartTime.getTime() / 1000;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
     const offset = actionsStore.planStartOffset;
     const absoluteSimTime = baseTimestamp + (actionsStore.effectiveSnapshot.lastStepTime - offset);
 

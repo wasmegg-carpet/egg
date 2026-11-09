@@ -132,7 +132,7 @@
                 >Bocks Spent</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
-                {{ formatBockPrice(milestoneSummary.bocksSpent) }}
+                {{ formatPrice(milestoneSummary.totalSpent) }}
               </span>
             </div>
           </div>
@@ -236,7 +236,7 @@ import { getResearchById, type CommonResearch } from '@/calculations/commonResea
 import { researchPurchaseAt } from '@/engine/researchSale';
 import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import type { SaleAwarePurchase } from '@/calculations/researchROI';
-import { formatDuration, formatNumber, formatBockPrice, formatAbsoluteTime } from '@/lib/format';
+import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useEventWaits } from '@/composables/useEventWaits';
@@ -273,13 +273,13 @@ import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 // Sub-components
 import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
 import ResearchCubeToggle from './ResearchCubeToggle.vue';
-import ResearchViewSelector from './ResearchViewSelector.vue';
+import ResearchViewSelector from 'ui/components/planners/actions/ResearchViewSelector.vue';
 import ResearchGameView from './ResearchGameView.vue';
 import ResearchFlatView from './ResearchFlatView.vue';
 import ElrViewControls from './ElrViewControls.vue';
 import RoiViewControls from './RoiViewControls.vue';
 import SmartBuyView from './SmartBuyView.vue';
-import MilestoneTargetPicker from './MilestoneTargetPicker.vue';
+import MilestoneTargetPicker from 'ui/components/planners/actions/MilestoneTargetPicker.vue';
 
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
@@ -440,7 +440,7 @@ const quickBuyEarningsSummary = computed(() => ({
 const quickBuyStats = computed(() => ({
   purchaseCount: quickBuyPlan.value.researchIds.length,
   seconds: quickBuyPlan.value.totalSecondsToSave ?? 0,
-  bocks: quickBuyPlan.value.totalBocksSpent ?? 0,
+  spent: quickBuyPlan.value.totalSpent ?? 0,
 }));
 
 // The same resolver the action itself is charged and timed by, so what's shown is what's paid.
@@ -930,7 +930,7 @@ async function handleBuyUntilSaleDeadline() {
       const notePayload = buildSaleEndsBuyNotePayload(
         plan.length,
         saleEndsPlan.value.lastPurchaseTimestamp - startAbsoluteTime,
-        saleEndsPlan.value.totalBocksSpent ?? 0
+        saleEndsPlan.value.totalSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();
@@ -997,7 +997,7 @@ async function handleThresholdBuy(threshold: number) {
         threshold,
         plan.researchIds.length,
         plan.totalSecondsToSave ?? 0,
-        plan.totalBocksSpent ?? 0
+        plan.totalSpent ?? 0
       );
       if (notePayload) {
         const noteBeforeSnapshot = prepareExecution();

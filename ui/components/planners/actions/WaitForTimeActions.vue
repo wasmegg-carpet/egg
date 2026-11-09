@@ -57,14 +57,14 @@
           </div>
         </div>
 
-        <!-- Expected Bocks Display -->
+        <!-- Expected Earnings Display -->
         <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center transition-all">
-          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected Bocks:</span>
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expected {{ currency.name }}:</span>
           <div class="flex items-center gap-2">
             <span class="text-sm font-mono-premium font-black text-slate-900">
-              +{{ formatNumber(expectedBocksEarned, 3) }}
+              +{{ formatNumber(expectedEarned, 3) }}
             </span>
-            <img :src="iconURL('egginc/icon_bock.png', 64)" class="w-4 h-4 object-contain" alt="Bocks" />
+            <img :src="iconURL(currency.iconPath, 64)" class="w-4 h-4 object-contain" :alt="currency.name" />
           </div>
         </div>
       </div>
@@ -73,18 +73,21 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { ref, computed } from 'vue';
 import { iconURL } from 'lib';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
-import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from '@/lib/format';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
+import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from '@planner/lib/format';
 import { boostTransitionsFrom, calculateEarningsForTime } from 'lib/planners/engine/apply/math';
-import { absoluteSimTimeFor } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
+import { absoluteSimTimeFor } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+
+const { currency } = usePlannerProfile();
 
 const actionsStore = useActionsStore();
 const planStore = usePlanStore();
@@ -142,7 +145,7 @@ const parsedSeconds = computed(() => {
   return isNaN(seconds) ? 0 : seconds;
 });
 
-const expectedBocksEarned = computed(() => {
+const expectedEarned = computed(() => {
   if (parsedSeconds.value <= 0) return 0;
   const snapshot = actionsStore.effectiveSnapshot;
   return calculateEarningsForTime(

@@ -19,7 +19,7 @@ import { resetAllStores } from './reset';
 import { fetchPlayerBackup } from './fetchBackup';
 import { loadAndSyncBackup, rollUpPendingTE } from './utils';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
 
@@ -37,10 +37,10 @@ export async function initPlanFuture(playerId: string): Promise<void> {
   rollUpPendingTE();
 
   // 5. Plan-specific setup
-  const virtueStore = useVirtueStore();
-  virtueStore.resetToCurrentDateTime();
-  virtueStore.setBankValue(0);
-  virtueStore.setCurrentEgg('curiosity');
+  const planStore = usePlanStore();
+  planStore.resetToCurrentDateTime();
+  planStore.setBankValue(0);
+  planStore.setCurrentEgg('curiosity');
 
   // 6. Ensure start action is clean (resetAllStores already did this, but explicit)
   const actionsStore = useActionsStore();

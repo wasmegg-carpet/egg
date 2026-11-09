@@ -72,7 +72,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { type CommonResearch } from '@/calculations/commonResearch';
-import ResearchItem from './ResearchItem.vue';
+import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
 import { formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';

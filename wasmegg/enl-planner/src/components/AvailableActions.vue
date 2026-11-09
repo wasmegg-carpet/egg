@@ -58,11 +58,11 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import VehicleActions from './actions/VehicleActions.vue';
-import HabActions from './actions/HabActions.vue';
+import VehicleActions from 'ui/components/planners/actions/VehicleActions.vue';
+import HabActions from 'ui/components/planners/actions/HabActions.vue';
 import ResearchActions from './actions/ResearchActions.vue';
 import ArtifactActions from './actions/ArtifactActions.vue';
-import SiloActions from './actions/SiloActions.vue';
+import SiloActions from 'ui/components/planners/actions/SiloActions.vue';
 import FuelTankActions from './actions/FuelTankActions.vue';
 import WaitActions from './actions/WaitActions.vue';
 import RocketActions from './actions/RocketActions.vue';

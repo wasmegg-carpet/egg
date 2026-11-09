@@ -23,7 +23,7 @@ import { computed } from 'vue';
 import EChart from 'ui/components/planners/charts/EChart.vue';
 import type { ChartOption } from 'ui/components/planners/charts/echarts';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatAbsoluteTime, formatNumber } from '@/lib/format';
 import {
   VARIANT_KEY_ORDER,
@@ -42,7 +42,7 @@ const props = defineProps<{
   variants: Partial<Record<VariantKey, VariantResult>>;
 }>();
 
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 // Shape (not color — color already carries variant identity) encodes marker kind. `_start`/`_end`
 // pairs share a symbol, distinguished by rotation (up = starts, down = ends).
@@ -110,7 +110,7 @@ const series = computed<BuiltSeries[]>(() => {
 });
 
 const option = computed<ChartOption>(() => {
-  const tz = virtueStore.ascensionTimezone;
+  const tz = planStore.ascensionTimezone;
 
   // echarts' time axis can only compute its own "nice" day/week tick boundaries in the browser's
   // local zone or UTC — never an arbitrary IANA zone — so every x-value below is pre-shifted by

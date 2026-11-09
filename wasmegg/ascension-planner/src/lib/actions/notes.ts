@@ -1,6 +1,6 @@
 import type { DraftAction, NotificationPayload } from '@/types';
 import { generateActionId } from '@/types';
-import { formatDuration, formatGemPrice } from '@/lib/format';
+import { formatDuration, formatPrice } from '@/lib/format';
 
 /**
  * Builds a ready-to-push `DraftAction` for an inline note — the 'notification' action type. A note
@@ -28,10 +28,10 @@ export function createNoteAction(payload: NotificationPayload, dependsOn: string
 
 /** Shared "N purchase(s) over <duration>, <gems> gems spent" phrasing every Smart Buy note's
  *  submessage builds on. */
-function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalGemsSpent: number): string {
+function formatPurchasesOverDuration(purchaseCount: number, seconds: number, totalSpent: number): string {
   return `${purchaseCount} purchase${purchaseCount === 1 ? '' : 's'} over ${formatDuration(
     seconds
-  )}, ${formatGemPrice(totalGemsSpent)} gems spent`;
+  )}, ${formatPrice(totalSpent)} gems spent`;
 }
 
 /**
@@ -47,13 +47,13 @@ export function buildQuickBuyNotePayload(
   thresholdSeconds: number,
   purchaseCount: number,
   totalSecondsToSave: number,
-  totalGemsSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: `${formatDuration(thresholdSeconds)} Quick Buy`,
-    submessage: formatPurchasesOverDuration(purchaseCount, totalSecondsToSave, totalGemsSpent),
+    submessage: formatPurchasesOverDuration(purchaseCount, totalSecondsToSave, totalSpent),
   };
 }
 
@@ -77,13 +77,13 @@ export function buildSaleAwareBuyNotePayload(
   purchaseCount: number,
   saleCount: number,
   secondsUntilNextSale: number,
-  totalGemsSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: `${saleCount}-sale Earnings Buy`,
-    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilNextSale, totalGemsSpent)}, before next sale`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilNextSale, totalSpent)}, before next sale`,
   };
 }
 
@@ -98,13 +98,13 @@ export function buildSaleAwareBuyNotePayload(
 export function buildSaleEndsBuyNotePayload(
   purchaseCount: number,
   secondsUntilSaleEnd: number,
-  totalGemsSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: 'Buy Until Sale Ends',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilSaleEnd, totalGemsSpent)}, until sale ends`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, secondsUntilSaleEnd, totalSpent)}, until sale ends`,
   };
 }
 
@@ -119,13 +119,13 @@ export function buildSaleEndsBuyNotePayload(
 export function buildFinalSaleGapBuyNotePayload(
   purchaseCount: number,
   elapsedSeconds: number,
-  totalGemsSpent: number
+  totalSpent: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
 
   return {
     message: 'Final Sale Gap Buy',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalGemsSpent)}, before final sale`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalSpent)}, before final sale`,
   };
 }
 
@@ -143,7 +143,7 @@ export function buildFinalSaleGapBuyNotePayload(
 export function buildR1LookaheadNotePayload(
   purchaseCount: number,
   elapsedSeconds: number,
-  totalGemsSpent: number,
+  totalSpent: number,
   extraSilos: number,
   timeSavedSeconds: number
 ): NotificationPayload | null {
@@ -156,7 +156,7 @@ export function buildR1LookaheadNotePayload(
 
   return {
     message: 'R1 Lookahead Earnings Buy',
-    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalGemsSpent)}, ${outcome}`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, elapsedSeconds, totalSpent)}, ${outcome}`,
   };
 }
 
@@ -178,7 +178,7 @@ export function buildMilestoneNotePayload(
   targetLabel: string,
   purchaseCount: number,
   totalSeconds: number,
-  totalGemsSpent: number,
+  totalSpent: number,
   timeSavedSeconds?: number
 ): NotificationPayload | null {
   if (purchaseCount <= 0) return null;
@@ -188,6 +188,6 @@ export function buildMilestoneNotePayload(
 
   return {
     message: `Milestone: ${targetLabel}`,
-    submessage: `${formatPurchasesOverDuration(purchaseCount, totalSeconds, totalGemsSpent)}${savedPart}`,
+    submessage: `${formatPurchasesOverDuration(purchaseCount, totalSeconds, totalSpent)}${savedPart}`,
   };
 }

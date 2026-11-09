@@ -18,7 +18,7 @@ import {
   eventCrossingsForPurchase,
 } from './researchSale';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from './compute';
 import { boostTransitionsFrom, getTimeToSave } from './apply';
 import {
@@ -65,10 +65,10 @@ describe('the planner timeline', () => {
 
   // A fresh plan with no wait for habs, starting at the given Pacific wall-clock time.
   async function startPlan(date: string, time: string) {
-    const virtueStore = useVirtueStore();
-    virtueStore.setAscensionTimezone('America/Los_Angeles');
-    virtueStore.setAscensionDate(date);
-    virtueStore.setAscensionTime(time);
+    const planStore = usePlanStore();
+    planStore.setAscensionTimezone('America/Los_Angeles');
+    planStore.setAscensionDate(date);
+    planStore.setAscensionTime(time);
     const actionsStore = useActionsStore();
     const snapshot = computeSnapshot(createBaseEngineState(null), getSimulationContext());
     await actionsStore.setInitialSnapshot(snapshot);
@@ -221,11 +221,11 @@ describe('a research purchase crossing a sale boundary', () => {
 
   // A plan earning from its first second, starting at `absoluteStart`.
   async function startEarningPlan(absoluteStart: number, population = 100, researchLevels: Record<string, number> = {}) {
-    const virtueStore = useVirtueStore();
-    virtueStore.setAscensionTimezone('UTC');
+    const planStore = usePlanStore();
+    planStore.setAscensionTimezone('UTC');
     const iso = new Date(absoluteStart * 1000).toISOString();
-    virtueStore.setAscensionDate(iso.slice(0, 10));
-    virtueStore.setAscensionTime(iso.slice(11, 19));
+    planStore.setAscensionDate(iso.slice(0, 10));
+    planStore.setAscensionTime(iso.slice(11, 19));
     const store = useActionsStore();
     const base = {
       ...createBaseEngineState(null),

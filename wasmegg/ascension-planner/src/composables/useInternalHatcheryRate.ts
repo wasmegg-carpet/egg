@@ -8,7 +8,7 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
 import type { IHRInput, IHROutput } from '@/types';
 import { PROFILE } from '@/lib/profile';
@@ -23,9 +23,9 @@ export function useInternalHatcheryRate(): {
 } {
   const initialStateStore = useInitialStateStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
 
-  const { te } = storeToRefs(virtueStore);
+  const { te } = storeToRefs(planStore);
   const { researchLevels } = storeToRefs(commonResearchStore);
   const { epicResearchLevels } = storeToRefs(initialStateStore);
 

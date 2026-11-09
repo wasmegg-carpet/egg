@@ -92,7 +92,7 @@ import {
   type DurationType,
 } from '@/lib/missions';
 import { FUEL_EGG_NAMES } from '@/types';
-import { formatNumber, formatBockPrice, formatDuration } from '@/lib/format';
+import { formatNumber, formatPrice, formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 

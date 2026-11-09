@@ -216,7 +216,7 @@
 import { computed, ref } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 
 import { type CalculationsSnapshot, type VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
@@ -228,7 +228,7 @@ import TeBreakdownModal from '@/components/TeBreakdownModal.vue';
 
 const actionsStore = useActionsStore();
 const initialStateStore = useInitialStateStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const emit = defineEmits<{
   'update:collapsed': [value: boolean];
@@ -284,7 +284,7 @@ const calculateTotalPotentialTE = (snapshot: CalculationsSnapshot) => {
   }, 0);
 };
 
-const startDate = computed(() => virtueStore.planStartTime);
+const startDate = computed(() => planStore.planStartTime);
 
 const totalDurationSeconds = computed(() => {
   const currentSimTime = actionsStore.currentSnapshot.lastStepTime || 0;

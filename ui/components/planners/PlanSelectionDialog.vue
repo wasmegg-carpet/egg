@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { loadLibraryPlans, type PlanData } from '@/lib/storage/db';
-import { usePersistence } from '@/composables/usePersistence';
-import { useActionsStore } from '@/stores/actions';
+import { loadLibraryPlans, type PlanData } from '@planner/lib/storage/db';
+import { usePersistence } from '@planner/composables/usePersistence';
+import { useActionsStore } from '@planner/stores/actions';
 import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 
 const actionsStore = useActionsStore();

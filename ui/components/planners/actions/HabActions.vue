@@ -133,20 +133,20 @@ import {
   countHabsOfType,
   isHabId,
   type HabCostModifiers,
-} from '@/lib/habs';
-import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
+} from '@planner/lib/habs';
+import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useActionsStore } from '@/stores/actions';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useActionsStore } from '@planner/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
-import { computeDependencies } from '@/lib/actions/executor';
-import { generateActionId } from '@/types';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import { generateActionId } from '@planner/types';
+import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
 import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
-import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from '@/calculations/habPurchasePlan';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
+import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from '@planner/calculations/habPurchasePlan';
+import { calculateArtifactModifiers } from '@planner/lib/artifacts';
+import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
+import { getSimulationContext } from '@planner/engine/adapter';
 
 const habCapacityStore = useHabCapacityStore();
 const initialStateStore = useInitialStateStore();

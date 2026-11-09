@@ -67,12 +67,12 @@ import { useActionsStore } from '@/stores/actions';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { generateActionId, type ActiveMissionInfo } from '@/types';
 import { computeDependencies } from '@/lib/actions/executor';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import ActiveMissionsDisplay from 'ui/components/planners/actions/rockets/ActiveMissionsDisplay.vue';
 
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const { prepareExecution, completeExecution } = useActionExecutor();
 
 const currentTimeSeconds = computed(() => actionsStore.effectiveSnapshot.lastStepTime);

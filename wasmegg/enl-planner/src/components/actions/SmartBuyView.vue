@@ -44,7 +44,7 @@
         <SmartBuyStats
           :purchase-count="saleAwareStats70.purchaseCount"
           :seconds="saleAwareStats70.seconds"
-          :cost="saleAwareStats70.bocks"
+          :cost="saleAwareStats70.spent"
         />
         <RatePreviewDelta
           label="Earnings"
@@ -81,7 +81,7 @@
       <SmartBuyStats
         :purchase-count="saleEndsStats.purchaseCount"
         :seconds="saleEndsStats.seconds"
-        :cost="saleEndsStats.bocks"
+        :cost="saleEndsStats.spent"
       />
       <ResearchPurchasePreview
         :items="saleEndsEarningsPreview"
@@ -112,11 +112,11 @@
 <script setup lang="ts">
 import { iconURL } from 'lib';
 import type { ResearchSummaryItem } from '@/calculations/smartBuyPreview';
-import QuickBuy from './QuickBuy.vue';
+import QuickBuy from 'ui/components/planners/actions/QuickBuy.vue';
 import AutoBuy from 'ui/components/planners/actions/AutoBuy.vue';
 import SmartBuyCard from 'ui/components/planners/actions/SmartBuyCard.vue';
 import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue';
-import ResearchPurchasePreview from './ResearchPurchasePreview.vue';
+import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
 import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
@@ -130,7 +130,7 @@ interface RateSummary {
 interface BuyStats {
   purchaseCount: number;
   seconds: number;
-  bocks: number;
+  spent: number;
 }
 
 defineProps<{

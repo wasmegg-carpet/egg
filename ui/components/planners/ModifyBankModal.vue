@@ -13,9 +13,9 @@
         >
           <div class="p-1.5 bg-slate-100 rounded-lg text-slate-600">
             <img
-              :src="iconURL('egginc/icon_bock.png', 64)"
+              :src="iconURL(currency.iconPath, 64)"
               class="w-5 h-5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]"
-              alt="Bocks"
+              :alt="currency.name"
             />
           </div>
           <h3 class="text-xs font-black text-slate-800 uppercase tracking-widest">Modify Bank Value</h3>
@@ -167,16 +167,19 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { ref, computed, watch, nextTick } from 'vue';
 import { iconURL } from 'lib';
-import { formatNumber, formatDuration, parseNumber, parseDuration } from '@/lib/format';
-import { generateActionId } from '@/types';
-import type { ModifyBankPayload } from '@/types';
-import { usePlanStore } from '@/stores/plan';
-import { useActionsStore } from '@/stores/actions';
-import { computeDependencies } from '@/lib/actions/executor';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { formatNumber, formatDuration, parseNumber, parseDuration } from '@planner/lib/format';
+import { generateActionId } from '@planner/types';
+import type { ModifyBankPayload } from '@planner/types';
+import { usePlanStore } from '@planner/stores/plan';
+import { useActionsStore } from '@planner/stores/actions';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import { useActionExecutor } from '@planner/composables/useActionExecutor';
 import { calculateEarningsForTime } from 'lib/planners/engine/apply/math';
+
+const { currency } = usePlannerProfile();
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -238,7 +241,7 @@ const parsedTimeAmount = computed(() => {
   return sign * magnitude;
 });
 
-// The signed bock amount to add/subtract for 'delta' and 'time' modes.
+// The signed currency amount to add/subtract for 'delta' and 'time' modes.
 const effectiveDeltaAmount = computed(() => {
   if (mode.value === 'time') return parsedTimeAmount.value ?? 0;
   return parsedDeltaAmount.value ?? 0;
@@ -285,7 +288,7 @@ async function handleConfirm() {
   const targetValue =
     mode.value === 'set' ? (parsedSetValue.value as number) : previousValue + effectiveDeltaAmount.value;
 
-  // 'time' mode computes a one-off bock amount from the current earnings rate, then
+  // 'time' mode computes a one-off currency amount from the current earnings rate, then
   // behaves exactly like a manually-typed delta from here on.
   const payload: ModifyBankPayload = {
     mode: mode.value === 'set' ? 'set' : 'delta',

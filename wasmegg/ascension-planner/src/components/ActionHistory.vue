@@ -59,8 +59,8 @@
 import { computed } from 'vue';
 import type { Action, StoreFuelPayload, WaitForTEPayload, LaunchMissionsPayload } from '@/types';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
-import { formatNumber, formatGemPrice } from '@/lib/format';
+import { usePlanStore } from '@/stores/plan';
+import { formatNumber, formatPrice } from '@/lib/format';
 import { compactActionHistory } from '@/composables/useCompactActionHistory';
 import ActionHistoryItem from './ActionHistoryItem.vue';
 import ActionGroup from './ActionGroup.vue';
@@ -71,7 +71,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const actions = computed(() => actionsStore.actions);
 const totalCost = computed(() => actionsStore.totalCost);
@@ -82,7 +82,7 @@ const hasStartAction = computed(() => actionsStore.hasStartAction);
  * Get the ascension start time as a Date object.
  */
 const ascensionStartTime = computed(() => {
-  const { ascensionDate, ascensionTime } = virtueStore;
+  const { ascensionDate, ascensionTime } = planStore;
 
   // Parse the date and time
   // Format: "YYYY-MM-DD HH:MM"

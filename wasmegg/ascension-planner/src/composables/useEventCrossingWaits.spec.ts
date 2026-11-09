@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from '@/engine/compute';
 import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
 import {
@@ -35,11 +35,11 @@ const VEHICLE_MULTIPLIERS = {
 };
 
 async function startPlan(absoluteStart: number) {
-  const virtueStore = useVirtueStore();
-  virtueStore.setAscensionTimezone('UTC');
+  const planStore = usePlanStore();
+  planStore.setAscensionTimezone('UTC');
   const iso = new Date(absoluteStart * 1000).toISOString();
-  virtueStore.setAscensionDate(iso.slice(0, 10));
-  virtueStore.setAscensionTime(iso.slice(11, 16));
+  planStore.setAscensionDate(iso.slice(0, 10));
+  planStore.setAscensionTime(iso.slice(11, 16));
   const store = useActionsStore();
   const base = {
     ...createBaseEngineState(null),

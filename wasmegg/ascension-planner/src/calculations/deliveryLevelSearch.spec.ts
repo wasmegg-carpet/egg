@@ -274,7 +274,7 @@ describe('Buy Until Sale Ends', () => {
       expected += getDiscountedVirtuePrice(getResearchById(id)!, levels[id] || 0, mods, true);
       levels[id] = (levels[id] || 0) + 1;
     }
-    expect(result.totalGemsSpent! / expected).toBeCloseTo(1, 9);
+    expect(result.totalSpent! / expected).toBeCloseTo(1, 9);
     expect(levels).toEqual(result.endLevels);
   });
 });

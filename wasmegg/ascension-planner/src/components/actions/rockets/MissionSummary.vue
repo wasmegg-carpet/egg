@@ -24,7 +24,7 @@ import { computed } from 'vue';
 import type { ScheduleResult, MissionSummaryLine } from '@/lib/rockets/scheduler';
 import { formatDuration, formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 
 const props = defineProps<{
   summary: MissionSummaryLine[];
@@ -32,10 +32,10 @@ const props = defineProps<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 const absoluteTime = computed(() => {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const currentSimTime = actionsStore.effectiveSnapshot.lastStepTime || 0;
   const totalSeconds = props.schedule.totalSeconds;

@@ -78,11 +78,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { iconURL } from 'lib';
-import { useActionsStore } from '@/stores/actions';
-import { formatNumber, formatDuration } from '@/lib/format';
-import { generateActionId } from '@/types';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { computeDependencies } from '@/lib/actions/executor';
+import { useActionsStore } from '@planner/stores/actions';
+import { formatNumber, formatDuration } from '@planner/lib/format';
+import { generateActionId } from '@planner/types';
+import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { computeDependencies } from '@planner/lib/actions/executor';
 
 const actionsStore = useActionsStore();
 const { prepareExecution, completeExecution } = useActionExecutor();

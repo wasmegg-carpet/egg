@@ -19,7 +19,7 @@ import { type HabId } from '@/lib/habs';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeDeltas } from '@/lib/actions/snapshot';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useSilosStore } from '@/stores/silos';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
@@ -118,7 +118,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     ascensionStartTime(): number {
-      const vStore = useVirtueStore();
+      const vStore = usePlanStore();
       return vStore.planStartTime.getTime() / 1000;
     },
 
@@ -133,7 +133,7 @@ export const useActionsStore = defineStore('actions', {
 
         const initialStateStore = useInitialStateStore();
         const eventsStore = useEventsStore();
-        const vStore = useVirtueStore();
+        const vStore = usePlanStore();
 
         return evaluateAction(action, {
           farm: this.reconcileFarmState,
@@ -509,7 +509,7 @@ export const useActionsStore = defineStore('actions', {
 
     async continueFromBackup(applyEvents = false) {
       const initialStateStore = useInitialStateStore();
-      const virtueStore = useVirtueStore();
+      const planStore = usePlanStore();
       const silosStore = useSilosStore();
       const commonResearchStore = useCommonResearchStore();
       const habCapacityStore = useHabCapacityStore();
@@ -527,7 +527,7 @@ export const useActionsStore = defineStore('actions', {
         startAction.payload.initialFarmState = farm;
         startAction.payload.isQuickContinue = applyEvents;
       }
-      virtueStore.setCurrentEgg(egg);
+      planStore.setCurrentEgg(egg);
       silosStore.setSiloCount(farm.numSilos);
       commonResearchStore.resetAll();
       for (const [id, level] of Object.entries(farm.commonResearches)) commonResearchStore.setResearchLevel(id, level);
@@ -613,7 +613,7 @@ export const useActionsStore = defineStore('actions', {
         const { newSnapshot, durationSeconds } = calculateActionResult(fullAction, prevSnapshot, prevState);
         const deltas = computeDeltas(prevSnapshot, newSnapshot);
         Object.assign(fullAction, { ...deltas, totalTimeSeconds: durationSeconds, endState: markRaw(newSnapshot) });
-        useVirtueStore().setBankValue(newSnapshot.bankValue);
+        usePlanStore().setBankValue(newSnapshot.bankValue);
       } else {
         await this.recalculateFrom(insertIndex);
       }

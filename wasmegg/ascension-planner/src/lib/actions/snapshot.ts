@@ -18,7 +18,7 @@ import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore, totalAwayTime } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
@@ -43,7 +43,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
   const habCapacityStore = useHabCapacityStore();
   const shippingCapacityStore = useShippingCapacityStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
@@ -66,12 +66,12 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     onlineIHR: ihr.value.onlineRate,
     offlineIHR: ihr.value.offlineRate,
     ratePerChickenPerSecond: layRate.value.ratePerChickenPerSecond,
-    bankValue: virtueStore.bankValue,
+    bankValue: planStore.bankValue,
 
     // Virtue state
-    currentEgg: virtueStore.currentEgg,
-    shiftCount: virtueStore.shiftCount,
-    te: virtueStore.te,
+    currentEgg: planStore.currentEgg,
+    shiftCount: planStore.shiftCount,
+    te: planStore.te,
     soulEggs: initialStateStore.soulEggs,
 
     // Silo state
@@ -100,7 +100,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     ),
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
-    population: virtueStore.population,
+    population: planStore.population,
     lastStepTime: 0,
     activeSales: { ...salesStore.$state },
     earningsBoost: {
@@ -172,7 +172,7 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   const habCapacityStore = useHabCapacityStore();
   const shippingCapacityStore = useShippingCapacityStore();
   const commonResearchStore = useCommonResearchStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
@@ -199,7 +199,7 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   });
 
   // Restore virtue state
-  virtueStore.$patch(state => {
+  planStore.$patch(state => {
     state.currentEgg = snapshot.currentEgg;
     state.shiftCount = snapshot.shiftCount;
     state.te = snapshot.te;
