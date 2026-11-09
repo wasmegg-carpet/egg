@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue';
 import { useActionsStore } from '@/stores/actions';
-import { usePersistence } from '@/composables/usePersistence';
+import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanData } from '@/lib/storage/db';
 import { downloadGzipped, importedPlanName, readImportedJson } from 'lib/planners/utils/export';
 import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';

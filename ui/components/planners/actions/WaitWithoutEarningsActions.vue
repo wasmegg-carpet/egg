@@ -80,7 +80,7 @@ defineExpose({ focus: () => inputEl.value?.focus() });
 import { usePlanStore } from '@planner/stores/plan';
 import { formatDuration, parseDuration, formatAbsoluteTime } from '@planner/lib/format';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
-import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 
 const { currency } = usePlannerProfile();
 

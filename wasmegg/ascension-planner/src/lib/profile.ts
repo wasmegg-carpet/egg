@@ -18,4 +18,8 @@ export const PROFILE: PlannerProfile = {
   storagePrefix: 'ascension',
   hasDeliveryViews: true,
   maxVehiclesRoiRoute: 'gone to Kindness and ',
+  hasShifts: true,
+  researchSaleEgg: 'curiosity',
+  baseEggValue: 1,
+  fuelEggIconPath: egg => `egginc/egg_${egg}.png`,
 };

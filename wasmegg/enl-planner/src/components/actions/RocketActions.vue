@@ -56,7 +56,7 @@ import { useRocketsStore } from '@/stores/rockets';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useEarnings } from '@/composables/useEarnings';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, FUEL_EGGS, createEmptyFuelAmounts } from '@/types';
 import type { FuelEgg, LaunchMissionEntry } from '@/types';
@@ -65,9 +65,9 @@ import { formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
 import { getSimulationContext } from '@/engine/adapter';
 
-import FuelTankGraphic from './rockets/FuelTankGraphic.vue';
+import FuelTankGraphic from 'ui/components/planners/actions/rockets/FuelTankGraphic.vue';
 import MissionGrid from './rockets/MissionGrid.vue';
-import MissionSummary from './rockets/MissionSummary.vue';
+import MissionSummary from 'ui/components/planners/actions/rockets/MissionSummary.vue';
 
 const fuelTankStore = useFuelTankStore();
 const rocketsStore = useRocketsStore();

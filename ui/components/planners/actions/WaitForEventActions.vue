@@ -17,8 +17,8 @@
 
 <script setup lang="ts">
 import EventWaitButton from 'ui/components/planners/actions/EventWaitButton.vue';
-import { useEventWaits } from '@/composables/useEventWaits';
-import WaitForResearchSaleButton from './WaitForResearchSaleButton.vue';
+import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
+import WaitForResearchSaleButton from 'ui/components/planners/actions/WaitForResearchSaleButton.vue';
 
 const { secondsUntilNextEarningsBoost, waitForNextEarningsBoost } = useEventWaits();
 </script>

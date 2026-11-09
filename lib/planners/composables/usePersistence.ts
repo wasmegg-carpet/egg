@@ -1,16 +1,17 @@
+import { PROFILE } from '@planner/lib/profile';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useActionsStore } from '@/stores/actions';
-import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
-import { exportPlanData } from '@/stores/actions/io';
+import { useActionsStore } from '@planner/stores/actions';
+import { hashID, saveMetadata, loadMetadata } from '@planner/lib/storage/db';
+import { exportPlanData } from '@planner/stores/actions/io';
 
-const SYNC_CHANNEL_NAME = 'enl_sync';
+const SYNC_CHANNEL_NAME = `${PROFILE.storagePrefix}_sync`;
 const channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
 const partitionHash = ref('');
 const isSyncing = ref(false);
 
 // Generate a unique session ID for this tab that persists through refreshes
-const sessionId = sessionStorage.getItem('enl_session_id') || Math.random().toString(36).substring(2, 15);
-sessionStorage.setItem('enl_session_id', sessionId);
+const sessionId = sessionStorage.getItem(`${PROFILE.storagePrefix}_session_id`) || Math.random().toString(36).substring(2, 15);
+sessionStorage.setItem(`${PROFILE.storagePrefix}_session_id`, sessionId);
 
 let lastSyncedDataStr = '';
 let channelListenerAttached = false;

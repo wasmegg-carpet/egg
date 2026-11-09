@@ -1,27 +1,27 @@
-import type { Action, BuyResearchPayload, CalculationsSnapshot } from '@/types';
-import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive, isResearchSaleActive } from 'lib/planners/events';
-import { activeSlots, calculateArtifactModifiers } from '@/lib/artifacts';
+import type { Action, BuyResearchPayload, CalculationsSnapshot } from '@planner/types';
+import { BOUNDARY_EPSILON_SECONDS, isEarningsBoostActive, isResearchSaleActive } from '../events';
+import { activeSlots, calculateArtifactModifiers } from '@planner/lib/artifacts';
 import {
   getDiscountedResearchPrice,
   getResearchById,
   type CommonResearch,
   type ResearchCostModifiers,
-} from '@/calculations/commonResearch';
+} from '@planner/calculations/commonResearch';
 import {
   findEventCrossings,
   getSaleAwareTimeToSave,
   type PurchaseEventCrossings,
   type SaleAwarePurchase,
-} from 'lib/planners/calculations/researchROI';
-import { boostTransitionsFrom } from 'lib/planners/engine/apply/math';
-import { isResearchSaleAtSimTime } from 'lib/planners/engine/calendarEvents';
-import type { SimulationContext } from './types';
+} from '../calculations/researchROI';
+import { boostTransitionsFrom } from './apply/math';
+import { isResearchSaleAtSimTime } from './calendarEvents';
+import type { SimulationContext } from '@planner/engine/types';
 
 export {
   isResearchSaleAtSimTime,
   withCalendarResearchSale,
   hasStaleResearchSaleFlags,
-} from 'lib/planners/engine/calendarEvents';
+} from './calendarEvents';
 
 /** The research cost modifiers in effect at `snapshot`, whose loadout may differ from the live stores'. */
 export function researchCostModifiersAt(
@@ -31,8 +31,10 @@ export function researchCostModifiersAt(
   return {
     labUpgradeLevel: context.epicResearchLevels['cheaper_research'] || 0,
     researchCostMultiplier: context.colleggtibleModifiers.researchCost || 1,
-    puzzleCubeMultiplier: calculateArtifactModifiers(activeSlots(snapshot.artifactLoadout, snapshot.proPermit))
-      .researchCost.totalMultiplier,
+    puzzleCubeMultiplier:
+      context.researchCubeMultiplier ??
+      calculateArtifactModifiers(activeSlots(snapshot.artifactLoadout, snapshot.proPermit)).researchCost
+        .totalMultiplier,
   };
 }
 

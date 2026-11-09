@@ -1,11 +1,11 @@
-import { useActionsStore } from '@/stores/actions';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { generateActionId, type CalculationsSnapshot, type DraftAction } from '@/types';
-import { computeDependencies } from '@/lib/actions/executor';
-import type { CommonResearch } from '@/calculations/commonResearch';
-import { getSimulationContext } from '@/engine/adapter';
-import { eventCrossingsForPurchase } from '@/engine/researchSale';
-import { useEventCrossingWaits as useSharedEventCrossingWaits } from 'lib/planners/composables/useEventCrossingWaits';
+import { useActionsStore } from '@planner/stores/actions';
+import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { generateActionId, type CalculationsSnapshot, type DraftAction } from '@planner/types';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import type { CommonResearch } from '@planner/calculations/commonResearch';
+import { getSimulationContext } from '@planner/engine/adapter';
+import { eventCrossingsForPurchase } from '../engine/researchSale';
+import { useEventCrossingWaits as useSharedEventCrossingWaits } from './useEventCrossingWaits';
 
 /** This planner's stores and research pricing wired into the shared crossing waits. */
 export function useEventCrossingWaits() {

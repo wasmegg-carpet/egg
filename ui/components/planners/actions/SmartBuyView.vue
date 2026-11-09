@@ -127,7 +127,7 @@ import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue'
 import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
-import WaitForResearchSaleButton from '@planner/components/actions/WaitForResearchSaleButton.vue';
+import WaitForResearchSaleButton from 'ui/components/planners/actions/WaitForResearchSaleButton.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 interface RateSummary {

@@ -29,9 +29,9 @@ import { createBuyResearchExecutor } from 'lib/planners/actions/executors/buyRes
 import { createBuyTrainCarExecutor } from 'lib/planners/actions/executors/buyTrainCar';
 import { changeArtifactsExecutor } from 'lib/planners/actions/executors/changeArtifacts';
 import { buySiloExecutor } from 'lib/planners/actions/executors/buySilo';
-import { storeFuelExecutor } from './executors/storeFuel';
+import { storeFuelExecutor } from 'lib/planners/actions/executors/storeFuel';
 import { waitForPopulationExecutor } from './executors/waitForPopulation';
-import { launchMissionsExecutor } from './executors/launchMissions';
+import { launchMissionsExecutor } from 'lib/planners/actions/executors/launchMissions';
 import { toggleSaleExecutor } from 'lib/planners/actions/executors/toggleSale';
 import { equipArtifactSetExecutor } from './executors/equipArtifactSet';
 import { updateArtifactSetExecutor } from './executors/updateArtifactSet';
@@ -39,7 +39,7 @@ import { createWaitForMissionsExecutor } from 'lib/planners/actions/executors/wa
 import { waitForTimeExecutor } from 'lib/planners/actions/executors/wait_for_time';
 import { waitForResearchSaleEndExecutor } from 'lib/planners/actions/executors/waitForResearchSaleEnd';
 import { waitForEarningsBoostEndExecutor } from 'lib/planners/actions/executors/waitForEarningsBoostEnd';
-import { removeFuelExecutor } from './executors/removeFuel';
+import { removeFuelExecutor } from 'lib/planners/actions/executors/removeFuel';
 import { waitForFullHabsExecutor } from 'lib/planners/actions/executors/wait_for_full_habs';
 import { toggleEarningsBoostExecutor } from 'lib/planners/actions/executors/toggleEarningsBoost';
 import { waitForResearchSaleExecutor } from 'lib/planners/actions/executors/waitForResearchSale';

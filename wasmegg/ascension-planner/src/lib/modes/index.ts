@@ -22,7 +22,7 @@
 export { fetchPlayerBackup, type BackupResult } from 'lib/planners/modes/fetchBackup';
 export { resetAllStores } from './reset';
 export { initStartFromScratch } from './startFromScratch';
-export { initLoadPlan } from './loadPlan';
+export { initLoadPlan } from 'lib/planners/modes/loadPlan';
 export { initPlanFuture } from './planFuture';
 export { initContinueCurrent } from './continueCurrent';
 export { initReconcile, refreshReconcile } from 'lib/planners/modes/reconcile';

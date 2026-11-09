@@ -8,7 +8,7 @@ import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
 import { usePlanStore } from '@/stores/plan';
 import { useEggValue } from 'lib/planners/composables/useEggValue';
-import { useEffectiveLayRate } from './useEffectiveLayRate';
+import { useEffectiveLayRate } from 'lib/planners/composables/useEffectiveLayRate';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { calculateEarnings } from '@/calculations/earnings';
 import type { EarningsInput, EarningsOutput } from '@/types';

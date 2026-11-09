@@ -18,7 +18,7 @@ import { usePlanStore } from '@planner/stores/plan';
 import { computeSnapshot } from '@planner/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@planner/engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@planner/engine/apply';
-import { researchPurchaseAt } from '@planner/engine/researchSale';
+import { researchPurchaseAt } from '../engine/researchSale';
 import { calculateShippingCapacity } from '../calculations/shippingCapacity';
 import {
   getNextPacificTime,

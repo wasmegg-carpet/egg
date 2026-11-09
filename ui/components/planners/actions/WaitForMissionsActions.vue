@@ -24,14 +24,14 @@
 
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <ActiveMissionsDisplay
-        :missions="initialStateStore.regularMissions"
+        :missions="initialStateStore.plannerMissions"
         :current-time-seconds="currentTimeSeconds"
         @wait-missions="handleWaitMissions"
       />
     </div>
 
     <div
-      v-if="initialStateStore.regularMissions.length === 0"
+      v-if="initialStateStore.plannerMissions.length === 0"
       class="flex flex-col items-center justify-center py-16 px-6 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200"
     >
       <div
@@ -53,7 +53,7 @@
       </div>
       <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-2">No Active Missions</h3>
       <p class="text-[11px] text-slate-500 max-w-xs leading-relaxed font-medium">
-        There are no active missions found in your last backup. Once missions return, use the "Rockets" tab to
+        There are no active {{ PROFILE.missions.noun }}s found in your last backup. Once missions return, use the "Rockets" tab to
         plan new launches.
       </p>
     </div>
@@ -61,13 +61,14 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
 import { computed } from 'vue';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useActionsStore } from '@/stores/actions';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { generateActionId, type ActiveMissionInfo } from '@/types';
-import { computeDependencies } from '@/lib/actions/executor';
-import { usePlanStore } from '@/stores/plan';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useActionsStore } from '@planner/stores/actions';
+import { useActionExecutor } from '@planner/composables/useActionExecutor';
+import { generateActionId, type ActiveMissionInfo } from '@planner/types';
+import { computeDependencies } from '@planner/lib/actions/executor';
+import { usePlanStore } from '@planner/stores/plan';
 import ActiveMissionsDisplay from 'ui/components/planners/actions/rockets/ActiveMissionsDisplay.vue';
 
 const initialStateStore = useInitialStateStore();

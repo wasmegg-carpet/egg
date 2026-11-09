@@ -85,7 +85,7 @@ import { boostTransitionsFrom, calculateEarningsForTime } from 'lib/planners/eng
 import { absoluteSimTimeFor } from '@planner/engine/apply';
 import { getSimulationContext } from '@planner/engine/adapter';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
-import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 
 const { currency } = usePlannerProfile();
 

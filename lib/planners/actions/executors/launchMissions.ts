@@ -5,10 +5,11 @@
  * (normal flow) and by replay.ts (replay flow).
  */
 
-import type { PayloadExecutor } from 'lib/planners/actions/executorTypes';
-import type { LaunchMissionsPayload } from '@/types';
-import { SHIP_INFO, DURATION_NAMES, type Spaceship, type DurationType } from '@/lib/missions';
-import { formatDuration } from '@/lib/format';
+import { PROFILE } from '@planner/lib/profile';
+import type { PayloadExecutor } from '../executorTypes';
+import type { LaunchMissionsPayload } from '@planner/types';
+import { SHIP_INFO, DURATION_NAMES, type Spaceship, type DurationType } from '@planner/lib/missions';
+import { formatDuration } from '@planner/lib/format';
 
 export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
   execute(_payload: LaunchMissionsPayload): number {
@@ -29,7 +30,7 @@ export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
       parts.push(`${m.count}× ${durName} ${shipName}`);
     }
     const summary = parts.join(', ');
-    const timeStr = payload.totalTimeSeconds === 0 ? '0s' : formatDuration(payload.totalTimeSeconds);
+    const timeStr = payload.totalTimeSeconds === 0 ? (PROFILE.hasShifts ? '0s (Pre-shift)' : '0s') : formatDuration(payload.totalTimeSeconds);
     return `${summary} (${timeStr})`;
   },
 };

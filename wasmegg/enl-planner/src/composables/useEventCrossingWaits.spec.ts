@@ -11,9 +11,9 @@ import {
   getBoostAwareTimeToSave,
   getTimeToSave,
 } from '@/engine/apply';
-import { useEventCrossingWaits } from './useEventCrossingWaits';
-import { simulateHabPurchases } from '@/calculations/habPurchasePlan';
-import { planMaxVehicles, planVehiclesForTimeLimit } from '@/calculations/vehiclePurchasePlan';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
+import { simulateHabPurchases } from 'lib/planners/calculations/plannerHabPurchasePlan';
+import { planMaxVehicles, planVehiclesForTimeLimit } from 'lib/planners/calculations/plannerVehiclePurchasePlan';
 import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';
 import { getNextEarningsBoostEnd, getNextEarningsBoostStart } from 'lib/planners/events';
 import { getDiscountedHabPrice, getHabById, type HabId } from '@/lib/habs';

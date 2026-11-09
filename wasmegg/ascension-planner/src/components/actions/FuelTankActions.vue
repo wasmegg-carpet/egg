@@ -309,7 +309,7 @@ import { VIRTUE_FUEL_ORDER } from '@/stores/fuelTank';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 
 import { useLayRate } from 'lib/planners/composables/useLayRate';
-import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
+import { useInternalHatcheryRate } from 'lib/planners/composables/useInternalHatcheryRate';
 import { useHabCapacity } from 'lib/planners/composables/useHabCapacity';
 import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
 import { solveForTime, integrateRate } from 'lib/planners/engine/apply/math';

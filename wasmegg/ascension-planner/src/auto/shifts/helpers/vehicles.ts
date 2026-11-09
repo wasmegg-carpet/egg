@@ -15,7 +15,7 @@ import {
   planVehiclesForTimeLimit,
   HYPERLOOP_ID,
   type VehicleMultipliers,
-} from '../../../calculations/vehiclePurchasePlan';
+} from 'lib/planners/calculations/plannerVehiclePurchasePlan';
 import type { VehicleCostModifiers } from '../../../lib/vehicles';
 
 /**

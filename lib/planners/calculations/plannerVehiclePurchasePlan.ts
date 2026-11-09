@@ -6,11 +6,11 @@
 import {
   planMaxVehicles as planMaxVehiclesAt,
   planVehiclesForTimeLimit as planVehiclesForTimeLimitAt,
-} from 'lib/planners/calculations/vehiclePurchasePlan';
-import { withPricing } from 'lib/planners/profile';
-import { PROFILE } from '@/lib/profile';
+} from './vehiclePurchasePlan';
+import { withPricing } from '../profile';
+import { PROFILE } from '@planner/lib/profile';
 
-export { HYPERLOOP_ID, calculateVehicleCapacity } from 'lib/planners/calculations/vehiclePurchasePlan';
+export { HYPERLOOP_ID, calculateVehicleCapacity } from './vehiclePurchasePlan';
 export type {
   VehicleMultipliers,
   VehiclePurchaseStep,
@@ -18,7 +18,7 @@ export type {
   VehiclePlanningSnapshot,
   VehicleTimeStep,
   VehicleTimePlanResult,
-} from 'lib/planners/calculations/vehiclePurchasePlan';
+} from './vehiclePurchasePlan';
 
 export const planMaxVehicles = withPricing(planMaxVehiclesAt, PROFILE.pricing);
 export const planVehiclesForTimeLimit = withPricing(planVehiclesForTimeLimitAt, PROFILE.pricing);

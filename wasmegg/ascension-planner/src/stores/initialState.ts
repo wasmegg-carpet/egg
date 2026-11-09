@@ -162,7 +162,7 @@ export const useInitialStateStore = defineStore('initialState', {
     /**
      * Get active virtue missions from backup
      */
-    virtueMissions(): ActiveMissionInfo[] {
+    plannerMissions(): ActiveMissionInfo[] {
       return this.activeMissions
         .map(m => new Mission(m))
         .filter(m => m.type === ei.MissionInfo.MissionType.VIRTUE)

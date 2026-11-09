@@ -233,12 +233,12 @@
 import { ref, watch, nextTick } from 'vue';
 import { iconURL } from 'lib';
 import WaitForPopulationActions from './WaitForPopulationActions.vue';
-import WaitForMissionsActions from './WaitForMissionsActions.vue';
+import WaitForMissionsActions from 'ui/components/planners/actions/WaitForMissionsActions.vue';
 import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
 import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
 import WaitForCurrencyActions from 'ui/components/planners/actions/WaitForCurrencyActions.vue';
 import WaitWithoutEarningsActions from 'ui/components/planners/actions/WaitWithoutEarningsActions.vue';
-import WaitForEventActions from './WaitForEventActions.vue';
+import WaitForEventActions from 'ui/components/planners/actions/WaitForEventActions.vue';
 
 
 

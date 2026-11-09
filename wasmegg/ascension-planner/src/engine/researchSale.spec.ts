@@ -17,7 +17,7 @@ import {
   researchCostModifiersAt,
   researchPurchaseAt,
   eventCrossingsForPurchase,
-} from './researchSale';
+} from 'lib/planners/engine/researchSale';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import { computeSnapshot } from './compute';
@@ -28,10 +28,10 @@ import {
   type CommonResearch,
 } from '@/calculations/commonResearch';
 import { useResearchViews } from 'lib/planners/composables/useResearchViews';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { getExecutor } from '@/lib/actions/executor';
 import { createBaseEngineState, getSimulationContext } from './adapter';
-import { useEventWaits } from '@/composables/useEventWaits';
+import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { useToastStore } from 'lib/planners/stores/toast';
 import { generateActionId } from '@/types';

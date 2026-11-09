@@ -26,7 +26,7 @@ import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useEventsStore } from 'lib/planners/stores/events';
 
 import { simulateAsync } from 'lib/planners/engine/simulate';
-import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '@/engine/researchSale';
+import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from 'lib/planners/engine/researchSale';
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';

@@ -1,9 +1,9 @@
-import type { CalculationsSnapshot } from '@/types';
-import type { EngineState } from '../types';
-import { calculateEarningsForTime, type EarningsRateTransition } from 'lib/planners/engine/apply/math';
+import type { CalculationsSnapshot } from '@planner/types';
+import type { EngineState } from '@planner/engine/types';
+import { calculateEarningsForTime, type EarningsRateTransition } from './math';
 
 /**
- * Advance the simulation time in the engine state and add earned bocks to the bank.
+ * Advance the simulation time in the engine state and add earned currency to the bank.
  */
 export function applyTime(
   state: EngineState,
@@ -28,15 +28,15 @@ export function applyTime(
 
   const newPop = Math.min(maxPop, P0 + I * seconds);
 
-  let earnedBocks = 0;
+  let earned = 0;
   if (!options.skipEarnings) {
     const V = prevSnapshot.elr > 0 ? prevSnapshot.offlineEarnings / prevSnapshot.elr : 0;
     if (V > 0) {
-      earnedBocks = calculateEarningsForTime(seconds, prevSnapshot, options.transitions);
+      earned = calculateEarningsForTime(seconds, prevSnapshot, options.transitions);
     }
   }
 
-  let newBankValue = (state.bankValue || 0) + earnedBocks;
+  let newBankValue = (state.bankValue || 0) + earned;
   if (!options.skipEarnings && prevSnapshot.offlineEarnings > 0) {
     if (Math.abs(newBankValue) < prevSnapshot.offlineEarnings * 1e-6) {
       newBankValue = 0;

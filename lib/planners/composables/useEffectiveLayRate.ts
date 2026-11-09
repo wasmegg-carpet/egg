@@ -4,10 +4,10 @@
  */
 
 import { computed, type ComputedRef } from 'vue';
-import { useLayRate } from 'lib/planners/composables/useLayRate';
-import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
-import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
-import type { EffectiveLayRateOutput } from '@/types';
+import { useLayRate } from './useLayRate';
+import { useShippingCapacity } from './useShippingCapacity';
+import { calculateEffectiveLayRate } from '../calculations/effectiveLayRate';
+import type { EffectiveLayRateOutput } from '@planner/types';
 
 /**
  * Composable that provides reactive effective lay rate calculations.

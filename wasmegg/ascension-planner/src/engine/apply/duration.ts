@@ -28,7 +28,7 @@ import {
 } from 'lib/planners/engine/apply/math';
 import { eggsNeededForTE, countTEThresholdsPassed } from '@/lib/truthEggs';
 import { getResearchById } from '@/calculations/commonResearch';
-import { researchPurchaseAt } from '../researchSale';
+import { researchPurchaseAt } from 'lib/planners/engine/researchSale';
 import { getHabById, getDiscountedHabPrice, countHabsOfType, type HabId } from '@/lib/habs';
 import { getDiscountedVehiclePrice, countVehiclesOfType, getDiscountedTrainCarPrice } from '@/lib/vehicles';
 import { nextSiloCost } from 'lib/planners/stores/silos';

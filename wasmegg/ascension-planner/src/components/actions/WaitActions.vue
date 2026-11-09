@@ -268,12 +268,12 @@ import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
 import WaitForTEActions from './WaitForTEActions.vue';
 import BulkWaitForTEActions from './BulkWaitForTEActions.vue';
-import WaitForMissionsActions from './WaitForMissionsActions.vue';
+import WaitForMissionsActions from 'ui/components/planners/actions/WaitForMissionsActions.vue';
 import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
 import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
 import WaitForCurrencyActions from 'ui/components/planners/actions/WaitForCurrencyActions.vue';
 import WaitWithoutEarningsActions from 'ui/components/planners/actions/WaitWithoutEarningsActions.vue';
-import WaitForEventActions from './WaitForEventActions.vue';
+import WaitForEventActions from 'ui/components/planners/actions/WaitForEventActions.vue';
 
 const actionsStore = useActionsStore();
 

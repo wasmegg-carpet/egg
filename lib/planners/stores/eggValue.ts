@@ -1,12 +1,13 @@
+import { PROFILE } from '@planner/lib/profile';
 import { defineStore } from 'pinia';
-import type { ResearchLevels, Research } from '@/types';
-import { allResearches } from 'lib';
+import type { ResearchLevels, Research } from '@planner/types';
+import { allResearches } from '../..';
 
 // Filter to only egg value researches
 const eggValueResearches = (allResearches as Research[]).filter(r => r.categories.split(',').includes('egg_value'));
 
 export interface EggValueState {
-  // Base egg value (1 gem for virtue eggs)
+  // Base egg value before research
   baseValue: number;
 
   // Research levels for egg value researches
@@ -15,7 +16,7 @@ export interface EggValueState {
 
 export const useEggValueStore = defineStore('eggValue', {
   state: (): EggValueState => ({
-    baseValue: 1,
+    baseValue: PROFILE.baseEggValue,
     researchLevels: initializeResearchLevels(),
   }),
 

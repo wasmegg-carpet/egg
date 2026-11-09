@@ -18,7 +18,7 @@ import { makeContinueState, VIRTUE_EGGS_MAP } from '@/auto/continueState';
 import { triggerPlanExport, type ExportedPlan } from '@/auto/export';
 import { buildLibraryPlansFromExport } from '@/auto/buildLibraryPlans';
 import { savePlanToLibrary, type PlanData } from '@/lib/storage/db';
-import { usePersistence } from '@/composables/usePersistence';
+import { usePersistence } from 'lib/planners/composables/usePersistence';
 import type { AscensionSummary } from '@/auto/types';
 import type { ChainedAscension, VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { pickVariant } from '@/stores/autoPlanner';

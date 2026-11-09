@@ -11,9 +11,9 @@ import { useEggValue } from 'lib/planners/composables/useEggValue';
 import { useHabCapacity } from 'lib/planners/composables/useHabCapacity';
 import { useLayRate } from 'lib/planners/composables/useLayRate';
 import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
-import { useEffectiveLayRate } from '@/composables/useEffectiveLayRate';
+import { useEffectiveLayRate } from 'lib/planners/composables/useEffectiveLayRate';
 import { useEarnings } from '@/composables/useEarnings';
-import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
+import { useInternalHatcheryRate } from 'lib/planners/composables/useInternalHatcheryRate';
 
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';

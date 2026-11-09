@@ -6,7 +6,7 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useEggValueStore } from '@planner/stores/eggValue';
+import { useEggValueStore } from '../stores/eggValue';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useCommonResearchStore } from '../stores/commonResearch';
 import { calculateEggValue } from '@planner/calculations/eggValue';

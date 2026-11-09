@@ -108,7 +108,7 @@ import { useActionsStore } from '@planner/stores/actions';
 import { formatNumber, formatDuration, parseNumber, formatAbsoluteTime } from '@planner/lib/format';
 import { generateActionId, type ActionType } from '@planner/types';
 import { createCurrencyWaitPayload } from 'lib/planners/actions/currencyWait';
-import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { getBoostAwareTimeToSave } from '@planner/engine/apply';
 import { getSimulationContext } from '@planner/engine/adapter';
 import { computeDependencies } from '@planner/lib/actions/executor';

@@ -3,6 +3,7 @@
  */
 
 import { defineStore } from 'pinia';
+import { useInitialStateStore } from '@/stores/initialState';
 import { getLocalTimestampInTimezone } from 'lib/planners/events';
 
 /**
@@ -54,6 +55,11 @@ export const usePlanStore = defineStore('virtue', {
   }),
 
   getters: {
+    /** Truth Eggs are fixed for the length of an enlightenment plan. */
+    te(): number {
+      return useInitialStateStore().truthEggs;
+    },
+
     /**
      * Get the base start time for the planning session as a Date object.
      */

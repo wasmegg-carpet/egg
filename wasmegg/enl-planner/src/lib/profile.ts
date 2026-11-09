@@ -1,3 +1,6 @@
+import { ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
+import { fuelEggIconPath } from '@/lib/missions';
+import type { FuelEgg } from '@/types';
 import { researchCubeOverride } from '@/lib/artifacts/researchCube';
 import { useInitialStateStore } from '@/stores/initialState';
 import type { PlannerProfile } from 'lib/planners/profile';
@@ -21,5 +24,9 @@ export const PROFILE: PlannerProfile = {
   storagePrefix: 'enl',
   hasDeliveryViews: false,
   maxVehiclesRoiRoute: '',
+  hasShifts: false,
+  researchSaleEgg: null,
+  baseEggValue: ENLIGHTENMENT_EGG_VALUE,
+  fuelEggIconPath: egg => fuelEggIconPath(egg as FuelEgg),
   researchCubeMultiplier: () => researchCubeOverride(useInitialStateStore().researchCube),
 };

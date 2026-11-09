@@ -198,7 +198,7 @@ import { useActionsStore } from '@planner/stores/actions';
 import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from '@planner/lib/actions/executor';
 import { generateActionId } from '@planner/types';
-import { useEventCrossingWaits } from '@planner/composables/useEventCrossingWaits';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import {
   calculateShippingMultipliers,
   calculateMaxVehicleSlots,
@@ -207,7 +207,7 @@ import {
 import { calculateArtifactModifiers } from '@planner/lib/artifacts';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
 import { getSimulationContext } from '@planner/engine/adapter';
-import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from '@planner/calculations/vehiclePurchasePlan';
+import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from 'lib/planners/calculations/plannerVehiclePurchasePlan';
 
 const shippingStore = useShippingCapacityStore();
 const initialStateStore = useInitialStateStore();

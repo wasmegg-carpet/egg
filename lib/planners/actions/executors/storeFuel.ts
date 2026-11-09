@@ -5,12 +5,12 @@
  * Cost is 0 (free action, just time-based).
  */
 
-import { fuelEarnings } from 'lib/planners/actions/fuelEarnings';
-import { PROFILE } from '@/lib/profile';
-import type { ActionExecutor, ExecutorContext } from '../executor';
-import type { StoreFuelPayload } from '@/types';
-import { FUEL_EGG_NAMES } from '@/types';
-import { formatNumber, formatDuration } from '@/lib/format';
+import { fuelEarnings } from '../fuelEarnings';
+import { PROFILE } from '@planner/lib/profile';
+import type { ActionExecutor, ExecutorContext } from '@planner/lib/actions/executor';
+import type { StoreFuelPayload } from '@planner/types';
+import { FUEL_EGG_NAMES } from '@planner/types';
+import { formatNumber, formatDuration } from '@planner/lib/format';
 
 export const storeFuelExecutor: ActionExecutor<'store_fuel'> = {
   execute(payload: StoreFuelPayload, context: ExecutorContext): number {

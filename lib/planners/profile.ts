@@ -63,6 +63,14 @@ export interface PlannerProfile {
   hasDeliveryViews: boolean;
   /** How the Max Vehicles ROI note says you get to the vehicles, including a trailing space if not empty. */
   maxVehiclesRoiRoute: string;
+  /** Whether a plan moves between eggs in shifts. */
+  hasShifts: boolean;
+  /** The egg the Wait for Research Sale button is limited to, or null to always show it. */
+  researchSaleEgg: string | null;
+  /** Value of one egg before research. */
+  baseEggValue: number;
+  /** Icon asset for a fuel egg. */
+  fuelEggIconPath: (egg: string) => string;
   /** A research puzzle cube multiplier that replaces the equipped set's, or null to use the set. */
   researchCubeMultiplier?: () => number | null;
 }

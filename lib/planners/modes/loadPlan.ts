@@ -12,10 +12,10 @@
  * - activePlanId set to the plan's ID
  */
 
-import { resetAllStores } from './reset';
-import { backfillMissingBackup } from './utils';
-import { useActionsStore } from '@/stores/actions';
-import type { PlanData } from '@/lib/storage/db';
+import { resetAllStores } from '@planner/lib/modes/reset';
+import { backfillMissingBackup } from '@planner/lib/modes/utils';
+import { useActionsStore } from '@planner/stores/actions';
+import type { PlanData } from '@planner/lib/storage/db';
 
 export async function initLoadPlan(plan: PlanData): Promise<void> {
   // 1. Clean slate — prevents stale state from previous modes
