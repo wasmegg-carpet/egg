@@ -65,6 +65,8 @@ export interface PlannerProfile {
   maxVehiclesRoiRoute: string;
   /** Whether a plan moves between eggs in shifts. */
   hasShifts: boolean;
+  /** The planner's name, used in the page title. */
+  appName: string;
   /** What the start-of-plan settings are headed with. */
   planLabel: string;
   /** Start of exported library file names. */

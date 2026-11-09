@@ -25,6 +25,7 @@ export const PROFILE: PlannerProfile = {
   hasDeliveryViews: false,
   maxVehiclesRoiRoute: '',
   hasShifts: false,
+  appName: 'Enlightenment Planner',
   planLabel: 'Plan',
   planFilePrefix: 'enlightenment',
   missionsWaitEgg: null,

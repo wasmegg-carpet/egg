@@ -473,42 +473,7 @@
         <TableBuilder />
       </div>
 
-      <!-- Undo Confirmation Dialog -->
-      <UndoConfirmationDialog
-        v-if="undoAction"
-        :action="undoAction"
-        :dependents-a="undoDependentsA"
-        :dependents-b="undoDependentsB"
-        @confirm="executeUndo"
-        @cancel="cancelUndo"
-      />
-
-      <!-- Clear All Confirmation Dialog -->
-      <ConfirmationDialog
-        v-if="showClearAllConfirmation"
-        title="Clear All Actions"
-        message="Are you sure you want to clear all actions? This cannot be undone."
-        confirm-label="Clear All"
-        @confirm="executeClearAll"
-        @cancel="showClearAllConfirmation = false"
-      />
-
-      <!-- Unsaved Changes Protection Dialog -->
-      <ConfirmationDialog
-        v-if="showUnsavedConfirm"
-        title="Unsaved Changes"
-        message="You have unsaved changes in your current plan. If you continue, these changes will be lost. Would you like to save before proceeding?"
-        confirm-label="Continue Without Saving"
-        variant="danger"
-        @confirm="
-          showUnsavedConfirm = false;
-          pendingAction?.();
-        "
-        @cancel="
-          showUnsavedConfirm = false;
-          pendingAction = null;
-        "
-      />
+      <PlannerDialogs :dialogs="dialogs" />
 
       <!-- Plan Selection Dialog (for Reconcile) -->
       <PlanSelectionDialog
@@ -570,6 +535,10 @@
 </template>
 
 <script setup lang="ts">
+import { usePlannerPageStatus } from 'lib/planners/composables/usePlannerPageStatus';
+import { usePlanDialogs } from 'lib/planners/composables/usePlanDialogs';
+import { usePlanSaving } from 'lib/planners/composables/usePlanSaving';
+import PlannerDialogs from 'ui/components/planners/PlannerDialogs.vue';
 import { ref, computed, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import TheNavBar from 'ui/components/NavBar.vue';
@@ -587,10 +556,8 @@ import { useNotesStore } from 'lib/planners/stores/notes';
 import CustomEggWatcher from 'ui/components/planners/CustomEggWatcher.vue';
 import ActionHistory from '@/components/ActionHistory.vue';
 import AvailableActions from '@/components/AvailableActions.vue';
-import UndoConfirmationDialog from 'ui/components/planners/UndoConfirmationDialog.vue';
 import PlanFinalSummary from 'ui/components/planners/PlanFinalSummary.vue';
 import ContinuityDialog from '@/components/ContinuityDialog.vue';
-import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import FloatingStats from 'ui/components/planners/FloatingStats.vue';
 import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
 import PlannerToast from 'ui/components/planners/PlannerToast.vue';
@@ -614,7 +581,6 @@ import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { useTablePrefetch } from '@/composables/useTablePrefetch';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
-import { restoreFromSnapshot } from 'lib/planners/actions/snapshot';
 import { computeSnapshot } from 'lib/planners/engine/compute';
 import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import type { Action, VirtueEgg } from '@/types';
@@ -658,48 +624,7 @@ useTablePrefetch();
 
 const isEarningsBoostActive = computed(() => actionsStore.effectiveSnapshot?.earningsBoost?.active ?? false);
 
-const lastBackupFormatted = computed(() => {
-  const approxTime = initialStateStore.rawBackup?.approxTime;
-  if (approxTime == null) return 'Unknown';
-  const date = new Date(approxTime * 1000);
-
-  return date.toLocaleTimeString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-});
-
-const lastBackupAge = computed(() => {
-  const approxTime = initialStateStore.rawBackup?.approxTime;
-  if (approxTime == null) return '';
-  const now = Date.now() / 1000;
-  const diff = Math.max(0, now - approxTime);
-
-  if (diff < 60) return 'Just now';
-
-  const minutes = Math.floor(diff / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h${remainingMinutes}m ago`;
-});
-
-const pageTitle = computed(() => {
-  const name = initialStateStore.rawBackup?.userName;
-  return name ? `Ascension Planner ${name}` : 'Ascension Planner';
-});
-
-watch(
-  pageTitle,
-  newTitle => {
-    document.title = newTitle;
-  },
-  { immediate: true }
-);
+const { lastBackupFormatted, lastBackupAge, pageTitle } = usePlannerPageStatus();
 
 onMounted(async () => {
   eventsStore.fetchEvents();
@@ -802,73 +727,15 @@ const totalCost = computed(() => actionsStore.totalCost);
 const actionCount = computed(() => actionsStore.actionCount);
 
 // Modal state
-const undoAction = ref<Action | null>(null);
-const undoDependentsA = ref<Action[]>([]);
-const undoDependentsB = ref<Action[]>([]);
-const showClearAllConfirmation = ref(false);
 
 const showReconcileLibraryModal = ref(false);
-const showUnsavedConfirm = ref(false);
 const showArtifactSetConfirm = ref(false);
-const pendingAction = ref<(() => void) | null>(null);
 
-/**
- * Confirm unsaved changes before potentially destructive actions.
- */
-function confirmUnsavedChanges(action: () => void) {
-  if (actionsStore.isDirty) {
-    pendingAction.value = action;
-    showUnsavedConfirm.value = true;
-  } else {
-    action();
-  }
-}
+const dialogs = usePlanDialogs();
+const { confirmUnsavedChanges, showUndoConfirmation, handleClearAll } = dialogs;
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function showUndoConfirmation(action: Action, options?: { skipConfirmation: boolean }) {
-  const validationA = actionsStore.prepareUndo(action.id);
-  const validationB = actionsStore.prepareUndoToEnd(action.id);
-
-  undoAction.value = action;
-  undoDependentsA.value = validationA.dependentActions;
-  undoDependentsB.value = validationB.dependentActions;
-
-  if (options?.skipConfirmation) {
-    executeUndo('truncate');
-  }
-}
-
-function cancelUndo() {
-  undoAction.value = null;
-  undoDependentsA.value = [];
-  undoDependentsB.value = [];
-}
-
-function executeUndo(mode: 'dependents' | 'truncate' = 'dependents') {
-  if (!undoAction.value) return;
-
-  actionsStore.executeUndo(undoAction.value.id, mode, snapshot => {
-    // Restore stores to the snapshot of the last remaining action
-    restoreFromSnapshot(snapshot);
-  });
-
-  cancelUndo();
-}
-
-function handleClearAll(options?: { skipConfirmation: boolean }) {
-  if (options?.skipConfirmation) {
-    executeClearAll();
-  } else {
-    showClearAllConfirmation.value = true;
-  }
-}
-
-function executeClearAll() {
-  actionsStore.clearAll();
-  showClearAllConfirmation.value = false;
 }
 
 /**
@@ -1173,41 +1040,7 @@ async function planNextAscension() {
   }
 }
 
-async function saveCurrentPlan() {
-  if (!partitionHash.value) return;
-
-  if (actionsStore.activePlanId) {
-    const { safeImport } = await import('lib/planners/import');
-    const plans = await (await safeImport(() => import('@/lib/storage/db'))).loadLibraryPlans(partitionHash.value!);
-    const current = plans.find(p => p.id === actionsStore.activePlanId);
-    if (current) {
-      await actionsStore.savePlan(current.name, partitionHash.value);
-      return;
-    }
-  }
-
-  // Prompt for name if no active plan
-  const name = prompt('Enter a name for this plan:');
-  if (name) {
-    await actionsStore.savePlan(name, partitionHash.value);
-  }
-}
-
-async function savePlanAs() {
-  if (!partitionHash.value) return;
-  const name = prompt('Enter a new name for this plan:');
-  if (name) {
-    // Reset ID to trigger a new save
-    const tempId = actionsStore.activePlanId;
-    actionsStore.activePlanId = null;
-    try {
-      await actionsStore.savePlan(name, partitionHash.value);
-    } catch (err) {
-      actionsStore.activePlanId = tempId;
-      alert('Save failed: ' + err);
-    }
-  }
-}
+const { saveCurrentPlan, savePlanAs } = usePlanSaving(partitionHash);
 
 // Chevron icon component
 const ChevronIcon = {
