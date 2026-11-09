@@ -17,6 +17,7 @@ function header(gear = tableGear(maxedContext())): Record<string, unknown> {
     slots: 3,
     builtAt: '2026-10-20T12:00:00.000Z',
     simVersion: 'd019f9b7',
+    simChange: '799a6502',
     k3: {},
   };
 }

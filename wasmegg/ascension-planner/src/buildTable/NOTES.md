@@ -47,6 +47,9 @@ node dist-scripts/buildTable.js --generate --out out/verify --tes 120,250,339 --
   since 2026-10-20; tables built before that, e.g. `31b596bb`, had it off), defer-for-earnings off. Recorded as
   `doubleEarnings` in `meta.json` and the packed header.
 - `simVersion` stamp = short commit hash; `-dirty` if simulator paths (or `src/buildTable`) are uncommitted.
+- `simChange` stamp (2026-11-08) = the newest `SIM_CHANGES` entry the building code had, so "Changes since this table"
+  doesn't depend on hashes or dates surviving a squash-merge. Captured at `--generate` (in `meta.json`), not at
+  `--pack`. Add a simulator change's `SIM_CHANGES` entry in the same PR, or its tables will list it as missing.
 - Header gear (2026-10-20, `header.ts` `tableGear`): `earnings`, `delivery` (artifact ids), `deliveryKey` (FNV-1a
   of the sorted delivery ids, for file names / CloudFront paths), `stones` (`quantum-stone-4: 12`, …), and
   `deferForEarnings: true` only in silo mode (absent otherwise). Chain Finder warns on missing keys, unknown keys,

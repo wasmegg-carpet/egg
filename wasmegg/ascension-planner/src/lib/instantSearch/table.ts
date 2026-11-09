@@ -8,6 +8,7 @@
  */
 import { canonicalDelivered, EGG_ORDER, rebase, WEEK_HOURS, type BuildParams } from './precomputedLeg';
 import type { BuildLookup } from './routeFinder';
+import { olderSimChange } from './simChanges';
 import type { TableGear } from './tableGear';
 
 const FIELDS = 9;
@@ -24,6 +25,8 @@ export interface TableHeader {
   builtAt: string;
   /** The simulator commit the cells came from (scripts/simVersion.ts). */
   simVersion?: string;
+  /** The newest SIM_CHANGES entry the building code had (simChanges.ts); absent in older tables. */
+  simChange?: string;
   /** Built in silo mode (the auto-planner's defer for earnings). Only silo tables have it now;
    *  older ones may say `false`. */
   deferForEarnings?: boolean;
@@ -182,6 +185,7 @@ export function compositeTable(low: Table, high: Table, split: number, scale: nu
       builtAt: Date.parse(high.header.builtAt) < Date.parse(low.header.builtAt) ? high.header.builtAt : low.header.builtAt,
       simVersion:
         low.header.simVersion && low.header.simVersion === high.header.simVersion ? low.header.simVersion : undefined,
+      simChange: olderSimChange(low.header.simChange, high.header.simChange),
     },
     lookup(te, hour) {
       if (te <= top) return low.lookup(te, hour);

@@ -5,7 +5,8 @@
 import type { TableHeader } from './table';
 
 export interface SimChange {
-  /** Short hash, as `simVersion` stamps it (`git rev-parse --short=8 <commit>`). */
+  /** Short hash, as `simVersion` stamps it (`git rev-parse --short=8 <commit>`). Also this entry's id
+   *  in a table's `simChange` stamp: only compared as text, so it can be a pre-squash branch commit. */
   commit: string;
   /** When it was committed, with the time: `git log -1 --format=%cI <commit>`. */
   date: string;
@@ -32,14 +33,31 @@ export const SIM_CHANGES: SimChange[] = [
   },
 ];
 
+/** The newest change in the code doing the building: what a new table's `simChange` stamp says. */
+export const LATEST_SIM_CHANGE = SIM_CHANGES.at(-1)?.commit;
+
+/** The older of two `simChange` stamps, or undefined when either can't be placed in the list. */
+export function olderSimChange(
+  a: string | undefined,
+  b: string | undefined,
+  changes: SimChange[] = SIM_CHANGES
+): string | undefined {
+  const i = changes.findIndex(c => c.commit === a);
+  const j = changes.findIndex(c => c.commit === b);
+  return i < 0 || j < 0 ? undefined : changes[Math.min(i, j)].commit;
+}
+
 /**
- * The changes a table doesn't have, oldest first: those after its own commit when that is listed,
- * otherwise those committed after it was built (most tables come from a commit that isn't listed).
+ * The changes a table doesn't have, oldest first: those after its `simChange` stamp, which says
+ * exactly what its code had whatever the merge history. A table from before the stamp goes by its
+ * own commit when that is listed, otherwise by those committed after it was built.
  */
 export function simChangesSince(
-  header: Pick<TableHeader, 'simVersion' | 'builtAt'>,
+  header: Pick<TableHeader, 'simChange' | 'simVersion' | 'builtAt'>,
   changes: SimChange[] = SIM_CHANGES
 ): SimChange[] {
+  const stamped = changes.findIndex(c => c.commit === header.simChange);
+  if (stamped >= 0) return changes.slice(stamped + 1);
   const commit = header.simVersion?.replace(/-dirty$/, '');
   const own = changes.findIndex(c => c.commit === commit);
   if (own >= 0) return changes.slice(own + 1);

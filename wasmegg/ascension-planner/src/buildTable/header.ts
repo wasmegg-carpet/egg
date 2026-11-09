@@ -67,6 +67,7 @@ const KNOWN_KEYS = new Set([
   'slots',
   'builtAt',
   'simVersion',
+  'simChange',
   'k3',
 ]);
 
