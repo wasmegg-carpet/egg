@@ -47,6 +47,15 @@ export function olderSimChange(
   return i < 0 || j < 0 ? undefined : changes[Math.min(i, j)].commit;
 }
 
+/** The colleggtibles both halves of a composite table have, or undefined when either has no stamp. */
+export function commonColleggtibles(
+  a: Record<string, number> | undefined,
+  b: Record<string, number> | undefined
+): Record<string, number> | undefined {
+  if (!a || !b) return undefined;
+  return Object.fromEntries(Object.entries(a).filter(([id, value]) => b[id] === value));
+}
+
 /**
  * The changes a table doesn't have, oldest first: those after its `simChange` stamp, which says
  * exactly what its code had whatever the merge history. A table from before the stamp goes by its

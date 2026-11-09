@@ -13,6 +13,7 @@ import { checkPacked, packTable, type Cell } from '@/buildTable/pack';
 import { allHours, prefixSourceFor, SEED_HOURS, type EventClass } from '@/buildTable/prefixReuse';
 import { cteBonusOf, type K3Record, type TaskResult } from '@/buildTable/task';
 import type { SimulationContext } from '@/auto/types';
+import { currentColleggtibles } from '@/lib/instantSearch/colleggtibleChanges';
 import { LATEST_SIM_CHANGE } from '@/lib/instantSearch/simChanges';
 import { gzipBytes } from 'lib/planners/utils/gzip';
 import { BuildEta } from './eta';
@@ -223,6 +224,7 @@ function pack(
       builtAt,
       simVersion: __SIM_VERSION__,
       simChange: LATEST_SIM_CHANGE,
+      colleggtibles: currentColleggtibles(),
       k3,
     },
     cells

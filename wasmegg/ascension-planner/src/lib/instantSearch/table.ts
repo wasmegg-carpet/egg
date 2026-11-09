@@ -8,7 +8,7 @@
  */
 import { canonicalDelivered, EGG_ORDER, rebase, WEEK_HOURS, type BuildParams } from './precomputedLeg';
 import type { BuildLookup } from './routeFinder';
-import { olderSimChange } from './simChanges';
+import { commonColleggtibles, olderSimChange } from './simChanges';
 import type { TableGear } from './tableGear';
 
 const FIELDS = 9;
@@ -27,6 +27,9 @@ export interface TableHeader {
   simVersion?: string;
   /** The newest SIM_CHANGES entry the building code had (simChanges.ts); absent in older tables. */
   simChange?: string;
+  /** Each colleggtible's top-tier multiplier the cells assume (colleggtibleChanges.ts); absent in
+   *  older tables. */
+  colleggtibles?: Record<string, number>;
   /** Built in silo mode (the auto-planner's defer for earnings). Only silo tables have it now;
    *  older ones may say `false`. */
   deferForEarnings?: boolean;
@@ -186,6 +189,7 @@ export function compositeTable(low: Table, high: Table, split: number, scale: nu
       simVersion:
         low.header.simVersion && low.header.simVersion === high.header.simVersion ? low.header.simVersion : undefined,
       simChange: olderSimChange(low.header.simChange, high.header.simChange),
+      colleggtibles: commonColleggtibles(low.header.colleggtibles, high.header.colleggtibles),
     },
     lookup(te, hour) {
       if (te <= top) return low.lookup(te, hour);

@@ -50,6 +50,9 @@ node dist-scripts/buildTable.js --generate --out out/verify --tes 120,250,339 --
 - `simChange` stamp (2026-11-08) = the newest `SIM_CHANGES` entry the building code had, so "Changes since this table"
   doesn't depend on hashes or dates surviving a squash-merge. Captured at `--generate` (in `meta.json`), not at
   `--pack`. Add a simulator change's `SIM_CHANGES` entry in the same PR, or its tables will list it as missing.
+- `colleggtibles` stamp (2026-11-09) = each egg's top-tier multiplier the cells assume, from `customeggs.json`. Chain
+  Finder compares it with the page's own list, so an egg the bot adds shows up under "Changes since this table" with
+  no hand edit. Tables without the stamp count as built before Copper (`UNSTAMPED_COLLEGGTIBLES`).
 - Header gear (2026-10-20, `header.ts` `tableGear`): `earnings`, `delivery` (artifact ids), `deliveryKey` (FNV-1a
   of the sorted delivery ids, for file names / CloudFront paths), `stones` (`quantum-stone-4: 12`, …), and
   `deferForEarnings: true` only in silo mode (absent otherwise). Chain Finder warns on missing keys, unknown keys,
