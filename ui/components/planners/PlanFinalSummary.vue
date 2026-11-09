@@ -37,17 +37,7 @@
         <span class="summary-value text-slate-900">{{ formatDateTime(endDate) }}</span>
       </div>
 
-      <!-- Population -->
-      <div class="summary-item">
-        <span class="summary-label">Population</span>
-        <span class="summary-value font-mono-premium font-black text-slate-600">{{ formatNumber(finalPopulation, 3) }}</span>
-      </div>
-
-      <!-- Next Goal -->
-      <div class="summary-item">
-        <span class="summary-label">Next Goal</span>
-        <span class="summary-value text-slate-900">{{ nextGoalLabel }}</span>
-      </div>
+      <PlannerSummaryStats />
 
       <!-- Actions Group -->
       <div class="flex items-center gap-2">
@@ -187,14 +177,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useActionsStore } from '@/stores/actions';
-import { usePlanStore } from '@/stores/plan';
+import { useActionsStore } from '@planner/stores/actions';
+import { usePlanStore } from '@planner/stores/plan';
 
-import { computeGoalStatuses } from '@/calculations/goals';
-import { formatNumber } from '@/lib/format';
-import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
+import { formatNumber } from '@planner/lib/format';
+import { isTestingEnvironment } from '@planner/lib/isTestingEnvironment';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { iconURL } from 'lib';
+import PlannerSummaryStats from '@planner/components/PlannerSummaryStats.vue';
 
 const actionsStore = useActionsStore();
 const planStore = usePlanStore();
@@ -283,13 +273,6 @@ const endDate = computed(() => {
   return new Date(Math.round(startDate.value.getTime() + totalDurationSeconds.value * 1000));
 });
 
-const finalPopulation = computed(() => actionsStore.currentSnapshot.population);
-
-const nextGoalLabel = computed(() => {
-  const goals = computeGoalStatuses(actionsStore.actions, actionsStore.initialSnapshot, actionsStore.planStartOffset);
-  return goals.find(goal => goal.reachedAfterSeconds === null)?.label ?? 'All reached';
-});
-
 function formatDateTime(date: Date): string {
   if (isNaN(date.getTime())) return 'N/A';
   const options: Intl.DateTimeFormatOptions = {
@@ -376,15 +359,15 @@ function triggerCat() {
 </script>
 
 <style scoped>
-.summary-item {
+:deep(.summary-item) {
   @apply flex flex-col gap-1;
 }
 
-.summary-label {
+:deep(.summary-label) {
   @apply text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none;
 }
 
-.summary-value {
+:deep(.summary-value) {
   @apply text-[13px] font-bold tracking-tight whitespace-nowrap;
 }
 

@@ -19,6 +19,8 @@ export const PROFILE: PlannerProfile = {
   hasDeliveryViews: true,
   maxVehiclesRoiRoute: 'gone to Kindness and ',
   hasShifts: true,
+  planFilePrefix: 'ascension',
+  missionsWaitEgg: 'humility',
   tanklessFuelEggs: ['humility'],
   hidesUnusedFuelEggs: false,
   researchSaleEgg: 'curiosity',

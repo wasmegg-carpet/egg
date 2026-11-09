@@ -120,7 +120,17 @@
 
             <!-- Plan Library Section -->
             <div v-if="playerId && plannerTab === 'manual'" class="max-w-6xl mx-auto mt-6">
-              <PlanLibrary @plan-loaded="handlePlanLoaded" />
+              <PlanLibrary :import-special-file="importAutoPlan" @plan-loaded="handlePlanLoaded">
+                <template #dialogs>
+                  <AutoPlanImportDialog
+                    v-if="showAutoPlanDialog"
+                    :plan-name="autoPlanName"
+                    :ascension-count="autoPlanAscensionCount"
+                    @resolve="resolveAutoPlan"
+                    @cancel="cancelAutoPlan"
+                  />
+                </template>
+              </PlanLibrary>
             </div>
 
             <!-- Ascension Action Buttons -->
@@ -578,7 +588,7 @@ import CustomEggWatcher from 'ui/components/planners/CustomEggWatcher.vue';
 import ActionHistory from '@/components/ActionHistory.vue';
 import AvailableActions from '@/components/AvailableActions.vue';
 import UndoConfirmationDialog from 'ui/components/planners/UndoConfirmationDialog.vue';
-import PlanFinalSummary from '@/components/PlanFinalSummary.vue';
+import PlanFinalSummary from 'ui/components/planners/PlanFinalSummary.vue';
 import ContinuityDialog from '@/components/ContinuityDialog.vue';
 import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import FloatingStats from '@/components/FloatingStats.vue';
@@ -587,7 +597,9 @@ import PlannerToast from 'ui/components/planners/PlannerToast.vue';
 import WarningDialog from 'ui/components/planners/WarningDialog.vue';
 import RecalculationOverlay from 'ui/components/planners/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
-import PlanLibrary from '@/components/PlanLibrary.vue';
+import PlanLibrary from 'ui/components/planners/PlanLibrary.vue';
+import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
+import { useAutoPlanImport } from '@/composables/useAutoPlanImport';
 import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
 import AutomaticPlanner from '@/components/auto/AutomaticPlanner.vue';
 // The Table Builder lives in components/chainFinder/ and the Chain Finder in components/instantSearch/
@@ -636,6 +648,8 @@ const autoPlannerStore = useAutoPlannerStore();
 
 const notesStore = useNotesStore();
 const { toggleEarningsBoost: handleToggleEarningsEvent } = useEventWaits();
+const { showAutoPlanDialog, autoPlanName, autoPlanAscensionCount, importAutoPlan, resolveAutoPlan, cancelAutoPlan } =
+  useAutoPlanImport();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
 
 // The Chain Finder's tables, fetched in the background once a save is loaded (composables/

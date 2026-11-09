@@ -1,27 +1,26 @@
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
 import { ref, onMounted, watch, nextTick } from 'vue';
-import { useActionsStore } from '@/stores/actions';
+import { useActionsStore } from '@planner/stores/actions';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
-import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanData } from '@/lib/storage/db';
+import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanData } from '@planner/lib/storage/db';
 import { downloadGzipped, importedPlanName, readImportedJson } from 'lib/planners/utils/export';
-import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
-import { initLoadPlan, initPlanFuture } from '@/lib/modes';
-import { useAutoPlannerStore, pickVariant, type ChainedAscension, type VariantKey } from '@/stores/autoPlanner';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useUIStore } from '@/stores/ui';
+import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeInput } from '@planner/lib/format';
+import { initLoadPlan, initPlanFuture } from '@planner/lib/modes';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useUIStore } from '@planner/stores/ui';
 import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import ImportCollisionDialog from 'ui/components/planners/ImportCollisionDialog.vue';
-import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
 import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
-import { createEmptySnapshot } from '@/types';
-import { buildLibraryPlansFromExport } from '@/auto/buildLibraryPlans';
-import { migrateExportedPlanV1, type ExportedPlan } from '@/auto/export';
+import { createEmptySnapshot } from '@planner/types';
 
 const actionsStore = useActionsStore();
-const autoPlannerStore = useAutoPlannerStore();
+const props = defineProps<{
+  /** Handles file types only this planner understands: plans to add, null if handled, or undefined if not its type. */
+  importSpecialFile?: (imported: any, planName: string) => Promise<{ name: string; data: Record<string, unknown> }[] | null | undefined>;
+}>();
+
 const initialStateStore = useInitialStateStore();
-const truthEggsStore = useTruthEggsStore();
 const uiStore = useUIStore();
 const { partitionHash, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
 
@@ -52,13 +51,6 @@ let collisionResolver: ((resolution: 'overwrite' | 'keep-both' | 'skip' | 'cance
 
 // Import progress
 const importProgress = ref<{ current: number; total: number } | null>(null);
-
-// Auto-plan import state
-const showAutoPlanDialog = ref(false);
-const autoPlanToImport = ref<any>(null);
-const autoPlanName = ref('');
-const autoPlanAscensionCount = ref(0);
-let autoPlanResolver: ((resolution: 'restore' | 'individual' | 'cancel') => void) | null = null;
 
 async function refreshPlans() {
   if (!partitionHash.value) return;
@@ -214,7 +206,7 @@ async function exportAll() {
     })),
   };
   const jsonString = JSON.stringify(exportData, null, 2);
-  await downloadGzipped(`ascension-library-${new Date().toISOString().split('T')[0]}.json`, jsonString);
+  await downloadGzipped(`${PROFILE.planFilePrefix}-library-${new Date().toISOString().split('T')[0]}.json`, jsonString);
 }
 
 /**
@@ -282,6 +274,7 @@ async function handleImport(event: Event) {
 
       // Normalize imported data into a uniform array
       let plansToImport: { name: string; data: Record<string, unknown> }[] = [];
+      let specialPlans: { name: string; data: Record<string, unknown> }[] | null | undefined;
 
       if (imported.type === 'library' && Array.isArray(imported.plans)) {
         // Full library export
@@ -292,116 +285,13 @@ async function handleImport(event: Event) {
       } else if (imported.type === 'plan' && imported.data) {
         // Single plan export (from our new format)
         plansToImport = [{ name: imported.name || importedPlanName(file.name), data: imported.data }];
-      } else if (imported.version && imported.ascensions && imported.initialState) {
-        // Sequential Roadmap (Auto-Plan). Migrate version-1 exports (result1/result2/result3?) to
-        // the current variants-map shape up front so everything below only ever deals with one shape.
-        const plan: ExportedPlan =
-          imported.version === 1 ? migrateExportedPlanV1(imported) : (imported as ExportedPlan);
-
-        showAutoPlanDialog.value = true;
-        autoPlanToImport.value = plan;
-        autoPlanName.value = importedPlanName(file.name);
-        autoPlanAscensionCount.value = plan.ascensions.length;
-
-        const resolution = await new Promise<'restore' | 'individual' | 'cancel'>(resolve => {
-          autoPlanResolver = resolve;
-        });
-
-        if (resolution === 'cancel') return;
-
-        if (resolution === 'restore') {
-          // 1. Switch tab
-          uiStore.plannerTab = 'automatic';
-          uiStore.isHeaderCollapsed = true;
-
-          // 2. Load fresh backup first (ensures we have latest epic research/artifacts as a baseline)
-          //    We do this because switching to the Auto Planner tab normally triggers a backup fetch.
-          uiStore.loading = true;
-          try {
-            if (initialStateStore.playerId) {
-              await initPlanFuture(initialStateStore.playerId);
-            }
-
-            // 3. Restore to Auto Planner (now overwriting the fresh backup state)
-            const importedOverrides: Record<number, VariantKey> =
-              plan.planVariantOverrides ?? (plan.a1ForceMode === 'continue' ? { 0: 'continue' } : {});
-            const importedEndTimeOverrides: Record<number, number> = plan.endTimeOverrides ?? {};
-
-            const chain: ChainedAscension[] = plan.ascensions.map(a => {
-              const item: ChainedAscension = {
-                index: a.index,
-                variants: a.variants,
-                goal: a.goal,
-              };
-              if (a.result3SkippedReason) item.result3SkippedReason = a.result3SkippedReason;
-              if (a.loadoutHash) item.loadoutHash = a.loadoutHash;
-              return item;
-            });
-
-            const nextGoalsMap: Record<number, { te: number | null, date: string, time: string }> = {};
-            plan.ascensions.forEach((a, idx) => {
-              // Populate with the original goal
-              nextGoalsMap[idx] = { ...a.goal };
-
-              // If it was a TE goal, pre-fill the date/time fields with the actual result for better UX
-              if (a.goal.type === 'te' || !a.goal.date) {
-                const bestResult = pickVariant(a.variants, importedOverrides[idx], !!importedEndTimeOverrides[idx]);
-                nextGoalsMap[idx].date = formatUnixToDateInput(bestResult.summary.endTime, plan.timezone);
-                nextGoalsMap[idx].time = formatUnixToTimeInput(bestResult.summary.endTime, plan.timezone);
-              }
-            });
-            // Add the next step goal (empty placeholder for new ascension)
-            const lastImportedA = plan.ascensions[plan.ascensions.length - 1];
-            const lastIdx = plan.ascensions.length - 1;
-            const lastBestResult = pickVariant(
-              lastImportedA.variants, importedOverrides[lastIdx], !!importedEndTimeOverrides[lastIdx]
-            );
-            nextGoalsMap[chain.length] = {
-              te: Math.min(490, lastBestResult.summary.endTE + 30),
-              date: '',
-              time: ''
-            };
-
-            const firstA = plan.ascensions[0];
-            const bestFirstA = pickVariant(firstA.variants, importedOverrides[0], !!importedEndTimeOverrides[0]);
-            const a1EndTime = bestFirstA.summary.endTime;
-
-            autoPlannerStore.setPlan({
-              ascensionChain: chain,
-              timezone: plan.timezone,
-              startDate: formatUnixToDateInput(plan.startTime, plan.timezone),
-              startTime: formatUnixToTimeInput(plan.startTime, plan.timezone),
-              targetTE: plan.ascensions.map(a => a.goal.te || pickVariant(a.variants).summary.endTE).join(' '),
-              // Always populate date/time fields with results for visibility
-              targetEndDate: formatUnixToDateInput(a1EndTime, plan.timezone),
-              targetEndTime: formatUnixToTimeInput(a1EndTime, plan.timezone),
-              nextGoals: nextGoalsMap,
-              planVariantOverrides: importedOverrides,
-              endTimeOverrides: plan.endTimeOverrides ?? {},
-              loadoutInputs: plan.loadoutInputs ?? null,
-              loadoutOverrides: plan.loadoutOverrides ?? {},
-            });
-
-            // Hydrate stores so the form shows the correct numbers from the plan
-            initialStateStore.hydrate(plan.initialState);
-            truthEggsStore.hydrate(plan.initialState);
-          } catch (e) {
-            console.error('Failed to restore roadmap:', e);
-            alert('Failed to restore roadmap simulation state.');
-          } finally {
-            uiStore.loading = false;
-          }
-        }
-
-        if (resolution === 'individual') {
-          // 2. Import Individual Ascensions into Library
-          const exportDate = new Date(plan.exportedAt).toISOString().split('T')[0];
-
-          plansToImport = buildLibraryPlansFromExport(plan, exportDate);
-        } else {
-          // Restore only — we're done
-          return;
-        }
+      } else if (
+        props.importSpecialFile &&
+        (specialPlans = await props.importSpecialFile(imported, importedPlanName(file.name))) !== undefined
+      ) {
+        // A planner can accept extra file types; null means it dealt with the file and has nothing to add.
+        if (specialPlans === null) return;
+        plansToImport = specialPlans;
       } else if (imported.version && imported.actions && imported.initialState) {
         // Raw plan data (old format — the plan data itself, not wrapped)
         plansToImport = [{ name: importedPlanName(file.name), data: imported }];
@@ -502,22 +392,6 @@ async function handleImport(event: Event) {
   // Reset the file input so the same file can be imported again
   if (event.target) {
     (event.target as HTMLInputElement).value = '';
-  }
-}
-
-function handleAutoPlanResolve(resolution: 'restore' | 'individual') {
-  showAutoPlanDialog.value = false;
-  if (autoPlanResolver) {
-    autoPlanResolver(resolution);
-    autoPlanResolver = null;
-  }
-}
-
-function handleAutoPlanCancel() {
-  showAutoPlanDialog.value = false;
-  if (autoPlanResolver) {
-    autoPlanResolver('cancel');
-    autoPlanResolver = null;
   }
 }
 
@@ -761,11 +635,5 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
 
   <PlanAlreadyOpenWarning v-if="showAlreadyOpenWarning" @dismiss="showAlreadyOpenWarning = false" />
 
-  <AutoPlanImportDialog
-    v-if="showAutoPlanDialog"
-    :plan-name="autoPlanName"
-    :ascension-count="autoPlanAscensionCount"
-    @resolve="handleAutoPlanResolve"
-    @cancel="handleAutoPlanCancel"
-  />
+  <slot name="dialogs" />
 </template>

@@ -1,69 +1,6 @@
 <template>
   <div class="space-y-4">
-    <!-- Wait for TE Section -->
-    <div
-      class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
-    >
-      <button
-        class="w-full px-5 py-4 bg-slate-50/50 flex justify-between items-center hover:bg-white transition-colors group"
-        @click="teExpanded = !teExpanded"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="w-8 h-8 rounded-xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-1.5 group-hover:scale-110 transition-transform"
-          >
-            <img
-              :src="iconURL(`egginc/egg_${actionsStore.effectiveSnapshot.currentEgg}.png`, 64)"
-              class="w-full h-full object-contain"
-            />
-          </div>
-          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Wait for TE</h3>
-        </div>
-        <svg
-          class="w-5 h-5 text-slate-300 transition-transform duration-300"
-          :class="{ 'rotate-180 text-slate-900': teExpanded }"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      <div v-show="teExpanded" class="p-6 border-t border-slate-50">
-        <WaitForTEActions ref="teActionsRef" />
-      </div>
-    </div>
-
-    <!-- Bulk Wait for TE Section -->
-    <div
-      class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
-    >
-      <button
-        class="w-full px-5 py-4 bg-slate-50/50 flex justify-between items-center hover:bg-white transition-colors group"
-        @click="bulkTEExpanded = !bulkTEExpanded"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="w-8 h-8 rounded-xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-1.5 group-hover:scale-110 transition-transform"
-          >
-            <img :src="iconURL('egginc/egg_truth.png', 64)" class="w-full h-full object-contain" />
-          </div>
-          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Bulk Wait for TE</h3>
-        </div>
-        <svg
-          class="w-5 h-5 text-slate-300 transition-transform duration-300"
-          :class="{ 'rotate-180 text-slate-900': bulkTEExpanded }"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      <div v-show="bulkTEExpanded" class="p-6 border-t border-slate-50">
-        <BulkWaitForTEActions ref="bulkTEActionsRef" />
-      </div>
-    </div>
+    <PlannerWaitSections />
 
 
     <!-- Wait for Full Habs Section -->
@@ -99,7 +36,7 @@
 
     <!-- Wait for Missions Section -->
     <div
-      v-if="isHumility"
+      v-if="showsMissionsWait"
       class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
     >
       <button
@@ -129,25 +66,25 @@
       </div>
     </div>
 
-    <!-- Wait for Gems Section -->
+    <!-- Wait for Currency Section -->
     <div
       class="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm transition-all duration-300 hover:shadow-md"
     >
       <button
         class="w-full px-5 py-4 bg-slate-50/50 flex justify-between items-center hover:bg-white transition-colors group"
-        @click="gemsExpanded = !gemsExpanded"
+        @click="currencyExpanded = !currencyExpanded"
       >
         <div class="flex items-center gap-3">
           <div
             class="w-8 h-8 rounded-xl bg-white border border-slate-200/50 shadow-sm flex items-center justify-center p-1.5 group-hover:scale-110 transition-transform"
           >
-            <img :src="iconURL('egginc/icon_virtue_gem.png', 64)" class="w-full h-full object-contain" />
+            <img :src="iconURL(PROFILE.currency.iconPath, 64)" class="w-full h-full object-contain" />
           </div>
-          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Wait for Gems</h3>
+          <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-500">Wait for {{ PROFILE.currency.title }}</h3>
         </div>
         <svg
           class="w-5 h-5 text-slate-300 transition-transform duration-300"
-          :class="{ 'rotate-180 text-slate-900': gemsExpanded }"
+          :class="{ 'rotate-180 text-slate-900': currencyExpanded }"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -155,8 +92,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      <div v-show="gemsExpanded" class="p-6 border-t border-slate-50">
-        <WaitForCurrencyActions ref="gemsActionsRef" />
+      <div v-show="currencyExpanded" class="p-6 border-t border-slate-50">
+        <WaitForCurrencyActions ref="currencyActionsRef" />
       </div>
     </div>
 
@@ -263,11 +200,11 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
 import { ref, computed, watch, nextTick } from 'vue';
 import { iconURL } from 'lib';
-import { useActionsStore } from '@/stores/actions';
-import WaitForTEActions from './WaitForTEActions.vue';
-import BulkWaitForTEActions from './BulkWaitForTEActions.vue';
+import { useActionsStore } from '@planner/stores/actions';
+import PlannerWaitSections from '@planner/components/actions/PlannerWaitSections.vue';
 import WaitForMissionsActions from 'ui/components/planners/actions/WaitForMissionsActions.vue';
 import WaitForTimeActions from 'ui/components/planners/actions/WaitForTimeActions.vue';
 import WaitForFullHabsActions from 'ui/components/planners/actions/WaitForFullHabsActions.vue';
@@ -277,27 +214,22 @@ import WaitForEventActions from 'ui/components/planners/actions/WaitForEventActi
 
 const actionsStore = useActionsStore();
 
-const isHumility = computed(() => actionsStore.effectiveSnapshot.currentEgg === 'humility');
-const isCuriosity = computed(() => actionsStore.effectiveSnapshot.currentEgg === 'curiosity');
+const showsMissionsWait = computed(
+  () => PROFILE.missionsWaitEgg === null || actionsStore.effectiveSnapshot.currentEgg === PROFILE.missionsWaitEgg
+);
 
-const teExpanded = ref(false);
-const bulkTEExpanded = ref(false);
 const habsExpanded = ref(false);
 const missionsExpanded = ref(false);
-const gemsExpanded = ref(false);
+const currencyExpanded = ref(false);
 const timeExpanded = ref(false);
 const noEarningsExpanded = ref(false);
 const eventsExpanded = ref(false);
 
-const teActionsRef = ref<InstanceType<typeof WaitForTEActions> | null>(null);
-const bulkTEActionsRef = ref<InstanceType<typeof BulkWaitForTEActions> | null>(null);
-const gemsActionsRef = ref<InstanceType<typeof WaitForCurrencyActions> | null>(null);
+const currencyActionsRef = ref<InstanceType<typeof WaitForCurrencyActions> | null>(null);
 const timeActionsRef = ref<InstanceType<typeof WaitForTimeActions> | null>(null);
 const noEarningsActionsRef = ref<InstanceType<typeof WaitWithoutEarningsActions> | null>(null);
 
-watch(teExpanded, val => { if (val) nextTick(() => teActionsRef.value?.focus()); });
-watch(bulkTEExpanded, val => { if (val) nextTick(() => bulkTEActionsRef.value?.focus()); });
-watch(gemsExpanded, val => { if (val) nextTick(() => gemsActionsRef.value?.focus()); });
+watch(currencyExpanded, val => { if (val) nextTick(() => currencyActionsRef.value?.focus()); });
 watch(timeExpanded, val => { if (val) nextTick(() => timeActionsRef.value?.focus()); });
 watch(noEarningsExpanded, val => { if (val) nextTick(() => noEarningsActionsRef.value?.focus()); });
 </script>

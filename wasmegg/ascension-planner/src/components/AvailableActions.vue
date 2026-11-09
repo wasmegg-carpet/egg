@@ -84,7 +84,7 @@ import ShiftActions from './actions/ShiftActions.vue';
 import ArtifactActions from './actions/ArtifactActions.vue';
 import SiloActions from 'ui/components/planners/actions/SiloActions.vue';
 import FuelTankActions from 'ui/components/planners/actions/FuelTankActions.vue';
-import WaitActions from './actions/WaitActions.vue';
+import WaitActions from 'ui/components/planners/actions/WaitActions.vue';
 import RocketActions from './actions/RocketActions.vue';
 import InitialStateContainer from './containers/InitialStateContainer.vue';
 import { useActionsStore } from '@/stores/actions';
