@@ -44,6 +44,7 @@
         :price="item.price"
         :time-to-buy="item.timeToBuy || getResearchTimeToBuy(item.research)"
         :time-to-buy-seconds="item.timeToBuySeconds ?? getResearchTimeToBuySeconds(item.research)"
+        :time-cost-tooltip-seconds="view === 'milestones' ? item.buyToHereSeconds : undefined"
         :can-buy="item.canBuy"
         :is-maxed="item.isMaxed"
         :show-max="false"
@@ -138,7 +139,7 @@ interface SortedResearchItem {
   hpp?: number;
   timeRoiSeconds?: number;
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
-  lookahead?: { minLevels: number; impact: number; hpp: number };
+  lookahead?: { levels: number; partner?: { name: string; level: number }; helpsAlone: boolean; impact: number; hpp: number };
   recommendationNote?: string;
   showSaleWarning?: boolean;
   showDeadlineWarning?: boolean;

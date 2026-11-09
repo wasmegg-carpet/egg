@@ -1,4 +1,12 @@
-import { type ResearchCostModifiers, getCommonResearches, getResearchById, getResearchByTier } from './commonResearch';
+import {
+  type CommonResearch,
+  type ResearchCostModifiers,
+  getCommonResearches,
+  getDiscountedVirtuePrice,
+  getResearchById,
+  getResearchByTier,
+  isTierUnlocked,
+} from './commonResearch';
 import {
   rankResearchByROI,
   rankResearchByELRImpact,
@@ -7,14 +15,22 @@ import {
 } from './researchRanking';
 import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
 import { findSmartBuyCandidate } from './smartBuyCandidate';
+import {
+  type DeliveryLevelSet,
+  deliveryPlanCost,
+  createDeliveryLevelSearch,
+  deliveryRateScorer,
+  dropLevelsNotWorthTheirTime,
+} from './deliveryLevelSearch';
 import type { CalculationsSnapshot } from '@/types';
 import type { SimulationContext, EngineState } from '@/engine/types';
 import { createBaseEngineState } from '@/engine/adapter';
 import { computeSnapshot } from '@/engine/compute';
-import { applyAction, applyTime, boostTransitionsFrom } from '@/engine/apply';
-import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
-import { DEBUG_SALE_AWARE_BUY } from '@/lib/debugFlags';
+import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@/engine/apply';
+import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
+import { DEBUG_SALE_AWARE_BUY } from 'lib/planners/debugFlags';
 import { ei } from 'lib';
+import type { DeliverySource } from '@/lib/artifacts/virtue';
 
 /**
  * Safety-net cap shared by every dry run below — protects against a runaway loop, not a real
@@ -416,16 +432,22 @@ export function runDeliveryBuyLoop(
   researchSaleDeadline: number,
   elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: ei.IBackup | null | undefined,
+  rawBackup: DeliverySource | null | undefined,
   maxIterations: number = MAX_SIMULATED_PURCHASES
 ): DeliveryLoopResult {
   let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...researchLevels } };
   let simSnapshot = snapshot;
   let simTime = absoluteSimTime;
   const purchases: DeliveryPurchase[] = [];
+  // A candidate that does nothing until its lookahead's levels are all bought stays committed to
+  // them, since another candidate taking the time in between could strand them;
+  // `showDeadlineWarning` already confirmed they fit before the deadline. One that helps alone is
+  // re-ranked after each level instead, since a cheaper level may do what its next one would.
+  const committed: string[] = [];
 
   buyWhilePassingCheck(
     () => {
+      if (committed.length > 0) return { researchId: committed[0] };
       // Explicit stop condition, NOT delegated to `showDeadlineWarning` alone (unlike a plain
       // candidate filter — this loop needs a hard bound `buyWhilePassingCheck` itself has no concept
       // of). `showDeadlineWarning` is gated behind `isResearchSaleActive(simTime)`, correct for its
@@ -454,11 +476,20 @@ export function runDeliveryBuyLoop(
         elrSortMode
       );
       const candidate = ranked.find(item => item.canBuy && !item.showDeadlineWarning);
+      const lookahead = candidate?.lookahead;
+      if (candidate && lookahead && !(candidate.impact! > 0)) {
+        committed.push(
+          ...(lookahead.partner
+            ? [candidate.research.id, lookahead.partner.id]
+            : Array<string>(lookahead.levels).fill(candidate.research.id))
+        );
+      }
       return candidate ? { researchId: candidate.research.id } : undefined;
     },
     researchId => {
       const research = getResearchById(researchId);
       if (!research) return false;
+      committed.shift();
       const level = simState.researchLevels[researchId] || 0;
       const isSale = isResearchSaleActive(simTime);
       const transitions = boostTransitionsFrom(simSnapshot, simTime);
@@ -476,6 +507,170 @@ export function runDeliveryBuyLoop(
   );
 
   return { purchases, endLevels: simState.researchLevels, endSnapshot: simSnapshot };
+}
+
+/** Whichever next level adds the most earnings per gem, or the cheapest if none adds any. */
+function nextDeliveryLevel(
+  available: CommonResearch[],
+  state: EngineState,
+  snapshot: CalculationsSnapshot,
+  context: SimulationContext,
+  mods: ResearchCostModifiers,
+  isSale: boolean
+): CommonResearch {
+  const priceOf = (r: CommonResearch) => getDiscountedVirtuePrice(r, state.researchLevels[r.id] || 0, mods, isSale);
+  const earningsPerGem = (r: CommonResearch) => {
+    const levels = { ...state.researchLevels, [r.id]: (state.researchLevels[r.id] || 0) + 1 };
+    const next = computeSnapshot({ ...state, researchLevels: levels }, context, { skipEpochConversion: true });
+    return (next.offlineEarnings - snapshot.offlineEarnings) / priceOf(r);
+  };
+  const scored = available.map(r => ({ r, value: earningsPerGem(r), price: priceOf(r) }));
+  return scored.reduce((a, b) => (b.value > a.value || (b.value === a.value && b.price < a.price) ? b : a)).r;
+}
+
+/**
+ * Buys up to `targetLevels`, paying for what raises earnings first so the rest arrives sooner.
+ * Returns null if the levels can't all finish by `deadline` once really simulated.
+ */
+function buyDeliveryLevels(
+  startLevels: Record<string, number>,
+  targetLevels: Record<string, number>,
+  snapshot: CalculationsSnapshot,
+  context: SimulationContext,
+  mods: ResearchCostModifiers,
+  absoluteSimTime: number,
+  deadline: number,
+  isSale: boolean
+): DeliveryLoopResult | null {
+  let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...startLevels } };
+  let simSnapshot = snapshot;
+  let simTime = absoluteSimTime;
+  const purchases: DeliveryPurchase[] = [];
+  const wanted = getCommonResearches().filter(r => (targetLevels[r.id] || 0) > (startLevels[r.id] || 0));
+
+  for (;;) {
+    const levels = simState.researchLevels;
+    const remaining = wanted.filter(r => (levels[r.id] || 0) < targetLevels[r.id]);
+    if (remaining.length === 0) return { purchases, endLevels: levels, endSnapshot: simSnapshot };
+
+    const available = remaining.filter(r => isTierUnlocked(levels, r.tier));
+    if (available.length === 0) return null;
+    const research = nextDeliveryLevel(available, simState, simSnapshot, context, mods, isSale);
+
+    const level = levels[research.id] || 0;
+    const purchase = getSaleAwareTimeToSave(
+      research,
+      level,
+      mods,
+      isResearchSaleActive(simTime),
+      simTime,
+      simSnapshot,
+      boostTransitionsFrom(simSnapshot, simTime)
+    );
+    simTime += purchase.waitSeconds;
+    if (simTime > deadline) return null;
+    simState = applyAction(simState, buyResearchAction(research.id, level, purchase.price));
+    simState = applyTime(simState, purchase.waitSeconds, simSnapshot);
+    // See `simulateSaleAwareBuy`'s identical comment: keeps `lastStepTime` in its incoming frame.
+    simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
+    purchases.push({ researchId: research.id, purchaseTimestamp: simTime, price: purchase.price });
+  }
+}
+
+/** Budgets tried between spending only the bank and everything earned by the deadline. */
+const BUDGET_STEPS = 4;
+/** How many of a budget's top sets go forward, since trimming can reorder sets with close rates. */
+const SETS_PER_BUDGET = 2;
+/** How many sets get simulated, cheapest estimate first, since the estimate ignores earnings gained. */
+const SETS_SIMULATED = 3;
+/**
+ * Searches this far over the top budget, since earnings during the plan are only an estimate until
+ * it's simulated. A set that really doesn't fit is thrown out by the simulation; one never searched
+ * for can't be found at all.
+ */
+const BUDGET_MARGIN = 1.03;
+
+/**
+ * Buys the delivery research with the lowest `deliveryPlanCost` by `deadline`. The best set for a
+ * smaller budget usually isn't part of the best set for a larger one, so the level search
+ * runs at a range of budgets, from what the bank buys right now up to everything earned by the
+ * deadline, rather than trimming down from the largest. Delivery research can raise earnings, so a
+ * second pass budgets from what the best plan really had by the deadline. Returns null when the
+ * search is too large or nothing fits, so the caller can use the greedy loop.
+ */
+function runBestDeliveryPlan(
+  researchLevels: Record<string, number>,
+  snapshot: CalculationsSnapshot,
+  context: SimulationContext,
+  mods: ResearchCostModifiers,
+  absoluteSimTime: number,
+  deadline: number,
+  rawBackup: DeliverySource
+): DeliveryLoopResult | null {
+  const transitions = boostTransitionsFrom(snapshot, absoluteSimTime);
+  const isSale = isResearchSaleActive(deadline - 1);
+  const scoreRate = deliveryRateScorer(rawBackup, researchLevels, snapshot.proPermit, context);
+  const rates = new Map<string, number>();
+  const rateOf = (levels: Record<string, number>) => {
+    const key = getCommonResearches()
+      .map(r => levels[r.id] || 0)
+      .join();
+    let rate = rates.get(key);
+    if (rate === undefined) rates.set(key, (rate = scoreRate(levels)));
+    return rate;
+  };
+  const referenceRate = rateOf(researchLevels);
+  const secondsToAfford = (gems: number) => getTimeToSave(gems, snapshot, transitions);
+  const finishOf = (run: DeliveryLoopResult) => run.purchases.at(-1)?.purchaseTimestamp ?? absoluteSimTime;
+
+  const bank = snapshot.bankValue || 0;
+  let best: DeliveryLoopResult | null = null;
+  let bestCost = Infinity;
+  let topBudget = bank + calculateEarningsForTime(deadline - absoluteSimTime, snapshot, transitions);
+  const tried = new Set<string>();
+
+  for (let pass = 0; pass < 2; pass++) {
+    const candidates: DeliveryLevelSet[] = [];
+    const largestBudget = topBudget * BUDGET_MARGIN;
+    const search = createDeliveryLevelSearch(researchLevels, largestBudget, mods, isSale, rateOf);
+    for (let step = 0; step <= BUDGET_STEPS; step++) {
+      const budget = step === BUDGET_STEPS ? largestBudget : bank + ((topBudget - bank) * step) / BUDGET_STEPS;
+      const sets = search(budget, SETS_PER_BUDGET);
+      if (!sets) return best;
+      for (const set of sets) {
+        candidates.push(dropLevelsNotWorthTheirTime(set, researchLevels, mods, isSale, rateOf, secondsToAfford));
+      }
+    }
+
+    const estimate = (set: DeliveryLevelSet) =>
+      deliveryPlanCost(absoluteSimTime + secondsToAfford(set.gems), set.rate, referenceRate);
+    candidates.sort((a, b) => estimate(a) - estimate(b));
+
+    let simulated = 0;
+    for (const set of candidates) {
+      const key = JSON.stringify(set.levels);
+      if (tried.has(key)) continue;
+      tried.add(key);
+      const run = buyDeliveryLevels(researchLevels, set.levels, snapshot, context, mods, absoluteSimTime, deadline, isSale);
+      if (!run) continue;
+      const cost = deliveryPlanCost(finishOf(run), set.rate, referenceRate);
+      if (cost < bestCost) {
+        best = run;
+        bestCost = cost;
+      }
+      if (++simulated === SETS_SIMULATED) break;
+    }
+
+    if (!best) return null;
+    const spent = best.purchases.reduce((sum, p) => sum + p.price, 0);
+    const moneyByDeadline =
+      spent +
+      (best.endSnapshot.bankValue || 0) +
+      calculateEarningsForTime(deadline - finishOf(best), best.endSnapshot, boostTransitionsFrom(best.endSnapshot, finishOf(best)));
+    if (moneyByDeadline <= topBudget * (1 + 1e-9)) break;
+    topBudget = moneyByDeadline;
+  }
+  return best;
 }
 
 /** Whether every research/level pair in `target` has been reached in `endLevels`. */
@@ -535,6 +730,9 @@ export interface SaleEndsPlan extends SimpleBuyPlan {
    *  `saleAwareStats70`'s identical fix (useResearchViews.ts) for the same bug on the "70% Return"
    *  card. */
   lastPurchaseTimestamp: number;
+  /** Delivery rate at `endLevels` on the delivery set H1 will equip, unlike `endSnapshot.elr`, which
+   *  uses the farm's current gear and vehicles. Null without a delivery source or in `potential` view. */
+  endDeliveryRate: number | null;
 }
 
 /**
@@ -557,6 +755,11 @@ export interface SaleEndsPlan extends SimpleBuyPlan {
  * to the old direct-delivery-only behavior), and the final delivery run is left free to keep buying
  * past `D` with whatever time/budget remains — so the result can end up buying the same delivery
  * research as the untrimmed prelude, or more, never less.
+ *
+ * In `realistic` view sorted by `efficiency`, which is what Auto uses, the delivery research comes
+ * from `runBestDeliveryPlan` instead and every prelude length is compared directly by
+ * `deliveryPlanCost`. The greedy path above serves the other view modes,
+ * where the player asked for that order, and any search that's too large to finish.
  */
 export function simulateSaleEndsBuy(
   researchLevels: Record<string, number>,
@@ -567,7 +770,7 @@ export function simulateSaleEndsBuy(
   researchSaleDeadline: number,
   elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: ei.IBackup | null | undefined
+  rawBackup: DeliverySource | null | undefined
 ): SaleEndsPlan {
   const checkpoints = simulateEarningsPreludeForSaleEnd(
     researchLevels,
@@ -579,7 +782,24 @@ export function simulateSaleEndsBuy(
   );
   const n = checkpoints.length - 1;
 
+  const deliverySource = elrViewMode === 'realistic' ? rawBackup : null;
+  const rateOf = deliverySource
+    ? deliveryRateScorer(deliverySource, researchLevels, snapshot.proPermit, context)
+    : null;
+  const searchLevels = deliverySource && elrSortMode === 'efficiency' ? deliverySource : null;
+
   const runDeliveryFromCheckpoint = (k: number) =>
+    (searchLevels
+      ? runBestDeliveryPlan(
+          checkpoints[k].researchLevels,
+          checkpoints[k].snapshot,
+          context,
+          mods,
+          checkpoints[k].simTime,
+          researchSaleDeadline,
+          searchLevels
+        )
+      : null) ??
     runDeliveryBuyLoop(
       checkpoints[k].researchLevels,
       checkpoints[k].snapshot,
@@ -608,7 +828,24 @@ export function simulateSaleEndsBuy(
       ? checkpoints[n].simTime
       : findTargetCompletionTime(bestRun, target, checkpoints[n].researchLevels);
 
-  for (let k = n - 1; k >= 0; k--) {
+  // Compared directly when searching: `target` is only a stand-in for what the plan is worth.
+  if (searchLevels && rateOf) {
+    const referenceRate = rateOf(bestRun.endLevels);
+    const costOf = (run: DeliveryLoopResult, k: number) =>
+      deliveryPlanCost(run.purchases.at(-1)?.purchaseTimestamp ?? checkpoints[k].simTime, rateOf(run.endLevels), referenceRate);
+    let bestCost = costOf(bestRun, n);
+    for (let k = n - 1; k >= 0; k--) {
+      const run = runDeliveryFromCheckpoint(k);
+      const cost = costOf(run, k);
+      if (cost < bestCost) {
+        bestK = k;
+        bestRun = run;
+        bestCost = cost;
+      }
+    }
+  }
+
+  for (let k = n - 1; !searchLevels && k >= 0; k--) {
     const run = runDeliveryFromCheckpoint(k);
     if (!achievesTarget(run.endLevels, target)) break;
     const completionTime =
@@ -643,6 +880,7 @@ export function simulateSaleEndsBuy(
     endSnapshot: bestRun.endSnapshot,
     totalGemsSpent,
     lastPurchaseTimestamp,
+    endDeliveryRate: rateOf ? rateOf(bestRun.endLevels) : null,
   };
 }
 
@@ -695,9 +933,10 @@ export interface FinalSaleGapPlan {
  *    buying it: both branches are projected forward to `finalSaleStart` first (an idle wait,
  *    mirroring what this stretch would do with the time anyway) before running the real
  *    `simulateSaleEndsBuy` plan from there, so the comparison isn't contaminated by one branch
- *    simply having more elapsed time than the other. `endSnapshot.elr` — the real projected
- *    delivery rate at `buildPhaseEnd`, not a hypothetical maxed-vehicles one — is the comparison
- *    metric; non-negative (not strictly positive) is the bar, since a candidate that leaves the
+ *    simply having more elapsed time than the other. `deliveryPlanCost` — when the plan's last
+ *    purchase lands, and the delivery rate on the set H1 will equip after it — is the comparison
+ *    metric, less what the purchase delivers before the sale; no worse (not strictly better) is the
+ *    bar, since a candidate that leaves the
  *    final delivery rate merely unchanged still isn't making anything worse, and it's still earning
  *    extra along the way.
  * 3. A candidate that clears step 2 is bought for real (committing time/state), and its own "with
@@ -726,7 +965,7 @@ export function simulateFinalSaleGapBuy(
   buildPhaseEnd: number,
   elrViewMode: 'realistic' | 'potential',
   elrSortMode: 'efficiency' | 'impact',
-  rawBackup: ei.IBackup | null | undefined
+  rawBackup: DeliverySource | null | undefined
 ): FinalSaleGapPlan {
   if (absoluteSimTime >= finalSaleStart) {
     return { purchases: [], endLevels: researchLevels, endSnapshot: snapshot };
@@ -763,6 +1002,14 @@ export function simulateFinalSaleGapBuy(
       elrSortMode,
       rawBackup
     );
+  };
+
+  // `earlierEggs`: what the purchase delivers before the sale that it otherwise wouldn't. Those eggs
+  // count toward TE, so they offset a later finish, valued at how long they'd take at the plan's rate.
+  const isWorseOutcome = (plan: SaleEndsPlan, base: SaleEndsPlan, earlierEggs: number) => {
+    if (plan.endDeliveryRate === null || base.endDeliveryRate === null) return plan.endSnapshot.elr < base.endSnapshot.elr;
+    const cost = (p: SaleEndsPlan) => deliveryPlanCost(p.lastPurchaseTimestamp, p.endDeliveryRate!, base.endDeliveryRate!);
+    return cost(plan) - earlierEggs / plan.endDeliveryRate > cost(base);
   };
 
   let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...researchLevels } };
@@ -838,7 +1085,9 @@ export function simulateFinalSaleGapBuy(
       simTime + timeToBuySeconds
     );
 
-    if (candidateResult.endSnapshot.elr < baseline.endSnapshot.elr) {
+    const earlierEggs =
+      (candidateSnapshot.elr - simSnapshot.elr) * Math.max(0, finalSaleStart - (simTime + timeToBuySeconds));
+    if (isWorseOutcome(candidateResult, baseline, earlierEggs)) {
       rejectedIds.add(candidate.research.id);
       continue;
     }

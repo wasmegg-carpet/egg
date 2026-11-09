@@ -98,7 +98,7 @@ import { computed } from 'vue';
 import type { Action, BuyResearchPayload } from '@/types';
 import { getResearchById, getResearchByTier } from '@/calculations/commonResearch';
 import { formatGemPrice, formatNumber } from '@/lib/format';
-import { scrollToAndHighlight } from '@/lib/scrollToAndHighlight';
+import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
 import { iconURL } from 'lib';
 
 import { useActionsStore } from '@/stores/actions';

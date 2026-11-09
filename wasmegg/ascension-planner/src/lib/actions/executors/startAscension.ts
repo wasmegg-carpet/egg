@@ -6,11 +6,11 @@
  * Cost is always 0 - it represents the starting point.
  */
 
-import type { ActionExecutor } from '../executor';
+import type { PayloadExecutor } from 'lib/planners/actions/executorTypes';
 import type { StartAscensionPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 
-export const startAscensionExecutor: ActionExecutor<'start_ascension'> = {
+export const startAscensionExecutor: PayloadExecutor<StartAscensionPayload> = {
   execute(_payload: StartAscensionPayload, _context) {
     // No state changes - the initial state is already set in stores
     // Cost is 0 since this is the starting point

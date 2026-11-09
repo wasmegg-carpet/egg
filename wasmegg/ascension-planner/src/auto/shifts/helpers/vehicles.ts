@@ -8,7 +8,7 @@ import {
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
   calculateShippingMultipliers,
-} from '../../../calculations/shippingCapacity';
+} from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import {
   planMaxVehicles,
@@ -25,7 +25,7 @@ import type { VehicleCostModifiers } from '../../../lib/vehicles';
  */
 function buildVehiclePlanningInputs(currentState: EngineState, context: SimulationContext) {
   const costModifiers: VehicleCostModifiers = {
-    bustUnionsLevel: context.epicResearchLevels['cheaper_vehicles'] || 0,
+    bustUnionsLevel: context.epicResearchLevels['bust_unions'] || 0,
     vehicleCostMultiplier: context.colleggtibleModifiers.vehicleCost || 1,
   };
 

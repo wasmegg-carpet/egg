@@ -1,7 +1,9 @@
 import type { ActionPayloadMap, ActionType, CalculationsSnapshot } from './core';
 import type { VirtueEgg } from './virtue';
-import type { ArtifactSlotPayload } from './artifacts';
+import type { ArtifactSlotPayload } from 'lib/planners/types/actions/artifacts';
 import type { VehicleSlot, ResearchLevels } from '../index';
+export type { StoreContext } from 'lib/planners/types/actions/meta';
+export { generateActionId } from 'lib/planners/types/actions/meta';
 
 /**
  * Base action interface.
@@ -113,37 +115,6 @@ export interface UndoValidation {
   action?: Action;
   dependentActions: Action[];
   needsRecursiveUndo: boolean;
-}
-
-/**
- * Context passed to action executors.
- */
-export interface StoreContext {
-  habCapacity: {
-    setHab(slotIndex: number, habId: number | null): void;
-    habIds: (number | null)[];
-  };
-  shippingCapacity: {
-    setVehicle(slotIndex: number, vehicleId: number | null): void;
-    setTrainLength(slotIndex: number, length: number): void;
-    vehicles: VehicleSlot[];
-  };
-  commonResearch: {
-    setResearchLevel(researchId: string, level: number): void;
-    researchLevels: ResearchLevels;
-  };
-  costModifiers: {
-    habCostMultiplier: number;
-    vehicleCostMultiplier: number;
-    researchCostMultiplier: number;
-  };
-}
-
-/**
- * Helper to generate action ID.
- */
-export function generateActionId(): string {
-  return `action_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 /**

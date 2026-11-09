@@ -27,7 +27,7 @@ export function useEarningsClothedTE(): {
       truthEggs,
       colleggtibleModifiers: context.colleggtibleModifiers,
       labUpgradeLevel: context.epicResearchLevels['cheaper_research'] ?? 0,
-      permitLevel: initialStateStore.rawBackup?.game?.permitLevel ?? null,
+      proPermit: initialStateStore.proPermit,
     });
   });
 

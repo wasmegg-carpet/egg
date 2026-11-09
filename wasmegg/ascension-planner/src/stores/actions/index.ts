@@ -21,12 +21,13 @@ import { computeDeltas } from '@/lib/actions/snapshot';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useVirtueStore } from '@/stores/virtue';
 import { useSilosStore } from '@/stores/silos';
-import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
-import { useEventsStore } from '@/stores/events';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
+import { useEventsStore } from 'lib/planners/stores/events';
 
 import { simulateAsync } from '@/engine/simulate';
+import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '@/engine/researchSale';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -156,8 +157,8 @@ export const useActionsStore = defineStore('actions', {
       const isTrivial = (a: Action): boolean => {
         if (a.type === 'shift') return true;
         if (a.type === 'wait_for_full_habs') return true;
-        if (a.type === 'toggle_earnings_boost' && (a.payload as any).active) return true;
-        if (a.type === 'toggle_sale' && (a.payload as any).active) return true;
+        if (a.type === 'toggle_earnings_boost' && a.payload.active) return true;
+        if (a.type === 'toggle_sale' && a.payload.active) return true;
         return false;
       };
 
@@ -560,7 +561,6 @@ export const useActionsStore = defineStore('actions', {
           });
         }
         const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle'; egg: string }> = {
-          'research-sale': { type: 'research', egg: 'curiosity' },
           'hab-sale': { type: 'hab', egg: 'integrity' },
           'vehicle-sale': { type: 'vehicle', egg: 'kindness' },
         };
@@ -697,7 +697,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     exportPlan() {
-      exportPlanLogic(this.actions, this.initialSnapshot);
+      return exportPlanLogic(this.actions, this.initialSnapshot);
     },
 
     async importPlan(jsonString: string, skipRecalculate = false, preserveId = false) {
@@ -745,7 +745,11 @@ export const useActionsStore = defineStore('actions', {
       const initialSnapshot = computeSnapshot(baseState, getSimulationContext());
       this._initialSnapshot = markRaw(initialSnapshot);
 
-      if (!skipRecalculate) {
+      if (
+        !skipRecalculate ||
+        hasStaleResearchSaleFlags(this.actions, this.ascensionStartTime) ||
+        hasStaleResearchPurchasePrices(this.actions, getSimulationContext())
+      ) {
         await this.recalculateFrom(0);
       } else {
         syncStoresToSnapshot(this.effectiveSnapshot);
@@ -764,7 +768,7 @@ export const useActionsStore = defineStore('actions', {
         data: exportPlanData(this.actions, this.initialSnapshot, planId),
       };
 
-      const { safeImport } = await import('@/lib/import');
+      const { safeImport } = await import('lib/planners/import');
       const { savePlanToLibrary } = await safeImport(() => import('@/lib/storage/db'));
       await savePlanToLibrary(partitionHash, planData);
 

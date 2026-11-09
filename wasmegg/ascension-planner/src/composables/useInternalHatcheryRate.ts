@@ -7,10 +7,11 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
-import { calculateIHR } from '@/calculations/internalHatcheryRate';
+import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
 import type { IHRInput, IHROutput } from '@/types';
+import { PROFILE } from '@/lib/profile';
 
 /**
  * Composable that provides reactive IHR calculations.
@@ -33,6 +34,7 @@ export function useInternalHatcheryRate(): {
     const artifactMod = initialStateStore.artifactModifiers.internalHatcheryRate;
     return {
       te: te.value,
+      teBase: PROFILE.ihrTruthEggBase,
       researchLevels: researchLevels.value,
       epicResearchLevels: {
         epicInternalIncubators: epicResearchLevels.value['epic_internal_incubators'] || 0,

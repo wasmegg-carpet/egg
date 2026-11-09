@@ -82,6 +82,24 @@ export function createEmptyArtifactModifiers(): ArtifactModifiers {
 }
 
 /**
+ * How many artifacts can be active at once: 4 with Pro permit, 2 with Standard.
+ * `proPermit` undefined means Pro (plans and snapshots from before Standard was supported).
+ */
+export function artifactSlotCount(proPermit?: boolean): number {
+  return proPermit === false ? 2 : 4;
+}
+
+/**
+ * The loadout as it counts: slots past `artifactSlotCount(proPermit)` become empty. The array keeps
+ * its length, so callers that index all 4 slots still work.
+ */
+export function activeSlots<T extends EquippedArtifact>(loadout: T[], proPermit?: boolean): T[] {
+  const count = artifactSlotCount(proPermit);
+  if (loadout.length <= count) return loadout;
+  return loadout.map((slot, i) => (i < count ? slot : ({ ...slot, artifactId: null, stones: [] } as T)));
+}
+
+/**
  * Create an empty artifact loadout (4 empty slots)
  */
 export function createEmptyLoadout(): EquippedArtifact[] {

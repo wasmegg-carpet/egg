@@ -1,6 +1,6 @@
 import type { CalculationsSnapshot } from '@/types';
 import type { EngineState } from '../types';
-import { calculateEarningsForTime, type EarningsRateTransition } from './math';
+import { calculateEarningsForTime, type EarningsRateTransition } from 'lib/planners/engine/apply/math';
 
 /**
  * Advance the simulation time in the engine state and add earned gems to the bank.

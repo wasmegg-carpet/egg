@@ -120,22 +120,12 @@
     <div class="flex items-center justify-between px-2">
       <p class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{{ purchasedCount }}/4 habs active</p>
     </div>
-
-    <EventExpiryDialog
-      v-if="showExpiryDialog"
-      :event-name="expiryData.eventName"
-      :end-time="expiryData.endTime"
-      :completion-time="expiryData.completionTime"
-      @cancel="handleExpiryCancel"
-      @deactivate-and-cancel="handleExpiryDeactivateAndCancel"
-      @deactivate-and-continue="handleExpiryDeactivateAndContinue"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import UpgradeDropdown, { type UpgradeDropdownOption } from './UpgradeDropdown.vue';
+import UpgradeDropdown, { type UpgradeDropdownOption } from 'ui/components/planners/actions/UpgradeDropdown.vue';
 import {
   habTypes,
   getHabById,
@@ -145,33 +135,25 @@ import {
   type HabCostModifiers,
 } from '@/lib/habs';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { useHabCapacityStore } from '@/stores/habCapacity';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId } from '@/types';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { useEventExpiry } from '@/composables/useEventExpiry';
-import EventExpiryDialog from '../EventExpiryDialog.vue';
-import { calculateHabCapacity, calculateTotalResearchMultipliers } from '@/calculations/habCapacity';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
+import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
 import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from '@/calculations/habPurchasePlan';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { getTimeToSave } from '@/engine/apply';
+import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
+import { getSimulationContext } from '@/engine/adapter';
 
 const habCapacityStore = useHabCapacityStore();
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const salesStore = useSalesStore();
-const { prepareExecution, completeExecution, batch } = useActionExecutor();
-const {
-  showExpiryDialog,
-  expiryData,
-  withExpiryCheck,
-  cancel: handleExpiryCancel,
-  deactivateAndCancel: handleExpiryDeactivateAndCancel,
-  deactivateAndContinue: handleExpiryDeactivateAndContinue,
-} = useEventExpiry();
+const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
+  useEventCrossingWaits();
 
 // Cost modifiers
 const costModifiers = computed<HabCostModifiers>(() => ({
@@ -250,7 +232,7 @@ function getHabDropdownOptions(currentHabId: number | null, slotIndex: number): 
 
 function getTimeToBuy(habId: number, slotIndex: number): string {
   const price = getHabPrice(habId, slotIndex);
-  const seconds = getTimeToSave(price, actionsStore.effectiveSnapshot);
+  const seconds = getBoostAwareTimeToSave(price, actionsStore.effectiveSnapshot, getSimulationContext());
   if (seconds <= 0) return '0s';
   if (seconds === Infinity) return '∞';
   return formatDuration(seconds);
@@ -285,21 +267,22 @@ function handleHabChange(slotIndex: number, habId: number | undefined) {
   // Don't add if it's already the same
   if (habIds.value[slotIndex] === habId) return;
 
-  const duration = getTimeToBuySeconds(habId, slotIndex);
-
-  withExpiryCheck(duration, false, () => {
+  batch(() => {
     // Prepare execution (restores stores if editing past group)
-    const beforeSnapshot = prepareExecution();
+    const pricingSnapshot = prepareExecution();
 
     // Calculate cost based on effective state
     const hab = getHabById(habId);
     if (!hab) return;
 
-    const effectiveHabIds = beforeSnapshot.habIds;
+    const effectiveHabIds = pricingSnapshot.habIds;
     const otherHabs = effectiveHabIds.filter((_, i) => i !== slotIndex);
     const existingCount = countHabsOfType(otherHabs, habId);
-    const isSaleActive = beforeSnapshot.activeSales.hab;
+    const isSaleActive = pricingSnapshot.activeSales.hab;
     const cost = getDiscountedHabPrice(hab, existingCount, costModifiers.value, isSaleActive);
+
+    insertBoostCrossingWaits(cost);
+    const beforeSnapshot = prepareExecution();
 
     // Build payload
     const payload = {
@@ -331,11 +314,6 @@ function handleHabChange(slotIndex: number, habId: number | undefined) {
       beforeSnapshot
     );
   });
-}
-
-function getTimeToBuySeconds(habId: number, slotIndex: number): number {
-  const price = getHabPrice(habId, slotIndex);
-  return getTimeToSave(price, actionsStore.effectiveSnapshot);
 }
 
 function handleToggleSale() {
@@ -378,7 +356,8 @@ const maxHabsSim = computed(() =>
     costModifiers.value,
     isHabSaleActive.value,
     effectiveMultipliers.value,
-    () => false
+    () => false,
+    absoluteSimTimeFor(actionsStore.effectiveSnapshot, getSimulationContext())
   )
 );
 
@@ -397,12 +376,11 @@ function handleBuyMax() {
   const sim = maxHabsSim.value;
   if (sim.steps.length === 0) return;
 
-  withExpiryCheck(sim.totalSeconds, false, () => {
-    batch(() => {
-      for (const step of sim.steps) {
-        handleHabChange(step.slotIndex, step.habId);
-      }
-    });
+  batch(async () => {
+    for (const step of sim.steps) {
+      handleHabChange(step.slotIndex, step.habId);
+      if (isEditingPastGroup.value) await settled();
+    }
   });
 }
 
@@ -414,16 +392,16 @@ function handleBuy5MinSpace() {
     costModifiers.value,
     isHabSaleActive.value,
     effectiveMultipliers.value,
-    seconds => seconds > FIVE_MINUTES
+    seconds => seconds > FIVE_MINUTES,
+    absoluteSimTimeFor(actionsStore.effectiveSnapshot, getSimulationContext())
   );
   if (sim.steps.length === 0) return;
 
-  withExpiryCheck(sim.totalSeconds, false, () => {
-    batch(() => {
-      for (const step of sim.steps) {
-        handleHabChange(step.slotIndex, step.habId);
-      }
-    });
+  batch(async () => {
+    for (const step of sim.steps) {
+      handleHabChange(step.slotIndex, step.habId);
+      if (isEditingPastGroup.value) await settled();
+    }
   });
 }
 </script>

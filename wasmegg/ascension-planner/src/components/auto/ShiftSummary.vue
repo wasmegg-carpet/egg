@@ -124,6 +124,7 @@
 import { computed } from 'vue';
 import { formatNumber, formatDuration } from '@/lib/format';
 import { iconURL } from 'lib';
+import { rarityTint } from 'lib/planners/artifacts/display';
 import { getResearchById, getResearchByTier } from '@/calculations/commonResearch';
 import { getVehicleType } from '@/lib/vehicles';
 import { getHabById, type HabId } from '../../lib/habs';
@@ -203,19 +204,8 @@ function payloadPeakELR(action: Action): number | undefined {
   return 'peakELR' in action.payload ? action.payload.peakELR : undefined;
 }
 
-// Rarity background tint, matching ArtifactSelector.vue's color scheme.
-function rarityBg(rarityCode: string): string {
-  switch (rarityCode) {
-    case 'R':
-      return '#0D6DFD30';
-    case 'E':
-      return '#FF00FF30';
-    case 'L':
-      return '#FECD1B40';
-    default:
-      return '#F1F5F9'; // slate-100
-  }
-}
+// Rarity background tint, shared with ArtifactSelector.vue.
+const rarityBg = (rarityCode: string) => rarityTint(rarityCode, '#F1F5F9'); // slate-100 for commons
 
 const totalEggsLaid = computed(() => {
   for (const action of props.actions) {

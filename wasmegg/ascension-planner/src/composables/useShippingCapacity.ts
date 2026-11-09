@@ -6,10 +6,10 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
-import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
+import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
 import type { ShippingCapacityInput, ShippingCapacityOutput } from '@/types';
 
 /**

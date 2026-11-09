@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia';
 import type { VirtueEgg } from '@/types';
-import { getLocalTimestampInTimezone } from '@/lib/events';
+import { getLocalTimestampInTimezone } from 'lib/planners/events';
 
 /**
  * Get the user's detected timezone.

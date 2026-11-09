@@ -6,6 +6,7 @@
 
 import type { CalculationsSnapshot, CalculationsFullOutputs, VehicleSlot, ResearchLevels } from '@/types';
 import { type HabId } from '@/lib/habs';
+import { activeSlots } from '@/lib/artifacts/calculator';
 import { useEggValue } from '@/composables/useEggValue';
 import { useHabCapacity } from '@/composables/useHabCapacity';
 import { useLayRate } from '@/composables/useLayRate';
@@ -14,15 +15,15 @@ import { useEffectiveLayRate } from '@/composables/useEffectiveLayRate';
 import { useEarnings } from '@/composables/useEarnings';
 import { useInternalHatcheryRate } from '@/composables/useInternalHatcheryRate';
 
-import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useVirtueStore } from '@/stores/virtue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useSilosStore, totalAwayTime } from '@/stores/silos';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 
 /**
  * Compute a CalculationsSnapshot from current store state.
@@ -79,6 +80,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
 
     // Fuel tank state
     tankLevel: fuelTankStore.tankLevel,
+    proPermit: initialStateStore.proPermit,
     fuelTankAmounts: { ...fuelTankStore.fuelAmounts },
 
     // Truth Eggs state
@@ -89,10 +91,13 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     vehicles: [...shippingCapacityStore.vehicles],
     habIds: [...habCapacityStore.habIds],
     researchLevels: { ...commonResearchStore.researchLevels },
-    artifactLoadout: initialStateStore.artifactLoadout.map(slot => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    })),
+    artifactLoadout: activeSlots(
+      initialStateStore.artifactLoadout.map(slot => ({
+        artifactId: slot.artifactId,
+        stones: [...slot.stones],
+      })),
+      initialStateStore.proPermit
+    ),
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
     population: virtueStore.population,

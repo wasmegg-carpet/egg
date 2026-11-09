@@ -122,7 +122,11 @@
       </div>
 
       <div class="p-2">
-        <ArtifactSelector :model-value="localLoadout" @update:model-value="localLoadout = $event" />
+        <ArtifactSelector
+          :model-value="localLoadout"
+          :slot-count="artifactSlotCount(initialStateStore.proPermit)"
+          @update:model-value="localLoadout = $event"
+        />
       </div>
     </div>
 
@@ -160,18 +164,20 @@ import { ref, computed, watch } from 'vue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useWarningStore } from '@/stores/warning';
+import { useWarningStore } from 'lib/planners/stores/warning';
 import { generateActionId, type ArtifactSlotPayload, type ArtifactSetName, type CalculationsSnapshot } from '@/types';
 import {
   type EquippedArtifact,
   createEmptyLoadout,
   summarizeLoadout,
   calculateArtifactModifiers,
+  activeSlots,
+  artifactSlotCount,
 } from '@/lib/artifacts';
 import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } from '@/lib/artifacts/virtue';
 import { useActionExecutor } from '@/composables/useActionExecutor';
 import { computeDependencies } from '@/lib/actions/executor';
-import { calculateHabCapacity_Full } from '@/calculations/habCapacity';
+import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { getSimulationContext } from '@/engine/adapter';
 import { formatNumber } from '@/lib/format';
 
@@ -199,7 +205,7 @@ const earningsClothedTe = computed<number | null>(() => {
     truthEggs: actionsStore.effectiveSnapshot.te,
     colleggtibleModifiers: context.colleggtibleModifiers,
     labUpgradeLevel: context.epicResearchLevels['cheaper_research'] ?? 0,
-    permitLevel: initialStateStore.rawBackup?.game?.permitLevel ?? null,
+    proPermit: initialStateStore.proPermit,
   });
 });
 
@@ -210,11 +216,14 @@ const isOptimalELR = computed(() => {
   const context = getSimulationContext();
   const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
     assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
+    habIds: actionsStore.effectiveSnapshot.habIds,
+    vehicles: actionsStore.effectiveSnapshot.vehicles,
     currentSet: savedSet || undefined,
     excludeGusset: excludeGusset.value,
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: initialStateStore.proPermit,
   });
 
   const currentArtifacts = actionsStore.effectiveSnapshot.artifactLoadout;
@@ -229,11 +238,14 @@ function equipOptimalELR() {
   const context = getSimulationContext();
   const optimized = getOptimalELRSet(initialStateStore.rawBackup, {
     assumeMaxHabsVehicles: assumeMaxHabsVehicles.value,
+    habIds: actionsStore.effectiveSnapshot.habIds,
+    vehicles: actionsStore.effectiveSnapshot.vehicles,
     currentSet: savedSet || undefined,
     excludeGusset: excludeGusset.value,
     commonResearch: actionsStore.effectiveSnapshot.researchLevels,
     epicResearchLevels: context.epicResearchLevels,
     colleggtibleModifiers: context.colleggtibleModifiers,
+    proPermit: initialStateStore.proPermit,
   });
 
   // If the optimized set is DIFFERENT from our saved ELR set, update it
@@ -309,7 +321,7 @@ function checkHabCapacityViolation(
   actionName: string
 ): boolean {
   const context = getSimulationContext();
-  const artifactMods = calculateArtifactModifiers(loadout as EquippedArtifact[]);
+  const artifactMods = calculateArtifactModifiers(activeSlots(loadout as EquippedArtifact[], snapshot.proPermit));
   const habCapacityOutput = calculateHabCapacity_Full({
     habIds: snapshot.habIds,
     researchLevels: snapshot.researchLevels,

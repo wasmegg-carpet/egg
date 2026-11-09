@@ -285,7 +285,7 @@ import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { getExecutor } from '@/lib/actions';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { getResearchIconPath } from '@/lib/assets';
+import { getResearchIconPath } from 'lib/planners/assets';
 import { getResearchById } from '@/calculations/commonResearch';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
@@ -385,10 +385,10 @@ const actionIconPath = computed(() => {
   if (props.action.type === 'wait_for_full_habs') {
     return 'egginc/ei_hab_icon_chicken_universe.png';
   }
-  if (props.action.type === 'wait_for_research_sale') {
+  if (props.action.type === 'wait_for_research_sale' || props.action.type === 'wait_for_research_sale_end') {
     return 'egginc-extras/icon_research_sale.png';
   }
-  if (props.action.type === 'wait_for_earnings_boost') {
+  if (props.action.type === 'wait_for_earnings_boost' || props.action.type === 'wait_for_earnings_boost_end') {
     return 'egginc/icon_bock.png';
   }
   if (props.action.type === 'toggle_earnings_boost') {

@@ -28,12 +28,12 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useVirtueStore } from '@/stores/virtue';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useCommonResearchStore } from '@/stores/commonResearch';
-import { useHabCapacityStore } from '@/stores/habCapacity';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
+import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from '@/stores/silos';
-import { useSalesStore } from '@/stores/sales';
-import { useNotesStore } from '@/stores/notes';
+import { useSalesStore } from 'lib/planners/stores/sales';
+import { useNotesStore } from 'lib/planners/stores/notes';
 
 /**
  * Reset all stores to their default state.

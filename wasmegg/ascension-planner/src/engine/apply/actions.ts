@@ -17,6 +17,7 @@ import {
   VirtueEgg,
 } from '@/types';
 import type { EngineState } from '../types';
+import { activeSlots } from '@/lib/artifacts/calculator';
 
 /**
  * Purely apply an action to the engine state.
@@ -110,10 +111,13 @@ export function applyAction(
       const payload = action.payload as ChangeArtifactsPayload;
       return {
         ...state,
-        artifactLoadout: payload.toLoadout.map(slot => ({
-          artifactId: slot.artifactId,
-          stones: [...slot.stones],
-        })),
+        artifactLoadout: activeSlots(
+          payload.toLoadout.map(slot => ({
+            artifactId: slot.artifactId,
+            stones: [...slot.stones],
+          })),
+          state.proPermit
+        ),
       };
     }
 
@@ -189,11 +193,15 @@ export function applyAction(
       return {
         ...state,
         activeArtifactSet: setName,
+        // The set keeps every slot; only the ones the permit allows are equipped.
         artifactLoadout: newLoadout
-          ? newLoadout.map(slot => ({
-            artifactId: slot.artifactId,
-            stones: [...slot.stones],
-          }))
+          ? activeSlots(
+            newLoadout.map(slot => ({
+              artifactId: slot.artifactId,
+              stones: [...slot.stones],
+            })),
+            state.proPermit
+          )
           : emptyLoadout,
       };
     }
@@ -208,10 +216,13 @@ export function applyAction(
       }));
       const newState = { ...state, artifactSets: newSets };
       if (state.activeArtifactSet === setName) {
-        newState.artifactLoadout = payload.newLoadout.map(slot => ({
-          artifactId: slot.artifactId,
-          stones: [...slot.stones],
-        }));
+        newState.artifactLoadout = activeSlots(
+          payload.newLoadout.map(slot => ({
+            artifactId: slot.artifactId,
+            stones: [...slot.stones],
+          })),
+          state.proPermit
+        );
       }
       return newState;
     }
@@ -226,7 +237,9 @@ export function applyAction(
     case 'wait_for_full_habs':
     case 'wait_for_gems':
     case 'wait_for_research_sale':
+    case 'wait_for_research_sale_end':
     case 'wait_for_earnings_boost':
+    case 'wait_for_earnings_boost_end':
     case 'wait_for_no_earnings':
     case 'notification':
       return state;

@@ -176,7 +176,7 @@ import { useVirtueStore } from '@/stores/virtue';
 import { useActionsStore } from '@/stores/actions';
 import { computeDependencies } from '@/lib/actions/executor';
 import { useActionExecutor } from '@/composables/useActionExecutor';
-import { calculateEarningsForTime } from '@/engine/apply/math';
+import { calculateEarningsForTime } from 'lib/planners/engine/apply/math';
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ close: [] }>();

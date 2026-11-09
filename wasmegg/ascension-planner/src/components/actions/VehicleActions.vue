@@ -172,22 +172,12 @@
         <p class="text-[10px] text-indigo-400 italic font-medium">(upgrade fleet size research to unlock more slots)</p>
       </div>
     </div>
-
-    <EventExpiryDialog
-      v-if="showExpiryDialog"
-      :event-name="expiryData.eventName"
-      :end-time="expiryData.endTime"
-      :completion-time="expiryData.completionTime"
-      @cancel="handleExpiryCancel"
-      @deactivate-and-cancel="handleExpiryDeactivateAndCancel"
-      @deactivate-and-continue="handleExpiryDeactivateAndContinue"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import UpgradeDropdown, { type UpgradeDropdownOption } from './UpgradeDropdown.vue';
+import UpgradeDropdown, { type UpgradeDropdownOption } from 'ui/components/planners/actions/UpgradeDropdown.vue';
 import {
   vehicleTypes,
   getVehicleType,
@@ -200,24 +190,23 @@ import {
   type VehicleType,
 } from '@/lib/vehicles';
 import { formatNumber, formatGemPrice, formatDuration } from '@/lib/format';
-import { useShippingCapacityStore } from '@/stores/shippingCapacity';
+import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useShippingCapacity } from '@/composables/useShippingCapacity';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useCommonResearchStore } from '@/stores/commonResearch';
+import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
-import { useSalesStore } from '@/stores/sales';
+import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId } from '@/types';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { useEventExpiry } from '@/composables/useEventExpiry';
-import EventExpiryDialog from '../EventExpiryDialog.vue';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 import {
   calculateShippingMultipliers,
   calculateMaxVehicleSlots,
   calculateMaxTrainLength,
-} from '@/calculations/shippingCapacity';
+} from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
-import { getTimeToSave } from '@/engine/apply';
+import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@/engine/apply';
+import { getSimulationContext } from '@/engine/adapter';
 import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from '@/calculations/vehiclePurchasePlan';
 
 const shippingStore = useShippingCapacityStore();
@@ -226,15 +215,8 @@ const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const salesStore = useSalesStore();
 const { output } = useShippingCapacity();
-const { prepareExecution, completeExecution, batch } = useActionExecutor();
-const {
-  showExpiryDialog,
-  expiryData,
-  withExpiryCheck,
-  cancel: handleExpiryCancel,
-  deactivateAndCancel: handleExpiryDeactivateAndCancel,
-  deactivateAndContinue: handleExpiryDeactivateAndContinue,
-} = useEventExpiry();
+const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
+  useEventCrossingWaits();
 
 // Cost modifiers
 const costModifiers = computed<VehicleCostModifiers>(() => ({
@@ -301,15 +283,10 @@ function getVehiclePrice(vehicleId: number, slotIndex: number): number {
 }
 
 function getTimeToBuyFromPrice(price: number): string {
-  const seconds = getTimeToSave(price, actionsStore.effectiveSnapshot);
+  const seconds = getBoostAwareTimeToSave(price, actionsStore.effectiveSnapshot, getSimulationContext());
   if (seconds <= 0) return '0s';
   if (seconds === Infinity) return '∞';
   return formatDuration(seconds);
-}
-
-function getVehicleTimeToBuySeconds(vehicleId: number, slotIndex: number): number {
-  const price = getVehiclePrice(vehicleId, slotIndex);
-  return getTimeToSave(price, actionsStore.effectiveSnapshot);
 }
 
 function getVehicleDropdownOptions(currentVehicleId: number | null, slotIndex: number): UpgradeDropdownOption[] {
@@ -400,17 +377,18 @@ function handleVehicleChange(slotIndex: number, vehicleId: number | undefined) {
     trainLength: vehicleId === 11 ? 1 : undefined,
   };
 
-  const duration = getVehicleTimeToBuySeconds(vehicleId, slotIndex);
-
-  withExpiryCheck(duration, false, () => {
+  batch(() => {
     // Prepare execution (restores stores if editing past group)
-    const beforeSnapshot = prepareExecution();
+    const pricingSnapshot = prepareExecution();
 
     // Calculate cost based on effective state
-    const effectiveVehicles = beforeSnapshot.vehicles;
+    const effectiveVehicles = pricingSnapshot.vehicles;
     const existingCount = countVehiclesOfType(effectiveVehicles, vehicleId);
-    const isSaleActive = beforeSnapshot.activeSales.vehicle;
+    const isSaleActive = pricingSnapshot.activeSales.vehicle;
     const cost = getDiscountedVehiclePrice(vehicleId, existingCount, costModifiers.value, isSaleActive);
+
+    insertBoostCrossingWaits(cost);
+    const beforeSnapshot = prepareExecution();
 
     // Compute dependencies (hyperloop train cars depend on graviton coupling)
     const dependencies = computeDependencies(
@@ -506,12 +484,7 @@ function handleAddTrainCar(slotIndex: number) {
 
   if (toLength > getMaxTrainLength()) return;
 
-  const cost = getDiscountedTrainCarPrice(toLength - 1, costModifiers.value, isVehicleSaleActive.value);
-  const duration = getTimeToSave(cost, actionsStore.effectiveSnapshot);
-
-  withExpiryCheck(duration, false, () => {
-    addTrainCarAction(slotIndex, fromLength, toLength);
-  });
+  batch(() => addTrainCarAction(slotIndex, fromLength, toLength));
 }
 
 /**
@@ -523,24 +496,16 @@ function handleMaxTrainCars(slotIndex: number) {
 
   const maxLength = getMaxTrainLength();
   let currentLength = slot.trainLength;
-  let totalCost = 0;
-  
-  // Estimate total cost/duration
-  for (let l = currentLength; l < maxLength; l++) {
-      totalCost += getDiscountedTrainCarPrice(l, costModifiers.value, isVehicleSaleActive.value);
-  }
-  const duration = getTimeToSave(totalCost, actionsStore.effectiveSnapshot);
 
-  withExpiryCheck(duration, false, () => {
-    // Add each car as a separate action
-    batch(() => {
-      while (currentLength < maxLength) {
-        const fromLength = currentLength;
-        const toLength = currentLength + 1;
-        addTrainCarAction(slotIndex, fromLength, toLength);
-        currentLength = toLength;
-      }
-    });
+  // Add each car as a separate action
+  batch(async () => {
+    while (currentLength < maxLength) {
+      const fromLength = currentLength;
+      const toLength = currentLength + 1;
+      addTrainCarAction(slotIndex, fromLength, toLength);
+      currentLength = toLength;
+      if (isEditingPastGroup.value) await settled();
+    }
   });
 }
 
@@ -549,11 +514,14 @@ function handleMaxTrainCars(slotIndex: number) {
  */
 function addTrainCarAction(slotIndex: number, fromLength: number, toLength: number) {
   // Prepare execution (restores stores if editing past group)
-  const beforeSnapshot = prepareExecution();
+  const pricingSnapshot = prepareExecution();
 
   // Calculate cost
-  const isSaleActive = beforeSnapshot.activeSales.vehicle;
+  const isSaleActive = pricingSnapshot.activeSales.vehicle;
   const cost = getDiscountedTrainCarPrice(toLength - 1, costModifiers.value, isSaleActive);
+
+  insertBoostCrossingWaits(cost);
+  const beforeSnapshot = prepareExecution();
 
   // Build payload
   const payload = {
@@ -647,20 +615,19 @@ function handleBuyMax() {
   const sim = maxVehiclesSim.value;
   if (sim.steps.length === 0) return;
 
-  withExpiryCheck(sim.totalSeconds, false, () => {
-    batch(() => {
-      const trainLengths: Record<number, number> = {};
-      for (const step of sim.steps) {
-        if (step.type === 'upgrade_hyperloop') {
-          handleVehicleChange(step.slotIndex, HYPERLOOP_ID);
-          trainLengths[step.slotIndex] = 1;
-        } else {
-          const fromLength = trainLengths[step.slotIndex] ?? displaySlots.value[step.slotIndex].trainLength;
-          addTrainCarAction(step.slotIndex, fromLength, fromLength + 1);
-          trainLengths[step.slotIndex] = fromLength + 1;
-        }
+  batch(async () => {
+    const trainLengths: Record<number, number> = {};
+    for (const step of sim.steps) {
+      if (step.type === 'upgrade_hyperloop') {
+        handleVehicleChange(step.slotIndex, HYPERLOOP_ID);
+        trainLengths[step.slotIndex] = 1;
+      } else {
+        const fromLength = trainLengths[step.slotIndex] ?? displaySlots.value[step.slotIndex].trainLength;
+        addTrainCarAction(step.slotIndex, fromLength, fromLength + 1);
+        trainLengths[step.slotIndex] = fromLength + 1;
       }
-    });
+      if (isEditingPastGroup.value) await settled();
+    }
   });
 }
 
@@ -678,12 +645,13 @@ function handleBuy5MinCap() {
     isVehicleSaleActive.value,
     effectiveMultipliers.value,
     5 * 60,
-    snapshot
+    snapshot,
+    absoluteSimTimeFor(snapshot, getSimulationContext())
   );
 
   if (plan.steps.length === 0) return;
 
-  batch(() => {
+  batch(async () => {
     const trainLengths: Record<number, number> = {};
     for (const step of plan.steps) {
       if (step.type === 'vehicle') {
@@ -694,6 +662,7 @@ function handleBuy5MinCap() {
         addTrainCarAction(step.slotIndex, fromLength, fromLength + 1);
         trainLengths[step.slotIndex] = fromLength + 1;
       }
+      if (isEditingPastGroup.value) await settled();
     }
   });
 }

@@ -24,6 +24,7 @@ import {
 } from '@/engine/apply';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext } from '@/engine/adapter';
+import { withCalendarResearchSale } from '@/engine/researchSale';
 import { type EngineState } from '@/engine/types';
 
 /**
@@ -74,9 +75,13 @@ export function calculateActionResult(
     transitions: boostTransitionsFrom(prevSnapshot, absoluteSimTime),
   });
 
-  const newSnapshot = computeSnapshot(newState, context, {
-    freezePopulation: action.type === 'wait_for_no_earnings',
-    skipEpochConversion: true,
-  });
+  const newSnapshot = withCalendarResearchSale(
+    computeSnapshot(newState, context, {
+      freezePopulation: action.type === 'wait_for_no_earnings',
+      skipEpochConversion: true,
+    }),
+    context.ascensionStartTime,
+    context.planStartOffset
+  );
   return { newSnapshot, durationSeconds };
 }

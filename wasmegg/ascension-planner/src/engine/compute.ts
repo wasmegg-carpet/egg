@@ -7,17 +7,18 @@ import type {
   EarningsInput,
   IHRInput,
 } from '@/types';
-import { calculateArtifactModifiers } from '@/lib/artifacts';
+import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
 import { totalAwayTime } from '@/stores/silos';
-import { integrateRate } from './apply/math';
+import { integrateRate } from 'lib/planners/engine/apply/math';
 
 import { calculateEggValue } from '@/calculations/eggValue';
-import { calculateHabCapacity_Full as calculateHabCapacity } from '@/calculations/habCapacity';
-import { calculateLayRate } from '@/calculations/layRate';
-import { calculateShippingCapacity } from '@/calculations/shippingCapacity';
-import { calculateEffectiveLayRate } from '@/calculations/effectiveLayRate';
+import { calculateHabCapacity_Full as calculateHabCapacity } from 'lib/planners/calculations/habCapacity';
+import { calculateLayRate } from 'lib/planners/calculations/layRate';
+import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
+import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
 import { calculateEarnings } from '@/calculations/earnings';
-import { calculateIHR } from '@/calculations/internalHatcheryRate';
+import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
+import { PROFILE } from '@/lib/profile';
 
 // Base egg value is always 1 for virtue eggs
 const BASE_EGG_VALUE = 1;
@@ -34,7 +35,7 @@ export function computeSnapshot(
   const { epicResearchLevels, colleggtibleModifiers } = context;
 
   // 1. Artifacts - Calculate first as they affect almost everything
-  const artifactMods = calculateArtifactModifiers(state.artifactLoadout);
+  const artifactMods = calculateArtifactModifiers(activeSlots(state.artifactLoadout, state.proPermit));
 
   // 2. Egg Value
   const eggValueInput: EggValueInput = {
@@ -58,6 +59,7 @@ export function computeSnapshot(
   // 7. Internal Hatchery Rate (IHR)
   const ihrInput: IHRInput = {
     te: state.te,
+    teBase: PROFILE.ihrTruthEggBase,
     researchLevels: state.researchLevels,
     epicResearchLevels: {
       epicInternalIncubators: epicResearchLevels['epic_internal_incubators'] || 0,
@@ -139,6 +141,7 @@ export function computeSnapshot(
     artifactAwayMultiplier: artifactMods.awayEarnings.totalMultiplier,
     videoDoublerMultiplier: context.assumeDoubleEarnings ? 2 : 1,
     eventMultiplier: state.earningsBoost.active ? state.earningsBoost.multiplier : 1,
+    proPermit: state.proPermit,
     artifactEffects: artifactMods.awayEarnings.effects,
   };
   const earningsOutput = calculateEarnings(earningsInput);
@@ -204,6 +207,7 @@ export function computeSnapshot(
     siloCount: state.siloCount,
     siloTimeMinutes,
     tankLevel: state.tankLevel,
+    proPermit: state.proPermit,
     fuelTankAmounts: state.fuelTankAmounts,
     eggsDelivered:
       extraEggs > 0

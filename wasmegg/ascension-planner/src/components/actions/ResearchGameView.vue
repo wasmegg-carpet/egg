@@ -52,6 +52,7 @@
           :research="research"
           :current-level="levels[research.id] || 0"
           :price="getResearchPrice(research)"
+          :during-sale="getResearchDuringSale(research)"
           :time-to-buy="getResearchTimeToBuy(research)"
           :time-to-buy-seconds="getResearchTimeToBuySeconds(research)"
           :can-buy="true"
@@ -75,11 +76,12 @@ import ResearchItem from './ResearchItem.vue';
 import { formatAbsoluteTime } from '@/lib/format';
 import { useActionsStore } from '@/stores/actions';
 import { useVirtueStore } from '@/stores/virtue';
+import type { TierSummary } from '@/calculations/commonResearch';
 
 const props = defineProps<{
   tiers: number[];
   researchByTier: Map<number, CommonResearch[]>;
-  tierSummaries: Record<number, any>;
+  tierSummaries: Record<number, TierSummary>;
   viewTimes: {
     tiers: Record<number, string>;
     researches: Record<string, string>;
@@ -88,6 +90,7 @@ const props = defineProps<{
   };
   levels: Record<string, number>;
   getResearchPrice: (r: CommonResearch) => number;
+  getResearchDuringSale: (r: CommonResearch) => boolean;
   getResearchTimeToBuy: (r: CommonResearch) => string;
   getResearchTimeToBuySeconds: (r: CommonResearch) => number;
   isResearchSaleActive: boolean;
@@ -182,7 +185,7 @@ function deadlineWarningTooltip(seconds?: number) {
   if (seconds === undefined) return '';
   const timeStr = formatAbsoluteTime(seconds, baseTimestamp.value, virtueStore.ascensionTimezone);
   if (props.isResearchSaleActive && (baseTimestamp.value / 1000 + seconds > props.researchSaleDeadline)) {
-    return `${timeStr} is after next Saturday at +0. Turn off the research sale to see realistic prices.`;
+    return `${timeStr} is after this sale ends (Saturday at +0). The price shown is what it will cost by then.`;
   }
   return timeStr;
 }

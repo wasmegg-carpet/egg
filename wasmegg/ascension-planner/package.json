@@ -10,6 +10,7 @@
     "lint": "eslint --ext .js,.ts,.vue src",
     "serve": "vite preview",
     "format": "prettier --write \"src/**/*.{js,ts,vue}\"",
+    "table:build": "vite build --config vite.buildTable.config.ts",
     "generate:pacific-time-table": "node --experimental-strip-types scripts/generatePacificTimeTable.ts",
     "test": "vitest run",
     "coverage": "vitest run --coverage",

@@ -10,8 +10,9 @@ import {
   boostTransitionsFrom,
 } from './apply';
 import { computeSnapshot } from './compute';
+import { withCalendarResearchSale } from './researchSale';
 import { computeDeltas } from '@/lib/actions/snapshot';
-import { yieldForOverlayPaint } from '@/lib/yieldForOverlayPaint';
+import { yieldForOverlayPaint } from 'lib/planners/yieldForOverlayPaint';
 
 /**
  * Simulate a list of actions to produce a timeline of states.
@@ -46,24 +47,26 @@ export function simulate(
 
   let currentState = baseState;
   let currentSnapshot = baseSnapshot;
+  let planStartOffset = context.planStartOffset;
 
   for (let i = 0; i < actions.length; i++) {
     let action = actions[i];
     const actualIndex = startIndex + i;
+    const stepContext = { ...context, planStartOffset };
 
     // 0. Refresh dynamic payloads (e.g. wait_for_te duration based on new ELR)
-    action = refreshActionPayload(action, currentSnapshot, context);
+    action = refreshActionPayload(action, currentSnapshot, stepContext);
 
     // 1. Apply action to get new pure state
     currentState = applyAction(currentState, action);
 
     // 1b. Add passively delivered eggs during this action's duration
     // Uses the PREVIOUS snapshot's ELR (eggs are shipped at the old rate while saving for the action)
-    const durationSeconds = getActionDuration(action, currentSnapshot, context);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
+    const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
-    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
       skipEarnings: action.type === 'store_fuel',
@@ -71,10 +74,15 @@ export function simulate(
     });
 
     // 2. Compute full snapshot
-    const newSnapshot = computeSnapshot(currentState, context, {
+    const computedSnapshot = computeSnapshot(currentState, context, {
       freezePopulation: action.type === 'wait_for_no_earnings',
       skipEpochConversion: true,
     });
+    // `context.planStartOffset` was read before this pass, so it can predate the start action being
+    // recalculated here; that action's own end time is the offset everything after it is measured from.
+    if (action.type === 'start_ascension') planStartOffset = computedSnapshot.lastStepTime;
+    const newSnapshot = withCalendarResearchSale(computedSnapshot, context.ascensionStartTime, planStartOffset);
+    currentState = { ...currentState, activeSales: newSnapshot.activeSales };
 
     // 3. Compute deltas vs previous state
     // For the first action, we compare against baseSnapshot (or should we?)
@@ -131,6 +139,7 @@ export async function simulateAsync(
 
   let currentState = baseState;
   let currentSnapshot = baseSnapshot;
+  let planStartOffset = context.planStartOffset;
 
   // Yield every 20 actions to keep UI responsive
   // A smaller number makes the UI smoother but total time slightly longer
@@ -145,14 +154,15 @@ export async function simulateAsync(
 
     let action = actions[i];
     const actualIndex = startIndex + i;
+    const stepContext = { ...context, planStartOffset };
 
-    action = refreshActionPayload(action, currentSnapshot, context);
+    action = refreshActionPayload(action, currentSnapshot, stepContext);
     currentState = applyAction(currentState, action);
-    const durationSeconds = getActionDuration(action, currentSnapshot, context);
-    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, context);
+    const durationSeconds = getActionDuration(action, currentSnapshot, stepContext);
+    const passiveEggs = computePassiveEggsDelivered(action, currentSnapshot, stepContext);
     currentState = applyPassiveEggs(currentState, passiveEggs);
 
-    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - context.planStartOffset);
+    const absoluteSimTime = context.ascensionStartTime + (currentSnapshot.lastStepTime - planStartOffset);
     const transitions = boostTransitionsFrom(currentSnapshot, absoluteSimTime);
     currentState = applyTime(currentState, durationSeconds, currentSnapshot, {
       skipGrowth: action.type === 'wait_for_no_earnings',
@@ -160,10 +170,15 @@ export async function simulateAsync(
       transitions,
     });
 
-    const newSnapshot = computeSnapshot(currentState, context, {
+    const computedSnapshot = computeSnapshot(currentState, context, {
       freezePopulation: action.type === 'wait_for_no_earnings',
       skipEpochConversion: true,
     });
+    // `context.planStartOffset` was read before this pass, so it can predate the start action being
+    // recalculated here; that action's own end time is the offset everything after it is measured from.
+    if (action.type === 'start_ascension') planStartOffset = computedSnapshot.lastStepTime;
+    const newSnapshot = withCalendarResearchSale(computedSnapshot, context.ascensionStartTime, planStartOffset);
+    currentState = { ...currentState, activeSales: newSnapshot.activeSales };
     const prevSnap = i === 0 ? baseSnapshot : previousSnapshot!;
     const deltas = computeDeltas(prevSnap, newSnapshot);
     results.push({

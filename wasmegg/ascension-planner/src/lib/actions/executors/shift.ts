@@ -5,12 +5,12 @@
  * Cost is 0 (shifting is free in the game).
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { PayloadExecutor, BaseExecutorContext } from 'lib/planners/actions/executorTypes';
 import type { ShiftPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 
-export const shiftExecutor: ActionExecutor<'shift'> = {
-  execute(_payload: ShiftPayload, _context: ExecutorContext): number {
+export const shiftExecutor: PayloadExecutor<ShiftPayload> = {
+  execute(_payload: ShiftPayload, _context: BaseExecutorContext): number {
     // Shifting is free - the actual state change is handled by the caller
     // who updates the virtue store before computing the snapshot
     return 0;

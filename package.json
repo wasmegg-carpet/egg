@@ -41,7 +41,8 @@
     "wasmegg/legendary-study",
     "wasmegg/mission-planner",
     "wasmegg/virtue-companion",
-    "wasmegg/ascension-planner"
+    "wasmegg/ascension-planner",
+    "wasmegg/enl-planner"
   ],
   "packageManager": "pnpm@11.11.0"
 }

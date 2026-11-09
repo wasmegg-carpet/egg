@@ -6,12 +6,13 @@ import { computeRealisticELR } from '../../calculations/realisticELR';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { computeTEEarned, timeToEarnTE } from '../te-thresholds';
-import { applyShiftAction } from './helpers/actionHelpers';
+import { applyShiftIfNeeded } from './helpers/actionHelpers';
 import { runMaxVehiclesPlan } from './helpers/vehicles';
+import type { VirtueEgg } from '@/types';
 
 /**
  * K3 Shift Strategy:
- * 1. Shift to Kindness.
+ * 1. Shift to Kindness (or stay on `egg` — see below).
  * 2. Buy any remaining vehicles/trains unlocked by C3.
  * 3. Compute peak ELR.
  * 4. Wait until buildPhaseEnd.
@@ -24,23 +25,27 @@ import { runMaxVehiclesPlan } from './helpers/vehicles';
  *   build-phase-end wait, but it does NOT know `buildPhaseEnd` is mandatory and would truncate that
  *   base wait too if the caller got the two out of sync (`runC3Variants`' own filtering, done before
  *   any variant reaches this shift, is what's expected to guarantee this).
+ * @param egg - The egg to wait on. Normally Kindness; `runAscension` passes Humility when H1 already
+ *   reaches the peak delivery rate (nothing left for K3 to buy), so H1 does this wait itself without
+ *   shifting.
  */
 export function runK3(
   startState: EngineState,
   context: SimulationContext,
   buildPhaseEnd: number = 0,
   targetTEForEgg?: number,
-  maxWaitSeconds: number = Infinity
+  maxWaitSeconds: number = Infinity,
+  egg: VirtueEgg = 'kindness'
 ): ShiftResult {
-  // 1. Shift to Kindness
-  const shifted = applyShiftAction(startState, context, 'kindness');
+  // 1. Shift to the wait egg (if not already on it)
+  const shifted = applyShiftIfNeeded(startState, context, egg);
 
   // 2. Buy any remaining vehicles/trains (unbounded, same as this shift's previous behavior)
   const vehiclePlan = runMaxVehiclesPlan(shifted.state, context, Infinity);
 
   let currentState = vehiclePlan.endState;
   let elapsedSeconds = vehiclePlan.elapsedSeconds;
-  const actions = [shifted.action, ...vehiclePlan.actions];
+  const actions = [...shifted.actions, ...vehiclePlan.actions];
 
   const getAbsTime = () =>
     context.ascensionStartTime + ((startState.lastStepTime || 0) - context.planStartOffset) + elapsedSeconds;
@@ -57,7 +62,8 @@ export function runK3(
   const peakELR = elrResult.effectiveRate;
   currentState.maxELR = peakELR;
 
-  // Attach peakELR to the shift action (the first action) so the UI summary can find it easily
+  // Attach peakELR to the shift action (the first action) so the UI summary can find it easily.
+  // Without a shift (H1 doing this wait), the caller attaches it to H1's own shift action.
   if (actions.length > 0 && actions[0].type === 'shift') {
     actions[0].payload.peakELR = peakELR;
   }
@@ -67,7 +73,7 @@ export function runK3(
   let waitDuration = Math.max(0, buildPhaseEnd - absTimeAfterPurchases);
 
   if (targetTEForEgg !== undefined) {
-    const currentEggsDelivered = currentState.eggsDelivered['kindness'] || 0;
+    const currentEggsDelivered = currentState.eggsDelivered[egg] || 0;
     const currentTE = countTEThresholdsPassed(currentEggsDelivered);
     const neededTE = Math.max(0, targetTEForEgg - currentTE);
 
@@ -84,13 +90,13 @@ export function runK3(
   waitDuration = Math.min(waitDuration, maxWaitSeconds);
 
   if (waitDuration > 0) {
-    const currentEggsDelivered = currentState.eggsDelivered['kindness'] || 0;
+    const currentEggsDelivered = currentState.eggsDelivered[egg] || 0;
     const currentTE = countTEThresholdsPassed(currentEggsDelivered);
 
     const teResult = computeTEEarned(currentEggsDelivered, peakELR, waitDuration);
 
     const waitAction = createSimAction('wait_for_te', {
-      egg: 'kindness',
+      egg,
       targetTE: currentTE + teResult.teEarned,
       teGained: teResult.teEarned,
       eggsToLay: teResult.finalEggsDelivered - currentEggsDelivered,
@@ -104,10 +110,10 @@ export function runK3(
     const snap = computeSnapshot(currentState, context, { skipGrowth: true });
     currentState.bankValue += snap.offlineEarnings * waitDuration;
 
-    currentState.eggsDelivered = { ...currentState.eggsDelivered, kindness: teResult.finalEggsDelivered };
+    currentState.eggsDelivered = { ...currentState.eggsDelivered, [egg]: teResult.finalEggsDelivered };
     currentState.teEarned = {
       ...currentState.teEarned,
-      kindness: (currentState.teEarned['kindness'] || 0) + teResult.teEarned,
+      [egg]: (currentState.teEarned[egg] || 0) + teResult.teEarned,
     };
     currentState.te = Object.values(currentState.teEarned).reduce((a, b) => (a as number) + (b as number), 0);
 

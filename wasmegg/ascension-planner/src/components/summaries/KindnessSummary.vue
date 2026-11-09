@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Action, CalculationsSnapshot } from '@/types';
-import { calculateMaxVehicleSlots, calculateMaxTrainLength } from '@/calculations/shippingCapacity';
+import { calculateMaxVehicleSlots, calculateMaxTrainLength } from 'lib/planners/calculations/shippingCapacity';
 import { getVehicleType } from '@/lib/vehicles';
 import { formatNumber } from '@/lib/format';
 

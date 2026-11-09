@@ -11,8 +11,9 @@ import {
 } from './helpers/milestones';
 import { applyDecoratedAction } from './helpers/actionHelpers';
 import { computeSnapshot } from '../../engine/compute';
-import { isResearchSaleActive, getNextSaleEnd } from '@/lib/events';
-import { getOptimalEarningsSet } from '@/lib/artifacts';
+import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
+import { getOptimalEarningsSet, activeSlots } from '@/lib/artifacts';
+import { socketEarningsStones } from '../loadout/resolve';
 
 const FLEET_RESEARCH_IDS = [
   'vehicle_reliablity',
@@ -66,11 +67,22 @@ export function runC1(
   // Repeat C1 rounds within one ascension's opening (see `runC1K1I1Segment`) pass
   // `equipEarningsSet = false`, since the first round already equipped it and nothing since has
   // switched gear.
+  // With loadout inputs (the auto planner's artifact/stone form or a per-ascension override), the
+  // input earnings set always wins over whatever set the start state carries, socketed from the
+  // input stone pool.
   if (equipEarningsSet) {
     let earningsSet = currentState.artifactSets.earnings;
-    const needsUpdate = !earningsSet;
-    if (needsUpdate && context.rawBackup) {
-      earningsSet = getOptimalEarningsSet(context.rawBackup);
+    let needsUpdate = !earningsSet;
+    if (context.loadoutInputs) {
+      earningsSet = socketEarningsStones(context.loadoutInputs.earnings, context.loadoutInputs.stones);
+      needsUpdate = true;
+    } else if (needsUpdate && context.rawBackup) {
+      earningsSet = getOptimalEarningsSet(context.rawBackup, currentState.proPermit !== false);
+    }
+    // Standard permit: the plan's earnings set holds only the 2 artifacts that can be active.
+    if (earningsSet && currentState.proPermit === false && earningsSet.slice(2).some(slot => slot.artifactId)) {
+      earningsSet = activeSlots(earningsSet, false);
+      needsUpdate = true;
     }
     if (earningsSet) {
       if (needsUpdate) {

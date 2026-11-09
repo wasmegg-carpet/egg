@@ -1,5 +1,21 @@
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+  <div v-if="!startTimeOverride" class="space-y-2">
+    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Start Time</label>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-baseline gap-2 flex-wrap px-1">
+        <span class="text-sm font-black text-slate-800 tabular-nums">{{ nowLabel }}</span>
+        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Now</span>
+      </div>
+      <button
+        @click="addOverride"
+        class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200 active:scale-95 whitespace-nowrap"
+      >
+        Override
+      </button>
+    </div>
+  </div>
+
+  <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-8">
     <div class="space-y-2">
       <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Start Time</label>
       <div class="flex gap-3">
@@ -35,10 +51,10 @@
           </select>
         </div>
         <button
-          @click="setStartTimeToNow"
-          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100 flex items-center justify-center active:scale-95 whitespace-nowrap"
+          @click="removeOverride"
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-slate-200 flex items-center justify-center active:scale-95 whitespace-nowrap"
         >
-          Now
+          Remove Override
         </button>
       </div>
     </div>
@@ -46,12 +62,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
+import { useVirtueStore } from '@/stores/virtue';
 import { formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 
-const { startDate, startTime, timezone } = storeToRefs(useAutoPlannerStore());
+const { startDate, startTime, timezone, startTimeOverride } = storeToRefs(useAutoPlannerStore());
+const virtueStore = useVirtueStore();
+
+// Live clock for the default "starts now" display.
+const nowMs = ref(Date.now());
+const clock = setInterval(() => (nowMs.value = Date.now()), 1000);
+onBeforeUnmount(() => clearInterval(clock));
+
+const nowLabel = computed(() =>
+  new Intl.DateTimeFormat(undefined, {
+    timeZone: timezone.value,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(nowMs.value)
+);
 
 const startTimeInput = ref<HTMLInputElement | null>(null);
 const timezoneSelect = ref<HTMLSelectElement | null>(null);
@@ -84,6 +121,19 @@ const setStartTimeToNow = () => {
   const nowUnix = Date.now() / 1000;
   startDate.value = formatUnixToDateInput(nowUnix, timezone.value);
   startTime.value = formatUnixToTimeInput(nowUnix, timezone.value);
+};
+
+// The override form opens on the current time, ready to adjust.
+const addOverride = () => {
+  setStartTimeToNow();
+  startTimeOverride.value = true;
+};
+
+// Back to the default: starts now, in the default timezone.
+const removeOverride = () => {
+  startTimeOverride.value = false;
+  timezone.value = virtueStore.ascensionTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  setStartTimeToNow();
 };
 
 const allTimezones = computed(() => {

@@ -1,5 +1,5 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
-import { applyShiftAction } from './helpers/actionHelpers';
+import { applyShiftIfNeeded } from './helpers/actionHelpers';
 import { runSiloBudgetPlan } from './helpers/silos';
 
 /**
@@ -8,11 +8,11 @@ import { runSiloBudgetPlan } from './helpers/silos';
  * 2. Buy as many silos as possible within 1 hour.
  */
 export function runR1(startState: EngineState, context: SimulationContext, timeLimit: number = 3600): ShiftResult {
-  const { state, action: shiftAction } = applyShiftAction(startState, context, 'resilience');
+  const { state, actions: shiftActions } = applyShiftIfNeeded(startState, context, 'resilience');
   const plan = runSiloBudgetPlan(state, context, timeLimit, timeLimit);
 
   return {
-    actions: [shiftAction, ...plan.actions],
+    actions: [...shiftActions, ...plan.actions],
     elapsedSeconds: plan.elapsedSeconds,
     endState: plan.endState,
   };

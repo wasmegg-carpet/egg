@@ -68,16 +68,6 @@
         </div>
       </div>
     </div>
-
-    <EventExpiryDialog
-      v-if="showExpiryDialog"
-      :event-name="expiryData.eventName"
-      :end-time="expiryData.endTime"
-      :completion-time="expiryData.completionTime"
-      @cancel="handleExpiryCancel"
-      @deactivate-and-cancel="handleExpiryDeactivateAndCancel"
-      @deactivate-and-continue="handleExpiryDeactivateAndContinue"
-    />
   </div>
 </template>
 
@@ -87,25 +77,13 @@ import { useActionsStore } from '@/stores/actions';
 const inputEl = ref<HTMLInputElement | null>(null);
 defineExpose({ focus: () => inputEl.value?.focus() });
 import { useVirtueStore } from '@/stores/virtue';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { generateActionId } from '@/types';
-import { computeDependencies } from '@/lib/actions/executor';
 import { formatDuration, parseDuration, formatAbsoluteTime } from '@/lib/format';
-import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from '@/lib/events';
-import { useEventExpiry } from '@/composables/useEventExpiry';
-import EventExpiryDialog from '../EventExpiryDialog.vue';
+import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
+import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
 
 const actionsStore = useActionsStore();
 const virtueStore = useVirtueStore();
-const { prepareExecution, completeExecution } = useActionExecutor();
-const {
-  showExpiryDialog,
-  expiryData,
-  withExpiryCheck,
-  cancel: handleExpiryCancel,
-  deactivateAndCancel: handleExpiryDeactivateAndCancel,
-  deactivateAndContinue: handleExpiryDeactivateAndContinue,
-} = useEventExpiry();
+const { batch, insertWaitAcrossBoost } = useEventCrossingWaits();
 
 const inputDuration = ref('');
 
@@ -173,34 +151,7 @@ function handleWaitTime() {
 
   const duration = parsedSeconds.value;
 
-  // We check both events because any time addition could cross either
-  withExpiryCheck(duration, true, () => {
-    const beforeSnapshot = prepareExecution();
-
-    const payload = {
-      totalTimeSeconds: duration,
-    };
-
-    const dependencies = computeDependencies(
-      'wait_for_no_earnings',
-      payload,
-      actionsStore.actionsBeforeInsertion,
-      actionsStore.initialSnapshot.researchLevels
-    );
-
-    completeExecution(
-      {
-        id: generateActionId(),
-        timestamp: Date.now(),
-        type: 'wait_for_no_earnings',
-        payload,
-        cost: 0,
-        dependsOn: dependencies,
-      },
-      beforeSnapshot
-    );
-
-    inputDuration.value = '';
-  });
+  batch(() => insertWaitAcrossBoost(duration, 'wait_for_no_earnings'));
+  inputDuration.value = '';
 }
 </script>

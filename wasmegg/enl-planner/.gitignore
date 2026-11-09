@@ -1,0 +1,3 @@
+# scripts/buildTable.ts: its bundle and the tables it writes
+dist-scripts/
+out/
