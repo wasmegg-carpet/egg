@@ -23,8 +23,8 @@ import {
 import { simulateSaleAwareBuy } from './smartBuyPreview';
 import type { EngineState, SimulationContext } from '@planner/engine/types';
 import type { CalculationsSnapshot } from '@planner/types';
-import { computeSnapshot } from '@planner/engine/compute';
-import { createBaseEngineState } from '@planner/engine/adapter';
+import { computeSnapshot } from '../engine/compute';
+import { createBaseEngineState } from '../engine/adapter';
 import { applyAction, applyTime, boostTransitionsFrom } from '@planner/engine/apply';
 import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from '../events';
 import { DEBUG_MILESTONE_CHAIN } from '../debugFlags';

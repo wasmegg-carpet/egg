@@ -4,26 +4,26 @@
  * Captures the current calculation state from all composables.
  */
 
-import type { CalculationsSnapshot, CalculationsFullOutputs, VehicleSlot, ResearchLevels } from '@/types';
-import { type HabId } from '@/lib/habs';
-import { activeSlots } from '@/lib/artifacts/calculator';
-import { useEggValue } from 'lib/planners/composables/useEggValue';
-import { useHabCapacity } from 'lib/planners/composables/useHabCapacity';
-import { useLayRate } from 'lib/planners/composables/useLayRate';
-import { useShippingCapacity } from 'lib/planners/composables/useShippingCapacity';
-import { useEffectiveLayRate } from 'lib/planners/composables/useEffectiveLayRate';
-import { useEarnings } from '@/composables/useEarnings';
-import { useInternalHatcheryRate } from 'lib/planners/composables/useInternalHatcheryRate';
+import type { CalculationsSnapshot, CalculationsFullOutputs, VehicleSlot, ResearchLevels } from '@planner/types';
+import { type HabId } from '@planner/lib/habs';
+import { activeSlots } from '@planner/lib/artifacts/calculator';
+import { useEggValue } from '../composables/useEggValue';
+import { useHabCapacity } from '../composables/useHabCapacity';
+import { useLayRate } from '../composables/useLayRate';
+import { useShippingCapacity } from '../composables/useShippingCapacity';
+import { useEffectiveLayRate } from '../composables/useEffectiveLayRate';
+import { useEarnings } from '@planner/composables/useEarnings';
+import { useInternalHatcheryRate } from '../composables/useInternalHatcheryRate';
 
-import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
-import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { usePlanStore } from '@/stores/plan';
-import { useInitialStateStore } from '@/stores/initialState';
-import { useSilosStore, totalAwayTime } from 'lib/planners/stores/silos';
-import { useFuelTankStore } from '@/stores/fuelTank';
-import { useTruthEggsStore } from '@/stores/truthEggs';
-import { useSalesStore } from 'lib/planners/stores/sales';
+import { useHabCapacityStore } from '../stores/habCapacity';
+import { useShippingCapacityStore } from '../stores/shippingCapacity';
+import { useCommonResearchStore } from '../stores/commonResearch';
+import { usePlanStore } from '@planner/stores/plan';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { useSilosStore, totalAwayTime } from '../stores/silos';
+import { useFuelTankStore } from '@planner/stores/fuelTank';
+import { plannerSnapshotFields, restorePlannerSnapshot } from '@planner/lib/actions/plannerRules';
+import { useSalesStore } from '../stores/sales';
 
 /**
  * Compute a CalculationsSnapshot from current store state.
@@ -47,7 +47,6 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
-  const truthEggsStore = useTruthEggsStore();
   const salesStore = useSalesStore();
 
   // Calculate silo time
@@ -68,10 +67,7 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     ratePerChickenPerSecond: layRate.value.ratePerChickenPerSecond,
     bankValue: planStore.bankValue,
 
-    // Virtue state
-    currentEgg: planStore.currentEgg,
-    shiftCount: planStore.shiftCount,
-    te: planStore.te,
+    ...plannerSnapshotFields(),
     soulEggs: initialStateStore.soulEggs,
 
     // Silo state
@@ -82,10 +78,6 @@ export function computeCurrentSnapshot(): CalculationsSnapshot {
     tankLevel: fuelTankStore.tankLevel,
     proPermit: initialStateStore.proPermit,
     fuelTankAmounts: { ...fuelTankStore.fuelAmounts },
-
-    // Truth Eggs state
-    eggsDelivered: { ...truthEggsStore.eggsDelivered },
-    teEarned: { ...truthEggsStore.teEarned },
 
     // Store state for reconstruction
     vehicles: [...shippingCapacityStore.vehicles],
@@ -176,7 +168,6 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   const initialStateStore = useInitialStateStore();
   const silosStore = useSilosStore();
   const fuelTankStore = useFuelTankStore();
-  const truthEggsStore = useTruthEggsStore();
   const salesStore = useSalesStore();
 
   // Restore hab state
@@ -198,11 +189,8 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
     state.researchLevels = { ...snapshot.researchLevels };
   });
 
-  // Restore virtue state
+  // Restore plan state
   planStore.$patch(state => {
-    state.currentEgg = snapshot.currentEgg;
-    state.shiftCount = snapshot.shiftCount;
-    state.te = snapshot.te;
     state.bankValue = snapshot.bankValue;
     state.population = snapshot.population;
   });
@@ -235,14 +223,7 @@ export function restoreFromSnapshot(snapshot: CalculationsSnapshot): void {
   }
 
   // Restore truth eggs state
-  truthEggsStore.$patch(state => {
-    if (snapshot.eggsDelivered) {
-      state.eggsDelivered = { ...snapshot.eggsDelivered };
-    }
-    if (snapshot.teEarned) {
-      state.teEarned = { ...snapshot.teEarned };
-    }
-  });
+  restorePlannerSnapshot(snapshot);
 
   // Restore sales state
   if (snapshot.activeSales) {

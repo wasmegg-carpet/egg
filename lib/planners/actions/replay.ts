@@ -24,7 +24,7 @@ import type {
   ModifyBankPayload,
 } from '@planner/types';
 import { type HabId } from '@planner/lib/habs';
-import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@planner/lib/actions/snapshot';
+import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from './snapshot';
 
 // ... (existing imports)
 

@@ -84,7 +84,7 @@ import type { VirtueEgg, LaunchMissionEntry } from '@/types';
 import { SHIP_INFO, Spaceship } from '@/lib/missions';
 import { formatDuration } from '@/lib/format';
 import { getBoostAwareTimeToSave } from '@/engine/apply';
-import { getSimulationContext } from '@/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 
 import FuelTankGraphic from 'ui/components/planners/actions/rockets/FuelTankGraphic.vue';
 import MissionGrid from 'ui/components/planners/actions/rockets/MissionGrid.vue';

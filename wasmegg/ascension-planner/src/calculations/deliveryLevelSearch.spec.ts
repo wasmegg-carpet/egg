@@ -12,7 +12,7 @@ import {
 import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
 import { DELIVERY_IMPACT_CATEGORIES, rankResearchByELRImpact } from 'lib/planners/calculations/researchRanking';
 import { runDeliveryBuyLoop, simulateSaleEndsBuy } from 'lib/planners/calculations/smartBuyPreview';
-import { computeSnapshot } from '@/engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { calculateArtifactModifiers } from '@/lib/artifacts';

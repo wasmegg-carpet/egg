@@ -9,33 +9,34 @@ import {
   ToggleEarningsBoostPayload,
   UpdateArtifactSetPayload,
   VehicleSlot,
-  FUEL_EGGS,
   createEmptySnapshot,
   createEmptyUndoValidation,
   generateActionId,
-} from '@/types';
-import { evaluateAction } from 'lib/planners/actions/reconciliation';
-import { type HabId } from '@/lib/habs';
-import { computeDeltas } from '@/lib/actions/snapshot';
-import { useInitialStateStore } from '@/stores/initialState';
-import { usePlanStore } from '@/stores/plan';
-import { useSilosStore } from 'lib/planners/stores/silos';
-import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
-import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
-import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useEventsStore } from 'lib/planners/stores/events';
+} from '@planner/types';
+import { evaluateAction } from '../../actions/reconciliation';
+import { type HabId } from '@planner/lib/habs';
+import { PROFILE } from '@planner/lib/profile';
+import { applyPlannerStartDefaults, syncPlannerFarmEgg } from '@planner/lib/actions/plannerRules';
+import { computeDeltas } from '../../actions/snapshot';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { usePlanStore } from '@planner/stores/plan';
+import { useSilosStore } from '../silos';
+import { useCommonResearchStore } from '../commonResearch';
+import { useHabCapacityStore } from '../habCapacity';
+import { useShippingCapacityStore } from '../shippingCapacity';
+import { useEventsStore } from '../events';
 
-import { simulateAsync } from 'lib/planners/engine/simulate';
-import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from 'lib/planners/engine/researchSale';
-import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
-import { computeDependencies } from 'lib/planners/actions/executor';
+import { simulateAsync } from '../../engine/simulate';
+import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '../../engine/researchSale';
+import { hasStaleEarningsBoostFlags } from '../../engine/calendarEvents';
+import { computeSnapshot } from '../../engine/compute';
+import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '../../engine/adapter';
+import { computeDependencies } from '../../actions/executor';
 
-import { ActionsState } from './types';
-import { createDefaultStartAction, calculateActionResult } from './simulation';
-import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from 'lib/planners/stores/actions/dependency';
-import { exportPlanLogic, importPlanLogic, exportPlanData } from './io';
+import { ActionsState } from '@planner/stores/actions/types';
+import { createDefaultStartAction, calculateActionResult } from '@planner/stores/actions/simulation';
+import { relinkDependenciesLogic, getActionsRequiringRemovalLogic, collectDependentActions } from './dependency';
+import { exportPlanLogic, importPlanLogic, exportPlanData } from '@planner/stores/actions/io';
 
 export const useActionsStore = defineStore('actions', {
   state: (): ActionsState => {
@@ -54,11 +55,13 @@ export const useActionsStore = defineStore('actions', {
       isReconciling: false,
       reconciledBackupTime: 0,
       reconcileFarmState: null,
+      reconcileEggsDelivered: null,
+      reconcileTeEarned: null,
       showIncompleteOnly: true,
       activePlanId: null,
       lastSavedActionsJson: JSON.stringify([startAction]),
       libraryUpdateTick: 0,
-      manualOverrides: JSON.parse(localStorage.getItem('enl_manual_overrides') || '{}') as Record<string, Record<string, boolean>>,
+      manualOverrides: JSON.parse(localStorage.getItem(`${PROFILE.storagePrefix}_manual_overrides`) || '{}') as Record<string, Record<string, boolean>>,
     };
   },
 
@@ -87,12 +90,20 @@ export const useActionsStore = defineStore('actions', {
     },
 
     effectiveSnapshot(): CalculationsSnapshot {
-      return this.currentSnapshot;
+      if (!this.editingGroupId) return this.currentSnapshot;
+      const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
+      if (headerIndex === -1) return this.currentSnapshot;
+      const nextShiftIndex = this.actions.findIndex((a, idx) => idx > headerIndex && (a.type as string) === 'shift');
+      if (nextShiftIndex === -1) return this.currentSnapshot;
+      return this.actions[nextShiftIndex - 1].endState;
     },
 
-    // A plan is one long group, so new actions always land at the end.
     editingInsertIndex(): number {
-      return -1;
+      if (!this.editingGroupId) return -1;
+      const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
+      if (headerIndex === -1) return -1;
+      const nextShiftIndex = this.actions.findIndex((a, idx) => idx > headerIndex && (a.type as string) === 'shift');
+      return nextShiftIndex === -1 ? -1 : nextShiftIndex;
     },
 
     actionsBeforeInsertion(): Action[] {
@@ -145,6 +156,7 @@ export const useActionsStore = defineStore('actions', {
 
     isDirty(): boolean {
       const isTrivial = (a: Action): boolean => {
+        if ((a.type as string) === 'shift') return true;
         if (a.type === 'wait_for_full_habs') return true;
         if (a.type === 'toggle_earnings_boost' && a.payload.active) return true;
         if (a.type === 'toggle_sale' && a.payload.active) return true;
@@ -248,7 +260,7 @@ export const useActionsStore = defineStore('actions', {
       return collectDependentActions(this.actions, actionId);
     },
 
-    pushAction(action: import('@/types').DraftAction) {
+    pushAction(action: import('@planner/types').DraftAction) {
       // Logic for redundant actions
       if (action.type === 'toggle_sale' || action.type === 'toggle_earnings_boost') {
         const lastAction = this.actions[this.actions.length - 1];
@@ -325,7 +337,7 @@ export const useActionsStore = defineStore('actions', {
       }
 
       this.actions.push(finalAction);
-      if (finalAction.type === 'start_ascension') {
+      if ((finalAction.type as string) === 'shift' || finalAction.type === 'start_ascension') {
         this.expandedGroupIds.clear();
         this.expandedGroupIds.add(finalAction.id);
       }
@@ -351,6 +363,7 @@ export const useActionsStore = defineStore('actions', {
       const index = this.actions.findIndex(a => a.id === actionId);
       const initialToRemove = new Set<string>();
       for (let i = index; i < this.actions.length; i++) {
+        if (i > index && (this.actions[i].type as string) === 'shift') break;
         initialToRemove.add(this.actions[i].id);
       }
       const toRemove = getActionsRequiringRemovalLogic(
@@ -378,6 +391,19 @@ export const useActionsStore = defineStore('actions', {
       });
       this.actions = newActions;
 
+      // If we're editing a shift and it's now the last shift in the plan (because a later
+      // shift and its actions were just undone), stop editing it. Editing exists to modify a
+      // past shift; once it's the last shift, it's already the default edit target.
+      if (this.editingGroupId) {
+        const headerIndex = this.actions.findIndex(a => a.id === this.editingGroupId);
+        if (headerIndex !== -1) {
+          const hasLaterShift = this.actions.some((a, idx) => idx > headerIndex && (a.type as string) === 'shift');
+          if (!hasLaterShift) {
+            this.editingGroupId = null;
+          }
+        }
+      }
+
       await this.recalculateFrom(minIndex === Infinity ? 0 : minIndex);
       if (restoreCallback) restoreCallback(this.effectiveSnapshot);
     },
@@ -402,8 +428,11 @@ export const useActionsStore = defineStore('actions', {
       this.isReconciling = false;
       this.editingGroupId = null;
       this.reconcileFarmState = null;
+      this.reconcileEggsDelivered = null;
+      this.reconcileTeEarned = null;
       let startAction = this.getStartAction();
       if (startAction) {
+        applyPlannerStartDefaults(startAction);
         this.actions = [startAction];
       } else {
         startAction = createDefaultStartAction();
@@ -427,6 +456,51 @@ export const useActionsStore = defineStore('actions', {
       return this.actions.find(a => a.id === actionId);
     },
 
+    async setInitialEgg(egg: FuelEgg) {
+      const startAction = this.getStartAction();
+      if (!startAction) return;
+
+      (startAction.payload as unknown as { initialEgg: FuelEgg }).initialEgg = egg;
+
+      const keptActions: Action[] = [startAction];
+      let foundWait = false;
+
+      for (let i = 1; i < this.actions.length; i++) {
+        const a = this.actions[i];
+        if (a.type === 'wait_for_full_habs' && !foundWait) {
+          keptActions.push(a);
+          foundWait = true;
+        } else if ((a.type as string) === 'shift') {
+          // As soon as we see the first shift, we stop considering any waits
+          break;
+        }
+      }
+
+      keptActions.forEach((a, idx) => {
+        a.index = idx;
+        a.dependents = [];
+      });
+      
+      for (let i = 1; i < keptActions.length; i++) {
+        keptActions[i].dependsOn = [keptActions[i - 1].id];
+        keptActions[i - 1].dependents.push(keptActions[i].id);
+      }
+
+      this.actions = keptActions;
+
+      const keptIds = new Set(keptActions.map(a => a.id));
+      if (this.editingGroupId && !keptIds.has(this.editingGroupId)) {
+        this.editingGroupId = null;
+      }
+      for (const id of Array.from(this.expandedGroupIds)) {
+        if (!keptIds.has(id)) {
+          this.expandedGroupIds.delete(id);
+        }
+      }
+
+      await this.recalculateFrom(0);
+    },
+
     setEditingGroup(groupId: string | null) {
       this.editingGroupId = groupId;
       if (groupId) this.expandedGroupIds.add(groupId);
@@ -447,6 +521,7 @@ export const useActionsStore = defineStore('actions', {
 
       const farm = initialStateStore.currentFarmState;
       const startAction = this.getStartAction();
+      const egg = syncPlannerFarmEgg(farm, startAction);
       if (startAction) {
         startAction.payload.initialFarmState = farm;
         startAction.payload.isQuickContinue = applyEvents;
@@ -464,23 +539,24 @@ export const useActionsStore = defineStore('actions', {
       const initialSnapshot = computeSnapshot(createBaseEngineState(null), context);
       await this.setInitialSnapshot(initialSnapshot);
       if (applyEvents) {
-        this.pushRelevantEvents();
+        this.pushRelevantEvents(egg);
       }
     },
 
-    pushRelevantEvents() {
+    pushRelevantEvents(egg?: string) {
       const initialStateStore = useInitialStateStore();
       const eventsStore = useEventsStore();
       const activeEvents = eventsStore.getActiveEvents(initialStateStore.isUltra);
 
       for (const event of activeEvents) {
-        const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle' }> = {
-          'hab-sale': { type: 'hab' },
-          'vehicle-sale': { type: 'vehicle' },
+        const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle'; egg: string }> = {
+          'hab-sale': { type: 'hab', egg: 'integrity' },
+          'vehicle-sale': { type: 'vehicle', egg: 'kindness' },
         };
         const s = saleMap[event.type];
         if (
           s &&
+          (egg === undefined || egg === s.egg) &&
           !this.effectiveSnapshot.activeSales[s.type as keyof typeof this.effectiveSnapshot.activeSales]
         ) {
           this.pushAction({
@@ -496,7 +572,7 @@ export const useActionsStore = defineStore('actions', {
     },
 
     async insertAction(
-      action: import('@/types').DraftAction,
+      action: import('@planner/types').DraftAction,
       _replayCallback?: (action: Action, previousSnapshot: CalculationsSnapshot) => CalculationsSnapshot
     ) {
       const insertIndex = this.editingInsertIndex;
@@ -522,6 +598,11 @@ export const useActionsStore = defineStore('actions', {
       }
 
       this.actions.splice(insertIndex, 0, fullAction);
+      if ((fullAction.type as string) === 'shift') {
+        this.expandedGroupIds.clear();
+        this.expandedGroupIds.add(fullAction.id);
+      }
+
       if (this.batchMode) {
         this.minBatchIndex = Math.min(this.minBatchIndex, insertIndex + 1);
         const prevAction = this.actions[insertIndex - 1];
@@ -638,11 +719,13 @@ export const useActionsStore = defineStore('actions', {
       // Reset editing state when importing.
       this.editingGroupId = null;
 
-      // Clear expanded groups when importing.
+      // Clear expanded groups when importing. The user wants the initial shift
+      // collapsed when loading from the library or reconciling.
       this.expandedGroupIds.clear();
 
-      // But we DO want the start action expanded so the plan shows by default.
-      const lastGroupAction = [...this.actions].reverse().find(a => a.type === 'start_ascension');
+      // But we DO want the last shift (or the start action if no shifts) expanded
+      // so the user is "editing" it by default.
+      const lastGroupAction = [...this.actions].reverse().find(a => (a.type as string) === 'shift' || a.type === 'start_ascension');
       if (lastGroupAction) {
         this.expandedGroupIds.add(lastGroupAction.id);
       }
@@ -675,8 +758,8 @@ export const useActionsStore = defineStore('actions', {
         data: exportPlanData(this.actions, this.initialSnapshot, planId),
       };
 
-      const { safeImport } = await import('lib/planners/import');
-      const { savePlanToLibrary } = await safeImport(() => import('@/lib/storage/db'));
+      const { safeImport } = await import('../../import');
+      const { savePlanToLibrary } = await safeImport(() => import('@planner/lib/storage/db'));
       await savePlanToLibrary(partitionHash, planData);
 
       this.activePlanId = planId;
@@ -684,7 +767,7 @@ export const useActionsStore = defineStore('actions', {
       this.libraryUpdateTick++;
     },
 
-    async loadPlanFromLibrary(plan: import('@/lib/storage/db').PlanData) {
+    async loadPlanFromLibrary(plan: import('@planner/lib/storage/db').PlanData) {
       this.activePlanId = plan.id;
       await this.importPlan(JSON.stringify(plan.data));
     },
@@ -699,7 +782,7 @@ export const useActionsStore = defineStore('actions', {
           [actionId]: !currentOverrides[actionId],
         },
       };
-      localStorage.setItem('enl_manual_overrides', JSON.stringify(this.manualOverrides));
+      localStorage.setItem(`${PROFILE.storagePrefix}_manual_overrides`, JSON.stringify(this.manualOverrides));
     },
   },
 });

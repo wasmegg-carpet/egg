@@ -287,7 +287,7 @@ const headerText = computed(() => {
 const summaryComponent = computed(() => summaryComponents[currentEgg.value]);
 
 const shiftReconciliationStatus = computed(() => {
-  return actionsStore.getShiftReconciliationStatus(props.actions);
+  return actionsStore.getGroupReconciliationStatus(props.actions);
 });
 
 /**

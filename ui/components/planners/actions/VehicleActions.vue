@@ -206,7 +206,7 @@ import {
 } from 'lib/planners/calculations/shippingCapacity';
 import { calculateArtifactModifiers } from '@planner/lib/artifacts';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { calculateVehicleCapacity, planMaxVehicles, planVehiclesForTimeLimit } from 'lib/planners/calculations/plannerVehiclePurchasePlan';
 
 const shippingStore = useShippingCapacityStore();

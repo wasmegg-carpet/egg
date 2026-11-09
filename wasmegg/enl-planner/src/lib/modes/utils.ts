@@ -7,7 +7,7 @@ import { getSavedPlayerID } from 'lib';
 import { PlayerIdSchema } from 'lib/schema';
 import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { optimizeOfflineEarnings } from '@/lib/artifacts/optimizeArtifacts';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
 import type { PlanData } from '@/lib/storage/db';
 
 /**

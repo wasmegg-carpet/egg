@@ -299,7 +299,7 @@ import {
 } from 'lib/planners/actions/notes';
 import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from 'lib/planners/composables/useResearchViews';
 import { getTimeToSave, boostTransitionsFrom } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { buyWhilePassingCheck, buyUntilRealSaleStarts } from 'lib/planners/calculations/researchRanking';
 import {
   getSaleAwareTimeToSave,

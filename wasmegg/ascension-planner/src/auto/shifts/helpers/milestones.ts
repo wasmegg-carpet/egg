@@ -14,7 +14,7 @@ import {
 } from 'lib/planners/calculations/milestoneChain';
 import { getSaleAwareTimeToSave, shouldDeferToNextSale } from 'lib/planners/calculations/researchROI';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
-import { computeSnapshot } from '../../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction, boostTransitionsFrom } from '../../../engine/apply';
 import { advanceTimeWithBoundaries } from './advanceTime';
 import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from 'lib/planners/events';

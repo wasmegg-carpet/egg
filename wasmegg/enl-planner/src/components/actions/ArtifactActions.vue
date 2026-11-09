@@ -97,7 +97,7 @@ import {
 import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 import { computeDependencies } from 'lib/planners/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import { optimizeArtifacts, type ArtifactGoal } from '@/lib/artifacts/optimizeArtifacts';
 import { formatNumber } from '@/lib/format';
 

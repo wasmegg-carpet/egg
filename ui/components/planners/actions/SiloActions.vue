@@ -207,7 +207,7 @@ import { iconURL } from 'lib';
 import { generateActionId } from '@planner/types';
 import { computed } from 'vue';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';
 

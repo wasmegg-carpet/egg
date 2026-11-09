@@ -1,5 +1,5 @@
 import { type Action, generateActionId } from '@/types/actions/meta';
-import { computeSnapshot } from '@/engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { countTEThresholdsPassed, getThresholdForTE } from '@/lib/truthEggs';
 import { timeToEarnTE } from './te-thresholds';
 import { computeShiftCosts } from './se-tracker';

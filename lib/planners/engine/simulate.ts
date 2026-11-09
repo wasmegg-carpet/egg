@@ -1,8 +1,8 @@
 import type { Action, CalculationsSnapshot } from '@planner/types';
 import type { EngineState, SimulationContext } from '@planner/engine/types';
 import { applyAction, applyTime, getActionDuration, refreshActionPayload } from '@planner/engine/apply';
-import { computeSnapshot } from '@planner/engine/compute';
-import { computeDeltas } from '@planner/lib/actions/snapshot';
+import { computeSnapshot } from './compute';
+import { computeDeltas } from '../actions/snapshot';
 import { boostTransitionsFrom } from './apply/math';
 import { withCalendarEarningsBoost, withCalendarResearchSale } from './calendarEvents';
 import { applyPassiveEggs, computePassiveEggsDelivered } from './passiveEggs';

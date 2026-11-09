@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { EngineState } from '@/engine/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { optimizeOfflineEarnings, optimizeIHR } from './optimizeArtifacts';

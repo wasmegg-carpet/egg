@@ -17,7 +17,7 @@
 import type { Action } from '@/types/actions/meta';
 import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext } from '../../types';
-import { computeSnapshot } from '../../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction, calculateEggsDeliveredForTime } from '../../../engine/apply';
 import { totalAwayTime } from 'lib/planners/stores/silos';
 import {

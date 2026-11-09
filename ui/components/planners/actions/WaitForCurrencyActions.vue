@@ -110,7 +110,7 @@ import { generateActionId, type ActionType } from '@planner/types';
 import { createCurrencyWaitPayload } from 'lib/planners/actions/currencyWait';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { getBoostAwareTimeToSave } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { computeDependencies } from 'lib/planners/actions/executor';
 
 const { currency } = usePlannerProfile();

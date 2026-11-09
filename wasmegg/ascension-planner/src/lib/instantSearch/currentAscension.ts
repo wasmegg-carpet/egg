@@ -16,8 +16,8 @@
  * to any stop with the same tail arithmetic as a fresh build.
  */
 import type { ei } from 'lib';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { makeContinueState, VIRTUE_EGGS_MAP } from '@/auto/continueState';
 import { getOptimalEarningsSet } from '@/lib/artifacts';
 import { parseVirtueFarm, parseVirtueProgress } from '@/lib/backupVirtue';

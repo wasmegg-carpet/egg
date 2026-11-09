@@ -14,7 +14,7 @@
 import { artifactOptions, stoneOptions, getArtifact } from './data';
 import { calculateArtifactModifiers, artifactSlotCount } from './calculator';
 import type { ArtifactOption, EquippedArtifact, StoneOption } from './types';
-import { computeSnapshot } from '@/engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { EngineState, SimulationContext } from '@/engine/types';
 import { calculateEarningBonus } from '@/calculations/earnings';
 

@@ -6,7 +6,7 @@
 import { computed, type ComputedRef } from 'vue';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { getSimulationContext } from '@/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { calculateClothedTEForSet } from 'lib/planners/artifacts/virtue';
 
 export function useEarningsClothedTE(): {

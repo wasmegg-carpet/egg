@@ -3,7 +3,7 @@ import { useActionExecutor } from './useActionExecutor';
 import { generateActionId, type CalculationsSnapshot, type DraftAction } from '@planner/types';
 import { computeDependencies } from '../actions/executor';
 import type { CommonResearch } from '@planner/calculations/commonResearch';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from '../engine/adapter';
 import { eventCrossingsForPurchase } from '../engine/researchSale';
 import { useEventCrossingWaits as useSharedEventCrossingWaits } from './useEventCrossingWaits';
 

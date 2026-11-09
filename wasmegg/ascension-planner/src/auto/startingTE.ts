@@ -6,8 +6,8 @@ import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { parseVirtueFarm, parseVirtueProgress } from '@/lib/backupVirtue';
 import { makeContinueState } from '@/auto/continueState';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { VirtueEgg } from '@/types';
 
 /** Claimed TE for one egg, eggs delivered at that threshold's minimum (no partial progress, nothing

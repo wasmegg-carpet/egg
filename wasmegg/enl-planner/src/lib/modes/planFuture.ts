@@ -19,8 +19,8 @@ import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { loadAndSyncBackup, equipMaxEarningsSet } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 
 export async function initPlanFuture(playerId: string): Promise<void> {
   // 1. Clean slate

@@ -98,7 +98,7 @@ import {
 } from '@planner/lib/missions';
 import { formatNumber, formatPrice, formatDuration } from '@planner/lib/format';
 import { getBoostAwareTimeToSave } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 
 const props = defineProps<{
   ftlLevel: number;

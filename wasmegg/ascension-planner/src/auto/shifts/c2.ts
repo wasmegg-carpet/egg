@@ -1,7 +1,7 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { getResearchById, isTierUnlocked } from '../../calculations/commonResearch';
 import { rankResearchByROI } from 'lib/planners/calculations/researchRanking';
-import { computeSnapshot } from '../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { maxSilos } from 'lib/planners/stores/silos';
 import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
 import { buildR1LookaheadNotePayload } from 'lib/planners/actions/notes';

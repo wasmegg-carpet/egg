@@ -5,4 +5,4 @@
  */
 
 export * from 'lib/planners/actions/executor';
-export * from './snapshot';
+export * from 'lib/planners/actions/snapshot';

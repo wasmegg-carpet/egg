@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { computeSnapshot } from '@/engine/compute';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
 import {
   absoluteSimTimeFor,
   boostTransitionsFrom,

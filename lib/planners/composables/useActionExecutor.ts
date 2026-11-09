@@ -9,7 +9,7 @@ import { computed } from 'vue';
 import type { Action, CalculationsSnapshot } from '@planner/types';
 import { useActionsStore } from '@planner/stores/actions';
 import { replayAction } from '../actions/replay';
-import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '@planner/lib/actions/snapshot';
+import { restoreFromSnapshot, computeCurrentSnapshot, computeDeltas } from '../actions/snapshot';
 import { confirmPastGroupEdit } from '@planner/lib/actions/plannerRules';
 
 export function useActionExecutor() {

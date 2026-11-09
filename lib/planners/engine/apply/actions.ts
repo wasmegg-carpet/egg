@@ -1,4 +1,5 @@
-import { fuelEarnings } from 'lib/planners/actions/fuelEarnings';
+import { applyPlannerAction, plannerStartFields } from '@planner/lib/actions/plannerRules';
+import { fuelEarnings } from '../../actions/fuelEarnings';
 import {
   SimulatedAction,
   ActionType,
@@ -14,9 +15,9 @@ import {
   StartAscensionPayload,
   ToggleSalePayload,
   FuelEgg,
-} from '@/types';
-import type { EngineState } from '../types';
-import { activeSlots } from '@/lib/artifacts/calculator';
+} from '@planner/types';
+import type { EngineState } from '@planner/engine/types';
+import { activeSlots } from '@planner/lib/artifacts/calculator';
 
 /**
  * Purely apply an action to the engine state.
@@ -25,10 +26,13 @@ export function applyAction(
   state: EngineState,
   action: { [T in ActionType]: { type: T; payload: ActionPayloadMap[T]; cost: number } }[ActionType]
 ): EngineState {
+  const plannerResult = applyPlannerAction(state, action);
+  if (plannerResult) return plannerResult;
+
   switch (action.type) {
     case 'start_ascension': {
       const payload = action.payload as StartAscensionPayload;
-      const newState = { ...state };
+      const newState = { ...state, ...plannerStartFields(state, payload) };
       if (payload.initialFarmState) {
         const farm = payload.initialFarmState;
         newState.researchLevels = { ...farm.commonResearches };
@@ -111,16 +115,24 @@ export function applyAction(
       const newFuelAmounts = { ...state.fuelTankAmounts };
       newFuelAmounts[payload.egg] = (newFuelAmounts[payload.egg] || 0) + payload.amount;
 
-      // Variable-speed fueling: apply bocks earned from the eggs shipped meanwhile
+      // Variable-speed fueling: apply shipped eggs and currency earned
+      const shippedEggs = payload.eggsShippedDuringFuel ?? 0;
+      const earned = fuelEarnings(payload);
+
+      const newEggsDelivered = shippedEggs > 0
+        ? { ...state.eggsDelivered, [payload.egg]: (state.eggsDelivered[payload.egg] || 0) + shippedEggs }
+        : state.eggsDelivered;
+
       return {
         ...state,
         fuelTankAmounts: newFuelAmounts,
-        bankValue: (state.bankValue || 0) + fuelEarnings(payload),
+        eggsDelivered: newEggsDelivered,
+        bankValue: (state.bankValue || 0) + earned,
       };
     }
 
     case 'remove_fuel': {
-      const payload = action.payload as import('@/types').RemoveFuelPayload;
+      const payload = action.payload as import('@planner/types').RemoveFuelPayload;
       const newFuelAmounts = { ...state.fuelTankAmounts };
       newFuelAmounts[payload.egg] = Math.max(0, (newFuelAmounts[payload.egg] || 0) - payload.amount);
       return { ...state, fuelTankAmounts: newFuelAmounts };
@@ -146,7 +158,7 @@ export function applyAction(
     }
 
     case 'equip_artifact_set': {
-      const payload = action.payload as import('@/types').EquipArtifactSetPayload;
+      const payload = action.payload as import('@planner/types').EquipArtifactSetPayload;
       const setName = payload.setName;
       const newLoadout = state.artifactSets[setName];
       const emptyLoadout = [
@@ -172,7 +184,7 @@ export function applyAction(
     }
 
     case 'update_artifact_set': {
-      const payload = action.payload as import('@/types').UpdateArtifactSetPayload;
+      const payload = action.payload as import('@planner/types').UpdateArtifactSetPayload;
       const setName = payload.setName;
       const newSets = { ...state.artifactSets };
       newSets[setName] = payload.newLoadout.map(slot => ({
@@ -193,15 +205,13 @@ export function applyAction(
     }
 
     case 'modify_bank': {
-      const payload = action.payload as import('@/types').ModifyBankPayload;
+      const payload = action.payload as import('@planner/types').ModifyBankPayload;
       const newBankValue = payload.mode === 'set' ? payload.amount : (state.bankValue || 0) + payload.amount;
       return { ...state, bankValue: newBankValue };
     }
 
     case 'wait_for_time':
-    case 'wait_for_population':
     case 'wait_for_full_habs':
-    case 'wait_for_cash':
     case 'wait_for_research_sale':
     case 'wait_for_research_sale_end':
     case 'wait_for_earnings_boost':
@@ -211,7 +221,7 @@ export function applyAction(
       return state;
 
     case 'toggle_earnings_boost': {
-      const payload = action.payload as import('@/types').ToggleEarningsBoostPayload;
+      const payload = action.payload as import('@planner/types').ToggleEarningsBoostPayload;
       return {
         ...state,
         earningsBoost: { active: payload.active, multiplier: payload.multiplier },

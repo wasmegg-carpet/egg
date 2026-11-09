@@ -1,4 +1,5 @@
-import type { EngineState, SimulationContext, SimulationResult } from './types';
+import { plannerComputedFields, plannerEarningsBonus } from '@planner/lib/actions/plannerRules';
+import type { EngineState, SimulationContext, SimulationResult } from '@planner/engine/types';
 import type {
   EggValueInput,
   HabCapacityInput,
@@ -6,22 +7,19 @@ import type {
   ShippingCapacityInput,
   EarningsInput,
   IHRInput,
-} from '@/types';
-import { calculateArtifactModifiers, activeSlots } from '@/lib/artifacts';
-import { totalAwayTime } from 'lib/planners/stores/silos';
-import { integrateRate } from 'lib/planners/engine/apply/math';
+} from '@planner/types';
+import { calculateArtifactModifiers, activeSlots } from '@planner/lib/artifacts';
+import { totalAwayTime } from '../stores/silos';
+import { integrateRate } from './apply/math';
 
-import { calculateEggValue } from '@/calculations/eggValue';
-import { calculateHabCapacity_Full as calculateHabCapacity } from 'lib/planners/calculations/habCapacity';
-import { calculateLayRate } from 'lib/planners/calculations/layRate';
-import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCapacity';
-import { calculateEffectiveLayRate } from 'lib/planners/calculations/effectiveLayRate';
-import { calculateEarnings } from '@/calculations/earnings';
-import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
-import { PROFILE } from '@/lib/profile';
-
-// Base egg value is always 1 for virtue eggs
-const BASE_EGG_VALUE = 1;
+import { calculateEggValue } from '@planner/calculations/eggValue';
+import { calculateHabCapacity_Full as calculateHabCapacity } from '../calculations/habCapacity';
+import { calculateLayRate } from '../calculations/layRate';
+import { calculateShippingCapacity } from '../calculations/shippingCapacity';
+import { calculateEffectiveLayRate } from '../calculations/effectiveLayRate';
+import { calculateEarnings } from '@planner/calculations/earnings';
+import { calculateIHR } from '../calculations/internalHatcheryRate';
+import { PROFILE } from '@planner/lib/profile';
 
 /**
  * Purely compute the full snapshot from engine state and context.
@@ -39,7 +37,7 @@ export function computeSnapshot(
 
   // 2. Egg Value
   const eggValueInput: EggValueInput = {
-    baseValue: BASE_EGG_VALUE,
+    baseValue: PROFILE.baseEggValue,
     researchLevels: state.researchLevels,
     artifactMultiplier: artifactMods.eggValue.totalMultiplier,
     artifactEffects: artifactMods.eggValue.effects,
@@ -81,7 +79,7 @@ export function computeSnapshot(
     population = habCapacityOutput.totalFinalCapacity;
     bankValue = state.bankValue || 0;
   } else if (options.freezePopulation) {
-    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no gems.
+    // Population and earnings are frozen (e.g. waiting with empty silos): no growth, no currency.
     population = state.population || 0;
     bankValue = state.bankValue || 0;
   } else {
@@ -135,7 +133,7 @@ export function computeSnapshot(
   const earningsInput: EarningsInput = {
     eggValue: eggValueOutput.finalValue,
     effectiveLayRate: elrOutput.effectiveLayRate,
-    te: state.te,
+    ...plannerEarningsBonus(state, epicResearchLevels, artifactMods),
     earningsMultiplier: colleggtibleModifiers.earnings,
     awayEarningsMultiplier: colleggtibleModifiers.awayEarnings,
     artifactAwayMultiplier: artifactMods.awayEarnings.totalMultiplier,
@@ -200,8 +198,7 @@ export function computeSnapshot(
     bankValue,
 
     // State (Pass through inputs for UI reconstruction)
-    currentEgg: state.currentEgg,
-    shiftCount: state.shiftCount,
+    ...plannerComputedFields(state),
     te: state.te,
     soulEggs: state.soulEggs,
     siloCount: state.siloCount,
@@ -213,7 +210,6 @@ export function computeSnapshot(
       extraEggs > 0
         ? { ...state.eggsDelivered, [state.currentEgg]: (state.eggsDelivered[state.currentEgg] || 0) + extraEggs }
         : state.eggsDelivered,
-    teEarned: state.teEarned,
     vehicles: state.vehicles,
     habIds: state.habIds,
     researchLevels: state.researchLevels,

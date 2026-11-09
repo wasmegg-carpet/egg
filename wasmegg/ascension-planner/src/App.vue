@@ -602,9 +602,9 @@ import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { useTablePrefetch } from '@/composables/useTablePrefetch';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
-import { restoreFromSnapshot } from '@/lib/actions/snapshot';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { restoreFromSnapshot } from 'lib/planners/actions/snapshot';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import type { Action, VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { getArtifact, getArtifactLoadoutFromBackup } from '@/lib/artifacts';
@@ -816,7 +816,7 @@ function scrollToTop() {
 
 function showUndoConfirmation(action: Action, options?: { skipConfirmation: boolean }) {
   const validationA = actionsStore.prepareUndo(action.id);
-  const validationB = actionsStore.prepareUndoUntilShift(action.id);
+  const validationB = actionsStore.prepareUndoToEnd(action.id);
 
   undoAction.value = action;
   undoDependentsA.value = validationA.dependentActions;

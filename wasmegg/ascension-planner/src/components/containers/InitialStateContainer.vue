@@ -81,8 +81,8 @@ const silosStore = useSilosStore();
 
 const startAction = computed(() => actionsStore.getStartAction() as Action<'start_ascension'> | undefined);
 
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 
 function updateInitialSnapshotAndRecalculate() {
   // Recompute the pure initial snapshot from base conditions (ignoring simulated head state)

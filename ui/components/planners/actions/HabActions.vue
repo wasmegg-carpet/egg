@@ -146,7 +146,7 @@ import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/pla
 import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from 'lib/planners/calculations/plannerHabPurchasePlan';
 import { calculateArtifactModifiers } from '@planner/lib/artifacts';
 import { absoluteSimTimeFor, getBoostAwareTimeToSave } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 
 const habCapacityStore = useHabCapacityStore();
 const initialStateStore = useInitialStateStore();

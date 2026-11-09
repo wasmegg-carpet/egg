@@ -11,7 +11,7 @@ import {
 import { applyShiftAction } from './helpers/actionHelpers';
 import { advanceTimeWithBoundaries } from './helpers/advanceTime';
 import { runWithEarningsEventDeferral, MULTI_LAYERING_ID } from './helpers/earningsEventDeferral';
-import { computeSnapshot } from '../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { calculateArtifactModifiers } from '../../lib/artifacts';
 import { contextDeliverySource } from '../loadout/resolve';
 import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateFinalSaleGapBuy } from 'lib/planners/calculations/smartBuyPreview';

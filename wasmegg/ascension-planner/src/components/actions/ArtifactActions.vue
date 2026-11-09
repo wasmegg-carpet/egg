@@ -178,7 +178,7 @@ import { getOptimalELRSet, isFunctionallyIdentical, calculateClothedTEForSet } f
 import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
 import { computeDependencies } from 'lib/planners/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
-import { getSimulationContext } from '@/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { formatNumber } from '@/lib/format';
 
 const initialStateStore = useInitialStateStore();

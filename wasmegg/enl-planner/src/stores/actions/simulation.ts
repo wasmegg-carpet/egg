@@ -14,7 +14,7 @@
 
 import type { Action, CalculationsSnapshot } from '@/types';
 import { createEmptySnapshot, generateActionId } from '@/types';
-import { getSimulationContext } from '@/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { simulateStep } from 'lib/planners/engine/simulate';
 import { type EngineState } from '@/engine/types';
 

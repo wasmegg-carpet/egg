@@ -1,5 +1,5 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
-import { computeSnapshot } from '../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction } from '../../engine/apply';
 import { createSimAction } from '@/types/actions/meta';
 import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';

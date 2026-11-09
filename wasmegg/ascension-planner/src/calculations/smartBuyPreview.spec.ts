@@ -4,7 +4,7 @@ import type { ResearchCostModifiers } from './commonResearch';
 import { deliveryRateScorer } from 'lib/planners/calculations/deliveryLevelSearch';
 import { rankResearchByELRImpact } from 'lib/planners/calculations/researchRanking';
 import { runDeliveryBuyLoop } from 'lib/planners/calculations/smartBuyPreview';
-import { computeSnapshot } from '@/engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';

@@ -24,8 +24,8 @@ import {
 } from './deliveryLevelSearch';
 import type { CalculationsSnapshot } from '@planner/types';
 import type { SimulationContext, EngineState } from '@planner/engine/types';
-import { createBaseEngineState } from '@planner/engine/adapter';
-import { computeSnapshot } from '@planner/engine/compute';
+import { createBaseEngineState } from '../engine/adapter';
+import { computeSnapshot } from '../engine/compute';
 import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@planner/engine/apply';
 import { isResearchSaleActive, getNextSaleEnd } from '../events';
 import { DEBUG_SALE_AWARE_BUY } from '../debugFlags';

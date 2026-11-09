@@ -270,7 +270,7 @@ const filteredGroupedActions = computed<GroupedItem[]>(() => {
   return groups
     .map(group => {
       if (group.type === 'group') {
-        const shiftStatus = actionsStore.getShiftReconciliationStatus(group.actions);
+        const shiftStatus = actionsStore.getGroupReconciliationStatus(group.actions);
 
         // If all internal actions of the shift are completed, hide it.
         if (shiftStatus === 'completed') return null;

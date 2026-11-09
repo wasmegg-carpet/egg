@@ -463,9 +463,9 @@ import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
-import { restoreFromSnapshot } from '@/lib/actions/snapshot';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { restoreFromSnapshot } from 'lib/planners/actions/snapshot';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import type { Action, FuelEgg } from '@/types';
 import {
   initStartFromScratch,

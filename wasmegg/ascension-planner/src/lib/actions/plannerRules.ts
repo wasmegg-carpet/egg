@@ -1,9 +1,15 @@
+type ArtifactModifiers = ReturnType<typeof calculateArtifactModifiers>;
+
 /**
  * The action rules only the ascension planner has: shifts and waiting for Truth Eggs. Shared planner
  * code calls these, and the enlightenment planner has its own versions.
  */
 
-import type { Action, CalculationsSnapshot, ShiftPayload, StartAscensionPayload, WaitForTEPayload, FuelEgg } from '@/types';
+import type { Action, CalculationsSnapshot, CurrentFarmState, ResearchLevels, ShiftPayload, StartAscensionPayload, VirtueEgg, WaitForTEPayload, FuelEgg } from '@/types';
+import type { EngineState } from '@/engine/types';
+import type { calculateArtifactModifiers } from '@/lib/artifacts';
+import { useAutoPlannerStore } from '@/stores/autoPlanner';
+import { useInitialStateStore } from '@/stores/initialState';
 import { VIRTUE_EGGS } from '@/types';
 import { solveForTime } from 'lib/planners/engine/apply/math';
 import { safeImport } from 'lib/planners/import';
@@ -107,4 +113,117 @@ export function plannerActionEgg(action: Action): FuelEgg | null {
 /** The icon for a planner-only action's row, if it is one. */
 export function plannerActionIconPath(type: string): string | null {
   return type === 'wait_for_te' ? 'egginc/egg_truth.png' : null;
+}
+
+/** What this planner's snapshots carry beyond the shared fields, read from the live stores. */
+export function plannerSnapshotFields() {
+  const planStore = usePlanStore();
+  const truthEggsStore = useTruthEggsStore();
+  return {
+    currentEgg: planStore.currentEgg,
+    shiftCount: planStore.shiftCount,
+    te: planStore.te,
+    eggsDelivered: { ...truthEggsStore.eggsDelivered },
+    teEarned: { ...truthEggsStore.teEarned },
+  };
+}
+
+/** Puts this planner's own snapshot fields back into the live stores. */
+export function restorePlannerSnapshot(snapshot: CalculationsSnapshot): void {
+  usePlanStore().$patch(state => {
+    state.currentEgg = snapshot.currentEgg;
+    state.shiftCount = snapshot.shiftCount;
+    state.te = snapshot.te;
+  });
+  useTruthEggsStore().$patch(state => {
+    if (snapshot.eggsDelivered) {
+      state.eggsDelivered = { ...snapshot.eggsDelivered };
+    }
+    if (snapshot.teEarned) {
+      state.teEarned = { ...snapshot.teEarned };
+    }
+  });
+}
+
+/** The state a start action sets that only this planner has. */
+export function plannerStartFields(state: EngineState, payload: StartAscensionPayload) {
+  return {
+    currentEgg: payload.initialEgg,
+    teEarned: { ...state.teEarned },
+    eggsDelivered: { ...state.eggsDelivered },
+  };
+}
+
+/** Applies a planner-only action to the engine state, or returns null if it isn't one. */
+export function applyPlannerAction(state: EngineState, action: { type: string; payload: unknown; cost: number }): EngineState | null {
+  if (action.type === 'shift') {
+    const payload = action.payload as ShiftPayload;
+    return {
+      ...state,
+      currentEgg: payload.toEgg,
+      shiftCount: payload.newShiftCount,
+      soulEggs: Math.max(0, state.soulEggs - action.cost),
+      bankValue: 0,
+      population: 1,
+    };
+  }
+  if (action.type === 'wait_for_te') {
+    const payload = action.payload as WaitForTEPayload;
+    const newEggsDelivered = { ...state.eggsDelivered };
+    newEggsDelivered[payload.egg] = (newEggsDelivered[payload.egg] || 0) + payload.eggsToLay;
+    return { ...state, eggsDelivered: newEggsDelivered };
+  }
+  return null;
+}
+
+/** The earnings input that depends on how this planner works out its bonus. */
+export function plannerEarningsBonus(state: EngineState, _epicResearchLevels: ResearchLevels, _artifactMods: ArtifactModifiers) {
+  return { te: state.te };
+}
+
+/** The computed snapshot fields only this planner has. */
+export function plannerComputedFields(state: EngineState) {
+  return { currentEgg: state.currentEgg, shiftCount: state.shiftCount, teEarned: state.teEarned };
+}
+
+/** The simulation context fields only this planner has. */
+export function plannerContextFields() {
+  return { deferForEarningsMode: useAutoPlannerStore().deferForEarningsMode };
+}
+
+/** This planner's engine state taken from a snapshot. Runs without Pinia in workers, so it can't use stores. */
+export function plannerStateFromSnapshot(snapshot: CalculationsSnapshot) {
+  return {
+    currentEgg: snapshot.currentEgg,
+    shiftCount: snapshot.shiftCount,
+    eggsDelivered: { ...snapshot.eggsDelivered },
+    teEarned: { ...snapshot.teEarned },
+  };
+}
+
+/** This planner's engine state before any snapshot exists. */
+export function plannerFreshState() {
+  const planStore = usePlanStore();
+  const initialStateStore = useInitialStateStore();
+  const farmEggType = initialStateStore.isContinuing ? initialStateStore.currentFarmState?.eggType : undefined;
+  return {
+    currentEgg: (farmEggType ? VIRTUE_EGGS[farmEggType - 50] : 'curiosity') as VirtueEgg,
+    shiftCount: planStore.initialShiftCount,
+    te: planStore.initialTE,
+    eggsDelivered: { ...initialStateStore.initialEggsDelivered },
+    teEarned: { ...initialStateStore.initialTeEarned },
+  };
+}
+
+/** Gives a start action being reset the egg this planner needs. */
+export function applyPlannerStartDefaults(startAction: Action<'start_ascension'>): void {
+  startAction.payload.initialEgg = startAction.payload.initialEgg || 'curiosity';
+}
+
+/** Points the plan at the egg of the farm being continued, returning that egg for event matching. */
+export function syncPlannerFarmEgg(farm: CurrentFarmState, startAction: Action<'start_ascension'> | undefined): string | undefined {
+  const egg = VIRTUE_EGGS[farm.eggType - 50];
+  if (startAction) startAction.payload.initialEgg = egg;
+  usePlanStore().setCurrentEgg(egg);
+  return egg;
 }

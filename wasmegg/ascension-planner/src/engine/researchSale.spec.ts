@@ -20,7 +20,7 @@ import {
 } from 'lib/planners/engine/researchSale';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { computeSnapshot } from './compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from './apply';
 import {
   getCommonResearches,
@@ -30,7 +30,7 @@ import {
 import { useResearchViews } from 'lib/planners/composables/useResearchViews';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 import { getExecutor } from 'lib/planners/actions/executor';
-import { createBaseEngineState, getSimulationContext } from './adapter';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { useToastStore } from 'lib/planners/stores/toast';

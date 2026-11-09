@@ -25,7 +25,7 @@
  */
 import { computeTierMilestoneChain, computeResearchMilestoneChain } from '../calculations/milestoneChain';
 import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '../calculations/smartBuyPreview';
-import { createBaseEngineState } from '@planner/engine/adapter';
+import { createBaseEngineState } from '../engine/adapter';
 import { sanitizeLongs } from '@planner/lib/artifacts/utils';
 import type { WorkerRequest, WorkerResponse } from './researchCalc.protocol';
 

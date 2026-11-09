@@ -1,7 +1,7 @@
 import { getDiscountedResearchPrice, type CommonResearch, type ResearchCostModifiers } from '@planner/calculations/commonResearch';
 import type { CalculationsSnapshot } from '@planner/types';
 import type { SimulationContext } from '@planner/engine/types';
-import { createBaseEngineState } from '@planner/engine/adapter';
+import { createBaseEngineState } from '../engine/adapter';
 import {
   applyAction,
   getTimeToSave,
@@ -9,7 +9,7 @@ import {
   boostTransitionsFrom,
   type EarningsRateTransition,
 } from '@planner/engine/apply';
-import { computeSnapshot } from '@planner/engine/compute';
+import { computeSnapshot } from '../engine/compute';
 import { createSimAction } from '@planner/types/actions/meta';
 import {
   getNextSaleStart,

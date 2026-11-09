@@ -1,14 +1,14 @@
-import type { EngineState, SimulationContext } from './types';
-import { CalculationsSnapshot, VIRTUE_EGGS, VirtueEgg } from '@/types';
-import { useInitialStateStore } from '@/stores/initialState';
-import { usePlanStore } from '@/stores/plan';
-import { useAutoPlannerStore } from '@/stores/autoPlanner';
-import { useSilosStore } from 'lib/planners/stores/silos';
-import { useFuelTankStore } from '@/stores/fuelTank';
-import { useActionsStore } from '@/stores/actions';
-import { restoreFromSnapshot } from '@/lib/actions/snapshot';
-import { activeSlots } from '@/lib/artifacts/calculator';
-import { getLocalTimestampInTimezone } from 'lib/planners/events';
+import type { EngineState, SimulationContext } from '@planner/engine/types';
+import type { CalculationsSnapshot } from '@planner/types';
+import { plannerContextFields, plannerFreshState, plannerStateFromSnapshot } from '@planner/lib/actions/plannerRules';
+import { useInitialStateStore } from '@planner/stores/initialState';
+import { usePlanStore } from '@planner/stores/plan';
+import { useSilosStore } from '../stores/silos';
+import { useFuelTankStore } from '@planner/stores/fuelTank';
+import { useActionsStore } from '@planner/stores/actions';
+import { restoreFromSnapshot } from '../actions/snapshot';
+import { activeSlots } from '@planner/lib/artifacts/calculator';
+import { getLocalTimestampInTimezone } from '../events';
 
 /**
  * Get the current simulation context from Pinia stores.
@@ -32,7 +32,7 @@ export function getSimulationContext(): SimulationContext {
     planStartOffset: useActionsStore().planStartOffset || 0,
     assumeDoubleEarnings: initialStateStore.assumeDoubleEarnings,
     rawBackup: initialStateStore.rawBackup || undefined,
-    deferForEarningsMode: useAutoPlannerStore().deferForEarningsMode,
+    ...plannerContextFields(),
   };
 }
 
@@ -50,8 +50,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
   // active Pinia app, even though this branch's return value never depends on any store.
   if (initialSnapshot) {
     return {
-      currentEgg: initialSnapshot.currentEgg,
-      shiftCount: initialSnapshot.shiftCount,
+      ...plannerStateFromSnapshot(initialSnapshot),
       te: initialSnapshot.te,
       soulEggs: initialSnapshot.soulEggs,
       vehicles: [...initialSnapshot.vehicles],
@@ -65,8 +64,6 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
         stones: [...slot.stones],
       })),
       fuelTankAmounts: { ...initialSnapshot.fuelTankAmounts },
-      eggsDelivered: { ...initialSnapshot.eggsDelivered },
-      teEarned: { ...initialSnapshot.teEarned },
       activeArtifactSet: initialSnapshot.activeArtifactSet,
       artifactSets: JSON.parse(JSON.stringify(initialSnapshot.artifactSets)),
       population: initialSnapshot.population,
@@ -86,11 +83,7 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
   // Fallback state
   return {
-    currentEgg: (isContinuing && initialStateStore.currentFarmState?.eggType
-      ? VIRTUE_EGGS[initialStateStore.currentFarmState.eggType - 50]
-      : 'curiosity') as VirtueEgg,
-    shiftCount: planStore.initialShiftCount,
-    te: planStore.initialTE,
+    ...plannerFreshState(),
     soulEggs: initialStateStore.soulEggs,
 
     vehicles: (isContinuing && initialStateStore.currentFarmState?.vehicles) || [{ vehicleId: 0, trainLength: 1 }],
@@ -110,8 +103,6 @@ export function createBaseEngineState(initialSnapshot?: CalculationsSnapshot | n
 
     // Progress state starts from what was in the backup
     fuelTankAmounts: { ...initialStateStore.initialFuelAmounts },
-    eggsDelivered: { ...initialStateStore.initialEggsDelivered },
-    teEarned: { ...initialStateStore.initialTeEarned },
     activeArtifactSet: initialStateStore.activeArtifactSet,
     artifactSets: JSON.parse(JSON.stringify(initialStateStore.artifactSets)),
 

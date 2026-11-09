@@ -83,7 +83,7 @@ import { usePlanStore } from '@planner/stores/plan';
 import { formatDuration, parseDuration, formatAbsoluteTime, formatNumber } from '@planner/lib/format';
 import { boostTransitionsFrom, calculateEarningsForTime } from 'lib/planners/engine/apply/math';
 import { absoluteSimTimeFor } from '@planner/engine/apply';
-import { getSimulationContext } from '@planner/engine/adapter';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { getNextTimeInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
 
