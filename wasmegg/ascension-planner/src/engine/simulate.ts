@@ -11,6 +11,7 @@ import {
 } from './apply';
 import { computeSnapshot } from './compute';
 import { withCalendarResearchSale } from './researchSale';
+import { withCalendarEarningsBoost } from 'lib/planners/engine/calendarEvents';
 import { computeDeltas } from '@/lib/actions/snapshot';
 import { yieldForOverlayPaint } from 'lib/planners/yieldForOverlayPaint';
 
@@ -74,6 +75,13 @@ export function simulate(
     });
 
     // 2. Compute full snapshot
+    // Set before computing the snapshot, whose earnings rate depends on it. A start action defines
+    // the plan's zero, so it's measured from its own time.
+    currentState = withCalendarEarningsBoost(
+      currentState,
+      context.ascensionStartTime,
+      action.type === 'start_ascension' ? currentState.lastStepTime : planStartOffset
+    );
     const computedSnapshot = computeSnapshot(currentState, context, {
       freezePopulation: action.type === 'wait_for_no_earnings',
       skipEpochConversion: true,
@@ -170,6 +178,13 @@ export async function simulateAsync(
       transitions,
     });
 
+    // Set before computing the snapshot, whose earnings rate depends on it. A start action defines
+    // the plan's zero, so it's measured from its own time.
+    currentState = withCalendarEarningsBoost(
+      currentState,
+      context.ascensionStartTime,
+      action.type === 'start_ascension' ? currentState.lastStepTime : planStartOffset
+    );
     const computedSnapshot = computeSnapshot(currentState, context, {
       freezePopulation: action.type === 'wait_for_no_earnings',
       skipEpochConversion: true,

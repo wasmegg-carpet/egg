@@ -25,6 +25,7 @@ import {
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext } from '@/engine/adapter';
 import { withCalendarResearchSale } from '@/engine/researchSale';
+import { withCalendarEarningsBoost } from 'lib/planners/engine/calendarEvents';
 import { type EngineState } from '@/engine/types';
 
 /**
@@ -74,6 +75,8 @@ export function calculateActionResult(
     skipEarnings: action.type === 'store_fuel',
     transitions: boostTransitionsFrom(prevSnapshot, absoluteSimTime),
   });
+
+  newState = withCalendarEarningsBoost(newState, context.ascensionStartTime, context.planStartOffset);
 
   const newSnapshot = withCalendarResearchSale(
     computeSnapshot(newState, context, {

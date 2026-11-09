@@ -554,6 +554,7 @@
       />
       <FloatingStats v-if="plannerTab === 'manual'" />
       <FloatingNotes v-if="plannerTab === 'manual'" />
+      <PlannerToast />
     </div>
   </div>
 </template>
@@ -582,6 +583,7 @@ import ContinuityDialog from '@/components/ContinuityDialog.vue';
 import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import FloatingStats from '@/components/FloatingStats.vue';
 import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
+import PlannerToast from 'ui/components/planners/PlannerToast.vue';
 import WarningDialog from 'ui/components/planners/WarningDialog.vue';
 import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
@@ -592,17 +594,14 @@ import AutomaticPlanner from '@/components/auto/AutomaticPlanner.vue';
 // (their names before the tabs were renamed).
 import TableBuilder from '@/components/chainFinder/ChainFinder.vue';
 import ChainFinder from '@/components/instantSearch/InstantSearch.vue';
-import { useSalesStore } from 'lib/planners/stores/sales';
 import { useInstantSearchStore } from '@/stores/instantSearch';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { readHandoff, searchWithoutHandoff } from '@/lib/instantSearch/autoPlannerHandoff';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useEventWaits } from '@/composables/useEventWaits';
 import { useTablePrefetch } from '@/composables/useTablePrefetch';
 import { usePersistence } from '@/composables/usePersistence';
 import { compactActionHistory } from '@/composables/useCompactActionHistory';
-import { generateActionId } from '@/types';
-import { computeDependencies } from '@/lib/actions/executor';
 import { restoreFromSnapshot } from '@/lib/actions/snapshot';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
@@ -632,12 +631,11 @@ const virtueStore = useVirtueStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
 const eventsStore = useEventsStore();
-const salesStore = useSalesStore();
 const chainFinderStore = useInstantSearchStore();
 const autoPlannerStore = useAutoPlannerStore();
 
 const notesStore = useNotesStore();
-const { prepareExecution, completeExecution } = useActionExecutor();
+const { toggleEarningsBoost: handleToggleEarningsEvent } = useEventWaits();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
 
 // The Chain Finder's tables, fetched in the background once a save is loaded (composables/
@@ -688,45 +686,6 @@ watch(
   },
   { immediate: true }
 );
-
-function handleToggleEarningsEvent() {
-  const beforeSnapshot = prepareExecution();
-  const currentlyActive = beforeSnapshot.earningsBoost.active;
-
-  // Find the multiplier from the event store if turning ON
-  let multiplier = 2;
-  if (!currentlyActive) {
-    const event = eventsStore.getActiveEvents(initialStateStore.isUltra).find(e => e.type === 'earnings-boost');
-    if (event) multiplier = event.multiplier;
-  } else {
-    multiplier = 1;
-  }
-
-  const payload = {
-    active: !currentlyActive,
-    multiplier,
-  };
-
-  // Update store state
-  salesStore.setEarningsBoost(payload.active, payload.multiplier);
-
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'toggle_earnings_boost',
-      payload,
-      cost: 0,
-      dependsOn: computeDependencies(
-        'toggle_earnings_boost',
-        payload,
-        actionsStore.actionsBeforeInsertion,
-        actionsStore.initialSnapshot.researchLevels
-      ),
-    },
-    beforeSnapshot
-  );
-}
 
 onMounted(async () => {
   eventsStore.fetchEvents();

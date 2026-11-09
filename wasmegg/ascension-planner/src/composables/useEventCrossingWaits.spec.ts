@@ -94,7 +94,7 @@ describe('2x earnings on purchases outside research', () => {
     setActivePinia(createPinia());
   });
 
-  test('saving across the start adds its wait and toggle, and takes the time shown', async () => {
+  test('saving across the start adds its wait, and takes the time shown', async () => {
     const probe = await startPlan(monday - 86400);
     const { habId, cost, flatWait } = habCostingSeconds(probe.currentSnapshot, 1800, 6 * 3600);
 
@@ -106,13 +106,13 @@ describe('2x earnings on purchases outside research', () => {
 
     await buyHab(habId, cost);
 
-    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost', 'toggle_earnings_boost', 'buy_hab']);
+    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost', 'buy_hab']);
     const purchase = store.actions[store.actions.length - 1];
     expect(purchase.endState.lastStepTime - startedAt).toBeCloseTo(shown, 0);
     expect(purchase.endState.earningsBoost.active).toBe(true);
   });
 
-  test('saving across the end adds its own named wait and toggle, and takes the time shown', async () => {
+  test('saving across the end adds its own named wait, and takes the time shown', async () => {
     const probe = await startPlan(tuesday + 3600);
     const { habId, cost, flatWait } = habCostingSeconds(probe.currentSnapshot, 1800, 6 * 3600);
 
@@ -123,7 +123,7 @@ describe('2x earnings on purchases outside research', () => {
 
     await buyHab(habId, cost);
 
-    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost_end', 'toggle_earnings_boost', 'buy_hab']);
+    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost_end', 'buy_hab']);
     const purchase = store.actions[store.actions.length - 1];
     expect(purchase.endState.lastStepTime - startedAt).toBeCloseTo(shown, 0);
     expect(purchase.endState.earningsBoost.active).toBe(false);
@@ -153,9 +153,7 @@ describe('2x earnings on purchases outside research', () => {
 
     expect(addedTypes(store)).toEqual([
       'wait_for_earnings_boost',
-      'toggle_earnings_boost',
       'wait_for_earnings_boost_end',
-      'toggle_earnings_boost',
       'wait_for_time',
     ]);
     const end = store.currentSnapshot;
@@ -178,7 +176,7 @@ describe('2x earnings on purchases outside research', () => {
     const { batch, insertWaitAcrossBoost } = useEventCrossingWaits();
     await batch(() => insertWaitAcrossBoost(7200, 'wait_for_no_earnings'));
 
-    expect(addedTypes(store)).toEqual(['wait_for_no_earnings', 'toggle_earnings_boost', 'wait_for_no_earnings']);
+    expect(addedTypes(store)).toEqual(['wait_for_no_earnings', 'wait_for_no_earnings']);
     const end = store.currentSnapshot;
     expect(end.lastStepTime - lastStepTime).toBeCloseTo(7200, 3);
     expect(end.earningsBoost.active).toBe(true);
@@ -210,7 +208,7 @@ describe('2x earnings on purchases outside research', () => {
   });
 
   test('multi-step plans count 2x only when given a start time', async () => {
-    const start = monday + 3600;
+    const start = monday - 300;
     const store = await startPlan(start);
     const snapshot = store.currentSnapshot;
     const context = getSimulationContext();
@@ -218,7 +216,7 @@ describe('2x earnings on purchases outside research', () => {
     const planHabs = (at?: number) =>
       simulateHabPurchases(snapshot, snapshot.habIds, HAB_MODS, false, HAB_MULTIPLIERS, seconds => seconds > 3600, at);
     const planSilos = (at?: number) => planSilosWithinBudget(snapshot, 1, 1e12, at);
-    // A Hyperloop is far out of reach for this farm, so scale earnings to land its wait inside the 2x day.
+    // A Hyperloop is far out of reach for this farm, so scale earnings to land its wait across the start of 2x.
     const earningMore = { ...snapshot, offlineEarnings: snapshot.offlineEarnings * 1e23 };
     const planVehicles = (at?: number) =>
       planMaxVehicles(snapshot.vehicles, 1, 1, VEHICLE_MODS, false, VEHICLE_MULTIPLIERS, earningMore, at);

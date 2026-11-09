@@ -27,6 +27,7 @@ import { useEventsStore } from 'lib/planners/stores/events';
 
 import { simulateAsync } from '@/engine/simulate';
 import { hasStaleResearchPurchasePrices, hasStaleResearchSaleFlags } from '@/engine/researchSale';
+import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
 import { computeSnapshot } from '@/engine/compute';
 import { getSimulationContext, createBaseEngineState, syncStoresToSnapshot } from '@/engine/adapter';
 import { computeDependencies } from '@/lib/actions/executor';
@@ -463,26 +464,16 @@ export const useActionsStore = defineStore('actions', {
       const initialSnapshot = computeSnapshot(createBaseEngineState(null), context);
       await this.setInitialSnapshot(initialSnapshot);
       if (applyEvents) {
-        this.pushRelevantEvents(true);
+        this.pushRelevantEvents();
       }
     },
 
-    pushRelevantEvents(includeGlobal = false) {
+    pushRelevantEvents() {
       const initialStateStore = useInitialStateStore();
       const eventsStore = useEventsStore();
       const activeEvents = eventsStore.getActiveEvents(initialStateStore.isUltra);
 
       for (const event of activeEvents) {
-        if (includeGlobal && event.type === 'earnings-boost' && !this.effectiveSnapshot.earningsBoost.active) {
-          this.pushAction({
-            id: generateActionId(),
-            type: 'toggle_earnings_boost',
-            timestamp: Date.now(),
-            cost: 0,
-            dependsOn: [],
-            payload: { active: true, multiplier: event.multiplier, eventId: event.id },
-          });
-        }
         const saleMap: Record<string, { type: 'research' | 'hab' | 'vehicle' }> = {
           'hab-sale': { type: 'hab' },
           'vehicle-sale': { type: 'vehicle' },
@@ -663,6 +654,7 @@ export const useActionsStore = defineStore('actions', {
       if (
         !skipRecalculate ||
         hasStaleResearchSaleFlags(this.actions, this.ascensionStartTime) ||
+        hasStaleEarningsBoostFlags(this.actions, this.ascensionStartTime) ||
         hasStaleResearchPurchasePrices(this.actions, getSimulationContext())
       ) {
         await this.recalculateFrom(0);

@@ -282,7 +282,7 @@ import type { SaleAwarePurchase } from '@/calculations/researchROI';
 import { formatDuration, formatNumber, formatGemPrice, formatAbsoluteTime } from '@/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useActionsStore } from '@/stores/actions';
-import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
+import { useEventWaits } from '@/composables/useEventWaits';
 import { useVirtueStore } from '@/stores/virtue';
 import { computeDependencies } from '@/lib/actions/executor';
 import { generateActionId, type Action } from '@/types';
@@ -325,7 +325,7 @@ import MilestoneTargetPicker from './MilestoneTargetPicker.vue';
 
 const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
-const { secondsUntilNextSale, secondsUntilSaleEnd, waitForNextSale, waitForSaleEnd } = useResearchSaleWaits();
+const { secondsUntilNextSale, secondsUntilSaleEnd, toggleResearchSale } = useEventWaits();
 const virtueStore = useVirtueStore();
 const {
   prepareExecution,
@@ -615,10 +615,10 @@ function absoluteSimTimeAt(lastStepTime: number): number {
  * (it's right there in that first call's own `crossings.boost`) but silently discarded, and the
  * second block's from-scratch window started only AFTER that boundary had already passed, so it
  * never got a another chance to find it. Merging both lists chronologically here fixes that: every
- * crossing — sale or boost, in whatever order they actually occur — gets its own wait+toggle action.
+ * crossing — sale or boost, in whatever order they actually occur — gets its own wait action.
  *
  * When a boundary genuinely is crossed, a `wait_for_research_sale`/`wait_for_earnings_boost`
- * (starting) or `wait_for_research_sale_end`/`wait_for_earnings_boost_end` (ending) action is inserted for exactly the calendar distance to that boundary, then the toggle. This
+ * (starting) or `wait_for_research_sale_end`/`wait_for_earnings_boost_end` (ending) action is inserted for exactly the calendar distance to that boundary. This
  * doesn't double-count time: the wait's duration is independent of price, and the purchase that
  * follows computes its own (correspondingly shorter) remaining wait from the bank/population the
  * wait action already advanced to. When no boundary is actually crossed, nothing is inserted at all.
@@ -700,7 +700,7 @@ function syncEventStateForItem(item: { research: CommonResearch }, checkRoiGate 
 
 /**
  * Carries the plan's clock the rest of the way to `targetDeadline` on its own, inserting whatever
- * wait+toggle actions the remaining sale/boost crossings between "wherever the buy loop stopped"
+ * wait actions the remaining sale/boost crossings between "wherever the buy loop stopped"
  * and the deadline need. `runSaleAwareBuyFlow`'s buy loop only advances time as a side effect of
  * `syncEventStateForItem` calls made right before each purchase — so if it stops because
  * `getNextCandidate()` ran out of qualifying research (rather than because the deadline was
@@ -1213,10 +1213,6 @@ async function handleToggleSale() {
   // Deactivate Auto Buy whenever a sale is toggled
   autoBuyState.value.alwaysOn = false;
 
-  if (isResearchSaleActive.value) {
-    await waitForSaleEnd();
-  } else {
-    await waitForNextSale();
-  }
+  await toggleResearchSale();
 }
 </script>
