@@ -3,32 +3,37 @@
     ref="displayRef"
     :has-data="store.hasData"
     :epic-research-levels="store.epicResearchLevels"
-    :te="store.truthEggs"
-    :prophecy-eggs="store.prophecyEggs"
     :ascension-date="planStore.ascensionDate"
     :ascension-time="planStore.ascensionTime"
     :ascension-timezone="planStore.ascensionTimezone"
     :tank-level="fuelTankStore.tankLevel"
     :fuel-amounts="store.initialFuelAmounts"
     :tank-capacity="fuelTankStore.tankCapacity"
-    :soul-eggs="store.soulEggs"
     :assume-double-earnings="store.assumeDoubleEarnings"
     :pro-permit="store.proPermit"
     :colleggtible-tiers="store.colleggtibleTiers"
     @set-epic-research-level="handleSetEpicResearchLevel"
-    @set-te="handleSetTE"
-    @set-prophecy-eggs="handleSetProphecyEggs"
     @set-ascension-date="handleSetAscensionDate"
     @set-ascension-time="handleSetAscensionTime"
     @set-ascension-timezone="handleSetAscensionTimezone"
     @apply-ascension-settings="handleApplyAscensionSettings"
     @set-tank-level="handleSetTankLevel"
     @set-fuel-amount="handleSetFuelAmount"
-    @set-soul-eggs="handleSetSoulEggs"
     @set-assume-double-earnings="handleSetAssumeDoubleEarnings"
     @set-pro-permit="handleSetProPermit"
     @set-colleggtible-tier="handleSetColleggtibleTier"
-  />
+  >
+    <template #settings-rows>
+      <EnlightenmentSettingsRows
+        :soul-eggs="store.soulEggs"
+        :prophecy-eggs="store.prophecyEggs"
+        :te="store.truthEggs"
+        @set-soul-eggs="handleSetSoulEggs"
+        @set-prophecy-eggs="handleSetProphecyEggs"
+        @set-te="handleSetTE"
+      />
+    </template>
+  </InitialStateDisplay>
 </template>
 
 <script setup lang="ts">
@@ -45,7 +50,8 @@ import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from 'lib/planners/stores/silos';
-import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
+import InitialStateDisplay from 'ui/components/planners/presenters/InitialStateDisplay.vue';
+import EnlightenmentSettingsRows from '@/components/presenters/EnlightenmentSettingsRows.vue';
 import type { FuelEgg } from '@/types';
 
 const store = useInitialStateStore();

@@ -2,13 +2,13 @@
   <div class="space-y-4">
     <!-- Plan Settings -->
     <div class="section-premium p-5 overflow-hidden">
-      <h3 class="style-guide-label mb-6">Plan Settings</h3>
+      <h3 class="style-guide-label mb-6">{{ PROFILE.planLabel }} Settings</h3>
 
       <div class="space-y-6">
-        <!-- Plan Start Time -->
+        <!-- Start Time -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:flex-wrap">
           <div>
-            <div class="text-sm font-bold text-slate-700">Plan Start</div>
+            <div class="text-sm font-bold text-slate-700">{{ PROFILE.planLabel }} Start</div>
             <div class="hidden md:block text-[10px] uppercase font-black text-slate-400 tracking-wider">When this journey begins</div>
           </div>
           <div class="flex flex-col md:flex-row md:items-center md:flex-wrap md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0">
@@ -27,71 +27,7 @@
           </div>
         </div>
 
-        <!-- Soul Eggs -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
-          <div>
-            <div class="flex items-center gap-1.5">
-              <div class="text-sm font-bold text-slate-700">Soul Eggs (SE)</div>
-              <img :src="iconURL('egginc/egg_soul.png', 32)" class="w-4 h-4 mb-0.5" alt="SE" />
-            </div>
-            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
-              Earning bonus on this farm
-            </div>
-          </div>
-          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-            <input
-              type="text"
-              :value="formatNumber(soulEggs, 3)"
-              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
-              @blur="handleSoulEggsChange(($event.target as HTMLInputElement).value)"
-              @keydown.enter="($event.target as HTMLInputElement).blur()"
-            />
-          </div>
-        </div>
-
-        <!-- Eggs of Prophecy -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
-          <div>
-            <div class="flex items-center gap-1.5">
-              <div class="text-sm font-bold text-slate-700">Eggs of Prophecy (PE)</div>
-              <img :src="iconURL('egginc/egg_of_prophecy.png', 32)" class="w-4 h-4 mb-0.5" alt="PE" />
-            </div>
-            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
-              Compound the Soul Egg bonus
-            </div>
-          </div>
-          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-            <input
-              type="number"
-              :value="prophecyEggs"
-              :min="0"
-              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
-              @change="$emit('set-prophecy-eggs', parseInt(($event.target as HTMLInputElement).value) || 0)"
-            />
-          </div>
-        </div>
-
-        <!-- Truth Eggs -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
-          <div>
-            <div class="flex items-center gap-1.5">
-              <div class="text-sm font-bold text-slate-700">Eggs of Truth (TE)</div>
-              <img :src="iconURL('egginc/egg_truth.png', 32)" class="w-4 h-4 mb-0.5" alt="TE" />
-            </div>
-            <div class="hidden sm:block text-[10px] uppercase font-black text-slate-400 tracking-wider">
-              Multiply IHR &amp; Earnings by 1.01^TE
-            </div>
-          </div>
-          <div class="flex items-center gap-2 w-full sm:w-auto mt-1 sm:mt-0">
-            <input
-              type="number"
-              :value="te"
-              :min="0"
-              class="input-premium w-full sm:w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
-              @change="$emit('set-te', parseInt(($event.target as HTMLInputElement).value) || 0)"
-            />
-          </div>
-        </div>
+        <slot name="settings-rows" />
 
         <!-- Assume Double Earnings -->
         <div
@@ -126,6 +62,8 @@
         <ProPermitToggle :model-value="proPermit" @update:model-value="$emit('set-pro-permit', $event)" />
       </div>
     </div>
+
+    <slot name="sections" />
 
     <!-- Fuel Tank (collapsible) -->
     <div class="section-premium overflow-hidden">
@@ -213,7 +151,7 @@
                 class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 group-hover:bg-white group-hover:shadow-sm transition-all"
               >
                 <img
-                  :src="iconURL(fuelEggIconPath(egg), 64)"
+                  :src="iconURL(PROFILE.fuelEggIconPath(egg), 64)"
                   class="w-full h-full object-contain drop-shadow-sm"
                   :alt="egg"
                 />
@@ -397,15 +335,15 @@
 </template>
 
 <script setup lang="ts">
+import { PROFILE } from '@planner/lib/profile';
 import { computed, ref, watch } from 'vue';
 import { iconURL } from 'lib';
 import { getResearchIconPath, getColleggtibleIconPath } from 'lib/planners/assets';
-import type { ResearchLevels, FuelEgg } from '@/types';
-import { FUEL_EGG_NAMES } from '@/types';
-import { fuelEggIconPath } from '@/lib/missions';
+import type { ResearchLevels, FuelEgg } from '@planner/types';
+import { FUEL_EGG_NAMES } from '@planner/types';
 import { epicResearchDefs } from 'lib/planners/epicResearch';
-import { TANK_CAPACITIES, FUEL_ORDER } from '@/stores/fuelTank';
-import { formatNumber, parseNumber, formatFullNumber } from '@/lib/format';
+import { TANK_CAPACITIES, FUEL_ORDER } from '@planner/stores/fuelTank';
+import { formatNumber, parseNumber, formatFullNumber } from '@planner/lib/format';
 import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
 import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
 import {
@@ -418,8 +356,6 @@ import {
 const props = defineProps<{
   hasData: boolean;
   epicResearchLevels: ResearchLevels;
-  te: number;
-  prophecyEggs: number;
   ascensionDate: string;
   ascensionTime: string;
   ascensionTimezone: string;
@@ -427,7 +363,6 @@ const props = defineProps<{
   fuelAmounts: Record<FuelEgg, number>;
   tankCapacity: number;
 
-  soulEggs: number;
   assumeDoubleEarnings: boolean;
   proPermit: boolean;
   colleggtibleTiers: import('lib/collegtibles').ColleggtibleTiers;
@@ -435,8 +370,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'set-epic-research-level': [researchId: string, level: number];
-  'set-te': [value: number];
-  'set-prophecy-eggs': [value: number];
   'set-ascension-date': [value: string];
   'set-ascension-time': [value: string];
   'set-ascension-timezone': [value: string];
@@ -444,13 +377,12 @@ const emit = defineEmits<{
   'set-tank-level': [level: number];
   'set-fuel-amount': [egg: FuelEgg, amount: number];
 
-  'set-soul-eggs': [count: number];
   'set-assume-double-earnings': [enabled: boolean];
   'set-pro-permit': [enabled: boolean];
   'set-colleggtible-tier': [id: string, tierIndex: number];
 }>();
 
-// Plan start local state for staged updates
+// Start time local state for staged updates
 const localAscensionDate = ref(props.ascensionDate);
 const localAscensionTime = ref(props.ascensionTime);
 const localAscensionTimezone = ref(props.ascensionTimezone);
@@ -482,7 +414,6 @@ const epicResearchExpanded = ref(false);
 const colleggtiblesExpanded = ref(false);
 const fuelTankExpanded = ref(false);
 
-
 // Total fuel in tank
 const totalFuel = computed(() => Object.values(props.fuelAmounts).reduce((sum, amt) => sum + amt, 0));
 
@@ -504,14 +435,6 @@ function handleFuelAmountChange(egg: FuelEgg, inputValue: string) {
   const parsed = parseNumber(inputValue);
   if (parsed !== null && !isNaN(parsed)) {
     emit('set-fuel-amount', egg, parsed);
-  }
-}
-
-// Handle soul eggs input change
-function handleSoulEggsChange(inputValue: string) {
-  const parsed = parseNumber(inputValue);
-  if (parsed !== null && !isNaN(parsed)) {
-    emit('set-soul-eggs', parsed);
   }
 }
 

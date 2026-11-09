@@ -3,49 +3,58 @@
     ref="displayRef"
     :has-data="store.hasData"
     :epic-research-levels="store.epicResearchLevels"
-    :artifact-loadout="store.artifactLoadout"
-    :initial-shift-count="planStore.initialShiftCount"
-    :initial-egg="startAction?.payload.initialEgg ?? 'curiosity'"
-    :te="planStore.te"
     :ascension-date="planStore.ascensionDate"
     :ascension-time="planStore.ascensionTime"
     :ascension-timezone="planStore.ascensionTimezone"
     :tank-level="fuelTankStore.tankLevel"
     :fuel-amounts="store.initialFuelAmounts"
     :tank-capacity="fuelTankStore.tankCapacity"
-    :eggs-delivered="store.initialEggsDelivered"
-    :te-earned="store.initialTeEarned"
-    :te-pending="store.initialTePending"
-    :total-te="initialTotalTe"
-    :soul-eggs="store.soulEggs"
     :assume-double-earnings="store.assumeDoubleEarnings"
     :pro-permit="store.proPermit"
-    :artifact-sets="store.artifactSets"
-    :active-artifact-set="store.activeArtifactSet"
     :colleggtible-tiers="store.colleggtibleTiers"
-    :clothed-te="earningsClothedTe"
     @set-epic-research-level="handleSetEpicResearchLevel"
-    @update:artifact-loadout="handleArtifactLoadout"
-    @set-initial-egg="handleSetInitialEgg"
-    @set-te="handleSetTE"
-    @set-initial-shift-count="handleSetInitialShiftCount"
     @set-ascension-date="handleSetAscensionDate"
     @set-ascension-time="handleSetAscensionTime"
     @set-ascension-timezone="handleSetAscensionTimezone"
     @apply-ascension-settings="handleApplyAscensionSettings"
     @set-tank-level="handleSetTankLevel"
     @set-fuel-amount="handleSetFuelAmount"
-    @set-eggs-delivered="handleSetEggsDelivered"
-    @set-te-earned="handleSetTEEarned"
-    @include-pending-te="handleIncludePendingTe"
-    @set-soul-eggs="handleSetSoulEggs"
     @set-assume-double-earnings="handleSetAssumeDoubleEarnings"
     @set-pro-permit="handleSetProPermit"
-    @save-current-to-set="handleSaveCurrentToSet"
-    @update-artifact-set="handleUpdateArtifactSet"
-    @set-active-artifact-set="handleSetActiveArtifactSet"
     @set-colleggtible-tier="handleSetColleggtibleTier"
-  />
+  >
+    <template #settings-rows>
+      <AscensionSettingsRows
+        :initial-egg="startAction?.payload.initialEgg ?? 'curiosity'"
+        :initial-shift-count="planStore.initialShiftCount"
+        :soul-eggs="store.soulEggs"
+        @set-initial-egg="handleSetInitialEgg"
+        @set-initial-shift-count="handleSetInitialShiftCount"
+        @set-soul-eggs="handleSetSoulEggs"
+      />
+    </template>
+    <template #sections>
+      <VirtueProgressSections
+        :has-data="store.hasData"
+        :pro-permit="store.proPermit"
+        :artifact-loadout="store.artifactLoadout"
+        :eggs-delivered="store.initialEggsDelivered"
+        :te-earned="store.initialTeEarned"
+        :te-pending="store.initialTePending"
+        :total-te="initialTotalTe"
+        :artifact-sets="store.artifactSets"
+        :active-artifact-set="store.activeArtifactSet"
+        :clothed-te="earningsClothedTe"
+        @update:artifact-loadout="handleArtifactLoadout"
+        @set-eggs-delivered="handleSetEggsDelivered"
+        @set-te-earned="handleSetTEEarned"
+        @include-pending-te="handleIncludePendingTe"
+        @save-current-to-set="handleSaveCurrentToSet"
+        @update-artifact-set="handleUpdateArtifactSet"
+        @set-active-artifact-set="handleSetActiveArtifactSet"
+      />
+    </template>
+  </InitialStateDisplay>
 </template>
 
 <script setup lang="ts">
@@ -63,7 +72,9 @@ import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
 import { useSilosStore } from 'lib/planners/stores/silos';
-import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
+import InitialStateDisplay from 'ui/components/planners/presenters/InitialStateDisplay.vue';
+import AscensionSettingsRows from '@/components/presenters/AscensionSettingsRows.vue';
+import VirtueProgressSections from '@/components/presenters/VirtueProgressSections.vue';
 import type { VirtueEgg, Action, ArtifactSetName } from '@/types';
 import { VIRTUE_EGGS } from '@/types';
 import type { EquippedArtifact } from '@/lib/artifacts';

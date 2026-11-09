@@ -65,6 +65,8 @@ export interface PlannerProfile {
   maxVehiclesRoiRoute: string;
   /** Whether a plan moves between eggs in shifts. */
   hasShifts: boolean;
+  /** What the start-of-plan settings are headed with. */
+  planLabel: string;
   /** Start of exported library file names. */
   planFilePrefix: string;
   /** The egg the Wait for Missions section is limited to, or null to always show it. */
