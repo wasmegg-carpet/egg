@@ -25,5 +25,6 @@
     "src/**/*.vue",
     "../ui/**/*.vue",
     "vite.config.ts"
-  ]
+  ],
+  "exclude": ["../ui/components/planners/**"]
 }
