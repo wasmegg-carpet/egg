@@ -585,7 +585,8 @@ import { computeSnapshot } from 'lib/planners/engine/compute';
 import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import type { Action, VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
-import { getArtifact, getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import { getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import { detectArtifactSet } from '@/lib/artifacts/detectSet';
 import {
   initStartFromScratch,
   initPlanFuture,
@@ -915,53 +916,6 @@ async function submitPlayerId(id: string) {
     error.value = e instanceof Error ? e.message : 'Failed to load player data';
     console.error('Error fetching player data:', e);
   }
-}
-
-/**
- * Try to determine which artifact set they have on based on stones.
- */
-function detectArtifactSet(loadout: import('@/lib/artifacts').EquippedArtifact[]): 'earnings' | 'elr' | null {
-  let totalSlots = 0;
-  const allStones: string[] = [];
-
-  for (const slot of loadout) {
-    if (slot.artifactId) {
-      const artifact = getArtifact(slot.artifactId);
-      if (artifact) {
-        totalSlots += artifact.slots;
-      }
-    }
-    for (const stoneId of slot.stones) {
-      if (stoneId) {
-        allStones.push(stoneId);
-      }
-    }
-  }
-
-  // 1. If their artifact set has at least 3 stone slots, we can try to determine which set it is
-  if (totalSlots < 3) {
-    return null;
-  }
-
-  // If no stones are equipped, we can't reliably determine the set
-  if (allStones.length === 0) {
-    return null;
-  }
-
-  const isLunar = (id: string) => id.startsWith('lunar-stone-');
-  const isELR = (id: string) => id.startsWith('quantum-stone-') || id.startsWith('tachyon-stone-');
-
-  // 2. If all the stones are lunar stones, it's the earnings set
-  if (allStones.every(isLunar)) {
-    return 'earnings';
-  }
-
-  // 3. If all the stones are either quantum or tachyon, it's the elr set
-  if (allStones.every(isELR)) {
-    return 'elr';
-  }
-
-  return null;
 }
 
 async function triggerQuickContinue() {

@@ -191,7 +191,7 @@
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                   </svg>
                   <span v-else class="w-2.5 flex-shrink-0" />
-                  Continue Asc.
+                  {{ continueButtonLabel }}
                 </button>
               </template>
             </div>
@@ -462,6 +462,7 @@ import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import ShiftSummary from './ShiftSummary.vue';
 import AutoLoadoutEditor from './AutoLoadoutEditor.vue';
 import { useInitialStateStore } from '@/stores/initialState';
+import { continueLabel } from '@/auto/buildStep';
 import { artifactSlotCount } from '@/lib/artifacts/calculator';
 import {
   cloneLoadoutInputs,
@@ -600,7 +601,7 @@ onBeforeUnmount(() => document.removeEventListener('click', handleClickOutside))
 const activeVariantKey = computed(() => props.activeVariantKey ?? 'continue');
 
 const activeVariantShortLabel = computed(() => {
-  if (activeVariantKey.value === 'continue') return 'Continue';
+  if (activeVariantKey.value === 'continue') return continueLabel(props.variants.continue?.summary.continueFromStep);
   return activeVariantKey.value.replace('-tier13', '+T13');
 });
 
@@ -622,10 +623,19 @@ const variantRows = computed(() => {
 });
 
 const continueAvailable = computed(() => !!props.variants.continue);
+const continueButtonLabel = computed(() =>
+  continueLabel(props.variants.continue?.summary.continueFromStep, 'Continue Asc.')
+);
 
 const continueDisabledTooltip = computed(() => {
   if (props.result3SkippedReason === 'startTimeTooFar') {
     return 'Start time must be within 1 hour of now to use Continue Ascension';
+  }
+  if (props.result3SkippedReason === 'notOnVirtueEgg') {
+    return 'Your farm is not on a virtue egg, so there is no ascension to continue';
+  }
+  if (props.result3SkippedReason === 'continueDeadlineTooEarly') {
+    return "The overridden end time is too early for the rest of your current build to finish";
   }
   return 'No farm backup loaded — upload a backup to use Continue Ascension';
 });
