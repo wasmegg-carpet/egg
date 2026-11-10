@@ -2,7 +2,7 @@
  * Common research tier and cost-multiplier helpers shared by the planners.
  */
 
-import { calculateCostMultiplier as calculateBaseCostMultiplier } from '../utils/pricing';
+import { applyDiscountCeil, calculateCostMultiplier as calculateBaseCostMultiplier } from '../utils/pricing';
 import type { Research, ResearchLevels } from '../types';
 import { allResearches } from '../../index';
 
@@ -179,4 +179,102 @@ export function purchasesNeededForTier(researchLevels: ResearchLevels, tier: num
   const requiredPurchases = TIER_UNLOCK_THRESHOLDS[tierIndex];
   const currentPurchases = calculatePurchasesUpToTier(researchLevels, tier - 1);
   return Math.max(0, requiredPurchases - currentPurchases);
+}
+
+/**
+ * The research price lookups for one planner, reading the price table its currency uses.
+ */
+export function createResearchPricing(priceField: 'virtue_prices' | 'prices') {
+  /**
+   * Get the base price for a research at a specific level (0-indexed).
+   * Returns the price to buy level (currentLevel + 1).
+   */
+  function getBaseResearchPrice(research: CommonResearch, currentLevel: number): number {
+    if (currentLevel >= research.levels) return Infinity;
+    if (currentLevel < 0) return research[priceField][0] || 0;
+    return research[priceField][currentLevel] || 0;
+  }
+
+  /**
+   * Get the discounted price for a research at a specific level.
+   */
+  function getDiscountedResearchPrice(
+    research: CommonResearch,
+    currentLevel: number,
+    modifiers: ResearchCostModifiers,
+    isActiveSale: boolean = false
+  ): number {
+    const basePrice = getBaseResearchPrice(research, currentLevel);
+    if (!isFinite(basePrice)) return Infinity;
+    return applyDiscountCeil(basePrice, calculateCostMultiplier(modifiers, isActiveSale));
+  }
+
+  /**
+   * Calculate total cost to max out a research from current level.
+   */
+  function getTotalCostToMax(
+    research: CommonResearch,
+    currentLevel: number,
+    modifiers: ResearchCostModifiers,
+    isActiveSale: boolean = false
+  ): number {
+    let total = 0;
+    const multiplier = calculateCostMultiplier(modifiers, isActiveSale);
+
+    for (let level = currentLevel; level < research.levels; level++) {
+      const basePrice = research[priceField][level] || 0;
+      total += applyDiscountCeil(basePrice, multiplier);
+    }
+
+    return total;
+  }
+
+  /**
+   * Calculate total cost to max out an entire tier.
+   */
+  function getTotalCostToMaxTier(
+    tier: number,
+    researchLevels: ResearchLevels,
+    modifiers: ResearchCostModifiers,
+    isActiveSale: boolean = false
+  ): number {
+    const tierResearches = researchByTier.get(tier) || [];
+    let total = 0;
+
+    for (const research of tierResearches) {
+      const currentLevel = researchLevels[research.id] || 0;
+      total += getTotalCostToMax(research, currentLevel, modifiers, isActiveSale);
+    }
+
+    return total;
+  }
+
+  function getTierSummary(
+    tier: number,
+    researchLevels: ResearchLevels,
+    modifiers: ResearchCostModifiers,
+    isActiveSale: boolean = false
+  ): TierSummary {
+    const tierResearches = researchByTier.get(tier) || [];
+
+    let totalLevels = 0;
+    let purchasedLevels = 0;
+
+    for (const research of tierResearches) {
+      totalLevels += research.levels;
+      purchasedLevels += researchLevels[research.id] || 0;
+    }
+
+    return {
+      tier,
+      totalResearches: tierResearches.length,
+      totalLevels,
+      purchasedLevels,
+      isUnlocked: isTierUnlocked(researchLevels, tier),
+      purchasesNeeded: purchasesNeededForTier(researchLevels, tier),
+      costToMax: getTotalCostToMaxTier(tier, researchLevels, modifiers, isActiveSale),
+    };
+  }
+
+  return { getBaseResearchPrice, getDiscountedResearchPrice, getTotalCostToMax, getTotalCostToMaxTier, getTierSummary };
 }

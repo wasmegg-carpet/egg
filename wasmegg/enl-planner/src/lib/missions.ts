@@ -38,6 +38,8 @@ export interface ShipInfo {
   name: string;
   displayName: string;
   iconPath: string;
+  /** Bocks to fund the ship ("Cost to Fund" on the Egg Inc wiki's Spaceships page). */
+  price: number;
   isFTL: boolean;
 }
 
@@ -46,61 +48,71 @@ export const SHIP_INFO: Record<Spaceship, ShipInfo> = {
     name: 'Chicken One',
     displayName: 'Chicken One',
     iconPath: 'egginc/afx_ship_chicken_1.png',
+    price: 7.2e9,
     isFTL: false,
   },
   [Spaceship.CHICKEN_NINE]: {
     name: 'Chicken Nine',
     displayName: 'Chicken Nine',
     iconPath: 'egginc/afx_ship_chicken_9.png',
+    price: 130e12,
     isFTL: false,
   },
   [Spaceship.CHICKEN_HEAVY]: {
     name: 'Chicken Heavy',
     displayName: 'Chicken Heavy',
     iconPath: 'egginc/afx_ship_chicken_heavy.png',
+    price: 2.1e18,
     isFTL: false,
   },
-  [Spaceship.BCR]: { name: 'BCR', displayName: 'BCR', iconPath: 'egginc/afx_ship_bcr.png', isFTL: false },
+  [Spaceship.BCR]: { name: 'BCR', displayName: 'BCR', iconPath: 'egginc/afx_ship_bcr.png', price: 32e21, isFTL: false },
   [Spaceship.MILLENIUM_CHICKEN]: {
     name: 'Quintillion',
     displayName: 'Quintillion',
     iconPath: 'egginc/afx_ship_millenium_chicken.png',
+    price: 3.9e24,
     isFTL: true,
   },
   [Spaceship.CORELLIHEN_CORVETTE]: {
     name: 'Corvette',
     displayName: 'Corvette',
     iconPath: 'egginc/afx_ship_corellihen_corvette.png',
+    price: 4.9e27,
     isFTL: true,
   },
   [Spaceship.GALEGGTICA]: {
     name: 'Galeggtica',
     displayName: 'Galeggtica',
     iconPath: 'egginc/afx_ship_galeggtica.png',
+    price: 5.7e30,
     isFTL: true,
   },
   [Spaceship.CHICKFIANT]: {
     name: 'Defihent',
     displayName: 'Defihent',
     iconPath: 'egginc/afx_ship_defihent.png',
+    price: 6.5e33,
     isFTL: true,
   },
   [Spaceship.VOYEGGER]: {
     name: 'Voyegger',
     displayName: 'Voyegger',
     iconPath: 'egginc/afx_ship_voyegger.png',
+    price: 65e36,
     isFTL: true,
   },
   [Spaceship.HENERPRISE]: {
     name: 'Henerprise',
     displayName: 'Henerprise',
     iconPath: 'egginc/afx_ship_henerprise.png',
+    price: 2.5e42,
     isFTL: true,
   },
   [Spaceship.ATREGGIES]: {
     name: 'Henliner',
     displayName: 'Henliner',
     iconPath: 'egginc/afx_ship_atreggies.png',
+    price: 15e45,
     isFTL: true,
   },
 };

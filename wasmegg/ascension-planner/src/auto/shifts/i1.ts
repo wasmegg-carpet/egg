@@ -1,7 +1,7 @@
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { applyShiftIfNeeded } from './helpers/actionHelpers';
 import { runHabPurchasePlan } from './helpers/habs';
-import { CHICKEN_UNIVERSE_ID } from '../../calculations/habPurchasePlan';
+import { CHICKEN_UNIVERSE_ID } from 'lib/planners/calculations/plannerHabPurchasePlan';
 
 export const I1_TIME_LIMIT_SECONDS = 4 * 3600;
 

@@ -9,6 +9,7 @@ import type { ei } from 'lib';
 import { useInitialStateStore } from '@/stores/initialState';
 import { TE_BREAKPOINTS } from '@/lib/truthEggs';
 import { readCurrentAscension } from './currentAscension';
+import { simulateContinueBuilds } from './continueBuilds';
 import { epicResearchDefs } from 'lib/planners/epicResearch';
 
 const BACKUP_TIME = 1_792_470_300; // Mon 19 Oct 2026, 11:25 PM Central
@@ -90,6 +91,36 @@ describe('readCurrentAscension', () => {
     b.game!.epicResearch = epicResearchDefs.map(r => ({ id: r.id, level: r.maxLevel }));
     const withEpic = readCurrentAscension(b, now)!.elr;
     expect(withEpic).toBeGreaterThan(without * 1.5);
+  });
+
+  it('continues a farm part-way through its build as the rest of that build, one build per C3 variant', () => {
+    const now = BACKUP_TIME + 3600;
+    const b0 = backup();
+    b0.game!.epicResearch = epicResearchDefs.map(r => ({ id: r.id, level: r.maxLevel }));
+    const c = readCurrentAscension(b0, now)!;
+    // On integrity, no delivery gear: I1.
+    expect(c.buildStep).toBe('I1');
+    expect(c.continueBuild?.step).toBe('I1');
+    const builds = simulateContinueBuilds(JSON.parse(JSON.stringify(c.continueBuild)));
+    expect(builds.length).toBeGreaterThan(0);
+    for (const b of builds) {
+      expect(b.sales).toBeGreaterThanOrEqual(1);
+      expect(b.waitStart).toBeGreaterThan(0);
+      expect(b.saleEnd).toBeGreaterThan(0);
+      expect(b.peakELR).toBeGreaterThan(c.elr);
+      // The build lays on from the caught-up counts.
+      b.delivered.forEach((d, i) => expect(d).toBeGreaterThanOrEqual(c.delivered[i]));
+    }
+    // Laying on until a later prestige is still at the farm's own rate.
+    expect(c.build.peakELR).toBe(c.elr);
+  }, 120000);
+
+  it('continues a finished build at the farm rate', () => {
+    const b = backup();
+    b.farms![0].eggType = 52; // humility
+    const c = readCurrentAscension(b, BACKUP_TIME + 3600)!;
+    expect(c.buildStep).toBeNull();
+    expect(c.continueBuild).toBeNull();
   });
 
   it('is null without a virtue farm', () => {

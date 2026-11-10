@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { EngineState } from '@/engine/types';
 import { useInitialStateStore } from '@/stores/initialState';
 import { optimizeOfflineEarnings, optimizeIHR } from './optimizeArtifacts';
@@ -81,5 +81,5 @@ describe('max offline earnings loadout', () => {
     expect(wide.ok && wide.offlineEarnings).toBeCloseTo(result.offlineEarnings, -1);
     // The other slots still earn: well above an IHR-only set.
     expect(result.offlineEarnings).toBeGreaterThan(offline(state, [chalice!]).offlineEarnings * 100);
-  });
+  }, 20000); // Runs the search twice, once with a very wide beam, which takes about 5 seconds.
 });

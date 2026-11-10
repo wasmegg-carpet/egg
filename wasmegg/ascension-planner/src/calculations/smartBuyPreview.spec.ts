@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { getCommonResearches, getDiscountedVirtuePrice, getResearchById } from './commonResearch';
+import { getCommonResearches, getDiscountedResearchPrice, getResearchById } from './commonResearch';
 import type { ResearchCostModifiers } from './commonResearch';
-import { deliveryRateScorer } from './deliveryLevelSearch';
-import { rankResearchByELRImpact } from './researchRanking';
-import { runDeliveryBuyLoop } from './smartBuyPreview';
-import { computeSnapshot } from '@/engine/compute';
+import { deliveryRateScorer } from 'lib/planners/calculations/deliveryLevelSearch';
+import { rankResearchByELRImpact } from 'lib/planners/calculations/researchRanking';
+import { runDeliveryBuyLoop } from 'lib/planners/calculations/smartBuyPreview';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
@@ -12,8 +12,8 @@ import { getNextSaleEnd, getNextSaleStart } from 'lib/planners/events';
 
 // Lets one test script the ranking; every other test runs the real one.
 const ranking = vi.hoisted(() => ({ override: null as null | (() => unknown[]) }));
-vi.mock('./researchRanking', async importOriginal => {
-  const actual = await importOriginal<typeof import('./researchRanking')>();
+vi.mock('lib/planners/calculations/researchRanking', async importOriginal => {
+  const actual = await importOriginal<typeof import('lib/planners/calculations/researchRanking')>();
   return {
     ...actual,
     rankResearchByELRImpact: (...args: Parameters<typeof actual.rankResearchByELRImpact>) =>
@@ -55,10 +55,10 @@ function multiLevelScenario() {
   // Scales prices so the first level takes an hour to save for, instead of a tiny fraction of a
   // second against a maxed account's earnings.
   const unitMods: ResearchCostModifiers = { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 };
-  const unitSeconds = getTimeToSave(getDiscountedVirtuePrice(research, level, unitMods, true), snapshot, []);
+  const unitSeconds = getTimeToSave(getDiscountedResearchPrice(research, level, unitMods, true), snapshot, []);
   const mods = { ...unitMods, researchCostMultiplier: 3600 / unitSeconds };
 
-  const levelSeconds = (n: number) => getTimeToSave(getDiscountedVirtuePrice(research, level + n, mods, true), snapshot, []);
+  const levelSeconds = (n: number) => getTimeToSave(getDiscountedResearchPrice(research, level + n, mods, true), snapshot, []);
   return { researchId, researchLevels, snapshot, level, mods, levelSeconds };
 }
 
@@ -246,7 +246,7 @@ describe('delivery research that helps a little alone and far more with another 
     const snapshot = snapshotFor(researchLevels);
     const research = getResearchById('hyper_portalling')!;
     const unitMods: ResearchCostModifiers = { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 };
-    const unitSeconds = getTimeToSave(getDiscountedVirtuePrice(research, 3, unitMods, true), snapshot, []);
+    const unitSeconds = getTimeToSave(getDiscountedResearchPrice(research, 3, unitMods, true), snapshot, []);
     const mods = { ...unitMods, researchCostMultiplier: (14 * 3600) / unitSeconds };
     return { researchLevels, snapshot, mods };
   }
@@ -308,7 +308,7 @@ describe('delivery research that helps a little alone and far more with another 
       const level = researchLevels[r.id];
       const hoursFor = (gems: number) => getTimeToSave(gems, noBank, transitions) / 3600;
       const hppFor = (gems: number, impact: number) => (impact > 0 ? hoursFor(gems) / (impact * 100) : Infinity);
-      const priceOf = (id: string, at: number) => getDiscountedVirtuePrice(getResearchById(id)!, at, mods, true);
+      const priceOf = (id: string, at: number) => getDiscountedResearchPrice(getResearchById(id)!, at, mods, true);
       let gems = 0;
       let best = Infinity;
       for (let n = 1; level + n <= r.levels; n++) {

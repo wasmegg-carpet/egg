@@ -84,6 +84,10 @@ export interface FindOptions {
    *  leg to each stop is whichever ends sooner of continuing it (from `start`) and prestiging
    *  (`firstLegOptions`). Without it, the first leg is always a prestige. */
   cont?: BuildParams | null;
+  /** The builds continuing the ascension in progress can take (`CurrentAscension.contBuilds`): the
+   *  rest of a part-done build, one per C3 variant, the fastest to each stop kept. `cont` alone when
+   *  left out. `cont` is still the farm laying at its own rate, for a first prestige that waits. */
+  contBuilds?: BuildParams[];
   /** The egg the farm in progress is on (EGG_ORDER index): a first prestige that waits credits its
    *  laying there. */
   contEgg?: number;
@@ -622,7 +626,8 @@ export function firstLegOptions(table: BuildLookup, o: FindOptions & { cont: Bui
     freshAt !== o.start && nextAllowed(o.start, o.avoid) === o.start ? startInSale(table, te, o.start) : null;
   const lateFresh = late ? late.builds.map(b => rebase(b, te, delivered)) : [];
   const lateSweeps = lateFresh.map(b => sweepTails(b, o.final, late!.lateBy, te + 1));
-  const contSweep = sweepTails(o.cont, o.final, 0, te + 1);
+  const contBuilds = o.contBuilds?.length ? o.contBuilds : [o.cont];
+  const contSweeps = contBuilds.map(b => sweepTails(b, o.final, 0, te + 1));
 
   const out: FirstLeg[] = [];
   for (let target = te + 1; target <= o.final; target++) {
@@ -659,14 +664,14 @@ export function firstLegOptions(table: BuildLookup, o: FindOptions & { cont: Bui
     if (now) add(now.sweep, now.i, o.start, false, now.build, te, delivered);
     // The sooner prestige: on the hour, or at once inside the sale.
     const f = options.reduce<FirstLeg | null>((a, x) => (!a || x.end < a.end ? x : a), null);
-    const ci = target - contSweep.from;
-    const contSeconds = ci >= 0 && ci < contSweep.seconds.length ? contSweep.seconds[ci] : NaN;
+    const cont = fastest(contSweeps, contBuilds, target);
+    const contSeconds = cont ? cont.sweep.seconds[cont.i] : NaN;
     let c: FirstLeg | null = null;
     // Where the route can end: the target, or by a date anything reached in time.
     const routeEnd = target === o.final || (o.deadline !== undefined && o.start + contSeconds <= o.deadline);
-    if (contSeconds <= CONTINUE_MAX_SECONDS || (routeEnd && Number.isFinite(contSeconds))) {
+    if (cont && (contSeconds <= CONTINUE_MAX_SECONDS || (routeEnd && Number.isFinite(contSeconds)))) {
       const before = options.length;
-      add(contSweep, ci, o.start, true, o.cont, te, delivered);
+      add(cont.sweep, cont.i, o.start, true, cont.build, te, delivered);
       c = options[before];
     }
     if (f) out.push(f);

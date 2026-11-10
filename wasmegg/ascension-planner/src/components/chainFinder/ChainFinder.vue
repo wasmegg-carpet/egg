@@ -32,13 +32,17 @@
       Simulates every hour of the week for each start TE on a maxed account with this delivery set, then downloads
       the table as a .bin file.
     </p>
+    <ExistingTablePanel class="mb-4" />
     <TableBuildPanel />
+    <TableSummary class="mt-8" />
   </div>
 </template>
 
 <script setup lang="ts">
 import DeliveryArtifactPicker from './DeliveryArtifactPicker.vue';
 import TableBuildPanel from './TableBuildPanel.vue';
+import ExistingTablePanel from './ExistingTablePanel.vue';
+import TableSummary from './TableSummary.vue';
 import StandardPermitWarning from '@/components/StandardPermitWarning.vue';
 import { useChainFinderStore } from '@/stores/chainFinder';
 

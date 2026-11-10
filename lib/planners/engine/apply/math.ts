@@ -48,7 +48,7 @@ const BOOST_TRANSITION_HORIZON_SECONDS = 3 * 365 * 86400;
  * for the OPPOSITE of the snapshot's current active state — see `calculateEarningsForTime`'s and
  * `getTimeToSave`'s `rateFor` for why relying on the snapshot field there is unsafe.
  */
-const EARNINGS_BOOST_MULTIPLIER = 2;
+export const EARNINGS_BOOST_MULTIPLIER = 2;
 
 /**
  * Builds the earnings-rate transitions needed for a `getTimeToSave`/`calculateEarningsForTime`/

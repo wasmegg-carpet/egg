@@ -162,6 +162,11 @@ export function formatMultiplier(value: number, asPercent: boolean = false): str
   return value.toFixed(2) + 'x';
 }
 
+/** Formats a price in the planner's currency (no currency name). */
+export function formatPrice(price: number): string {
+  return formatNumber(price, price < 1000 ? 0 : 3);
+}
+
 /**
  * Format a duration in seconds to human-readable form.
  *

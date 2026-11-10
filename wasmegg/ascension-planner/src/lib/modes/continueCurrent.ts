@@ -17,13 +17,13 @@
  */
 
 import { resetAllStores } from './reset';
-import { fetchPlayerBackup } from './fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { loadAndSyncBackup, catchUpFarmState } from './utils';
 import { useActionsStore } from '@/stores/actions';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { usePlanStore } from '@/stores/plan';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 
 export async function initContinueCurrent(
   playerId: string,
@@ -41,9 +41,9 @@ export async function initContinueCurrent(
   const { teEarnedPerEgg } = loadAndSyncBackup(playerId, backup, mode);
 
   // 4. Continue-specific virtue store setup
-  const virtueStore = useVirtueStore();
-  virtueStore.resetToCurrentDateTime();
-  virtueStore.setBankValue(0); // Will be overridden by continueFromBackup
+  const planStore = usePlanStore();
+  planStore.resetToCurrentDateTime();
+  planStore.setBankValue(0); // Will be overridden by continueFromBackup
 
   // 5. Compute a catch-up snapshot and sync farm state
   //    (backup may be hours old — simulate time passage for egg delivery)

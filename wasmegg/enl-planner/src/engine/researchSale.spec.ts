@@ -1,7 +1,9 @@
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useInitialStateStore } from '@/stores/initialState';
 import {
+  getNextEarningsBoostEnd,
   getNextEarningsBoostStart,
   getNextSaleEnd,
   getNextSaleStart,
@@ -16,21 +18,23 @@ import {
   researchCostModifiersAt,
   researchPurchaseAt,
   eventCrossingsForPurchase,
-} from './researchSale';
+} from 'lib/planners/engine/researchSale';
 import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
-import { computeSnapshot } from './compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from './apply';
 import {
   getCommonResearches,
   getDiscountedResearchPrice,
   type CommonResearch,
 } from '@/calculations/commonResearch';
-import { useResearchViews } from '@/composables/useResearchViews';
-import { useEventCrossingWaits } from '@/composables/useEventCrossingWaits';
-import { getExecutor } from '@/lib/actions/executor';
-import { createBaseEngineState, getSimulationContext } from './adapter';
-import { useResearchSaleWaits } from '@/composables/useResearchSaleWaits';
+import { useResearchViews } from 'lib/planners/composables/useResearchViews';
+import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
+import { getExecutor } from 'lib/planners/actions/executor';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
+import { hasStaleEarningsBoostFlags } from 'lib/planners/engine/calendarEvents';
+import { useToastStore } from 'lib/planners/stores/toast';
 import { generateActionId } from '@/types';
 import type { Action } from '@/types';
 
@@ -73,7 +77,7 @@ describe('the planner timeline', () => {
     return actionsStore;
   }
 
-  function wait(type: 'wait_for_time' | 'wait_for_research_sale', totalTimeSeconds: number) {
+  function wait(type: 'wait_for_time' | 'wait_for_research_sale' | 'wait_for_earnings_boost', totalTimeSeconds: number) {
     return {
       id: generateActionId(),
       timestamp: Date.now(),
@@ -106,14 +110,14 @@ describe('the planner timeline', () => {
 
   test('turning the toggle on advances to the sale start, and off to the sale end', async () => {
     const store = await startPlan('2026-11-01', '12:00'); // Sunday, so 2x Earnings falls in between
-    const { waitForNextSale, waitForSaleEnd } = useResearchSaleWaits();
+    const { waitForNextSale, waitForSaleEnd } = useEventWaits();
     const expectedStart = getNextSaleStart(absoluteNow(store));
 
     await waitForNextSale();
     expect(absoluteNow(store)).toBeCloseTo(expectedStart, 3);
     expect(store.currentSnapshot.activeSales.research).toBe(true);
     expect(store.actions.map(a => a.type)).toEqual(
-      expect.arrayContaining(['wait_for_earnings_boost', 'toggle_earnings_boost', 'wait_for_research_sale'])
+      expect.arrayContaining(['wait_for_earnings_boost', 'wait_for_earnings_boost_end', 'wait_for_research_sale'])
     );
     expect(store.currentSnapshot.earningsBoost.active).toBe(false);
 
@@ -121,6 +125,54 @@ describe('the planner timeline', () => {
     expect(absoluteNow(store)).toBeCloseTo(getNextSaleEnd(expectedStart), 3);
     expect(store.currentSnapshot.activeSales.research).toBe(false);
     expect(store.actions.every(a => a.type !== 'toggle_sale')).toBe(true);
+  });
+
+  test('2x earnings follows the calendar, whatever a stored toggle says', async () => {
+    const store = await startPlan('2026-11-01', '12:00'); // Sunday
+    store.pushAction({
+      id: generateActionId(),
+      timestamp: Date.now(),
+      type: 'toggle_earnings_boost',
+      payload: { active: true, multiplier: 2 },
+      cost: 0,
+      dependsOn: [],
+    } as never);
+    expect(store.currentSnapshot.earningsBoost).toEqual({ active: false, multiplier: 1 });
+
+    const toStart = getNextEarningsBoostStart(absoluteNow(store)) - absoluteNow(store);
+    store.pushAction(wait('wait_for_earnings_boost', toStart));
+    expect(store.currentSnapshot.earningsBoost).toEqual({ active: true, multiplier: 2 });
+  });
+
+  test('a plan saved with a 2x flag off the calendar is stale', async () => {
+    const store = await startPlan('2026-11-01', '12:00'); // Sunday
+    expect(hasStaleEarningsBoostFlags(store.actions, getSimulationContext().ascensionStartTime)).toBe(false);
+    const stale = store.actions.map(a => ({ ...a, endState: { ...a.endState, earningsBoost: { active: true, multiplier: 2 } } }));
+    expect(hasStaleEarningsBoostFlags(stale, getSimulationContext().ascensionStartTime)).toBe(true);
+  });
+
+  test('the 2x toggle advances to the event start, then its end, and says so', async () => {
+    const store = await startPlan('2026-11-01', '12:00'); // Sunday
+    const { toggleEarningsBoost } = useEventWaits();
+    const expectedStart = getNextEarningsBoostStart(absoluteNow(store));
+
+    await toggleEarningsBoost();
+    expect(absoluteNow(store)).toBeCloseTo(expectedStart, 3);
+    expect(store.currentSnapshot.earningsBoost.active).toBe(true);
+    expect(useToastStore().message).toBe('Time automatically advanced 21h to start of 2x Earnings');
+
+    await toggleEarningsBoost();
+    expect(absoluteNow(store)).toBeCloseTo(getNextEarningsBoostEnd(expectedStart), 3);
+    expect(store.currentSnapshot.earningsBoost.active).toBe(false);
+    expect(useToastStore().message).toBe('Time automatically advanced 1d to end of 2x Earnings');
+    expect(store.actions.every(a => a.type !== 'toggle_earnings_boost')).toBe(true);
+  });
+
+  test('the research sale toggle says how far it advanced', async () => {
+    await startPlan('2026-11-01', '12:00'); // Sunday
+    const { toggleResearchSale } = useEventWaits();
+    await toggleResearchSale();
+    expect(useToastStore().message).toBe('Time automatically advanced 4d21h to start of Research Sale');
   });
 
   test('a stored toggle cannot override the calendar', async () => {
@@ -543,16 +595,16 @@ describe('a research purchase crossing a sale boundary', () => {
     const types = addedTypes(store);
     expect(types).toContain('wait_for_earnings_boost');
     expect(types).toContain('wait_for_earnings_boost_end');
-    expect(types).toContain('toggle_earnings_boost');
+    expect(types).not.toContain('toggle_earnings_boost');
     expect(types).not.toContain('wait_for_time');
     for (const type of ['wait_for_research_sale_end', 'wait_for_earnings_boost_end'] as const) {
       const row = store.actions.find(a => a.type === type)!;
       expect(getExecutor(type).getDisplayName(row.payload as never)).toMatch(/Ends/);
     }
 
-    // The toggles land on the calendar, and the plan ends up where the boost math said it would.
-    for (const toggle of store.actions.filter(a => a.type === 'toggle_earnings_boost')) {
-      expect(toggle.endState.earningsBoost.active).toBe(isEarningsBoostActive(absoluteEnd(store, toggle) + BOUNDARY_EPSILON_SECONDS));
+    // The plan's 2x state follows the calendar the whole way through.
+    for (const action of store.actions) {
+      expect(action.endState.earningsBoost.active).toBe(isEarningsBoostActive(absoluteEnd(store, action) + BOUNDARY_EPSILON_SECONDS));
     }
   });
 
@@ -577,7 +629,7 @@ describe('a research purchase crossing a sale boundary', () => {
     await buyWithWaits(store, research, level);
     await store.recalculateFrom(0);
 
-    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost', 'toggle_earnings_boost', 'buy_research']);
+    expect(addedTypes(store)).toEqual(['wait_for_earnings_boost', 'buy_research']);
     const purchase = store.actions[store.actions.length - 1];
     expect(purchase.cost).toBeCloseTo(shown.price, 6);
     expect(purchase.endState.lastStepTime - startedAt).toBeCloseTo(shown.waitSeconds, 0);
@@ -614,6 +666,32 @@ describe('a research purchase crossing a sale boundary', () => {
     }
     return seconds;
   }
+
+  function countDeliveryPlanRequests() {
+    const kinds: string[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class {
+        onmessage = null;
+        onerror = null;
+        postMessage(message: { kind: string }) {
+          kinds.push(message.kind);
+        }
+        terminate() {}
+      }
+    );
+    return () => kinds.filter(kind => kind === 'saleEndsBuy').length;
+  }
+
+  test('the delivery plan is never calculated on an enlightenment farm', async () => {
+    const requests = countDeliveryPlanRequests();
+    await startEarningPlan(friday + 3600);
+    const views = useResearchViews();
+    views.currentView.value = 'smart_buy';
+    await nextTick();
+    expect(requests()).toBe(0);
+    expect(views.isComputingSaleEndsPlan.value).toBe(false);
+  });
 
   test('game view max times match what buying every level takes across the boundary', async () => {
     const research = getCommonResearches().find(r => r.tier === 1 && r.levels > 1)!;

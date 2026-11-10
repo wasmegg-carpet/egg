@@ -29,6 +29,8 @@ export interface EngineState {
 
   // Progress State
   fuelTankAmounts: Record<FuelEgg, number>;
+  currentEgg: 'enlightenment';
+  eggsDelivered: Record<string, number>;
 
   population: number;
   lastStepTime: number;

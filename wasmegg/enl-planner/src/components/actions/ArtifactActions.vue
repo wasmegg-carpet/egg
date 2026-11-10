@@ -43,6 +43,13 @@
       </div>
 
       <div class="p-2">
+        <div
+          v-if="overages.length > 0"
+          class="mb-2 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-bold text-amber-800"
+        >
+          This set uses more than you have:
+          {{ overages.map(o => `${o.label} (${o.used} used, ${o.owned} owned)`).join(', ') }}.
+        </div>
         <ArtifactSelector
           :model-value="localLoadout"
           :slot-count="artifactSlotCount(initialStateStore.proPermit)"
@@ -80,8 +87,9 @@
 </template>
 
 <script setup lang="ts">
+import { useArtifactSetEditor } from 'lib/planners/composables/useArtifactSetEditor';
 import { ref, computed, watch } from 'vue';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ArtifactSelector from 'ui/components/planners/ArtifactSelector.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { useWarningStore } from 'lib/planners/stores/warning';
@@ -94,11 +102,12 @@ import {
   activeSlots,
   artifactSlotCount,
 } from '@/lib/artifacts';
-import { useActionExecutor } from '@/composables/useActionExecutor';
-import { computeDependencies } from '@/lib/actions/executor';
+import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
+import { computeDependencies } from 'lib/planners/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import { optimizeArtifacts, type ArtifactGoal } from '@/lib/artifacts/optimizeArtifacts';
+import { inventoryOverages } from '@/lib/artifacts/inventory';
 import { formatNumber } from '@/lib/format';
 
 const initialStateStore = useInitialStateStore();
@@ -115,137 +124,21 @@ const selectedTab = ref<ArtifactSetName>('earnings');
 // Local state for the selected set (allows unsaved changes)
 const localLoadout = ref<EquippedArtifact[]>(createEmptyLoadout());
 
-// Sync local loadout when tab or store state changes
-watch(
-  [selectedTab, () => actionsStore.effectiveSnapshot],
-  () => {
-    const setLoadout = artifactSets.value[selectedTab.value];
-    if (setLoadout) {
-      localLoadout.value = setLoadout.map(slot => ({
-        artifactId: slot.artifactId,
-        stones: [...slot.stones],
-      }));
-    } else {
-      localLoadout.value = createEmptyLoadout();
-    }
-  },
-  { immediate: true }
-);
-
-const isDirty = computed(() => {
-  const currentSet = artifactSets.value[selectedTab.value];
-  if (!currentSet) {
-    // Check if local loadout is non-empty
-    return localLoadout.value.some(slot => slot.artifactId !== null);
-  }
-
-  return localLoadout.value.some((slot, i) => {
-    const orig = currentSet[i];
-    if (slot.artifactId !== orig.artifactId) return true;
-    if (slot.stones.length !== orig.stones.length) return true;
-    return slot.stones.some((stone, j) => stone !== orig.stones[j]);
-  });
+const { isDirty, undoChanges, saveChanges, equipSet } = useArtifactSetEditor(selectedTab, localLoadout, artifactSets, activeArtifactSet, {
+  equipOnSave: true,
 });
 
-function undoChanges() {
-  const currentSet = artifactSets.value[selectedTab.value];
-  if (currentSet) {
-    localLoadout.value = currentSet.map(slot => ({
-      artifactId: slot.artifactId,
-      stones: [...slot.stones],
-    }));
-  } else {
-    localLoadout.value = createEmptyLoadout();
-  }
-}
-
-function checkHabCapacityViolation(
-  loadout: ArtifactSlotPayload[],
-  snapshot: CalculationsSnapshot,
-  actionName: string
-): boolean {
-  const context = getSimulationContext();
-  const artifactMods = calculateArtifactModifiers(activeSlots(loadout as EquippedArtifact[], snapshot.proPermit));
-  const habCapacityOutput = calculateHabCapacity_Full({
-    habIds: snapshot.habIds,
-    researchLevels: snapshot.researchLevels,
-    habCapMultiplier: context.colleggtibleModifiers.habCap,
-    artifactMultiplier: artifactMods.habCapacity.totalMultiplier,
-    artifactEffects: artifactMods.habCapacity.effects,
-  });
-
-  const newHabCap = habCapacityOutput.totalFinalCapacity;
-  const population = snapshot.population;
-
-  if (newHabCap < population) {
-    warningStore.showWarning(
-      'Hab Capacity Violation',
-      `Cannot ${actionName}. The new habitat capacity (${formatNumber(newHabCap, 3)}) ` +
-        `would be lower than your current population (${formatNumber(population, 3)}).`
-    );
-    return true; // Violation found
-  }
-  return false;
-}
-
-// If equipping/updating a set increased hab capacity (e.g. a new or upgraded
-// gusset), queue a "Wait for Full Habs" action right after it.
-function insertWaitForFullHabsIfCapacityIncreased(beforeSnapshot: CalculationsSnapshot) {
-  if (actionsStore.effectiveSnapshot.habCapacity > beforeSnapshot.habCapacity) {
-    actionsStore.pushWaitForFullHabsAction();
-  }
-}
-
-function saveChanges() {
-  const toLoadout: ArtifactSlotPayload[] = localLoadout.value.map(slot => ({
-    artifactId: slot.artifactId,
-    stones: [...slot.stones],
-  }));
-
-  const beforeSnapshot = prepareExecution();
-
-  // If saving to the CURRENTLY EQUIPPED set, validate capacity
-  if (selectedTab.value === activeArtifactSet.value) {
-    if (checkHabCapacityViolation(toLoadout, beforeSnapshot, 'save changes')) {
-      return;
-    }
-  }
-
-  const payload = {
-    setName: selectedTab.value,
-    newLoadout: toLoadout,
-  };
-  const dependencies = computeDependencies(
-    'update_artifact_set',
-    payload,
-    actionsStore.actionsBeforeInsertion,
-    actionsStore.initialSnapshot.researchLevels
-  );
-
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'update_artifact_set',
-      payload: {
-        setName: selectedTab.value,
-        newLoadout: toLoadout,
-      },
-      cost: 0,
-      dependsOn: dependencies,
-    },
-    beforeSnapshot
-  );
-  insertWaitForFullHabsIfCapacityIncreased(beforeSnapshot);
-  if (activeArtifactSet.value !== selectedTab.value) equipSet();
-}
+const overages = computed(() =>
+  inventoryOverages(activeSlots(localLoadout.value, initialStateStore.proPermit), initialStateStore.inventory)
+);
 
 // One click: the best loadout for the goal at this point in the plan, saved to this set and equipped.
 function applyBest(goal: ArtifactGoal) {
   const result = optimizeArtifacts(
     createBaseEngineState(actionsStore.effectiveSnapshot),
     getSimulationContext(),
-    goal
+    goal,
+    { inventory: initialStateStore.inventory }
   );
   if (!result.ok) {
     warningStore.showWarning(goal === 'ihr' ? 'Max IHR' : 'Max Offline Earnings', result.reason);
@@ -254,40 +147,5 @@ function applyBest(goal: ArtifactGoal) {
   localLoadout.value = result.loadout;
   if (isDirty.value) saveChanges();
   else if (activeArtifactSet.value !== selectedTab.value) equipSet();
-}
-
-function equipSet() {
-  const beforeSnapshot = prepareExecution();
-
-  // Validation: Check if new hab capacity is lower than current population
-  const targetLoadout = beforeSnapshot.artifactSets[selectedTab.value];
-  if (targetLoadout && checkHabCapacityViolation(targetLoadout, beforeSnapshot, 'equip this set')) {
-    return;
-  }
-
-  const payload = {
-    setName: selectedTab.value,
-  };
-  const dependencies = computeDependencies(
-    'equip_artifact_set',
-    payload,
-    actionsStore.actionsBeforeInsertion,
-    actionsStore.initialSnapshot.researchLevels
-  );
-
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'equip_artifact_set',
-      payload: {
-        setName: selectedTab.value,
-      },
-      cost: 0,
-      dependsOn: dependencies,
-    },
-    beforeSnapshot
-  );
-  insertWaitForFullHabsIfCapacityIncreased(beforeSnapshot);
 }
 </script>

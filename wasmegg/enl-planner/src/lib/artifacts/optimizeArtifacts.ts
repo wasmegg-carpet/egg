@@ -5,8 +5,8 @@
  * Only artifacts and stones that touch the goal are tried (for earnings: egg value, laying rate,
  * shipping, away earnings, the SE and PE bonuses; for IHR: those plus internal hatchery rate, so
  * slots IHR can't use still earn), plus the gusset when the population needs it to stay within hab
- * capacity. The planner doesn't know the player's inventory, so every artifact counts as
- * owned, the same as the artifact picker.
+ * capacity. Only what's in the player's inventory is used, and no stone more times than they have
+ * it; with no inventory everything counts as owned.
  *
  * Ties at the current population (e.g. a lay-limited farm, where shipping does nothing yet) are
  * broken by offline earnings with full habs.
@@ -14,7 +14,8 @@
 import { artifactOptions, stoneOptions, getArtifact } from './data';
 import { calculateArtifactModifiers, artifactSlotCount } from './calculator';
 import type { ArtifactOption, EquippedArtifact, StoneOption } from './types';
-import { computeSnapshot } from '@/engine/compute';
+import { ownedStoneCount, ownsArtifact, type PlayerInventory } from './inventory';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { EngineState, SimulationContext } from '@/engine/types';
 import { calculateEarningBonus } from '@/calculations/earnings';
 
@@ -91,17 +92,28 @@ function slotEffects(slot: EquippedArtifact): Effects {
   };
 }
 
-/** The strongest version of each family (most effect, then most stone slots). */
-function bestPerFamily(filter: (a: ArtifactOption) => boolean): ArtifactOption[] {
-  const best = new Map<string, ArtifactOption>();
+/**
+ * The versions worth trying, by family: any not beaten on both effect and stone slots. A stronger
+ * version isn't always better, since it needs a slot for clarity to do anything.
+ */
+function bestVersionsByFamily(filter: (a: ArtifactOption) => boolean): ArtifactOption[][] {
+  const families = new Map<string, ArtifactOption[]>();
   for (const a of artifactOptions) {
     if (!filter(a)) continue;
-    const b = best.get(a.familyId);
-    if (!b || a.effectDelta > b.effectDelta || (a.effectDelta === b.effectDelta && a.slots > b.slots)) {
-      best.set(a.familyId, a);
-    }
+    families.set(a.familyId, [...(families.get(a.familyId) ?? []), a]);
   }
-  return [...best.values()];
+  return [...families.values()].map(versions =>
+    versions.filter(
+      (a, i) =>
+        !versions.some(
+          (b, j) =>
+            j !== i &&
+            b.effectDelta >= a.effectDelta &&
+            b.slots >= a.slots &&
+            (b.effectDelta > a.effectDelta || b.slots > a.slots || j < i)
+        )
+    )
+  );
 }
 
 /** All multisets of `size` items from `items`. */
@@ -114,17 +126,29 @@ function multisets<T>(items: T[], size: number, start = 0): T[][] {
   return out;
 }
 
-function slotConfigs(artifact: ArtifactOption, familyIndex: number, stones: StoneOption[], clarity: StoneOption) {
+/** An artifact and the family of stone for each socket (null: leave it empty). */
+interface SlotPlan {
+  familyIndex: number;
+  artifactId: string;
+  sockets: (string | null)[];
+}
+
+/**
+ * The ways to socket an artifact, by stone family. Which tier goes in is settled when the artifact
+ * is placed, from the stones still free, so the search doesn't grow with the tiers owned.
+ */
+function slotPlans(artifact: ArtifactOption, familyIndex: number, stoneFamilies: string[], allowEmpty: boolean) {
   const isLight = artifact.familyId === LIGHT_OF_EGGENDIL_FAMILY;
   // Light of Eggendil works in full with no clarity, and clarity in it does nothing.
-  const pool = isLight ? stones : [clarity, ...stones];
-  const configs: SlotConfig[] = [];
-  for (const combo of multisets(pool, artifact.slots)) {
-    if (!isLight && !combo.includes(clarity)) continue; // does nothing without clarity
-    const slot: EquippedArtifact = { artifactId: artifact.id, stones: combo.map(s => s.id) };
-    configs.push({ familyIndex, slot, effects: slotEffects(slot) });
+  const families = isLight ? stoneFamilies.filter(f => f !== CLARITY_FAMILY) : stoneFamilies;
+  // Sockets can only go unfilled when stones can run out.
+  const pool: (string | null)[] = allowEmpty ? [...families, null] : families;
+  const plans: SlotPlan[] = [];
+  for (const sockets of multisets(pool, artifact.slots)) {
+    if (!isLight && !sockets.includes(CLARITY_FAMILY)) continue; // does nothing without clarity
+    plans.push({ familyIndex, artifactId: artifact.id, sockets });
   }
-  return configs;
+  return plans;
 }
 
 export type OptimizeResult =
@@ -141,11 +165,17 @@ function better(a: Score, b: Score): boolean {
   return false;
 }
 
-export function optimizeOfflineEarnings(state: EngineState, context: SimulationContext, options: { beamWidth?: number } = {}) {
+export interface OptimizeOptions {
+  beamWidth?: number;
+  /** What the player owns; null or missing counts everything as owned. */
+  inventory?: PlayerInventory | null;
+}
+
+export function optimizeOfflineEarnings(state: EngineState, context: SimulationContext, options: OptimizeOptions = {}) {
   return optimizeArtifacts(state, context, 'offlineEarnings', options);
 }
 
-export function optimizeIHR(state: EngineState, context: SimulationContext, options: { beamWidth?: number } = {}) {
+export function optimizeIHR(state: EngineState, context: SimulationContext, options: OptimizeOptions = {}) {
   return optimizeArtifacts(state, context, 'ihr', options);
 }
 
@@ -153,24 +183,68 @@ export function optimizeArtifacts(
   state: EngineState,
   context: SimulationContext,
   goal: ArtifactGoal,
-  options: { beamWidth?: number } = {}
+  options: OptimizeOptions = {}
 ): OptimizeResult {
   const beamWidth = options.beamWidth ?? 1500;
   const slotCount = artifactSlotCount(state.proPermit);
   const population = state.population || 0;
 
-  const bestStones = new Map<string, StoneOption>();
-  for (const s of stoneOptions) {
-    const b = bestStones.get(s.familyId);
-    if (!b || s.tier > b.tier) bestStones.set(s.familyId, s);
-  }
-  const clarity = bestStones.get(CLARITY_FAMILY)!;
+  const inventory = options.inventory;
+  const allowEmpty = inventory != null;
   const targets = new Set(EARNING_TARGETS);
   if (goal === 'ihr') targets.add(IHR_TARGET);
-  const stones = [...bestStones.values()].filter(s => targets.has(s.effectTarget));
 
-  const candidates = bestPerFamily(a => targets.has(a.effectTarget) && a.effectDelta > 0);
-  const configsByFamily = candidates.map((a, i) => slotConfigs(a, i, stones, clarity));
+  // Usable stones by family, strongest tier first.
+  const stoneTiers = new Map<string, StoneOption[]>();
+  for (const s of stoneOptions) {
+    if (s.familyId !== CLARITY_FAMILY && !targets.has(s.effectTarget)) continue;
+    if (ownedStoneCount(inventory, s.id) <= 0) continue;
+    stoneTiers.set(s.familyId, [...(stoneTiers.get(s.familyId) ?? []), s].sort((a, b) => b.tier - a.tier));
+  }
+  // Clarity first, so sockets list it first.
+  const stoneFamilies = [...stoneTiers.keys()].sort(
+    (a, b) => Number(b === CLARITY_FAMILY) - Number(a === CLARITY_FAMILY)
+  );
+
+  const owned = (a: ArtifactOption) => ownsArtifact(inventory, a.id);
+  const candidates = bestVersionsByFamily(a => owned(a) && targets.has(a.effectTarget) && a.effectDelta > 0);
+  const plansByFamily = candidates.map((versions, i) =>
+    versions.flatMap(a => slotPlans(a, i, stoneFamilies, allowEmpty))
+  );
+
+  const configCache = new Map<string, SlotConfig>();
+  /** Fills a plan with the strongest stones still free; null when there aren't enough. */
+  function place(plan: SlotPlan, used: Map<string, number>): SlotConfig | null {
+    const taken = new Map<string, number>();
+    const stones: (string | null)[] = [];
+    for (const family of plan.sockets) {
+      if (family === null) {
+        stones.push(null);
+        continue;
+      }
+      const stone = stoneTiers
+        .get(family)!
+        .find(s => (used.get(s.id) ?? 0) + (taken.get(s.id) ?? 0) < ownedStoneCount(inventory, s.id));
+      if (!stone) return null;
+      taken.set(stone.id, (taken.get(stone.id) ?? 0) + 1);
+      stones.push(stone.id);
+    }
+    const key = `${plan.artifactId}:${stones.join(',')}`;
+    let config = configCache.get(key);
+    if (!config) {
+      const slot: EquippedArtifact = { artifactId: plan.artifactId, stones };
+      config = { familyIndex: plan.familyIndex, slot, effects: slotEffects(slot) };
+      configCache.set(key, config);
+    }
+    return config;
+  }
+  function stonesUsed(configs: SlotConfig[]): Map<string, number> {
+    const used = new Map<string, number>();
+    for (const c of configs) {
+      for (const id of c.slot.stones) if (id) used.set(id, (used.get(id) ?? 0) + 1);
+    }
+    return used;
+  }
 
   // Base values with no artifacts, which the effects then scale.
   const empty: EngineState = { ...state, artifactLoadout: [] };
@@ -209,10 +283,13 @@ export function optimizeArtifacts(
   let beam: Partial[];
   const neededHabCap = population / baseNow.habCapacity;
   if (neededHabCap > 1 + 1e-12) {
-    const gussets = bestPerFamily(a => GUSSET_FAMILIES.includes(a.familyId));
-    const fits = gussets
-      .flatMap(g => slotConfigs(g, -1, stones, clarity))
-      .filter(c => c.effects.habCap >= neededHabCap);
+    const gussets = bestVersionsByFamily(a => owned(a) && GUSSET_FAMILIES.includes(a.familyId)).flat();
+    const noneUsed = new Map<string, number>();
+    const placed = gussets
+      .flatMap(g => slotPlans(g, -1, stoneFamilies, allowEmpty))
+      .map(plan => place(plan, noneUsed))
+      .filter((c): c is SlotConfig => c !== null);
+    const fits = [...new Set(placed)].filter(c => c.effects.habCap >= neededHabCap);
     if (fits.length === 0 || slotCount === 0) {
       return { ok: false, reason: 'No loadout keeps hab capacity above the current population.' };
     }
@@ -232,10 +309,13 @@ export function optimizeArtifacts(
     const next: Partial[] = [...beam];
     const seen = new Set(beam.map(p => keyOf(p.configs)));
     for (const p of beam) {
-      const used = new Set(p.configs.map(c => c.familyIndex));
-      for (let f = 0; f < configsByFamily.length; f++) {
-        if (used.has(f)) continue;
-        for (const c of configsByFamily[f]) {
+      const familiesUsed = new Set(p.configs.map(c => c.familyIndex));
+      const used = stonesUsed(p.configs);
+      for (let f = 0; f < plansByFamily.length; f++) {
+        if (familiesUsed.has(f)) continue;
+        for (const plan of plansByFamily[f]) {
+          const c = place(plan, used);
+          if (!c) continue;
           const configs = [...p.configs, c];
           const key = keyOf(configs);
           if (seen.has(key)) continue;
