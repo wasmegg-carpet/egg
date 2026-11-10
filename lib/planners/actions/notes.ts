@@ -36,6 +36,34 @@ function formatPurchasesOverDuration(purchaseCount: number, seconds: number, tot
 }
 
 /**
+ * The purchase count a Smart Buy or Max note wrote into its submessage, or null for any other
+ * note. This phrasing is how action history recognizes a sweep, so changing it in
+ * `formatPurchasesOverDuration` or `buildMaxResearchNotePayload` means changing this pattern too,
+ * and saved plans keep the old wording.
+ */
+export function parseSmartBuyPurchaseCount(payload: NotificationPayload): number | null {
+  const match = payload.submessage?.match(/^(\d+) purchases?(?: over |$)/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Builds the inline-note payload the Max buttons insert ahead of their purchases. `targetLabel` is
+ * what's being maxed ("Max Tier 3", "Max Epic Comb Bovine"). Unlike the Smart Buy notes this has no
+ * duration or spend: those buttons run without a precomputed plan, so neither is known until the
+ * purchases have happened. The history's group row shows the real totals.
+ *
+ * Returns null when there's nothing left to buy.
+ */
+export function buildMaxResearchNotePayload(targetLabel: string, purchaseCount: number): NotificationPayload | null {
+  if (purchaseCount <= 0) return null;
+
+  return {
+    message: targetLabel,
+    submessage: `${purchaseCount} purchase${purchaseCount === 1 ? '' : 's'}`,
+  };
+}
+
+/**
  * Builds the inline-note payload a Quick Buy sweep inserts ahead of the purchases it makes, so a
  * plan reads "why did these show up" at a glance. Shared by the manual planner's Quick Buy
  * button/Auto Buy sweep (`ResearchActions.vue`'s `handleThresholdBuy`) and the auto-ascension

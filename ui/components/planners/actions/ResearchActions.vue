@@ -289,15 +289,17 @@ import { useActionsStore } from '@planner/stores/actions';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 import { usePlanStore } from '@planner/stores/plan';
 import { computeDependencies } from 'lib/planners/actions/executor';
-import { generateActionId, type Action } from '@planner/types';
+import { generateActionId } from '@planner/types';
 import {
   createNoteAction,
   buildQuickBuyNotePayload,
   buildSaleAwareBuyNotePayload,
   buildSaleEndsBuyNotePayload,
   buildMilestoneNotePayload,
+  buildMaxResearchNotePayload,
 } from 'lib/planners/actions/notes';
 import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from 'lib/planners/composables/useResearchViews';
+import { EVENT_CROSSING_ACTION_TYPES } from 'lib/planners/actions/smartBuyGroups';
 import { getTimeToSave, boostTransitionsFrom } from '@planner/engine/apply';
 import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { buyWhilePassingCheck, buyUntilRealSaleStarts } from 'lib/planners/calculations/researchRanking';
@@ -763,21 +765,6 @@ function handleBuyResearch(research: CommonResearch) {
 // `isComputingSaleAwarePlan`'s own spinner state.
 const canBuyUntilSaleWarning = computed(() => saleAwarePlan70.value.entries.length > 0);
 
-// Action types `syncEventStateForItem`/`insertEventCrossingWaits` insert immediately ahead of a
-// purchase (wait+toggle pairs, one pair per sale/boost crossing the purchase's own wait passes
-// through) — see that function's doc comment. Used by `findBypassEventCrossingIds` below to walk
-// backward from a bypassed purchase and find just its own prelude, not anything belonging to the
-// purchase before it.
-const EVENT_CROSSING_ACTION_TYPES = new Set<Action['type']>([
-  'wait_for_time',
-  'wait_for_research_sale',
-  'wait_for_research_sale_end',
-  'wait_for_earnings_boost',
-  'wait_for_earnings_boost_end',
-  'toggle_sale',
-  'toggle_earnings_boost',
-]);
-
 // A single sale-to-sale gap (~6 days) or sale duration (~1 day) alone never reaches this — see the
 // threshold check below for why the SUM across a purchase's whole crossing prelude is what matters,
 // not any individual wait.
@@ -1080,8 +1067,33 @@ async function handleThresholdBuy(threshold: number) {
   }
 }
 
+// Puts a note ahead of a Max button's purchases, so action history can group them like a Smart Buy.
+function insertMaxResearchNote(targetLabel: string, researches: CommonResearch[]) {
+  const beforeSnapshot = prepareExecution();
+  const purchaseCount = researches.reduce(
+    (sum, research) => sum + Math.max(research.levels - (beforeSnapshot.researchLevels[research.id] || 0), 0),
+    0
+  );
+  const notePayload = buildMaxResearchNotePayload(targetLabel, purchaseCount);
+  if (!notePayload) return;
+
+  completeExecution(
+    createNoteAction(
+      notePayload,
+      computeDependencies(
+        'notification',
+        notePayload,
+        actionsStore.actionsBeforeInsertion,
+        actionsStore.initialSnapshot.researchLevels
+      )
+    ),
+    beforeSnapshot
+  );
+}
+
 function handleMaxResearch(research: CommonResearch) {
   batch(async () => {
+    insertMaxResearchNote(`Max ${research.name}`, [research]);
     const maxLevel = research.levels;
     while ((commonResearchStore.researchLevels[research.id] || 0) < maxLevel) {
       if (!buyOneLevel(research)) break;
@@ -1093,6 +1105,7 @@ function handleMaxResearch(research: CommonResearch) {
 function handleMaxTier(tier: number) {
   batch(async () => {
     const researches = researchByTier.value.get(tier) || [];
+    insertMaxResearchNote(`Max Tier ${tier}`, researches);
     for (const research of researches) {
       const maxLevel = research.levels;
       while ((commonResearchStore.researchLevels[research.id] || 0) < maxLevel) {

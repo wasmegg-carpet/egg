@@ -43,25 +43,22 @@
         :actions="actions"
         compact
         hide-header
+        @scroll-to-action="handleScrollToAction"
       />
-      <ActionHistoryItem
-        v-for="action in actions"
-        :key="action.id"
-        :action="action"
-        compact
-        @undo="handleItemUndo(action, $event)"
-      />
+      <CompactActionRows :actions="actions" @undo="handleItemUndo" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { PROFILE } from '@planner/lib/profile';
-import { computed } from 'vue';
+import { computed, nextTick } from 'vue';
 import { iconURL } from 'lib';
 import type { Action } from '@planner/types';
 import { formatNumber, formatPrice } from '@planner/lib/format';
-import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
+import { expandSmartBuyContaining } from 'lib/planners/composables/useSmartBuyExpansion';
+import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
+import CompactActionRows from 'ui/components/planners/CompactActionRows.vue';
 
 const props = defineProps<{
   label: string;
@@ -88,5 +85,12 @@ const researchBuyCount = computed(() => props.actions.filter(a => a.type === 'bu
 
 function handleItemUndo(action: Action, options: { skipConfirmation: boolean }) {
   emit('undo', action, options);
+}
+
+// A summary link's target wasn't in the DOM, so it's inside a collapsed smart buy in this day.
+async function handleScrollToAction(actionId: string) {
+  expandSmartBuyContaining(props.actions, actionId);
+  await nextTick();
+  scrollToAndHighlight(actionId);
 }
 </script>

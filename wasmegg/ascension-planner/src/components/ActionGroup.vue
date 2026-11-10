@@ -147,6 +147,9 @@
           />
         </template>
 
+        <!-- Compact single-day shift: no day layer, but smart buys still get their summaries -->
+        <CompactActionRows v-else-if="compact" :actions="actions" @undo="handleDayUndo" />
+
         <!-- Action list -->
         <template v-else>
           <ActionHistoryItem
@@ -174,6 +177,9 @@ import { safeAsyncComponent } from 'lib/planners/import';
 import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
 import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
 import DayGroup from 'ui/components/planners/DayGroup.vue';
+import CompactActionRows from 'ui/components/planners/CompactActionRows.vue';
+import { smartBuyNoteByActionId } from 'lib/planners/actions/smartBuyGroups';
+import { expandSmartBuyContaining } from 'lib/planners/composables/useSmartBuyExpansion';
 
 // Lazy load summary components
 const CuriositySummary = safeAsyncComponent(() => import('./summaries/CuriositySummary.vue'));
@@ -378,8 +384,11 @@ const dayGroups = computed<DayGroupItem[]>(() => {
   let prevAction: Action | null = null;
   let currentDayKey = '';
 
+  // A smart buy can wait across several days; it stays whole, under the day it started.
+  const smartBuyNotes = smartBuyNoteByActionId(props.actions);
+
   for (const action of props.actions) {
-    const date = actionAbsoluteTime(action);
+    const date = actionAbsoluteTime(smartBuyNotes.get(action.id) ?? action);
     const dayKey = date.toDateString();
     if (dayKey !== currentDayKey) {
       currentDayKey = dayKey;
@@ -462,14 +471,14 @@ function setDayExpanded(key: string, value: boolean) {
 
 /**
  * Handles a curiosity summary link click whose target action wasn't found in the DOM — meaning
- * it's inside a collapsed day (compact view). Expand that day, wait for it to render, then scroll.
+ * it's inside a collapsed day or smart buy (compact view). Expand whichever hold it, wait for them
+ * to render, then scroll.
  */
 async function handleScrollToAction(actionId: string) {
   const day = dayGroups.value.find(d => d.actions.some(a => a.id === actionId));
-  if (day) {
-    expandedDayKeys.value.add(day.key);
-    await nextTick();
-  }
+  if (day) expandedDayKeys.value.add(day.key);
+  expandSmartBuyContaining(props.actions, actionId);
+  await nextTick();
   scrollToAndHighlight(actionId);
 }
 </script>
