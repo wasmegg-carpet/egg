@@ -34,6 +34,7 @@ import { describeTableArtifacts, tableArtifacts } from '@/lib/instantSearch/tabl
 import { fetchTableBytes, isTableStall } from '@/lib/instantSearch/tableFetch';
 import { backupGearContext, gearChanges, gearStamp, gearTableNames, tableName } from '@/lib/instantSearch/tableGear';
 import { instantDeliveryScale } from '@/lib/instantSearch/deliveryScale';
+import { colleggtibleChanges as colleggtibleChangesSince } from '@/lib/instantSearch/colleggtibleChanges';
 import { simChangesSince } from '@/lib/instantSearch/simChanges';
 import { getArtifact, getOptimalEarningsSet } from '@/lib/artifacts';
 import { readCurrentAscension, type CurrentAscension } from '@/lib/instantSearch/currentAscension';
@@ -244,6 +245,8 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
   );
   /** Simulator changes the loaded table doesn't have, oldest first (simChanges.ts). */
   const simChanges = computed(() => (header.value ? simChangesSince(header.value) : []));
+  /** Colleggtibles added or retuned since the loaded table (colleggtibleChanges.ts). */
+  const colleggtibleChanges = computed(() => (header.value ? colleggtibleChangesSince(header.value) : []));
   const tableSource = ref('');
   /** Why the table in use is not built for the player's own gear or delivery set; '' when it is. */
   const tableNote = ref('');
@@ -823,6 +826,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     header,
     headerWarnings,
     simChanges,
+    colleggtibleChanges,
     tableSource,
     tableNote,
     tableStatus,

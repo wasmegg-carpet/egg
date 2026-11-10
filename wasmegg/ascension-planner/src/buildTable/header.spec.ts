@@ -18,6 +18,7 @@ function header(gear = tableGear(maxedContext())): Record<string, unknown> {
     builtAt: '2026-10-20T12:00:00.000Z',
     simVersion: 'd019f9b7',
     simChange: '799a6502',
+    colleggtibles: { copper: 0.8 },
     k3: {},
   };
 }

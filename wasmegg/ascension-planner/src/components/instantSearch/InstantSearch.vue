@@ -205,12 +205,13 @@
       class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
     >
       <div class="font-bold text-slate-800">Changes since this table</div>
-      <ol v-if="store.simChanges.length" class="mt-1 space-y-1">
+      <ol v-if="store.simChanges.length || store.colleggtibleChanges.length" class="mt-1 space-y-1">
         <li v-for="c in store.simChanges" :key="c.commit">
           <span class="font-bold">{{ showTime(Date.parse(c.date) / 1000) }}</span>
           <span class="mx-1 font-mono-premium text-slate-400">{{ c.commit }}</span>
           {{ c.note }}
         </li>
+        <li v-for="c in store.colleggtibleChanges" :key="c.id">{{ c.note }}</li>
       </ol>
       <p v-else class="mt-1">None: the simulator hasn't changed since this table was built.</p>
     </div>

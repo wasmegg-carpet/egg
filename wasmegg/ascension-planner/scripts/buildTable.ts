@@ -24,6 +24,7 @@ import { checkPacked, packTable, type Cell } from '@/buildTable/pack';
 import { cteBonusOf, k3Record, runTask, type Task, type TaskResult } from '@/buildTable/task';
 import { maxedContext } from '@/buildTable/maxedAccount';
 import { tableGear } from '@/buildTable/header';
+import { currentColleggtibles } from '@/lib/instantSearch/colleggtibleChanges';
 import { LATEST_SIM_CHANGE } from '@/lib/instantSearch/simChanges';
 import { socketEarningsStones } from '@/auto/loadout';
 import { allHours, prefixSourceFor, SEED_HOURS, type EventClass, type PrefixSource } from '@/buildTable/prefixReuse';
@@ -82,6 +83,7 @@ function writeMeta(out: string, from: number, to: number): void {
         simVersion: version,
         // From the first run in this dir: a resumed one mustn't claim changes its earlier cells lack.
         simChange: before ? before.simChange : LATEST_SIM_CHANGE,
+        colleggtibles: before ? before.colleggtibles : currentColleggtibles(),
         builder: 'wasmegg/ascension-planner scripts/buildTable.ts',
       },
       null,
@@ -292,6 +294,7 @@ function pack(): void {
       builtAt: meta.builtAt,
       simVersion: meta.simVersion,
       simChange: meta.simChange,
+      colleggtibles: meta.colleggtibles,
       k3: JSON.parse(readFileSync(`${dir}/k3.json`, 'utf8')),
     },
     cells

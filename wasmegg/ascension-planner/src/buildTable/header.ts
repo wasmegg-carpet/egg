@@ -68,6 +68,7 @@ const KNOWN_KEYS = new Set([
   'builtAt',
   'simVersion',
   'simChange',
+  'colleggtibles',
   'k3',
 ]);
 
