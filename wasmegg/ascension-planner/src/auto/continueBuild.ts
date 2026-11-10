@@ -10,26 +10,17 @@ import { applyDecoratedAction } from './shifts/helpers/actionHelpers';
 import type { BuildStep } from './buildStep';
 
 /**
- * Plans the rest of the ascension from the start of `step`, from `startState` (a
- * `makeContinueState` farm, `lastStepTime` 0 at `startTime`).
+ * The build from the start of `step` up to C3, from `startState` (a `makeContinueState` farm,
+ * `lastStepTime` 0 at `context.ascensionStartTime`): what every C3 variant continues from.
  *
  * It opens by making the gear the player has on the earnings set and equipping it — mid-build, that
- * is what they farm with — in place of C1's own earnings set. Then it runs the build from `step`
- * through C3 (every C3 variant, as the other build variants do) and finishes each variant through
- * H2; the best one is returned, picked as `pickVariant` picks among an ascension's variants: the
- * shortest, or under a deadline (`targetEndTime`, used only without `targetTE`) the most TE. Null
- * when no variant can finish its build phase before that deadline.
+ * is what they farm with — in place of C1's own earnings set.
  */
-export function runContinueBuild(
+export function continueBuildPrefix(
   startState: EngineState,
   context: SimulationContext,
-  step: BuildStep,
-  startTime: number,
-  id: string,
-  targetTE: number | undefined,
-  targetEndTime: number | undefined,
-  skipTier13Attempts: boolean
-): { actions: Action[]; summary: AscensionSummary } | null {
+  step: BuildStep
+): { actions: Action[]; state: EngineState; elapsedSeconds: number } {
   let state: EngineState = JSON.parse(JSON.stringify(startState));
   const gearActions: Action[] = [];
   for (const action of [
@@ -45,7 +36,28 @@ export function runContinueBuild(
     step === 'C3'
       ? { actions: [], state, elapsedSeconds: 0 }
       : runUntilShift(state, context, 'C3', { from: step, equipEarningsSet: false });
-  const preC3 = { actions: [...gearActions, ...build.actions], state: build.state, elapsedSeconds: build.elapsedSeconds };
+  return { actions: [...gearActions, ...build.actions], state: build.state, elapsedSeconds: build.elapsedSeconds };
+}
+
+/**
+ * Plans the rest of the ascension from the start of `step`, from `startState` (a
+ * `makeContinueState` farm, `lastStepTime` 0 at `startTime`): `continueBuildPrefix`, then every C3
+ * variant (as the other build variants do), each finished through H2. The best one is returned,
+ * picked as `pickVariant` picks among an ascension's variants: the shortest, or under a deadline
+ * (`targetEndTime`, used only without `targetTE`) the most TE. Null when no variant can finish its
+ * build phase before that deadline.
+ */
+export function runContinueBuild(
+  startState: EngineState,
+  context: SimulationContext,
+  step: BuildStep,
+  startTime: number,
+  id: string,
+  targetTE: number | undefined,
+  targetEndTime: number | undefined,
+  skipTier13Attempts: boolean
+): { actions: Action[]; summary: AscensionSummary } | null {
+  const preC3 = continueBuildPrefix(startState, context, step);
 
   const deadlineMode = !targetTE && targetEndTime !== undefined;
   const variants = runC3Variants(preC3.state, context, 3, skipTier13Attempts).filter(

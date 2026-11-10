@@ -148,7 +148,9 @@
                   <span>
                     <span class="block">
                       {{ shortDays(legEnd(route, i) - leg.start) }}
-                      <template v-if="leg.continued">· continue your current ascension to {{ show(legEnd(route, i)) }}</template>
+                      <template v-if="leg.continued"
+                        >· continue your current ascension{{ continuedBuild(leg) }} to {{ show(legEnd(route, i)) }}</template
+                      >
                       <template v-else>
                         · {{ leg.sales }}-sale{{ leg.tier13 ? ' + T13' : '' }} · {{ show(leg.start) }} to
                         {{ show(legEnd(route, i)) }}
@@ -201,7 +203,7 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue';
-import { lastTE, type Route } from '@/lib/instantSearch/routeFinder';
+import { lastTE, type Route, type RouteLeg } from '@/lib/instantSearch/routeFinder';
 import { MAX_ASCENSIONS, useInstantSearchStore, type InstantAnswer } from '@/stores/instantSearch';
 import { formatDuration, formatNumber } from '@/lib/format';
 import { handoffUrl, routeToHandoff } from '@/lib/instantSearch/autoPlannerHandoff';
@@ -277,13 +279,19 @@ const spare = (r: Route) => props.answer.deadline! - r.end;
 const tight = (r: Route) => spare(r) < TIGHT_SECONDS;
 const spareClass = (r: Route) => (tight(r) ? 'text-amber-700' : 'text-emerald-700');
 /** The first ascension in words: continue to its stop, or prestige (on the next whole hour). */
+/** For a continued leg on a farm part-way through its build: the build it finishes, e.g. " (build from K2, 2-sale)". */
+function continuedBuild(l: RouteLeg): string {
+  const step = props.answer.inProgress?.buildStep;
+  return step && l.sales > 0 ? ` (build from ${step}, ${l.sales}-sale${l.tier13 ? ' + T13' : ''})` : '';
+}
+
 function firstStepText(r: Route): string {
   const l = r.legs[0];
   if (l.waited)
     return `keep your current farm laying until ${wait(l)} after reaching ${l.from} TE, then prestige (the build starts ${show(l.start)}).`;
   if (l.held) return `prestige once your blocked dates or hours are past (the build starts ${show(l.start)}).`;
   return l.continued
-    ? `continue your current ascension to ${l.to} TE (${show(l.end)})${r.legs.length > 1 ? ', then prestige' : ''}.`
+    ? `continue your current ascension${continuedBuild(l)} to ${l.to} TE (${show(l.end)})${r.legs.length > 1 ? ', then prestige' : ''}.`
     : `${props.answer.hypothetical ? 'prestige' : 'prestige now'} (the build starts ${show(l.start)}).`;
 }
 /**

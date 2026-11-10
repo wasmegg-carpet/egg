@@ -450,7 +450,9 @@ export function useAscensionGenerator() {
             continueContext.planStartOffset = 0;
             if (stepLoadoutInputs) continueContext.loadoutInputs = stepLoadoutInputs;
             // Part-way through a build: plan the rest of it from the start of the step the farm is on.
-            // A finished build just waits out TE at the farm's current rate.
+            // A finished build, or one that can't finish before an end-time override (e.g. a Chain
+            // Finder route that ends this ascension at a later prestige), just waits out TE at the
+            // farm's current rate.
             const buildStep = detectBuildStep(continueState);
             if (buildStep) {
               generateProgress.value = `Simulating A${i + 1} of ${loops} (Continue from ${buildStep})...`;
@@ -460,8 +462,8 @@ export function useAscensionGenerator() {
                 stepTargetTE, stepEndTime, ascensionStartTE < TIER_13_MIN_STARTING_TE
               );
               if (continued) variants.continue = continued;
-              else result3SkippedReason = 'continueDeadlineTooEarly';
-            } else {
+            }
+            if (!variants.continue) {
               const continueSnapshot = computeSnapshot(continueState, continueContext, { skipGrowth: true });
               const realELR = continueSnapshot.elr;
 

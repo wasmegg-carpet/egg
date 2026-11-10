@@ -634,9 +634,6 @@ const continueDisabledTooltip = computed(() => {
   if (props.result3SkippedReason === 'notOnVirtueEgg') {
     return 'Your farm is not on a virtue egg, so there is no ascension to continue';
   }
-  if (props.result3SkippedReason === 'continueDeadlineTooEarly') {
-    return "The overridden end time is too early for the rest of your current build to finish";
-  }
   return 'No farm backup loaded — upload a backup to use Continue Ascension';
 });
 
