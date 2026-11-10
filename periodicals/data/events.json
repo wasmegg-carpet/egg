@@ -29689,5 +29689,14 @@
     "startTimestamp": 1794243600,
     "type": "hab-sale",
     "ultra": true
+  },
+  {
+    "endTimestamp": 1794416400,
+    "id": "event-11-10",
+    "message": "4x DRONE REWARDS!",
+    "multiplier": 4,
+    "startTimestamp": 1794330000,
+    "type": "drone-boost",
+    "ultra": false
   }
 ]
