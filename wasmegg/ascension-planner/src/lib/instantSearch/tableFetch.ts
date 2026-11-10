@@ -5,7 +5,7 @@
  * a web page in its place, cut short, nothing to unpack it with) falls back to the plain file.
  * readTable checks either is complete.
  */
-import { readTable, type Table } from './table';
+import { readTable, type Table, type TableHeader } from './table';
 
 export interface FetchDeps {
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
@@ -137,4 +137,134 @@ export async function fetchTableBytes(
 
 export async function fetchTable(url: string, deps: FetchDeps = defaults(), stallMs = TABLE_STALL_MS): Promise<Table> {
   return readTable(await fetchTableBytes(url, deps, stallMs));
+}
+
+/** Reads a stream until `want(bytes so far)` says it has enough, then stops the download. */
+async function readUntil(
+  stream: ReadableStream<Uint8Array>,
+  want: (bytes: Uint8Array) => boolean
+): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  let bytes: Uint8Array = new Uint8Array(0);
+  try {
+    for (;;) {
+      if (want(bytes)) return bytes;
+      const { done, value } = await reader.read();
+      if (done) return bytes;
+      bytes = concat(bytes, value);
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+}
+
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.byteLength + b.byteLength);
+  out.set(a);
+  out.set(b, a.byteLength);
+  return out;
+}
+
+const TICK = Symbol('tick');
+const tick = () => new Promise<typeof TICK>(resolve => setTimeout(() => resolve(TICK), 0));
+
+/**
+ * Unpacks a gzip stream until `want` has enough. Fed one compressed chunk at a time, not piped: a
+ * pipe may read the whole download ahead of what is unpacked (Node's does), and only the front of
+ * the file is wanted.
+ */
+async function gunzipUntil(
+  source: ReadableStreamDefaultReader<Uint8Array>,
+  first: Uint8Array,
+  DS: typeof DecompressionStream,
+  want: (bytes: Uint8Array) => boolean
+): Promise<Uint8Array> {
+  const ds = new DS('gzip');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  let out: Uint8Array = new Uint8Array(0);
+  let pending = reader.read();
+  let chunk: Uint8Array | undefined = first;
+  try {
+    while (chunk) {
+      await writer.write(chunk as Uint8Array<ArrayBuffer>);
+      // Take what this chunk unpacked to, without waiting on output it may not make.
+      for (;;) {
+        const r = await Promise.race([pending, tick()]);
+        if (r === TICK) break;
+        if (r.done) return out;
+        out = concat(out, r.value);
+        if (want(out)) return out;
+        pending = reader.read();
+      }
+      const next = await source.read();
+      chunk = next.done ? undefined : next.value;
+    }
+    await writer.close();
+    for (;;) {
+      const r = await pending;
+      if (r.done || want((out = concat(out, r.value)))) return out;
+      pending = reader.read();
+    }
+  } finally {
+    writer.abort().catch(() => {});
+    reader.cancel().catch(() => {});
+  }
+}
+
+/** A table's header has arrived: its length and the JSON it counts. */
+const headerComplete = (b: Uint8Array) =>
+  b.byteLength >= 4 && b.byteLength >= 4 + new DataView(b.buffer, b.byteOffset, 4).getUint32(0, true);
+
+/**
+ * Only a table file's header: what it was built with, without the megabytes of cells. The header is
+ * at the front of the file, so the `.gz` is unpacked as it streams in and the download stopped once
+ * the header is whole (a few KB in). The plain file when the .gz can't be had.
+ */
+export async function fetchTableHeader(url: string, deps: FetchDeps = defaults()): Promise<TableHeader> {
+  const ctrl = new AbortController();
+  const open = async (u: string) => {
+    const res = await deps.fetch(u, { cache: 'no-cache', signal: ctrl.signal });
+    if (!res.ok || !res.body || /text\/html/.test(res.headers.get('content-type') ?? ''))
+      throw new Error(`the table could not be loaded (${res.ok ? 404 : res.status})`);
+    return res.body;
+  };
+  let bytes: Uint8Array;
+  try {
+    const source = (await open(url + '.gz')).getReader();
+    try {
+      let first: Uint8Array = new Uint8Array(0);
+      while (first.byteLength < 2) {
+        const { done, value } = await source.read();
+        if (done) break;
+        first = concat(first, value);
+      }
+      if (first[0] === 0x1f && first[1] === 0x8b) {
+        const DS = deps.DecompressionStream;
+        if (!DS) throw new Error('no DecompressionStream');
+        bytes = await gunzipUntil(source, first, DS, headerComplete);
+      } else {
+        bytes = first;
+        while (!headerComplete(bytes)) {
+          const { done, value } = await source.read();
+          if (done) break;
+          bytes = concat(bytes, value);
+        }
+      }
+    } finally {
+      source.cancel().catch(() => {});
+    }
+    if (!headerComplete(bytes)) throw new Error('cut short');
+  } catch {
+    bytes = await readUntil(await open(url), headerComplete);
+  } finally {
+    ctrl.abort();
+  }
+  if (!headerComplete(bytes)) throw new Error('that file is not a precomputed table');
+  const len = new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true);
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + len))) as TableHeader;
+  } catch {
+    throw new Error('that file is not a precomputed table');
+  }
 }
