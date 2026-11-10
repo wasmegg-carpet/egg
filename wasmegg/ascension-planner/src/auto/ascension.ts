@@ -28,6 +28,7 @@ import { getHabById, type HabId } from '@/lib/habs';
 import { getVehicleType } from '@/lib/vehicles';
 import { DEBUG_SHIFT_TIMING } from 'lib/planners/debugFlags';
 import type { BuildStep } from './buildStep';
+import { farmStateOf } from './continueState';
 
 function logShiftTimings(label: string, timings: { name: string; ms: number }[]): void {
   if (!DEBUG_SHIFT_TIMING) return;
@@ -44,14 +45,26 @@ function computeLastTEDuration(finalTE: Record<VirtueEgg, number>, peakELR: numb
   return timeToEarnTE(prevEggs, peakELR, 1);
 }
 
-/** The `start_ascension` action a plan starting from `state` at unix second `startTime` leads with. */
-export function startAscensionAction(state: EngineState, context: SimulationContext, startTime: number): Action {
+/**
+ * The `start_ascension` action a plan starting from `state` at unix second `startTime` leads with.
+ * `fromFarm` (Continue): the plan starts from `state`'s farm rather than an empty one, which the
+ * action carries (`farmStateOf`) so the plan replays from it when loaded elsewhere.
+ */
+export function startAscensionAction(
+  state: EngineState,
+  context: SimulationContext,
+  startTime: number,
+  fromFarm = false
+): Action {
   return {
     id: generateActionId(),
     index: 0,
     timestamp: startTime * 1000,
     type: 'start_ascension',
-    payload: { initialEgg: state.currentEgg as VirtueEgg },
+    payload: {
+      initialEgg: state.currentEgg as VirtueEgg,
+      ...(fromFarm ? { initialFarmState: farmStateOf(state) } : {}),
+    },
     cost: 0,
     elrDelta: 0,
     offlineEarningsDelta: 0,
@@ -932,7 +945,7 @@ export function runContinueCurrent(
   // we might end on a different egg. The TE wait shifts handle this via their shift logic.
 
   // Prepend start action
-  currentActions.unshift(startAscensionAction(actualStartState, context, startTime));
+  currentActions.unshift(startAscensionAction(actualStartState, context, startTime, true));
 
   // Fix indices
   currentActions.forEach((a, idx) => {

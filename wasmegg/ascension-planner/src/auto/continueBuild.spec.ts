@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { runAscensionFromC3Variant, runUntilShift } from './ascension';
 import { runContinueBuild } from './continueBuild';
+import { simulate } from 'lib/planners/engine/simulate';
+import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { detectBuildStep } from './buildStep';
 import { socketEarningsStones } from './loadout';
 import { maxedBaseState, maxedContext } from '@/buildTable/maxedAccount';
@@ -102,6 +104,39 @@ describe('runContinueBuild', () => {
     expect(names.slice(0, 6)).toEqual(['C1', 'K1', 'I1', 'C2', 'K2', 'R1']);
     expect(names).toEqual(expect.arrayContaining(['H1', 'K3']));
     expect(continued.summary.endTE).toBe(TARGET);
+  }, 240000);
+
+  test('replays from the farm it started on, as a library plan loaded in the manual planner does', () => {
+    const inputs = maxedContext().loadoutInputs!;
+    const fresh = startStateAt(maxedBaseState(), TE);
+    const before = runUntilShift(fresh, contextAt(maxedContext(), START), 'K2');
+    const resumeAt = START + before.elapsedSeconds;
+    const loadout = socketEarningsStones(inputs.earnings, inputs.stones);
+    const farmNow: EngineState = { ...before.state, lastStepTime: 0, artifactLoadout: loadout };
+    const context = contextAt(maxedContext(), resumeAt);
+    const plan = runContinueBuild(farmNow, context, 'K2', resumeAt, 'c', TARGET, undefined, false)!;
+
+    // A loaded plan's engine starts from an empty farm with the save's eggs and gear; the start
+    // action puts the farm on it.
+    const empty: EngineState = { ...fresh, eggsDelivered: { ...farmNow.eggsDelivered }, artifactLoadout: loadout };
+    const replay = (actions: typeof plan.actions) =>
+      simulate(JSON.parse(JSON.stringify(actions)), { ...context, loadoutInputs: undefined }, empty).at(-1)!.endState;
+
+    const simulated = plan.actions.at(-1)!.endState;
+    const replayed = replay(plan.actions);
+    expect(replayed.researchLevels).toEqual(simulated.researchLevels);
+    expect(replayed.habIds).toEqual(simulated.habIds);
+    expect(replayed.vehicles).toEqual(simulated.vehicles);
+    expect(replayed.siloCount).toBe(simulated.siloCount);
+    expect(replayed.lastStepTime).toBeCloseTo(simulated.lastStepTime, -2);
+    const teOf = (eggs: Record<string, number>) =>
+      Object.values(eggs).reduce((n, d) => n + countTEThresholdsPassed(d || 0), 0);
+    expect(teOf(replayed.eggsDelivered)).toBe(plan.summary.endTE);
+
+    // Without the farm on the start action, the replay starts from nothing and goes wrong.
+    const bare = JSON.parse(JSON.stringify(plan.actions));
+    delete bare[0].payload.initialFarmState;
+    expect(replay(bare).researchLevels).not.toEqual(simulated.researchLevels);
   }, 240000);
 
   test.each(['K2', 'R1', 'C3'] as const)('resuming at %s mid-build lands where the regular build does', step => {

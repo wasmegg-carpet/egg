@@ -73,7 +73,7 @@ export function runContinueBuild(
         : a.summary.totalDurationSeconds <= b.summary.totalDurationSeconds ? a : b
     );
 
-  const actions = [startAscensionAction(startState, context, startTime), ...best.actions];
+  const actions = [startAscensionAction(startState, context, startTime, true), ...best.actions];
   actions.forEach((a, i) => {
     a.index = i;
   });
