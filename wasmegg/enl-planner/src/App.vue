@@ -1,12 +1,7 @@
 <template>
   <the-nav-bar active-entry-id="enl-planner" />
 
-  <div
-    :class="[
-      'min-h-screen bg-gray-100 transition-all duration-300',
-      isFooterCollapsed ? 'pb-8' : 'pb-24',
-    ]"
-  >
+  <div :class="['min-h-screen bg-gray-100 transition-all duration-300', isFooterCollapsed ? 'pb-8' : 'pb-24']">
     <div class="max-w-6xl mx-auto p-4">
       <CustomEggWatcher v-if="isDev" />
 
@@ -35,9 +30,7 @@
             </div>
 
             <!-- Mode Buttons -->
-            <div
-              class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-6xl mx-auto"
-            >
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-3 max-w-6xl mx-auto">
               <!-- Start from Scratch -->
               <div class="section-premium p-5 flex flex-col items-center text-center group relative overflow-hidden">
                 <div
@@ -268,36 +261,19 @@
         </div>
       </div>
 
-      <!-- Active Event Slide Toggle (Earnings Boost) -->
+      <!-- 2x Earnings Event: status plus a wait for its next start or end -->
       <div class="mt-4 flex flex-col items-center gap-2">
-        <div
-          class="w-full max-w-sm bg-gradient-to-r from-orange-50/80 via-white to-amber-50/80 rounded-2xl p-4 border border-orange-100/50 shadow-sm relative overflow-hidden flex items-center justify-between transition-all duration-300"
-        >
-          <div class="flex items-center gap-2 relative z-10">
-            <div class="flex flex-col gap-0.5 text-left">
-              <div class="flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></div>
-                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none"
-                  >Monday 2x Earnings Event</span
-                >
-              </div>
-              <span class="text-[11px] font-black text-orange-600 uppercase tracking-tighter">
-                {{ isEarningsBoostActive ? 'Active' : 'Inactive' }}
-              </span>
-            </div>
-          </div>
-
-          <button
-            class="relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-300 focus:outline-none shadow-inner"
-            :class="isEarningsBoostActive ? 'bg-orange-500' : 'bg-slate-200'"
-            @click="handleToggleEarningsEvent"
-          >
-            <span
-              class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-all duration-300 shadow-sm"
-              :class="isEarningsBoostActive ? 'translate-x-[22px]' : 'translate-x-1'"
-            />
-          </button>
-        </div>
+        <EventEdgeWaitCard
+          class="w-full max-w-sm"
+          label="Monday 2x Earnings Event"
+          event-name="2x Earnings"
+          active-text="Active"
+          tone="orange"
+          :is-active="isEarningsBoostActive"
+          :seconds-until-change="isEarningsBoostActive ? secondsUntilEarningsBoostEnd : secondsUntilNextEarningsBoost"
+          :tooltip="earningsEventTooltip"
+          @wait="handleEarningsEventWait"
+        />
       </div>
 
       <div v-if="loading" class="text-center py-4 text-gray-600">Loading player data...</div>
@@ -428,6 +404,8 @@ import PlanLibrary from 'ui/components/planners/PlanLibrary.vue';
 import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
+import EventEdgeWaitCard from 'ui/components/planners/actions/EventEdgeWaitCard.vue';
+import { formatDuration } from 'lib/planners/format';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
 import { computeSnapshot } from 'lib/planners/engine/compute';
@@ -457,10 +435,19 @@ const fuelTankStore = useFuelTankStore();
 const eventsStore = useEventsStore();
 
 const notesStore = useNotesStore();
-const { toggleEarningsBoost: handleToggleEarningsEvent } = useEventWaits();
+const {
+  toggleEarningsBoost: handleEarningsEventWait,
+  secondsUntilNextEarningsBoost,
+  secondsUntilEarningsBoostEnd,
+} = useEventWaits();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
 
 const isEarningsBoostActive = computed(() => actionsStore.effectiveSnapshot?.earningsBoost?.active ?? false);
+const earningsEventTooltip = computed(() =>
+  isEarningsBoostActive.value
+    ? `2x Earnings ends Tuesday at +0. Click to wait ${formatDuration(secondsUntilEarningsBoostEnd.value)} until it ends.`
+    : `Next 2x Earnings starts Monday at +0. Click to wait ${formatDuration(secondsUntilNextEarningsBoost.value)} until it starts.`
+);
 
 const { lastBackupFormatted, lastBackupAge, pageTitle } = usePlannerPageStatus();
 

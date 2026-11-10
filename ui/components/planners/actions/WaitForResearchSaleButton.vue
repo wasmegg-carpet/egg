@@ -19,9 +19,8 @@ import EventWaitButton from 'ui/components/planners/actions/EventWaitButton.vue'
 import { useActionsStore } from '@planner/stores/actions';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
 
-// Shared by the Wait tab (WaitForEventActions.vue) and the Smart Buy view (SmartBuyView.vue, shown
-// between the Earnings and Delivery cards while no research sale is active) so both run the exact
-// same wait sequence.
+// The Wait tab's research sale wait (WaitForEventActions.vue). It runs the same sequence as the
+// Research Sale card's button (EventEdgeWaitCard.vue in ResearchActions.vue).
 
 const actionsStore = useActionsStore();
 const { secondsUntilNextSale, waitForNextSale } = useEventWaits();

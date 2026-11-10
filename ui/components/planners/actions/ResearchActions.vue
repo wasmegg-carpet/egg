@@ -2,10 +2,19 @@
   <div class="space-y-4">
     <slot name="top" />
 
-    <ResearchSaleToggle
+    <EventEdgeWaitCard
+      label="Research Sale"
+      event-name="Research Sale"
+      active-text="70% Off"
+      tone="indigo"
       :is-active="isResearchSaleActive"
       :seconds-until-change="isResearchSaleActive ? secondsUntilSaleEnd : secondsUntilNextSale"
-      @toggle="handleToggleSale"
+      :tooltip="
+        isResearchSaleActive
+          ? `Sale ends Saturday at +0. Click to wait ${formatDuration(secondsUntilSaleEnd)} until it ends.`
+          : `Next sale starts Friday at +0. Click to wait ${formatDuration(secondsUntilNextSale)} until it starts.`
+      "
+      @wait="handleToggleSale"
     />
 
     <ResearchViewSelector v-model="currentView" :views="VIEWS" />
@@ -97,7 +106,9 @@
                 >Without This Research</span
               >
               <span
-                v-tippy="`Finishes ${milestoneSummary.baselineFinishAbsoluteTime}. Time to reach this milestone buying cheapest-first, with no ROI prioritization.`"
+                v-tippy="
+                  `Finishes ${milestoneSummary.baselineFinishAbsoluteTime}. Time to reach this milestone buying cheapest-first, with no ROI prioritization.`
+                "
                 class="text-sm font-mono font-bold text-gray-900 leading-none py-1 cursor-help"
               >
                 {{ formatDuration(milestoneSummary.baselineSeconds) }}
@@ -108,7 +119,9 @@
                 >With This Research</span
               >
               <span
-                v-tippy="`Finishes ${milestoneSummary.finishAbsoluteTime}. Time to reach this milestone by always buying whatever currently pays for itself fastest.`"
+                v-tippy="
+                  `Finishes ${milestoneSummary.finishAbsoluteTime}. Time to reach this milestone by always buying whatever currently pays for itself fastest.`
+                "
                 class="text-sm font-mono font-bold text-gray-900 leading-none py-1 cursor-help"
               >
                 {{ formatDuration(milestoneSummary.optimizedSeconds) }}
@@ -320,7 +333,7 @@ import { DEBUG_MILESTONE_EXECUTION } from 'lib/planners/debugFlags';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 // Sub-components
-import ResearchSaleToggle from 'ui/components/planners/actions/ResearchSaleToggle.vue';
+import EventEdgeWaitCard from 'ui/components/planners/actions/EventEdgeWaitCard.vue';
 import ResearchViewSelector from 'ui/components/planners/actions/ResearchViewSelector.vue';
 import ResearchGameView from 'ui/components/planners/actions/ResearchGameView.vue';
 import ResearchFlatView from 'ui/components/planners/actions/ResearchFlatView.vue';
@@ -1228,10 +1241,10 @@ async function handleBuyMilestoneChain() {
   }
 }
 
-// The sale follows sim time, so the toggle moves the clock: turning it on waits for the next sale to
-// start, and turning it off waits for the current one to end.
+// The sale follows sim time, so the button moves the clock: while off it waits for the next sale to
+// start, and while on it waits for the current one to end.
 async function handleToggleSale() {
-  // Deactivate Auto Buy whenever a sale is toggled
+  // Deactivate Auto Buy whenever the sale changes
   autoBuyState.value.alwaysOn = false;
 
   await toggleResearchSale();

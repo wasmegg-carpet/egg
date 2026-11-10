@@ -55,10 +55,6 @@
       </div>
     </SmartBuyCard>
 
-    <!-- Only while no research sale is running, so the plan can be advanced to the next sale without
-         leaving the Smart Buy view for the Wait tab. -->
-    <WaitForResearchSaleButton v-if="!isResearchSaleActive" />
-
     <SmartBuyCard v-if="PROFILE.hasDeliveryViews" title="Buy Delivery Research" :loading="saleEndsLoading">
       <template #icon>
         <img
@@ -127,7 +123,6 @@ import SaleRideStepper from 'ui/components/planners/actions/SaleRideStepper.vue'
 import ResearchPurchasePreview from 'ui/components/planners/actions/ResearchPurchasePreview.vue';
 import RatePreviewDelta from 'ui/components/planners/actions/RatePreviewDelta.vue';
 import SmartBuyStats from 'ui/components/planners/actions/SmartBuyStats.vue';
-import WaitForResearchSaleButton from 'ui/components/planners/actions/WaitForResearchSaleButton.vue';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 
 interface RateSummary {
@@ -143,7 +138,6 @@ interface BuyStats {
 
 defineProps<{
   autoBuyAlwaysOn: boolean;
-  isResearchSaleActive: boolean;
   canBuyUntilSaleWarning: boolean;
   canBuyUntilSaleDeadline: boolean;
   quickBuyPreview: ResearchSummaryItem[];

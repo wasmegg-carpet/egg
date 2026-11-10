@@ -368,36 +368,19 @@
         </div>
       </div>
 
-      <!-- Active Event Slide Toggle (Earnings Boost) -->
+      <!-- 2x Earnings Event: status plus a wait for its next start or end -->
       <div v-if="plannerTab === 'manual'" class="mt-4 flex flex-col items-center gap-2">
-        <div
-          class="w-full max-w-sm bg-gradient-to-r from-orange-50/80 via-white to-amber-50/80 rounded-2xl p-4 border border-orange-100/50 shadow-sm relative overflow-hidden flex items-center justify-between transition-all duration-300"
-        >
-          <div class="flex items-center gap-2 relative z-10">
-            <div class="flex flex-col gap-0.5 text-left">
-              <div class="flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></div>
-                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none"
-                  >Monday 2x Earnings Event</span
-                >
-              </div>
-              <span class="text-[11px] font-black text-orange-600 uppercase tracking-tighter">
-                {{ isEarningsBoostActive ? 'Active' : 'Inactive' }}
-              </span>
-            </div>
-          </div>
-
-          <button
-            class="relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-300 focus:outline-none shadow-inner"
-            :class="isEarningsBoostActive ? 'bg-orange-500' : 'bg-slate-200'"
-            @click="handleToggleEarningsEvent"
-          >
-            <span
-              class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-all duration-300 shadow-sm"
-              :class="isEarningsBoostActive ? 'translate-x-[22px]' : 'translate-x-1'"
-            />
-          </button>
-        </div>
+        <EventEdgeWaitCard
+          class="w-full max-w-sm"
+          label="Monday 2x Earnings Event"
+          event-name="2x Earnings"
+          active-text="Active"
+          tone="orange"
+          :is-active="isEarningsBoostActive"
+          :seconds-until-change="isEarningsBoostActive ? secondsUntilEarningsBoostEnd : secondsUntilNextEarningsBoost"
+          :tooltip="earningsEventTooltip"
+          @wait="handleEarningsEventWait"
+        />
       </div>
 
       <div v-if="loading" class="text-center py-4 text-gray-600">Loading player data...</div>
@@ -578,6 +561,8 @@ import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { readHandoff, searchWithoutHandoff } from '@/lib/instantSearch/autoPlannerHandoff';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
 import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
+import EventEdgeWaitCard from 'ui/components/planners/actions/EventEdgeWaitCard.vue';
+import { formatDuration } from 'lib/planners/format';
 import { useTablePrefetch } from '@/composables/useTablePrefetch';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
@@ -614,7 +599,11 @@ const chainFinderStore = useInstantSearchStore();
 const autoPlannerStore = useAutoPlannerStore();
 
 const notesStore = useNotesStore();
-const { toggleEarningsBoost: handleToggleEarningsEvent } = useEventWaits();
+const {
+  toggleEarningsBoost: handleEarningsEventWait,
+  secondsUntilNextEarningsBoost,
+  secondsUntilEarningsBoostEnd,
+} = useEventWaits();
 const { showAutoPlanDialog, autoPlanName, autoPlanAscensionCount, importAutoPlan, resolveAutoPlan, cancelAutoPlan } =
   useAutoPlanImport();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
@@ -624,6 +613,11 @@ const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = u
 useTablePrefetch();
 
 const isEarningsBoostActive = computed(() => actionsStore.effectiveSnapshot?.earningsBoost?.active ?? false);
+const earningsEventTooltip = computed(() =>
+  isEarningsBoostActive.value
+    ? `2x Earnings ends Tuesday at +0. Click to wait ${formatDuration(secondsUntilEarningsBoostEnd.value)} until it ends.`
+    : `Next 2x Earnings starts Monday at +0. Click to wait ${formatDuration(secondsUntilNextEarningsBoost.value)} until it starts.`
+);
 
 const { lastBackupFormatted, lastBackupAge, pageTitle } = usePlannerPageStatus();
 
