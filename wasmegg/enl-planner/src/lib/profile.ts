@@ -30,7 +30,8 @@ export const PROFILE: PlannerProfile = {
   planFilePrefix: 'enlightenment',
   missionsWaitEgg: null,
   tanklessFuelEggs: [],
-  hidesUnusedFuelEggs: true,
+  // Setup only has the tank level; the amounts are edited under Rockets > Fuel.
+  setupShowsFuelTank: false,
   researchSaleEgg: null,
   baseEggValue: ENLIGHTENMENT_EGG_VALUE,
   fuelEggIconPath: egg => fuelEggIconPath(egg as FuelEgg),

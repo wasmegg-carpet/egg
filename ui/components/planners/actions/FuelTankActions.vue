@@ -4,68 +4,11 @@
 
     <!-- Current Tank State -->
     <div class="section-premium p-5">
-      <div class="flex justify-between items-end mb-4">
-        <div>
-          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tank Capacity</div>
-          <div class="text-xl font-bold text-slate-800 tracking-tight">
-            {{ formatNumber(fuelTankStore.totalFuel, 1) }} <span class="text-slate-300 font-normal">/</span>
-            {{ formatNumber(fuelTankStore.tankCapacity, 1) }}
-          </div>
-        </div>
-        <div class="badge-premium badge-brand py-0.5">{{ fuelTankStore.fillPercent.toFixed(1) }}%</div>
-      </div>
-
-      <!-- Capacity Bar -->
-      <div
-        class="h-3.5 bg-slate-100 shadow-inner rounded-full overflow-hidden mb-6 border border-slate-200/50 relative"
-      >
-        <div
-          class="h-full transition-all duration-1000 ease-out relative"
-          :class="
-            fuelTankStore.fillPercent > 90 ? 'bg-danger' : fuelTankStore.fillPercent > 70 ? 'bg-warning' : 'bg-success'
-          "
-          :style="{ width: `${fuelTankStore.fillPercent}%` }"
-        >
-          <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
-          <div class="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"></div>
-        </div>
-      </div>
-
-      <!-- Per-Egg Breakdown -->
-      <div class="space-y-2">
-        <div
-          v-for="egg in visibleEggs"
-          :key="egg"
-          class="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group"
-        >
-          <div
-            class="w-8 h-8 flex-shrink-0 bg-white rounded-lg shadow-sm border border-slate-100 p-1 group-hover:scale-110 transition-transform"
-          >
-            <img :src="iconURL(PROFILE.fuelEggIconPath(egg), 64)" class="w-full h-full object-contain" :alt="egg" />
-          </div>
-          <span class="text-xs font-bold text-slate-600 uppercase tracking-tight">{{ FUEL_EGG_NAMES[egg] }}</span>
-          <div class="flex-1 flex flex-col items-end">
-            <div class="flex items-center gap-1.5">
-              <svg
-                v-if="getRoundingShortfall(fuelTankStore.fuelAmounts[egg]) > 0"
-                v-tippy="'Rounding is likely to cause a problem for you, since you are below the displayed number of eggs.'"
-                class="w-4 h-4 text-warning"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span class="text-sm font-mono-premium font-bold text-slate-700 tracking-tight">
-                {{ formatNumber(fuelTankStore.fuelAmounts[egg], 1) }}
-              </span>
-            </div>
-            <div v-if="getRoundingShortfall(fuelTankStore.fuelAmounts[egg]) > 0" class="text-[9px] text-danger font-bold uppercase tracking-widest mt-0.5">
-              You're short by {{ formatFullNumber(getRoundingShortfall(fuelTankStore.fuelAmounts[egg])) }} eggs
-            </div>
-          </div>
-        </div>
-      </div>
+      <FuelTankBreakdown
+        :eggs="FUEL_ORDER"
+        :fuel-amounts="fuelTankStore.fuelAmounts"
+        :capacity="fuelTankStore.tankCapacity"
+      />
     </div>
 
     <!-- Store Fuel Section -->
@@ -212,7 +155,7 @@
       </div>
 
       <div class="space-y-4">
-        <div v-for="egg in visibleEggs" :key="egg" class="space-y-2">
+        <div v-for="egg in FUEL_ORDER" :key="egg" class="space-y-2">
           <div class="flex items-center gap-2">
             <div class="w-8 h-8 flex-shrink-0 bg-slate-50 rounded-lg p-1 border border-slate-100 shadow-inner">
               <img
@@ -302,10 +245,11 @@ import { useFuelTankStore } from '@planner/stores/fuelTank';
 import { usePlanStore } from '@planner/stores/plan';
 import { useActionsStore } from '@planner/stores/actions';
 import { computeDependencies } from 'lib/planners/actions/executor';
-import { formatNumber, formatDuration, parseNumber, formatFullNumber } from '@planner/lib/format';
+import { formatNumber, formatDuration, parseNumber } from '@planner/lib/format';
 import { generateActionId, FUEL_EGG_NAMES, type FuelEgg } from '@planner/types';
 import { FUEL_ORDER } from '@planner/stores/fuelTank';
 import { useActionExecutor } from 'lib/planners/composables/useActionExecutor';
+import FuelTankBreakdown from 'ui/components/planners/presenters/FuelTankBreakdown.vue';
 
 import { useLayRate } from 'lib/planners/composables/useLayRate';
 import { useInternalHatcheryRate } from 'lib/planners/composables/useInternalHatcheryRate';
@@ -334,11 +278,6 @@ const removeMode = ref<'remove' | 'drainTo'>('drainTo');
 const fuelSpeed = ref(1.0);
 const amountInput = ref('');
 const removeInputs = ref<Record<string, string>>({});
-const visibleEggs = computed(() =>
-  FUEL_ORDER.filter(
-    egg => !PROFILE.hidesUnusedFuelEggs || egg === planStore.currentEgg || fuelTankStore.fuelAmounts[egg] > 0
-  )
-);
 
 // Parse input amount
 const parsedAmount = computed(() => {
@@ -346,20 +285,6 @@ const parsedAmount = computed(() => {
   const parsed = parseNumber(amountInput.value);
   return isNaN(parsed) ? 0 : parsed;
 });
-
-// Calculate rounding shortfall
-function getRoundingShortfall(actual: number): number {
-  if (!actual || actual <= 0) return 0;
-  const formatted = formatNumber(actual, 1);
-  const parsed = parseNumber(formatted);
-  if (parsed > actual) {
-    const diff = parsed - actual;
-    if (diff < 100) {
-      return Math.round(diff);
-    }
-  }
-  return 0;
-}
 
 // Fill To mode: current fuel for the active egg and the delta needed
 const currentEggFuel = computed(() => fuelTankStore.fuelAmounts[planStore.currentEgg] || 0);

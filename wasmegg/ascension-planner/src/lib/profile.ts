@@ -24,7 +24,7 @@ export const PROFILE: PlannerProfile = {
   planFilePrefix: 'ascension',
   missionsWaitEgg: 'humility',
   tanklessFuelEggs: ['humility'],
-  hidesUnusedFuelEggs: false,
+  setupShowsFuelTank: true,
   researchSaleEgg: 'curiosity',
   baseEggValue: 1,
   fuelEggIconPath: egg => `egginc/egg_${egg}.png`,

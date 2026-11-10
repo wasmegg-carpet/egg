@@ -66,7 +66,7 @@
     <slot name="sections" />
 
     <!-- Fuel Tank (collapsible) -->
-    <div class="section-premium overflow-hidden">
+    <div v-if="PROFILE.setupShowsFuelTank" class="section-premium overflow-hidden">
       <button
         class="w-full px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center hover:bg-slate-100 transition-colors group"
         @click="fuelTankExpanded = !fuelTankExpanded"
@@ -104,89 +104,15 @@
         </div>
       </button>
       <div v-if="fuelTankExpanded" class="p-5 space-y-6">
-        <!-- Tank Level Selector -->
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="text-sm font-bold text-slate-700">Tank Level</div>
-            <div class="text-[10px] uppercase font-black text-slate-400 tracking-wider">Storage capacity tier</div>
-          </div>
-          <select
-            :value="tankLevel"
-            class="input-premium w-auto text-sm font-bold text-slate-900 py-2.5 pl-4 pr-12"
-            @change="$emit('set-tank-level', parseInt(($event.target as HTMLSelectElement).value))"
-          >
-            <option v-for="opt in tankLevelOptions" :key="opt.level" :value="opt.level">
-              {{ opt.label }} ({{ opt.capacity }})
-            </option>
-          </select>
-        </div>
+        <TankLevelSelect :tank-level="tankLevel" @set-tank-level="$emit('set-tank-level', $event)" />
 
-        <!-- Capacity Bar -->
-        <div class="space-y-2 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-          <div class="flex justify-between items-end mb-1">
-            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Utilization</span>
-            <span class="text-xs font-bold text-slate-700 font-mono-premium">{{ fillPercent.toFixed(1) }}%</span>
-          </div>
-          <div class="h-3 bg-white shadow-inner rounded-full overflow-hidden border border-slate-100">
-            <div
-              class="h-full transition-all duration-700 ease-out relative"
-              :class="fillPercent > 90 ? 'bg-danger' : fillPercent > 70 ? 'bg-warning' : 'bg-success'"
-              :style="{ width: `${fillPercent}%` }"
-            >
-              <div class="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Per-Egg Fuel Amounts -->
-        <div class="space-y-3">
-          <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Stored Inventory</h4>
-          <div class="grid grid-cols-1 gap-2">
-            <div
-              v-for="egg in FUEL_ORDER"
-              :key="egg"
-              class="flex items-center gap-4 p-3 bg-white hover:bg-slate-50 border border-slate-50 rounded-2xl transition-all group"
-            >
-              <div
-                class="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 group-hover:bg-white group-hover:shadow-sm transition-all"
-              >
-                <img
-                  :src="iconURL(PROFILE.fuelEggIconPath(egg), 64)"
-                  class="w-full h-full object-contain drop-shadow-sm"
-                  :alt="egg"
-                />
-              </div>
-              <div class="flex-1">
-                <div class="text-xs font-bold text-slate-700 uppercase tracking-tight">{{ FUEL_EGG_NAMES[egg] }}</div>
-              </div>
-              <div class="flex flex-col items-end">
-                <div class="flex items-center gap-2">
-                  <svg
-                    v-if="getRoundingShortfall(fuelAmounts[egg]) > 0"
-                    v-tippy="'Rounding is likely to cause a problem for you, since you are below the displayed number of eggs.'"
-                    class="w-4 h-4 text-warning"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <input
-                    type="text"
-                    :value="formatNumber(fuelAmounts[egg], 1)"
-                    class="input-premium w-40 text-right text-sm font-mono-premium font-bold text-slate-900"
-                    placeholder="0"
-                    @blur="handleFuelAmountChange(egg, ($event.target as HTMLInputElement).value)"
-                    @keydown.enter="($event.target as HTMLInputElement).blur()"
-                  />
-                </div>
-                <div v-if="getRoundingShortfall(fuelAmounts[egg]) > 0" class="text-[9px] text-danger font-bold uppercase tracking-widest mt-1">
-                  You're short by {{ formatFullNumber(getRoundingShortfall(fuelAmounts[egg])) }} eggs
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <FuelTankBreakdown
+          :eggs="FUEL_ORDER"
+          :fuel-amounts="fuelAmounts"
+          :capacity="tankCapacity"
+          editable
+          @set-fuel-amount="(egg, amount) => $emit('set-fuel-amount', egg, amount)"
+        />
       </div>
     </div>
 
@@ -340,12 +266,13 @@ import { computed, ref, watch } from 'vue';
 import { iconURL } from 'lib';
 import { getResearchIconPath, getColleggtibleIconPath } from 'lib/planners/assets';
 import type { ResearchLevels, FuelEgg } from '@planner/types';
-import { FUEL_EGG_NAMES } from '@planner/types';
 import { epicResearchDefs } from 'lib/planners/epicResearch';
-import { TANK_CAPACITIES, FUEL_ORDER } from '@planner/stores/fuelTank';
-import { formatNumber, parseNumber, formatFullNumber } from '@planner/lib/format';
+import { FUEL_ORDER } from '@planner/stores/fuelTank';
+import { formatNumber } from '@planner/lib/format';
 import ProPermitToggle from 'ui/components/planners/ProPermitToggle.vue';
 import DateTimeZonePicker from 'ui/components/planners/DateTimeZonePicker.vue';
+import FuelTankBreakdown from 'ui/components/planners/presenters/FuelTankBreakdown.vue';
+import TankLevelSelect from 'ui/components/planners/presenters/TankLevelSelect.vue';
 import {
   colleggtibleDefs,
   formatColleggtibleBonus,
@@ -416,41 +343,6 @@ const fuelTankExpanded = ref(false);
 
 // Total fuel in tank
 const totalFuel = computed(() => Object.values(props.fuelAmounts).reduce((sum, amt) => sum + amt, 0));
-
-// Fill percentage for visual bar
-const fillPercent = computed(() => {
-  if (props.tankCapacity === 0) return 0;
-  return Math.min(100, (totalFuel.value / props.tankCapacity) * 100);
-});
-
-// Tank level options (0-7)
-const tankLevelOptions = TANK_CAPACITIES.map((capacity, index) => ({
-  level: index,
-  label: `Level ${index}`,
-  capacity: formatNumber(capacity, 1),
-}));
-
-// Handle fuel amount input change
-function handleFuelAmountChange(egg: FuelEgg, inputValue: string) {
-  const parsed = parseNumber(inputValue);
-  if (parsed !== null && !isNaN(parsed)) {
-    emit('set-fuel-amount', egg, parsed);
-  }
-}
-
-// Calculate rounding shortfall
-function getRoundingShortfall(actual: number): number {
-  if (!actual || actual <= 0) return 0;
-  const formatted = formatNumber(actual, 1);
-  const parsed = parseNumber(formatted);
-  if (parsed > actual) {
-    const diff = parsed - actual;
-    if (diff < 100) {
-      return Math.round(diff);
-    }
-  }
-  return 0;
-}
 
 const epicResearchList = computed(() =>
   epicResearchDefs.map(def => ({

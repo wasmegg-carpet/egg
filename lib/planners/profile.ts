@@ -75,8 +75,8 @@ export interface PlannerProfile {
   missionsWaitEgg: string | null;
   /** Fuel eggs that don't go in the tank, so they never count against it. */
   tanklessFuelEggs: string[];
-  /** Whether the fuel tank only lists the farm's egg and eggs that have fuel. */
-  hidesUnusedFuelEggs: boolean;
+  /** Whether the Setup tab has the fuel tank panel with its per-egg amounts. */
+  setupShowsFuelTank: boolean;
   /** The egg the Wait for Research Sale button is limited to, or null to always show it. */
   researchSaleEgg: string | null;
   /** Value of one egg before research. */
