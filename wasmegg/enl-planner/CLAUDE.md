@@ -20,8 +20,9 @@ one enlightenment farm with no shifts, so every action is available at any time.
 - Types: /src/types/actions/
 - Earning bonus (SE, PE, TE): /src/calculations/earnings.ts
 - Clarity stones: /src/lib/artifacts/calculator.ts
+- Player inventory (artifacts and stones owned, null when unknown): /src/lib/artifacts/inventory.ts, saved with the plan
 - "Max Offline Earnings" and "Max IHR" artifact buttons: /src/lib/artifacts/optimizeArtifacts.ts (beam search over
-  every artifact, since the planner doesn't keep the player's inventory)
+  the artifacts and stones the player owns)
 - "Assume cube used for research purchases" (Research tab): /src/lib/artifacts/researchCube.ts. When
   on, its multiplier replaces the equipped set's puzzle cube in `researchCostModifiersAt` (engine) and
   `costModifiers` (useResearchViews); it reaches the engine as `SimulationContext.researchCubeMultiplier`

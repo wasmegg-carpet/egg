@@ -10,8 +10,8 @@ export function loadoutSourceFromBackup(backup: ei.IBackup) {
 
 /**
  * The part of a backup worth saving with a plan: its permit level. Loadouts are read from a live
- * backup and copied into the plan, so nothing here needs the player's inventory, and leaving
- * everything else out keeps names, contracts and ids out of exported plan files.
+ * backup and copied into the plan, and the inventory is saved separately as plain counts, so
+ * leaving everything else out keeps names, contracts and ids out of exported plan files.
  */
 export function redactBackupForStorage(backup: ei.IBackup): ei.IBackup | null {
   const permitLevel = backup.game?.permitLevel;

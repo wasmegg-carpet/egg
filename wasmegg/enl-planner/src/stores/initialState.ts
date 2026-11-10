@@ -26,6 +26,7 @@ import {
 } from '@/lib/artifacts';
 import { parseEnlightenmentFarm } from '@/lib/backupFarm';
 import { defaultResearchCube, type ResearchCubeSetting } from '@/lib/artifacts/researchCube';
+import { inventoryFromBackup, type PlayerInventory } from '@/lib/artifacts/inventory';
 import { createEmptyFuelAmounts, eiEggToFuelEgg } from '@/types';
 import { useFuelTankStore } from './fuelTank';
 
@@ -80,6 +81,9 @@ export interface InitialStateStoreState {
 
   // Original backup data for re-calculating optimal sets
   rawBackup: ei.IBackup | null;
+
+  // What the player owns; null when unknown, and then everything counts as owned
+  inventory: PlayerInventory | null;
 }
 
 /** Soul Eggs a plan assumes with no backup loaded. */
@@ -120,6 +124,7 @@ export const useInitialStateStore = defineStore('initialState', {
     initialFuelAmounts: createEmptyFuelAmounts(),
     activeMissions: [],
     rawBackup: null,
+    inventory: null,
   }),
 
   getters: {
@@ -176,6 +181,7 @@ export const useInitialStateStore = defineStore('initialState', {
       this.hasData = true;
       this.isContinuing = mode === 'continue';
       this.rawBackup = backup;
+      this.inventory = inventoryFromBackup(backup);
       this.playerId = playerId;
       this.nickname = backup.userName || playerId;
       this.isUltra =
@@ -186,6 +192,8 @@ export const useInitialStateStore = defineStore('initialState', {
       this.truthEggs = getNumTruthEggs(backup);
       // Reconciling keeps the loaded plan's own permit: a plan runs on the permit it was built with.
       if (mode !== 'reconcile') this.proPermit = backup.game?.permitLevel === 1;
+      // Likewise its research cube; a new plan starts from the best cube the player has.
+      if (mode !== 'reconcile') this.researchCube = defaultResearchCube(this.inventory);
 
       const artifactsDB = backup.artifactsDb || {};
       this.activeMissions = [
@@ -323,6 +331,7 @@ export const useInitialStateStore = defineStore('initialState', {
       if (data.rawBackup) {
         this.rawBackup = data.rawBackup;
       }
+      this.inventory = data.inventory ?? null;
 
       // Sync Fuel Tank Store
       const fuelTankStore = useFuelTankStore();
@@ -361,6 +370,7 @@ export const useInitialStateStore = defineStore('initialState', {
       this.proPermit = true;
       this.initialTankLevel = 0;
       this.initialFuelAmounts = createEmptyFuelAmounts();
+      this.inventory = null;
     },
   },
 });

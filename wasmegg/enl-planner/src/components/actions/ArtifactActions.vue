@@ -43,6 +43,13 @@
       </div>
 
       <div class="p-2">
+        <div
+          v-if="overages.length > 0"
+          class="mb-2 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-bold text-amber-800"
+        >
+          This set uses more than you have:
+          {{ overages.map(o => `${o.label} (${o.used} used, ${o.owned} owned)`).join(', ') }}.
+        </div>
         <ArtifactSelector
           :model-value="localLoadout"
           :slot-count="artifactSlotCount(initialStateStore.proPermit)"
@@ -100,6 +107,7 @@ import { computeDependencies } from 'lib/planners/actions/executor';
 import { calculateHabCapacity_Full } from 'lib/planners/calculations/habCapacity';
 import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import { optimizeArtifacts, type ArtifactGoal } from '@/lib/artifacts/optimizeArtifacts';
+import { inventoryOverages } from '@/lib/artifacts/inventory';
 import { formatNumber } from '@/lib/format';
 
 const initialStateStore = useInitialStateStore();
@@ -120,12 +128,17 @@ const { isDirty, undoChanges, saveChanges, equipSet } = useArtifactSetEditor(sel
   equipOnSave: true,
 });
 
+const overages = computed(() =>
+  inventoryOverages(activeSlots(localLoadout.value, initialStateStore.proPermit), initialStateStore.inventory)
+);
+
 // One click: the best loadout for the goal at this point in the plan, saved to this set and equipped.
 function applyBest(goal: ArtifactGoal) {
   const result = optimizeArtifacts(
     createBaseEngineState(actionsStore.effectiveSnapshot),
     getSimulationContext(),
-    goal
+    goal,
+    { inventory: initialStateStore.inventory }
   );
   if (!result.ok) {
     warningStore.showWarning(goal === 'ihr' ? 'Max IHR' : 'Max Offline Earnings', result.reason);

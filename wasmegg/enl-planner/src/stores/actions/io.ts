@@ -57,6 +57,7 @@ export function exportPlanData(actions: Action[], initialSnapshot?: Calculations
       initialTankLevel: baseTankLevel,
       initialFuelAmounts: baseFuelAmounts,
       rawBackup: redactedBackup,
+      inventory: initialStateStore.inventory,
     },
     planState: {
       ascensionDate: planStore.ascensionDate,
