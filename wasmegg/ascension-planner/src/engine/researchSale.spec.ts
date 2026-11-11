@@ -719,7 +719,7 @@ describe('a research purchase crossing a sale boundary', () => {
     await startEarningPlan(friday - 2 * 86400);
     const probeViews = useResearchViews();
     probeViews.currentView.value = 'cheapest';
-    const probeRows = probeViews.sortedResearches.value;
+    const probeRows = probeViews.sortedResearches.value as import('lib/planners/composables/useResearchViews').ResearchViewItem[];
     // Long enough to straddle Friday despite the start time's whole-minute rounding.
     const crossingIndex = probeRows.findIndex(r => r.timeToBuySeconds! > 600);
     const probeRow = probeRows[crossingIndex];
@@ -728,7 +728,7 @@ describe('a research purchase crossing a sale boundary', () => {
     const store = await startEarningPlan(friday - probeRow.buyToHereSeconds! + probeRow.timeToBuySeconds! / 2);
     const views = useResearchViews();
     views.currentView.value = 'cheapest';
-    const rows = views.sortedResearches.value.slice(0, crossingIndex + 1);
+    const rows = (views.sortedResearches.value as import('lib/planners/composables/useResearchViews').ResearchViewItem[]).slice(0, crossingIndex + 1);
 
     expect(rows[crossingIndex].research.id).toBe(probeRow.research.id);
     expect(rows[crossingIndex].price).toBeLessThan(probeRow.price);

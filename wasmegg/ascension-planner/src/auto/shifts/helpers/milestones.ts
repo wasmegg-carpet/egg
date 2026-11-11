@@ -11,7 +11,17 @@ import {
   computeMilestoneSummaryCore,
   isCheapestTierPurchaseAffordable,
   type MilestoneChainItem,
+  type ChainItem,
+  isResearchChainItem,
 } from 'lib/planners/calculations/milestoneChain';
+
+/**
+ * The research purchases of a chain. The ascension planner never ranks vehicles or habs as earnings
+ * purchases (that's PROFILE.hasFarmPurchasesInRoi, enlightenment only), so this is every item.
+ */
+function researchItems(items: ChainItem[]): MilestoneChainItem[] {
+  return items.filter(isResearchChainItem);
+}
 import { getSaleAwareTimeToSave, shouldDeferToNextSale } from 'lib/planners/calculations/researchROI';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import { computeSnapshot } from 'lib/planners/engine/compute';
@@ -448,7 +458,7 @@ export function runTierUnlockMilestone(
   const timeSavedSeconds =
     chain.reached && baseline.reached ? baseline.totalSeconds - chain.totalSeconds : undefined;
 
-  helpers.executeChain(chain.items, `Unlock Tier ${targetTier}`, timeLimit, timeSavedSeconds, deferForEarningsMode);
+  helpers.executeChain(researchItems(chain.items), `Unlock Tier ${targetTier}`, timeLimit, timeSavedSeconds, deferForEarningsMode);
 
   return {
     actions: helpers.getActions(),
@@ -515,7 +525,7 @@ export function runResearchMilestoneIfWorthwhile(
   const research = getResearchById(researchId);
   const targetLabel = research ? `${research.name} (Lv ${targetLevel}/${research.levels})` : 'Milestone';
 
-  helpers.executeChain(chain.items, targetLabel, timeLimit, summary.timeSavedSeconds, deferForEarningsMode);
+  helpers.executeChain(researchItems(chain.items), targetLabel, timeLimit, summary.timeSavedSeconds, deferForEarningsMode);
 
   return {
     actions: helpers.getActions(),

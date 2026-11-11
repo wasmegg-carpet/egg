@@ -61,6 +61,10 @@ export interface PlannerProfile {
   storagePrefix: string;
   /** Whether research offers delivery views. Enlightenment plans are about earnings and hatching, so it doesn't. */
   hasDeliveryViews: boolean;
+  /** Whether research offers the Hab Space view (earnings research timed to land before the habs fill). */
+  hasHabSpaceView?: boolean;
+  /** Vehicles, train cars and habs rank alongside research as earnings purchases (enlightenment only). */
+  hasFarmPurchasesInRoi?: boolean;
   /** How the Max Vehicles ROI note says you get to the vehicles, including a trailing space if not empty. */
   maxVehiclesRoiRoute: string;
   /** Whether a plan moves between eggs in shifts. */

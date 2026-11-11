@@ -142,6 +142,7 @@ import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId } from '@planner/types';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
+import { useFarmPurchaseActions } from 'lib/planners/composables/useFarmPurchaseActions';
 import { calculateHabCapacity, calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
 import { simulateHabPurchases, CHICKEN_UNIVERSE_ID } from 'lib/planners/calculations/plannerHabPurchasePlan';
 import { calculateArtifactModifiers } from '@planner/lib/artifacts';
@@ -152,8 +153,10 @@ const habCapacityStore = useHabCapacityStore();
 const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const salesStore = useSalesStore();
+const crossingWaits = useEventCrossingWaits();
 const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
-  useEventCrossingWaits();
+  crossingWaits;
+const { buyHab } = useFarmPurchaseActions(crossingWaits);
 
 // Cost modifiers
 const costModifiers = computed<HabCostModifiers>(() => ({
@@ -262,58 +265,9 @@ function getAvailableHabs(currentHabId: number | null) {
 
 function handleHabChange(slotIndex: number, habId: number | undefined) {
   if (habId === undefined) return;
-  if (!isHabId(habId)) return;
-
   // Don't add if it's already the same
   if (habIds.value[slotIndex] === habId) return;
-
-  batch(() => {
-    // Prepare execution (restores stores if editing past group)
-    const pricingSnapshot = prepareExecution();
-
-    // Calculate cost based on effective state
-    const hab = getHabById(habId);
-    if (!hab) return;
-
-    const effectiveHabIds = pricingSnapshot.habIds;
-    const otherHabs = effectiveHabIds.filter((_, i) => i !== slotIndex);
-    const existingCount = countHabsOfType(otherHabs, habId);
-    const isSaleActive = pricingSnapshot.activeSales.hab;
-    const cost = getDiscountedHabPrice(hab, existingCount, costModifiers.value, isSaleActive);
-
-    insertBoostCrossingWaits(cost);
-    const beforeSnapshot = prepareExecution();
-
-    // Build payload
-    const payload = {
-      slotIndex,
-      habId,
-    };
-
-    // Compute dependencies
-    const dependencies = computeDependencies(
-      'buy_hab',
-      payload,
-      actionsStore.actionsBeforeInsertion,
-      actionsStore.initialSnapshot.researchLevels
-    );
-
-    // Apply to store
-    habCapacityStore.setHab(slotIndex, habId);
-
-    // Complete execution
-    completeExecution(
-      {
-        id: generateActionId(),
-        timestamp: Date.now(),
-        type: 'buy_hab',
-        payload,
-        cost,
-        dependsOn: dependencies,
-      },
-      beforeSnapshot
-    );
-  });
+  batch(() => void buyHab(slotIndex, habId));
 }
 
 function handleToggleSale() {

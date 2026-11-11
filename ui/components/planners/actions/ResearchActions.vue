@@ -23,6 +23,16 @@
       {{ viewDescription }}
     </p>
 
+    <TierUnlockNote
+      v-if="tierUnlockNote"
+      :note="tierUnlockNote"
+      :computing="isComputingTierUnlockPath"
+      :show-path-button="
+        !(currentView === 'milestones' && milestoneTarget?.kind === 'tier' && milestoneTarget.tier === tierUnlockNote.nextTier)
+      "
+      @show-path="showTierUnlockPath"
+    />
+
     <RoiViewControls
       v-if="currentView === 'roi'"
       :delivery-impact-only="deliveryImpactOnly"
@@ -137,7 +147,7 @@
             </div>
             <div class="flex flex-col border-l border-gray-200 pl-6">
               <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-1"
-                >Researches Bought</span
+                >{{ PROFILE.hasFarmPurchasesInRoi ? 'Purchases' : 'Researches Bought' }}</span
               >
               <span class="text-sm font-mono font-bold text-gray-900 leading-none py-1">
                 {{ milestoneSummary.purchaseCount }}
@@ -189,6 +199,45 @@
            instead of a full-page overlay locking up the whole tab. -->
       <div
         v-if="isComputingMilestoneChain"
+        class="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg"
+      >
+        <InlineSpinner class="w-6 h-6 text-blue-500" />
+      </div>
+    </div>
+
+    <!-- Hab Space summary/buy-chain area — same layout and busy overlay as the milestones view. -->
+    <div v-if="currentView === 'hab_space'" class="relative">
+      <HabSpaceSummary v-if="habSpaceSummary" :summary="habSpaceSummary" />
+
+      <button
+        v-if="habSpaceSummary"
+        class="btn-premium btn-primary w-full mt-2 disabled:opacity-40 inline-flex items-center justify-center gap-1.5"
+        :disabled="isApplyingHabSpaceChain"
+        @click="handleBuyHabSpaceChain"
+      >
+        <InlineSpinner v-if="isApplyingHabSpaceChain" class="w-3.5 h-3.5" />
+        {{ isApplyingHabSpaceChain ? 'Buying…' : 'Buy Entire Chain' }}
+        <span v-if="!isApplyingHabSpaceChain" class="ml-1 text-[10px] opacity-70 font-mono lowercase tracking-normal">
+          ({{ sortedResearches.length + 1 }} {{ sortedResearches.length === 0 ? 'purchase' : 'purchases' }})
+        </span>
+      </button>
+
+      <div v-if="sortedResearches.length > 0" class="flex items-center justify-between mt-2 px-1">
+        <span class="text-xs text-gray-500">See details of sale and earnings events</span>
+        <button
+          class="relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-300 focus:outline-none shadow-inner"
+          :class="showEventCrossingDetails ? 'bg-indigo-500' : 'bg-slate-200'"
+          @click="showEventCrossingDetails = !showEventCrossingDetails"
+        >
+          <span
+            class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-all duration-300 shadow-sm"
+            :class="showEventCrossingDetails ? 'translate-x-[22px]' : 'translate-x-1'"
+          />
+        </button>
+      </div>
+
+      <div
+        v-if="isComputingHabSpaceChain"
         class="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg"
       >
         <InlineSpinner class="w-6 h-6 text-blue-500" />
@@ -268,6 +317,8 @@
         :thresholds="TIER_THRESHOLDS"
         :milestone-target-selected="!!milestoneTarget"
         :milestone-already-reached="milestoneAlreadyReached"
+        :has-hab-space-target="!!habSpaceSummary"
+        :hab-space-tier-recommendation="habSpaceTierRecommendation"
         :show-event-crossing-details="showEventCrossingDetails"
         :get-research-time-to-buy="getTimeToBuy"
         :get-research-time-to-buy-seconds="getTimeToBuySeconds"
@@ -275,11 +326,18 @@
         @buy="handleBuyResearch"
         @max="handleMaxResearch"
         @buy-to-here="handleBuyToHere"
+        @buy-farm="handleBuyFarmItem"
+        @show-tier-path="showTierUnlockPath"
         @refresh-backup="$emit('refresh-backup')"
       />
 
+      <HabSpaceTargetRow v-if="currentView === 'hab_space' && habSpaceSummary" class="mt-2" :summary="habSpaceSummary" />
+
       <div
-        v-if="currentView === 'milestones' && isComputingMilestoneChain"
+        v-if="
+          (currentView === 'milestones' && isComputingMilestoneChain) ||
+          (currentView === 'hab_space' && isComputingHabSpaceChain)
+        "
         class="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg"
       >
         <InlineSpinner class="w-6 h-6 text-blue-500" />
@@ -295,6 +353,8 @@ import { computed, ref, watch, watchEffect } from 'vue';
 import { getResearchById, type CommonResearch } from '@planner/calculations/commonResearch';
 import { researchPurchaseAt } from 'lib/planners/engine/researchSale';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
+import { useFarmPurchaseActions } from 'lib/planners/composables/useFarmPurchaseActions';
+import type { FarmPurchaseStep } from 'lib/planners/calculations/farmPurchases';
 import type { SaleAwarePurchase } from 'lib/planners/calculations/researchROI';
 import { formatDuration, formatNumber, formatPrice, formatAbsoluteTime } from '@planner/lib/format';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
@@ -309,9 +369,19 @@ import {
   buildSaleAwareBuyNotePayload,
   buildSaleEndsBuyNotePayload,
   buildMilestoneNotePayload,
+  buildHabSpaceNotePayload,
   buildMaxResearchNotePayload,
 } from 'lib/planners/actions/notes';
-import { useResearchViews, VIEWS, SMART_BUY_SALE_COUNT_CAP } from 'lib/planners/composables/useResearchViews';
+import {
+  useResearchViews,
+  VIEWS,
+  SMART_BUY_SALE_COUNT_CAP,
+  habSpaceTargetLabel,
+  isFarmViewItem,
+  farmPurchaseSummaryItems,
+  type FarmViewItem,
+  type ResearchListItem,
+} from 'lib/planners/composables/useResearchViews';
 import { EVENT_CROSSING_ACTION_TYPES } from 'lib/planners/actions/smartBuyGroups';
 import { getTimeToSave, boostTransitionsFrom } from '@planner/engine/apply';
 import { getSimulationContext } from 'lib/planners/engine/adapter';
@@ -341,6 +411,9 @@ import ElrViewControls from 'ui/components/planners/actions/ElrViewControls.vue'
 import RoiViewControls from 'ui/components/planners/actions/RoiViewControls.vue';
 import SmartBuyView from 'ui/components/planners/actions/SmartBuyView.vue';
 import MilestoneTargetPicker from 'ui/components/planners/actions/MilestoneTargetPicker.vue';
+import HabSpaceSummary from 'ui/components/planners/actions/HabSpaceSummary.vue';
+import TierUnlockNote from 'ui/components/planners/actions/TierUnlockNote.vue';
+import HabSpaceTargetRow from 'ui/components/planners/actions/HabSpaceTargetRow.vue';
 
 const { currency } = usePlannerProfile();
 
@@ -348,6 +421,7 @@ const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const { secondsUntilNextSale, secondsUntilSaleEnd, toggleResearchSale } = useEventWaits();
 const planStore = usePlanStore();
+const crossingWaits = useEventCrossingWaits();
 const {
   prepareExecution,
   completeExecution,
@@ -357,7 +431,8 @@ const {
   insertWait,
   insertEventCrossingWaits,
   insertCrossingWaits,
-} = useEventCrossingWaits();
+} = crossingWaits;
+const { buyHab, buyVehicle, buyTrainCar } = useFarmPurchaseActions(crossingWaits);
 
 const autoBuyState = ref({ threshold: 0, alwaysOn: false });
 // Reactive (not a plain `let`) so the Quick Buy button can bind its disabled/spinner state to the
@@ -370,6 +445,7 @@ const showEventCrossingDetails = ref(false);
 // state while the (synchronous, potentially slow) purchase loop and subsequent recalculation run,
 // same purpose `isThresholdBuying` already serves for Quick Buy.
 const isApplyingMilestoneChain = ref(false);
+const isApplyingHabSpaceChain = ref(false);
 const isApplyingSaleAwareBuy = ref(false);
 const isApplyingSaleEndsBuy = ref(false);
 
@@ -386,6 +462,12 @@ const {
   milestoneSummary,
   milestoneAlreadyReached,
   isComputingMilestoneChain,
+  habSpaceSummary,
+  isComputingHabSpaceChain,
+  tierUnlockNote,
+  isComputingTierUnlockPath,
+  showTierUnlockPath,
+  habSpaceTierRecommendation,
   viewDescription,
   costModifiers,
   isResearchSaleActive,
@@ -492,9 +574,12 @@ watchEffect(async () => {
 });
 
 const quickBuyPlan = computed(() => quickBuyPlanRef.value);
-const quickBuyPreview = computed(() =>
-  summarizeResearchLevelChanges(commonResearchStore.researchLevels, quickBuyPlan.value.endLevels)
-);
+const quickBuyPreview = computed(() => [
+  ...summarizeResearchLevelChanges(commonResearchStore.researchLevels, quickBuyPlan.value.endLevels),
+  ...farmPurchaseSummaryItems(
+    (quickBuyPlan.value.purchases ?? []).flatMap(purchase => ('farm' in purchase ? [purchase.farm] : []))
+  ),
+]);
 const quickBuyEarningsSummary = computed(() => ({
   before: actionsStore.effectiveSnapshot.offlineEarnings * 3600,
   after: quickBuyPlan.value.endSnapshot.offlineEarnings * 3600,
@@ -504,7 +589,7 @@ const quickBuyEarningsSummary = computed(() => ({
 // reports (`buildQuickBuyNotePayload` in `src/lib/actions/notes.ts`), shown live in the card itself
 // before the button is clicked.
 const quickBuyStats = computed(() => ({
-  purchaseCount: quickBuyPlan.value.researchIds.length,
+  purchaseCount: (quickBuyPlan.value.purchases ?? quickBuyPlan.value.researchIds).length,
   seconds: quickBuyPlan.value.totalSecondsToSave ?? 0,
   spent: quickBuyPlan.value.totalSpent ?? 0,
 }));
@@ -895,6 +980,7 @@ async function runSaleAwareBuyFlow(plan: SaleAwarePlanEntry[]) {
       researchId => {
         const next = plan[index];
         index++;
+        if (next?.farm) return buyFarmSteps(next.farm.steps, false);
         const research = getResearchById(researchId);
         if (!research) return false;
         if (next) syncEventStateForItem({ research });
@@ -1048,7 +1134,7 @@ async function handleThresholdBuy(threshold: number) {
       // up" before it reads the purchases themselves.
       const notePayload = buildQuickBuyNotePayload(
         threshold,
-        plan.researchIds.length,
+        (plan.purchases ?? plan.researchIds).length,
         plan.totalSecondsToSave ?? 0,
         plan.totalSpent ?? 0
       );
@@ -1068,10 +1154,14 @@ async function handleThresholdBuy(threshold: number) {
         );
       }
 
-      for (const researchId of plan.researchIds) {
-        const research = getResearchById(researchId);
-        if (!research) continue;
-        if (!buyOneLevel(research)) break;
+      for (const purchase of plan.purchases ?? plan.researchIds.map(researchId => ({ researchId }))) {
+        if ('farm' in purchase) {
+          if (!buyFarmSteps(purchase.farm.steps, false)) break;
+        } else {
+          const research = getResearchById(purchase.researchId);
+          if (!research) continue;
+          if (!buyOneLevel(research)) break;
+        }
         if (isEditingPastGroup.value) await settled();
       }
     });
@@ -1135,8 +1225,7 @@ function handleBuyToHere(index: number) {
 
   batch(async () => {
     for (let i = 0; i <= index; i++) {
-      const item = list[i];
-      buyOneLevel(item.research);
+      buyListItem(list[i], false);
       if (isEditingPastGroup.value) await settled();
     }
   });
@@ -1164,7 +1253,7 @@ async function handleBuyMilestoneChain() {
   if (totalDuration === undefined) {
     totalDuration = 0;
     for (const item of list) {
-      totalDuration += getTimeToBuySeconds(item.research);
+      totalDuration += isFarmViewItem(item) ? item.timeToBuySeconds : getTimeToBuySeconds(item.research);
     }
   }
 
@@ -1224,10 +1313,7 @@ async function handleBuyMilestoneChain() {
       // to the next sale (a real multi-day wait the preview never showed) whenever that particular
       // filler's own payback happens to be slow.
       const checkRoiGate = milestoneTarget.value?.kind === 'research';
-      for (const item of list) {
-        syncEventStateForItem(item, checkRoiGate);
-        buyOneLevel(item.research);
-      }
+      for (const item of list) buyListItem(item, checkRoiGate);
 
       if (DEBUG_MILESTONE_EXECUTION) {
         const endSnapshot = actionsStore.effectiveSnapshot;
@@ -1238,6 +1324,97 @@ async function handleBuyMilestoneChain() {
     });
   } finally {
     isApplyingMilestoneChain.value = false;
+  }
+}
+
+/**
+ * Buys one row of a research list. A research level is bought the usual way, with the research
+ * sale and boost synced to when it lands (and, with `checkRoiGate`, held for the sale if it no longer
+ * clears the 70% bar). A farm purchase buys each of its steps: a fleet research level first if it
+ * has one, then the vehicle, train car or hab. Must run inside `batch`.
+ */
+function buyListItem(item: ResearchListItem, checkRoiGate: boolean): boolean {
+  if (!isFarmViewItem(item)) {
+    syncEventStateForItem(item, checkRoiGate);
+    return buyOneLevel(item.research);
+  }
+  return buyFarmSteps(item.steps, checkRoiGate);
+}
+
+/** Buys a farm purchase's steps in order. False if a step couldn't be bought. Must run inside `batch`. */
+function buyFarmSteps(steps: FarmPurchaseStep[], checkRoiGate: boolean): boolean {
+  for (const step of steps) {
+    const payload = step.payload as Record<string, number>;
+    if (step.type === 'buy_research') {
+      const research = getResearchById(String(step.payload.researchId));
+      if (!research) return false;
+      syncEventStateForItem({ research }, checkRoiGate);
+      if (!buyOneLevel(research)) return false;
+    } else if (step.type === 'buy_vehicle') {
+      if (!buyVehicle(payload.slotIndex, payload.vehicleId)) return false;
+    } else if (step.type === 'buy_train_car') {
+      if (!buyTrainCar(payload.slotIndex, payload.fromLength)) return false;
+    } else if (!buyHab(payload.slotIndex, payload.habId)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function handleBuyFarmItem(item: FarmViewItem) {
+  batch(() => void buyListItem(item, false));
+}
+
+async function handleBuyHabSpaceChain() {
+  const summary = habSpaceSummary.value;
+  if (!summary) return;
+  const list = sortedResearches.value;
+  const target = summary.target;
+
+  isApplyingHabSpaceChain.value = true;
+  await yieldForOverlayPaint();
+
+  try {
+    await batch(() => {
+      const notePayload = buildHabSpaceNotePayload(
+        habSpaceTargetLabel(target),
+        list.length + 1,
+        summary.totalSeconds,
+        summary.totalSpent
+      );
+      if (notePayload) {
+        const noteBeforeSnapshot = prepareExecution();
+        completeExecution(
+          createNoteAction(
+            notePayload,
+            computeDependencies(
+              'notification',
+              notePayload,
+              actionsStore.actionsBeforeInsertion,
+              actionsStore.initialSnapshot.researchLevels
+            )
+          ),
+          noteBeforeSnapshot
+        );
+      }
+
+      // Earnings research passed the 70%-by-next-sale bar when planned, so it's re-checked live the
+      // same way the milestone chain's research purchases are.
+      for (const item of list) buyListItem(item, true);
+
+      // The hab space itself is bought regardless of that bar: it's there to keep the habs from filling.
+      if (target.kind === 'research') {
+        const research = getResearchById(target.researchId);
+        if (research) {
+          syncEventStateForItem({ research }, false);
+          buyOneLevel(research);
+        }
+      } else {
+        buyHab(target.slotIndex, target.habId);
+      }
+    });
+  } finally {
+    isApplyingHabSpaceChain.value = false;
   }
 }
 

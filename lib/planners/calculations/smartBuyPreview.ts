@@ -13,7 +13,15 @@ import {
   buyWhilePassingCheck,
   buyUntilRealSaleStarts,
 } from './researchRanking';
-import { meetsROIByDeadline, getSaleAwareTimeToSave } from './researchROI';
+import { meetsROIByDeadline, getSaleAwareTimeToSave, computeShowFullRoiWarning } from './researchROI';
+import {
+  type FarmPurchase,
+  type FarmPurchaseStep,
+  type FarmRankingItem,
+  listFarmPurchaseCandidates,
+  applyFarmPurchase,
+} from './farmPurchases';
+import { PROFILE } from '@planner/lib/profile';
 import { findSmartBuyCandidate } from './smartBuyCandidate';
 import {
   type DeliveryLevelSet,
@@ -68,10 +76,47 @@ function buyResearchAction(researchId: string, fromLevel: number, cost: number) 
 }
 
 export interface SaleAwarePlanEntry {
+  /** The research bought, or for a farm purchase a placeholder that isn't a research id. */
   researchId: string;
   duringSale: boolean;
   purchaseTimestamp: number;
   price: number;
+  /** Set when this entry is a vehicle, train car or hab (enlightenment only). */
+  farm?: { purchase: FarmPurchase; steps: FarmPurchaseStep[]; roiSeconds: number };
+}
+
+/**
+ * Farm purchases that clear the same bar as research in the sale-aware flow: in dual-gate mode,
+ * paying for themselves by `fullRoiDeadline`; otherwise the 70%-by-next-sale check, which only a
+ * fleet research pair can fail. Empty unless PROFILE.hasFarmPurchasesInRoi.
+ */
+export function eligibleFarmPurchases(
+  state: EngineState,
+  snapshot: CalculationsSnapshot,
+  context: SimulationContext,
+  mods: ResearchCostModifiers,
+  absoluteSimTime: number,
+  roiDeadline: number,
+  roiMode: 'immediate' | 'maxed_vehicles',
+  fullRoiDeadline: number | undefined
+): FarmRankingItem[] {
+  if (!PROFILE.hasFarmPurchasesInRoi) return [];
+  return listFarmPurchaseCandidates(state, snapshot, context, absoluteSimTime, {
+    includeHabs: true,
+    includeVehicles: roiMode === 'immediate',
+    mods,
+    roiDeadline,
+  }).filter(item => {
+    if (item.showSaleWarning) return false;
+    if (fullRoiDeadline === undefined) return true;
+    const completesAt = absoluteSimTime + item.timeToBuySeconds;
+    return !computeShowFullRoiWarning(item.earningsDelta, item.price, completesAt, fullRoiDeadline);
+  });
+}
+
+/** A ranked research item's Achieve ROI time, counting a better bottleneck-pair figure. */
+function researchAchieveRoi(item: { totalRoiSeconds?: number; pairRoiSeconds?: number }): number {
+  return item.pairRoiSeconds !== undefined ? Math.min(item.totalRoiSeconds!, item.pairRoiSeconds) : item.totalRoiSeconds!;
 }
 
 export interface SaleAwareBuyPlan {
@@ -98,7 +143,15 @@ export interface SimpleBuyPlan {
   /** Sum of each purchase's price — the Quick Buy note's "currency spent" figure. Only populated by
    *  `simulateThresholdBuy` — other `SimpleBuyPlan` producers leave it unset. */
   totalSpent?: number;
+  /** Every purchase in order, farm purchases included (enlightenment). Only set by
+   *  `simulateThresholdBuy`; `researchIds` above lists just the research among them. */
+  purchases?: ({ researchId: string } | { farm: { purchase: FarmPurchase; steps: FarmPurchaseStep[] } })[];
 }
+
+// Quick Buy rebuilds its farm purchase list after buying one, and otherwise after this many research
+// purchases: listing them costs more than a research step, and research rarely changes which
+// vehicles or habs pay for themselves.
+const QUICK_BUY_FARM_REFRESH_EVERY = 10;
 
 /**
  * Dry run of the sale-aware ROI buy flow ("70% Return") — mirrors `runSaleAwareBuyFlow` in
@@ -168,6 +221,7 @@ export function simulateSaleAwareBuy(
     price: number;
     duringSale: boolean;
     purchaseTimestamp: number;
+    farm?: { purchase: FarmPurchase; steps: FarmPurchaseStep[]; roiSeconds: number };
   }
   const log: LogEntry[] = [];
   let pending: (LogEntry & { timeToBuySeconds: number }) | undefined;
@@ -206,6 +260,34 @@ export function simulateSaleAwareBuy(
         fullRoiDeadline !== undefined
           ? ranked.find(item => item.canBuy && !item.showBuyNowRoiWarning && !item.showFullRoiWarning)
           : ranked.find(item => item.canBuy && !item.showSaleWarning);
+
+      // Enlightenment: the best farm purchase competes with the best research on Achieve ROI time.
+      const farmCandidate = eligibleFarmPurchases(
+        simState,
+        simSnapshot,
+        context,
+        mods,
+        simTime,
+        roiDeadlineOverride !== undefined ? Math.max(roiDeadlineOverride, nextSaleStart) : nextSaleStart,
+        roiMode,
+        fullRoiDeadline
+      ).sort((a, b) => a.totalRoiSeconds - b.totalRoiSeconds)[0];
+      if (farmCandidate && (!candidate || farmCandidate.totalRoiSeconds < researchAchieveRoi(candidate))) {
+        const purchaseTimestamp = simTime + farmCandidate.timeToBuySeconds;
+        pending = {
+          id: String(log.length),
+          researchId: `farm:${log.length}`,
+          fromLevel: 0,
+          price: farmCandidate.price,
+          // Vehicle and hab prices don't follow the research sale, so never the sale bypass.
+          duringSale: false,
+          purchaseTimestamp,
+          timeToBuySeconds: farmCandidate.timeToBuySeconds,
+          farm: { purchase: farmCandidate.purchase, steps: farmCandidate.steps, roiSeconds: farmCandidate.roiSeconds },
+        };
+        return { researchId: pending.researchId, duringSale: false, purchaseTimestamp };
+      }
+
       if (!candidate) {
         if (DEBUG_SALE_AWARE_BUY) {
           console.log(
@@ -249,7 +331,9 @@ export function simulateSaleAwareBuy(
     },
     researchId => {
       if (!pending || pending.researchId !== researchId) return false;
-      simState = applyAction(simState, buyResearchAction(researchId, pending.fromLevel, pending.price));
+      simState = pending.farm
+        ? applyFarmPurchase(simState, pending.farm.steps)
+        : applyAction(simState, buyResearchAction(researchId, pending.fromLevel, pending.price));
       simState = applyTime(simState, pending.timeToBuySeconds, simSnapshot);
       simTime += pending.timeToBuySeconds;
       // `skipEpochConversion` keeps `lastStepTime` in the incoming snapshot's own reference frame
@@ -291,6 +375,7 @@ export function simulateSaleAwareBuy(
       duringSale: e.duringSale,
       purchaseTimestamp: e.purchaseTimestamp,
       price: e.price,
+      ...(e.farm ? { farm: e.farm } : {}),
     })),
     endLevels: cleanState.researchLevels,
     endSnapshot,
@@ -1125,23 +1210,59 @@ export function simulateThresholdBuy(
   let simState: EngineState = { ...createBaseEngineState(snapshot), researchLevels: { ...researchLevels } };
   let simSnapshot = snapshot;
   const researchIds: string[] = [];
+  const purchases: NonNullable<SimpleBuyPlan['purchases']> = [];
   let totalSecondsToSave = 0;
   let totalSpent = 0;
 
+  // Enlightenment: vehicles, train cars and habs that pay for themselves and can be saved for within
+  // the threshold (bank ignored, like research) compete with the research on price.
+  let farmList: FarmRankingItem[] | null = null;
+  let researchSinceFarmList = 0;
+  const farmCandidate = (): FarmRankingItem | undefined => {
+    if (!PROFILE.hasFarmPurchasesInRoi) return undefined;
+    if (!farmList || researchSinceFarmList >= QUICK_BUY_FARM_REFRESH_EVERY) {
+      const noBank = { ...simSnapshot, bankValue: 0 };
+      farmList = listFarmPurchaseCandidates({ ...simState, bankValue: 0 }, noBank, context, noBank.lastStepTime, {
+        includeHabs: true,
+        includeVehicles: true,
+        mods,
+        roiDeadline: Infinity,
+        ignoreCalendar: { isResearchSale: isSale },
+      })
+        .filter(item => item.timeToBuySeconds <= thresholdSeconds && isFinite(item.totalRoiSeconds))
+        .sort((a, b) => a.price - b.price);
+      researchSinceFarmList = 0;
+    }
+    return farmList[0];
+  };
+
   for (let i = 0; i < MAX_SIMULATED_PURCHASES; i++) {
     const candidate = findSmartBuyCandidate(simState.researchLevels, mods, isSale, simSnapshot, thresholdSeconds);
+    const farm = farmCandidate();
+    if (farm && (!candidate || farm.price < candidate.price)) {
+      simState = applyFarmPurchase(simState, farm.steps);
+      simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
+      purchases.push({ farm: { purchase: farm.purchase, steps: farm.steps } });
+      totalSecondsToSave += farm.timeToBuySeconds;
+      totalSpent += farm.price;
+      farmList = null;
+      continue;
+    }
     if (!candidate) break;
+    researchSinceFarmList++;
     const level = simState.researchLevels[candidate.research.id] || 0;
     simState = applyAction(simState, buyResearchAction(candidate.research.id, level, candidate.price));
     // See `simulateSaleAwareBuy`'s identical comment — keeps `lastStepTime` in its incoming frame
     // across this loop's repeated snapshots instead of risking a mid-loop epoch flip.
     simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
     researchIds.push(candidate.research.id);
+    purchases.push({ researchId: candidate.research.id });
     totalSecondsToSave += candidate.secondsToSave;
     totalSpent += candidate.price;
   }
 
   return {
+    purchases,
     researchIds,
     endLevels: simState.researchLevels,
     endSnapshot: simSnapshot,

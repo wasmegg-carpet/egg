@@ -199,6 +199,7 @@ import { useSalesStore } from 'lib/planners/stores/sales';
 import { computeDependencies } from 'lib/planners/actions/executor';
 import { generateActionId } from '@planner/types';
 import { useEventCrossingWaits } from 'lib/planners/composables/usePlannerEventCrossingWaits';
+import { useFarmPurchaseActions } from 'lib/planners/composables/useFarmPurchaseActions';
 import {
   calculateShippingMultipliers,
   calculateMaxVehicleSlots,
@@ -215,8 +216,10 @@ const commonResearchStore = useCommonResearchStore();
 const actionsStore = useActionsStore();
 const salesStore = useSalesStore();
 const { output } = useShippingCapacity();
+const crossingWaits = useEventCrossingWaits();
 const { prepareExecution, completeExecution, batch, isEditingPastGroup, settled, insertBoostCrossingWaits } =
-  useEventCrossingWaits();
+  crossingWaits;
+const { buyVehicle, buyTrainCar } = useFarmPurchaseActions(crossingWaits);
 
 // Cost modifiers
 const costModifiers = computed<VehicleCostModifiers>(() => ({
@@ -365,55 +368,10 @@ function getAvailableVehicles(currentVehicleId: number | null) {
 
 function handleVehicleChange(slotIndex: number, vehicleId: number | undefined) {
   if (vehicleId === undefined) return;
-
   // Don't add if it's already the same (check array bounds for slots unlocked by fleet research)
   const currentSlot = displaySlots.value[slotIndex];
   if (currentSlot && currentSlot.vehicleId === vehicleId) return;
-
-  // Build payload
-  const payload = {
-    slotIndex,
-    vehicleId,
-    trainLength: vehicleId === 11 ? 1 : undefined,
-  };
-
-  batch(() => {
-    // Prepare execution (restores stores if editing past group)
-    const pricingSnapshot = prepareExecution();
-
-    // Calculate cost based on effective state
-    const effectiveVehicles = pricingSnapshot.vehicles;
-    const existingCount = countVehiclesOfType(effectiveVehicles, vehicleId);
-    const isSaleActive = pricingSnapshot.activeSales.vehicle;
-    const cost = getDiscountedVehiclePrice(vehicleId, existingCount, costModifiers.value, isSaleActive);
-
-    insertBoostCrossingWaits(cost);
-    const beforeSnapshot = prepareExecution();
-
-    // Compute dependencies (hyperloop train cars depend on graviton coupling)
-    const dependencies = computeDependencies(
-      'buy_vehicle',
-      payload,
-      actionsStore.actionsBeforeInsertion,
-      actionsStore.initialSnapshot.researchLevels
-    );
-
-    // Apply to store
-    shippingStore.setVehicle(slotIndex, vehicleId);
-
-    // Complete execution
-    completeExecution(
-      {
-        id: generateActionId(),
-        timestamp: Date.now(),
-        type: 'buy_vehicle',
-        payload,
-        cost,
-        dependsOn: dependencies,
-      },
-      beforeSnapshot
-    );
-  });
+  batch(() => void buyVehicle(slotIndex, vehicleId));
 }
 
 // ============================================================================
@@ -512,47 +470,8 @@ function handleMaxTrainCars(slotIndex: number) {
 /**
  * Add a train car action.
  */
-function addTrainCarAction(slotIndex: number, fromLength: number, toLength: number) {
-  // Prepare execution (restores stores if editing past group)
-  const pricingSnapshot = prepareExecution();
-
-  // Calculate cost
-  const isSaleActive = pricingSnapshot.activeSales.vehicle;
-  const cost = getDiscountedTrainCarPrice(toLength - 1, costModifiers.value, isSaleActive);
-
-  insertBoostCrossingWaits(cost);
-  const beforeSnapshot = prepareExecution();
-
-  // Build payload
-  const payload = {
-    slotIndex,
-    fromLength,
-    toLength,
-  };
-
-  // Compute dependencies
-  const dependencies = computeDependencies(
-    'buy_train_car',
-    payload,
-    actionsStore.actionsBeforeInsertion,
-    actionsStore.initialSnapshot.researchLevels
-  );
-
-  // Apply to store
-  shippingStore.setTrainLength(slotIndex, toLength);
-
-  // Complete execution
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'buy_train_car',
-      payload,
-      cost,
-      dependsOn: dependencies,
-    },
-    beforeSnapshot
-  );
+function addTrainCarAction(slotIndex: number, fromLength: number, _toLength: number) {
+  buyTrainCar(slotIndex, fromLength);
 }
 
 function handleToggleSale() {

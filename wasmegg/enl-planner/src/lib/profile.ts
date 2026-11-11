@@ -23,6 +23,8 @@ export const PROFILE: PlannerProfile = {
   ihrTruthEggBase: 1.01,
   storagePrefix: 'enl',
   hasDeliveryViews: false,
+  hasHabSpaceView: true,
+  hasFarmPurchasesInRoi: true,
   maxVehiclesRoiRoute: '',
   hasShifts: false,
   appName: 'Enlightenment Planner',

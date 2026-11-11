@@ -349,29 +349,20 @@ export function computeShowFullRoiWarning(
 }
 
 /**
- * Calculate the Return on Investment (ROI) for a specific research purchase.
- * This predicts how long it will take for the research to pay for itself
- * in terms of increased earnings.
+ * How long a purchase takes to pay for itself once bought: the time for the extra earnings after
+ * `actions` (bought `timeToBuySeconds` from `snapshot`, together costing `price`) to add up to
+ * `price`, or Infinity if that takes longer than MAX_ROI_PAYBACK_SEARCH_SECONDS. Shared by research
+ * and, on the enlightenment planner, vehicle and hab purchases.
  */
-export function calculateResearchROI(input: ROICalculationInput): ROICalculationResult {
-  const { research, level, mods, snapshot, context, eventTiming } = input;
-  const { absoluteSimTime, roiDeadline, researchSaleDeadline, isSaleActive, transitions, fullRoiDeadline } =
-    eventTiming;
-
-  const purchase = getSaleAwareTimeToSave(research, level, mods, isSaleActive, absoluteSimTime, snapshot, transitions);
-  const price = purchase.price;
-  const timeToBuySeconds = purchase.waitSeconds;
+export function calculatePurchasePayback(
+  actions: Parameters<typeof applyAction>[1][],
+  price: number,
+  timeToBuySeconds: number,
+  snapshot: CalculationsSnapshot,
+  context: SimulationContext,
+  absoluteSimTime: number
+): { roiSeconds: number; nextSnapshot: CalculationsSnapshot } {
   const baseState = createBaseEngineState(snapshot);
-
-  const tempAction = createSimAction(
-    'buy_research',
-    {
-      researchId: research.id,
-      fromLevel: level,
-      toLevel: level + 1,
-    },
-    price
-  );
 
   // Project the farm state forward to the actual time of purchase to get accurate ROI
   // predictions based on expected population growth while saving.
@@ -388,7 +379,7 @@ export function calculateResearchROI(input: ROICalculationInput): ROICalculation
       ? computeSnapshot(stateAtBuy, context, { skipEpochConversion: true })
       : snapshot;
 
-  const nextStateAtBuy = applyAction(stateAtBuy, tempAction);
+  const nextStateAtBuy = actions.reduce((state, action) => applyAction(state, action), stateAtBuy);
   const nextSnapshot = computeSnapshot(nextStateAtBuy, context, { skipEpochConversion: true });
 
   const absoluteSimTimeAtBuy = absoluteSimTime + timeToBuySeconds;
@@ -435,6 +426,42 @@ export function calculateResearchROI(input: ROICalculationInput): ROICalculation
     }
     roiSeconds = high;
   }
+
+
+  return { roiSeconds, nextSnapshot };
+}
+
+/**
+ * Calculate the Return on Investment (ROI) for a specific research purchase.
+ * This predicts how long it will take for the research to pay for itself
+ * in terms of increased earnings.
+ */
+export function calculateResearchROI(input: ROICalculationInput): ROICalculationResult {
+  const { research, level, mods, snapshot, context, eventTiming } = input;
+  const { absoluteSimTime, roiDeadline, researchSaleDeadline, isSaleActive, transitions, fullRoiDeadline } =
+    eventTiming;
+
+  const purchase = getSaleAwareTimeToSave(research, level, mods, isSaleActive, absoluteSimTime, snapshot, transitions);
+  const price = purchase.price;
+  const timeToBuySeconds = purchase.waitSeconds;
+  const { roiSeconds, nextSnapshot } = calculatePurchasePayback(
+    [
+      createSimAction(
+        'buy_research',
+        {
+          researchId: research.id,
+          fromLevel: level,
+          toLevel: level + 1,
+        },
+        price
+      ),
+    ],
+    price,
+    timeToBuySeconds,
+    snapshot,
+    context,
+    absoluteSimTime
+  );
 
   const earningsDelta = roiSeconds !== Infinity && roiSeconds > 0 ? price / roiSeconds : 0;
   const totalRoiSeconds = timeToBuySeconds + roiSeconds;

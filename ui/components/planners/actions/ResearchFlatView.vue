@@ -20,7 +20,15 @@
       </div>
     </div>
 
-    <template v-for="(item, idx) in sortedResearches" :key="`${item.research.id}-${item.targetLevel}`">
+    <template v-for="(item, idx) in sortedResearches" :key="isFarmViewItem(item) ? item.key : `${item.research.id}-${item.targetLevel}`">
+      <FarmPurchaseRow
+        v-if="isFarmViewItem(item)"
+        :item="item"
+        :hide-buy-button="isChainView"
+        :time-cost-tooltip-seconds="isChainView ? item.buyToHereSeconds : undefined"
+        @buy="$emit('buy-farm', item)"
+      />
+      <template v-else>
       <!-- Tier Break Divider (Cheapest First) -->
       <div
         v-if="item.showDivider"
@@ -44,11 +52,11 @@
         :price="item.price"
         :time-to-buy="item.timeToBuy || getResearchTimeToBuy(item.research)"
         :time-to-buy-seconds="item.timeToBuySeconds ?? getResearchTimeToBuySeconds(item.research)"
-        :time-cost-tooltip-seconds="view === 'milestones' ? item.buyToHereSeconds : undefined"
+        :time-cost-tooltip-seconds="isChainView ? item.buyToHereSeconds : undefined"
         :can-buy="item.canBuy"
         :is-maxed="item.isMaxed"
         :show-max="false"
-        :hide-buy-button="view === 'milestones'"
+        :hide-buy-button="isChainView"
         :show-tier="true"
         :show-buy-to-here="view === 'cheapest'"
         :can-buy-to-here="view === 'cheapest' ? true : item.canBuyToHere"
@@ -74,6 +82,7 @@
         @max="$emit('max', item.research)"
         @buy-to-here="$emit('buy-to-here', idx)"
       />
+      </template>
     </template>
 
     <div v-if="sortedResearches.length === 0" class="px-4 py-8 text-center text-gray-500 italic bg-gray-50">
@@ -100,6 +109,33 @@
       <template v-else-if="view === 'milestones'">
         Unable to find a path to this milestone from the current state.
       </template>
+      <template v-else-if="view === 'hab_space' && hasHabSpaceTarget">
+        <p>No earnings purchase fits in first. Buy the hab space directly.</p>
+        <div
+          v-if="habSpaceTierRecommendation"
+          class="mt-3 max-w-sm mx-auto not-italic text-left text-xs text-gray-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2"
+        >
+          <p>
+            <span class="font-semibold text-indigo-800">Or unlock tier {{ habSpaceTierRecommendation.tier }} first.</span>
+            It takes {{ habSpaceTierRecommendation.purchasesNeeded }} more
+            {{ habSpaceTierRecommendation.purchasesNeeded === 1 ? 'purchase' : 'purchases' }}, about
+            <span class="font-mono font-semibold">{{ formatDuration(habSpaceTierRecommendation.pathSeconds) }}</span>
+            on the Milestones path, and your habs fill in
+            <span class="font-mono font-semibold">{{ formatDuration(habSpaceTierRecommendation.fullAtSeconds) }}</span>.
+            The new tier's earnings research would then be available here.
+          </p>
+          <button
+            type="button"
+            class="mt-1.5 text-indigo-600 hover:text-indigo-800 font-semibold"
+            @click="$emit('show-tier-path')"
+          >
+            Show path to tier {{ habSpaceTierRecommendation.tier }}
+          </button>
+        </div>
+      </template>
+      <template v-else-if="view === 'hab_space'">
+        No hab space purchase is available from the current state.
+      </template>
       <template v-else>
         No researches match this criteria or all are maxed.
       </template>
@@ -111,13 +147,19 @@
 import { usePlannerProfile } from 'ui/composables/planners/plannerProfile';
 import { computed } from 'vue';
 import { type CommonResearch } from '@planner/calculations/commonResearch';
-import { type ViewType, type ElrRoiDisplayMode } from 'lib/planners/composables/useResearchViews';
+import {
+  type ViewType,
+  type ElrRoiDisplayMode,
+  type FarmViewItem,
+  isFarmViewItem,
+} from 'lib/planners/composables/useResearchViews';
 import { useInitialStateStore } from '@planner/stores/initialState';
 import { useActionsStore } from '@planner/stores/actions';
 import { usePlanStore } from '@planner/stores/plan';
-import { formatAbsoluteTime } from '@planner/lib/format';
+import { formatAbsoluteTime, formatDuration } from '@planner/lib/format';
 import { type PurchaseEventCrossings } from 'lib/planners/calculations/researchROI';
 import ResearchItem from 'ui/components/planners/actions/ResearchItem.vue';
+import FarmPurchaseRow from 'ui/components/planners/actions/FarmPurchaseRow.vue';
 
 interface SortedResearchItem {
   research: CommonResearch;
@@ -150,11 +192,13 @@ interface SortedResearchItem {
 }
 
 const props = defineProps<{
-  sortedResearches: SortedResearchItem[];
+  sortedResearches: (SortedResearchItem | FarmViewItem)[];
   view: ViewType;
   thresholds: readonly number[];
   milestoneTargetSelected?: boolean;
   milestoneAlreadyReached?: boolean;
+  hasHabSpaceTarget?: boolean;
+  habSpaceTierRecommendation?: { tier: number; purchasesNeeded: number; pathSeconds: number; fullAtSeconds: number } | null;
   showEventCrossingDetails?: boolean;
   getResearchTimeToBuy: (r: CommonResearch) => string;
   getResearchTimeToBuySeconds: (r: CommonResearch) => number;
@@ -164,6 +208,9 @@ const props = defineProps<{
 const initialStateStore = useInitialStateStore();
 const { hasDeliveryViews } = usePlannerProfile();
 const isMissingRealisticData = computed(() => hasDeliveryViews && props.view === 'elr' && !initialStateStore.rawBackup);
+
+// Views whose list is a planned chain, bought all at once rather than row by row.
+const isChainView = computed(() => props.view === 'milestones' || props.view === 'hab_space');
 
 const actionsStore = useActionsStore();
 const planStore = usePlanStore();
@@ -178,14 +225,16 @@ const baseTimestamp = computed(() => {
 const unlockNextTier = computed(() => {
   if (props.view !== 'cheapest') return null;
 
-  const dividerIndex = props.sortedResearches.findIndex(item => item.showDivider);
+  // The cheapest view lists research only.
+  const items = props.sortedResearches.filter((item): item is SortedResearchItem => !isFarmViewItem(item));
+  const dividerIndex = items.findIndex(item => item.showDivider);
   if (dividerIndex <= 0) return null;
 
   const index = dividerIndex - 1;
-  const target = props.sortedResearches[index];
+  const target = items[index];
   return {
     index,
-    tier: props.sortedResearches[dividerIndex].unlockTier,
+    tier: items[dividerIndex].unlockTier,
     purchaseCount: dividerIndex,
     time: target.buyToHereTime,
     canBuy: target.canBuyToHere,
@@ -196,5 +245,5 @@ const unlockNextTier = computed(() => {
   };
 });
 
-defineEmits(['buy', 'max', 'buy-to-here', 'refresh-backup']);
+defineEmits(['buy', 'max', 'buy-to-here', 'buy-farm', 'show-tier-path', 'refresh-backup']);
 </script>

@@ -15,6 +15,7 @@ import type { CalculationsSnapshot } from '@planner/types';
 import type { SimulationContext } from '@planner/engine/types';
 import type { ResearchCostModifiers } from '@planner/calculations/commonResearch';
 import type { MilestoneTarget, MilestoneChainResult } from '../calculations/milestoneChain';
+import type { HabSpaceChainResult } from '../calculations/habSpaceChain';
 import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '../calculations/smartBuyPreview';
 import type { ei } from '../..';
 
@@ -28,6 +29,16 @@ export interface MilestoneChainRequest {
    *  result should still be used; this only decides where it goes. */
   requestId: number;
   target: MilestoneTarget;
+  startSnapshot: CalculationsSnapshot;
+  context: SimulationContext;
+  mods: ResearchCostModifiers;
+  absoluteSimTime: number;
+  deadline: number;
+}
+
+export interface HabSpaceChainRequest {
+  kind: 'habSpaceChain';
+  requestId: number;
   startSnapshot: CalculationsSnapshot;
   context: SimulationContext;
   mods: ResearchCostModifiers;
@@ -78,12 +89,15 @@ export interface ThresholdBuyRequest {
   thresholdSeconds: number;
 }
 
-export type WorkerRequest = MilestoneChainRequest | SaleAwareBuyRequest | SaleEndsBuyRequest | ThresholdBuyRequest;
+export type WorkerRequest =
+  | MilestoneChainRequest
+  | HabSpaceChainRequest
+  | SaleAwareBuyRequest | SaleEndsBuyRequest | ThresholdBuyRequest;
 
 export interface WorkerResultMessage {
   type: 'result';
   requestId: number;
-  result: MilestoneChainResult | SaleAwareBuyPlan | SaleEndsPlan | SimpleBuyPlan;
+  result: MilestoneChainResult | HabSpaceChainResult | SaleAwareBuyPlan | SaleEndsPlan | SimpleBuyPlan;
 }
 
 export interface WorkerErrorMessage {

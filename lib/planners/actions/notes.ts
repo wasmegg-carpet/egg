@@ -220,3 +220,21 @@ export function buildMilestoneNotePayload(
     submessage: `${formatPurchasesOverDuration(purchaseCount, totalSeconds, totalSpent)}${savedPart}`,
   };
 }
+
+/**
+ * Note logged ahead of a Hab Space "Buy Entire Chain" — `ResearchActions.vue`'s
+ * `handleBuyHabSpaceChain`. `targetLabel` names the hab space purchase the chain ends with;
+ * `purchaseCount`/`totalSpent` include it. Returns null when the chain bought nothing.
+ */
+export function buildHabSpaceNotePayload(
+  targetLabel: string,
+  purchaseCount: number,
+  totalSeconds: number,
+  totalSpent: number
+): NotificationPayload | null {
+  if (purchaseCount <= 0) return null;
+  return {
+    message: `Hab space: ${targetLabel}`,
+    submessage: formatPurchasesOverDuration(purchaseCount, totalSeconds, totalSpent),
+  };
+}

@@ -24,6 +24,7 @@
  *   new Worker(new URL('./researchCalc.worker.ts', import.meta.url), { type: 'module' })
  */
 import { computeTierMilestoneChain, computeResearchMilestoneChain } from '../calculations/milestoneChain';
+import { computeHabSpaceChain } from '../calculations/habSpaceChain';
 import { simulateSaleAwareBuy, simulateSaleEndsBuy, simulateThresholdBuy } from '../calculations/smartBuyPreview';
 import { createBaseEngineState } from '../engine/adapter';
 import { sanitizeLongs } from '../artifacts/utils';
@@ -62,6 +63,13 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
                 absoluteSimTime,
                 deadline
               );
+        post({ type: 'result', requestId: msg.requestId, result });
+        break;
+      }
+
+      case 'habSpaceChain': {
+        const { startSnapshot, context, mods, absoluteSimTime, deadline } = msg;
+        const result = computeHabSpaceChain(startSnapshot, context, mods, absoluteSimTime, deadline);
         post({ type: 'result', requestId: msg.requestId, result });
         break;
       }

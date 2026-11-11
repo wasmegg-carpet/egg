@@ -25,9 +25,19 @@ import type { EngineState, SimulationContext } from '@planner/engine/types';
 import type { CalculationsSnapshot } from '@planner/types';
 import { computeSnapshot } from '../engine/compute';
 import { createBaseEngineState } from '../engine/adapter';
-import { applyAction, applyTime, boostTransitionsFrom } from '@planner/engine/apply';
+import { applyAction, applyTime, boostTransitionsFrom, getTimeToSave } from '@planner/engine/apply';
 import { getNextSaleStart, isResearchSaleActive, isEarningsBoostActive } from '../events';
 import { DEBUG_MILESTONE_CHAIN } from '../debugFlags';
+import { PROFILE } from '@planner/lib/profile';
+import {
+  type FarmChainItem,
+  type FarmRankingItem,
+  listFarmPurchaseCandidates,
+  simulateFarmPurchase,
+  applyFarmPurchase,
+  toFarmChainItem,
+  isFarmChainItem,
+} from './farmPurchases';
 
 export type MilestoneTarget =
   | { kind: 'tier'; tier: number }
@@ -39,7 +49,12 @@ export function isMilestoneReached(target: MilestoneTarget, researchLevels: Reco
     : (researchLevels[target.researchId] || 0) >= target.targetLevel;
 }
 
-const MILESTONE_MAX_STEPS = 2000;
+export const MILESTONE_MAX_STEPS = 2000;
+
+export function isExcludedResearch(id: string, exclude: string | ReadonlySet<string> | undefined): boolean {
+  if (exclude === undefined) return false;
+  return typeof exclude === 'string' ? id === exclude : exclude.has(id);
+}
 
 // How many ROI-ranked candidates to try as a detour at each step before giving up and falling back
 // to the non-detour path (buying the milestone target directly, or — for a tier chain — finishing
@@ -78,8 +93,18 @@ export interface MilestoneChainItem {
   eventCrossings?: PurchaseEventCrossings;
 }
 
+/**
+ * One purchase in a chain: a research level, or on the enlightenment planner a vehicle, train car
+ * or hab bought as an earnings detour.
+ */
+export type ChainItem = MilestoneChainItem | FarmChainItem;
+
+export function isResearchChainItem(item: ChainItem): item is MilestoneChainItem {
+  return !isFarmChainItem(item);
+}
+
 export interface MilestoneChainResult {
-  items: MilestoneChainItem[];
+  items: ChainItem[];
   reached: boolean;
   totalSeconds: number;
 }
@@ -121,7 +146,7 @@ function sweepUntilNextSale(
   researchSaleDeadline: number,
   // Forwarded to `simulateSaleAwareBuy`'s own `roiDeadlineOverride` — see its doc comment.
   roiDeadlineOverride: number | undefined
-): { items: MilestoneChainItem[]; state: EngineState; snapshot: CalculationsSnapshot; totalSeconds: number } {
+): { items: ChainItem[]; state: EngineState; snapshot: CalculationsSnapshot; totalSeconds: number } {
   const nextSaleStart = getNextSaleStart(absoluteSimTimeAtStart);
 
   if (DEBUG_MILESTONE_CHAIN) {
@@ -179,10 +204,37 @@ function sweepUntilNextSale(
   // disagreeing) calculations.
   let resultState = state;
   let resultSnapshot = snapshot;
-  const items: MilestoneChainItem[] = [];
+  const items: ChainItem[] = [];
   let itemTimestamp = absoluteSimTimeAtStart;
 
   for (const entry of acceptedEntries) {
+    if (entry.farm) {
+      // Same idea as research below: the plan picks it, the wait is worked out again from here.
+      const price = entry.farm.steps.reduce((sum, step) => sum + step.cost, 0);
+      const transitions = boostTransitionsFrom(resultSnapshot, itemTimestamp);
+      const waitSeconds = getTimeToSave(price, resultSnapshot, transitions);
+      if (waitSeconds === Infinity) break;
+      resultState = applyTime(applyFarmPurchase(resultState, entry.farm.steps), waitSeconds, resultSnapshot, {
+        transitions,
+      });
+      resultSnapshot = computeSnapshot(resultState, context, { skipEpochConversion: true });
+      const completesAt = itemTimestamp + waitSeconds;
+      items.push({
+        kind: 'farm',
+        purchase: entry.farm.purchase,
+        steps: entry.farm.steps,
+        price,
+        timeToBuySeconds: waitSeconds,
+        buyToHereSeconds: completesAt - absoluteSimTimeAtStart,
+        roiSeconds: entry.farm.roiSeconds,
+        totalRoiSeconds: waitSeconds + entry.farm.roiSeconds,
+        showSaleWarning: false,
+        duringSale: false,
+        duringEarningsBoost: isEarningsBoostActive(completesAt),
+      });
+      itemTimestamp = completesAt;
+      continue;
+    }
     const research = getResearchById(entry.researchId);
     if (!research) continue;
     const currentLevel = resultState.researchLevels[entry.researchId] || 0;
@@ -287,7 +339,7 @@ function idleForwardTo(
  * the tier afterward actually looks like, since a tier has no single expensive target whose own
  * clock a candidate's value can be judged against.
  */
-function findRoiDetour(
+export function findRoiDetour(
   state: EngineState,
   snapshot: CalculationsSnapshot,
   context: SimulationContext,
@@ -297,17 +349,26 @@ function findRoiDetour(
   // Forwarded to `rankResearchByROI`'s own `roiDeadlineOverride` — see its doc comment.
   roiDeadlineOverride: number | undefined,
   fallbackSeconds: number,
-  excludeResearchId: string | undefined,
+  // One research id, or a set of them (the hab space chain keeps every hab-capacity research out).
+  excludeResearchId: string | ReadonlySet<string> | undefined,
   scoreSequence: (
     result: NonNullable<ReturnType<typeof simulatePurchaseSequence>>,
     afterAbsoluteTime: number
-  ) => number | null
+  ) => number | null,
+  // Only research affordable within this many seconds is tried, and then every one of them is, not
+  // just the best MAX_DETOUR_CANDIDATES_PER_STEP by payback. The hab space chain passes the time
+  // until the habs fill: the best-payback research is often too expensive to fit in that window,
+  // and the cheaper research behind it would otherwise never be tried.
+  maxWaitSeconds?: number,
+  // Enlightenment only (PROFILE.hasFarmPurchasesInRoi): vehicles and train cars, and habs when
+  // `includeHabs`, are tried too, in payback order alongside the research.
+  farm?: { includeHabs: boolean }
 ): {
-  items: SequencedPurchase[];
+  /** The detour's purchases, tagged for display, with `buyToHereSeconds` relative to its start. */
+  items: ChainItem[];
   state: EngineState;
   snapshot: CalculationsSnapshot;
   totalSeconds: number;
-  candidate: ResearchRankingItem;
 } | null {
   const isSale = isResearchSaleActive(currentAbsoluteTime);
   const ranked = rankResearchByROI(
@@ -325,13 +386,61 @@ function findRoiDetour(
 
   const eligibleCandidates = ranked.filter(item => {
     if (!item.canBuy || item.showSaleWarning) return false;
-    if (excludeResearchId && item.research.id === excludeResearchId) return false;
+    if (isExcludedResearch(item.research.id, excludeResearchId)) return false;
     const achieveRoiSeconds =
       item.pairRoiSeconds !== undefined ? Math.min(item.totalRoiSeconds!, item.pairRoiSeconds) : item.totalRoiSeconds;
     return achieveRoiSeconds !== undefined && achieveRoiSeconds <= fallbackSeconds;
   });
 
-  for (const candidate of eligibleCandidates.slice(0, MAX_DETOUR_CANDIDATES_PER_STEP)) {
+  const farmCandidates: FarmRankingItem[] =
+    farm && PROFILE.hasFarmPurchasesInRoi
+      ? listFarmPurchaseCandidates(state, snapshot, context, currentAbsoluteTime, {
+          includeHabs: farm.includeHabs,
+          includeVehicles: true,
+          mods,
+          roiDeadline:
+            roiDeadlineOverride !== undefined
+              ? Math.max(roiDeadlineOverride, getNextSaleStart(currentAbsoluteTime))
+              : getNextSaleStart(currentAbsoluteTime),
+        }).filter(item => !item.showSaleWarning && item.totalRoiSeconds <= fallbackSeconds)
+      : [];
+
+  // Research and farm purchases together, fastest Achieve ROI first (the research list already is).
+  type Candidate = { research: ResearchRankingItem } | { farm: FarmRankingItem };
+  const achieveRoi = (c: Candidate) =>
+    'farm' in c
+      ? c.farm.totalRoiSeconds
+      : c.research.pairRoiSeconds !== undefined
+        ? Math.min(c.research.totalRoiSeconds!, c.research.pairRoiSeconds)
+        : c.research.totalRoiSeconds!;
+  const merged: Candidate[] = [
+    ...eligibleCandidates.map(research => ({ research })),
+    ...farmCandidates.map(farm => ({ farm })),
+  ];
+  if (farmCandidates.length > 0) merged.sort((a, b) => achieveRoi(a) - achieveRoi(b));
+
+  const timeToBuy = (c: Candidate) => ('farm' in c ? c.farm.timeToBuySeconds : (c.research.timeToBuySeconds ?? Infinity));
+  const candidatesToTry =
+    maxWaitSeconds === undefined
+      ? merged.slice(0, MAX_DETOUR_CANDIDATES_PER_STEP)
+      : merged.filter(c => timeToBuy(c) <= maxWaitSeconds);
+  for (const entry of candidatesToTry) {
+    if ('farm' in entry) {
+      const bought = simulateFarmPurchase(entry.farm, state, snapshot, context, currentAbsoluteTime);
+      if (!bought) continue;
+      const score = scoreSequence(
+        { ...bought, items: [] },
+        currentAbsoluteTime + bought.totalSecondsSpent
+      );
+      if (score === null) continue;
+      return {
+        items: [toFarmChainItem(entry.farm)],
+        state: bought.state,
+        snapshot: bought.snapshot,
+        totalSeconds: bought.totalSecondsSpent,
+      };
+    }
+    const candidate = entry.research;
     const sequences = buildRoiCandidateSequences(candidate, state.researchLevels, excludeResearchId);
     // See this function's own doc comment: a candidate that only qualified via pairing has no
     // verified solo economics, so its solo sequence (always first) is skipped entirely.
@@ -350,11 +459,10 @@ function findRoiDetour(
 
     if (best) {
       return {
-        items: best.result.items,
+        items: tagDetourItems(best.result.items, candidate),
         state: best.result.state,
         snapshot: best.result.snapshot,
         totalSeconds: best.result.totalSecondsSpent,
-        candidate,
       };
     }
   }
@@ -365,7 +473,7 @@ function findRoiDetour(
 /** Tags a `findRoiDetour` result's purchases with their ROI display fields and relative
  *  `buyToHereSeconds`, the same convention `sweepUntilNextSale`'s items use — the caller rebases
  *  them onto its own running total. */
-function tagDetourItems(items: SequencedPurchase[], candidate: ResearchRankingItem): MilestoneChainItem[] {
+export function tagDetourItems(items: SequencedPurchase[], candidate: ResearchRankingItem): MilestoneChainItem[] {
   const isPair = items.length > 1;
   const sequenceSeconds = items.reduce((sum, purchase) => sum + purchase.timeToBuySeconds, 0);
   let totalSeconds = 0;
@@ -458,14 +566,14 @@ export function computeResearchMilestoneChain(
   let state = startState;
   let snapshot = startSnapshot;
   let totalSeconds = 0;
-  const items: MilestoneChainItem[] = [];
+  const items: ChainItem[] = [];
 
   // `items.length < MILESTONE_MAX_STEPS` bounds total PURCHASES (shared with every other
   // milestone-chain loop in this file). `round` is purely `MAX_SALE_SWEEPS_SAFETY_CAP`'s crash
   // guard — see that constant's own comment — not a heuristic budget.
   let round = 0;
 
-  const rebaseAndPush = (newItems: MilestoneChainItem[]) => {
+  const rebaseAndPush = (newItems: ChainItem[]) => {
     for (const item of newItems) {
       items.push({ ...item, buyToHereSeconds: totalSeconds + item.buyToHereSeconds });
     }
@@ -529,15 +637,17 @@ export function computeResearchMilestoneChain(
       roiDeadlineOverride,
       targetRoi.timeToBuySeconds,
       targetResearch.id,
-      () => 0
+      () => 0,
+      undefined,
+      { includeHabs: true }
     );
     if (detour) {
       if (DEBUG_MILESTONE_CHAIN) {
         console.log(
-          `[milestoneChain] computeResearchMilestoneChain round ${round}: DETOUR — ${detour.items.map(i => i.research.id).join(', ')}, direct wait was ${targetRoi.timeToBuySeconds}s`
+          `[milestoneChain] computeResearchMilestoneChain round ${round}: DETOUR — ${detour.items.map(i => (isResearchChainItem(i) ? i.research.id : i.purchase.kind)).join(', ')}, direct wait was ${targetRoi.timeToBuySeconds}s`
         );
       }
-      rebaseAndPush(tagDetourItems(detour.items, detour.candidate));
+      rebaseAndPush(detour.items);
       state = detour.state;
       snapshot = detour.snapshot;
       totalSeconds += detour.totalSeconds;
@@ -810,7 +920,7 @@ export function computeTierMilestoneChain(
   let state = createBaseEngineState(startSnapshot);
   let snapshot = startSnapshot;
   let totalSeconds = 0;
-  const items: MilestoneChainItem[] = [];
+  const items: ChainItem[] = [];
 
   while (items.length < MILESTONE_MAX_STEPS && !isTierUnlocked(state.researchLevels, target.tier)) {
     const cheapPlan = simulateCheapestFirstTierChain(
@@ -857,11 +967,13 @@ export function computeTierMilestoneChain(
         // very first such no-net-cost detour from being taken.
         if (cheapPlan.reached && restOfPlan.totalSeconds > cheapPlan.totalSeconds) return null;
         return restOfPlan.totalSeconds;
-      }
+      },
+      undefined,
+      { includeHabs: true }
     );
 
     if (detour) {
-      for (const item of tagDetourItems(detour.items, detour.candidate)) {
+      for (const item of detour.items) {
         items.push({ ...item, buyToHereSeconds: totalSeconds + item.buyToHereSeconds });
       }
       totalSeconds += detour.totalSeconds;
@@ -873,7 +985,8 @@ export function computeTierMilestoneChain(
     // Cheapest-first wins (or no detour is viable) — buy the same set of items, but re-sequenced
     // by ROI so any ROI-positive purchases in the tail happen before the zero-ROI filler.
     const reordered = reorderPurchaseListByROI(
-      cheapPlan.items,
+      // Cheapest-first only ever buys research.
+      cheapPlan.items.filter(isResearchChainItem),
       state,
       snapshot,
       totalSeconds,
@@ -937,7 +1050,7 @@ export interface MilestoneSummaryCore {
 }
 
 export function computeMilestoneSummaryCore(
-  chain: { items: MilestoneChainItem[]; reached: boolean; totalSeconds: number },
+  chain: { items: ChainItem[]; reached: boolean; totalSeconds: number },
   baseline: { reached: boolean; totalSeconds: number }
 ): MilestoneSummaryCore {
   if (!chain.reached || !baseline.reached) {

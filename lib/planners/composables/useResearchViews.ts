@@ -2,6 +2,7 @@ import { PROFILE } from '@planner/lib/profile';
 import { ref, computed, watch, watchEffect } from 'vue';
 import {
   getCommonResearches,
+  getResearchById,
   getTiers,
   getResearchByTier,
   getTierSummary,
@@ -36,14 +37,32 @@ import { computeRealisticELR } from '../calculations/realisticELR';
 import {
   type MilestoneTarget,
   type MilestoneChainItem,
+  type ChainItem,
+  isResearchChainItem,
   type MilestoneChainResult,
   isMilestoneReached,
   computeMilestoneBaseline,
   computeMilestoneSummaryCore,
 } from '../calculations/milestoneChain';
+import {
+  type HabSpaceChainResult,
+  type HabSpaceTarget,
+  emptyHabSpaceChainResult,
+} from '../calculations/habSpaceChain';
+import { getHabById, isHabId } from '@planner/lib/habs';
+import { computeTierUnlockStatus } from '../calculations/tierUnlockStatus';
+import {
+  type FarmPurchase,
+  type FarmPurchaseStep,
+  type FarmRankingItem,
+  listFarmPurchaseCandidates,
+  HYPERLOOP_ID,
+} from '../calculations/farmPurchases';
+import { getVehicleType } from '../vehicles';
 import { type ResearchRankingItem, rankResearchByROI, rankResearchByELRImpact } from '../calculations/researchRanking';
 import { type PurchaseEventCrossings, isActuallyDuringSale } from '../calculations/researchROI';
 import {
+  type ResearchSummaryItem,
   summarizeResearchLevelChanges,
   type SaleAwareBuyPlan,
   type SaleEndsPlan,
@@ -91,7 +110,7 @@ function computeRealisticDeliverySummary(
 
 export type { MilestoneTarget } from '../calculations/milestoneChain';
 
-export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'smart_buy';
+export type ViewType = 'game' | 'cheapest' | 'roi' | 'elr' | 'milestones' | 'hab_space' | 'smart_buy';
 export type ElrViewMode = 'realistic' | 'potential';
 export type ElrSortMode = 'efficiency' | 'impact';
 export type ElrRoiDisplayMode = 'hpp' | 'time';
@@ -158,6 +177,149 @@ export interface ResearchViewItem {
   realisticStats?: { layRate: number; shippingRate: number; elr: number; elrDelta: number };
 }
 
+/**
+ * A vehicle, train car or hab purchase listed among the research (enlightenment's Earnings ROI view,
+ * and later the chains). `steps` are the engine actions it buys, in order.
+ */
+export interface FarmViewItem {
+  kind: 'farm';
+  key: string;
+  purchase: FarmPurchase;
+  steps: FarmPurchaseStep[];
+  name: string;
+  detail: string;
+  iconPath: string;
+  price: number;
+  timeToBuy: string;
+  timeToBuySeconds: number;
+  roiSeconds: number;
+  totalRoiSeconds: number;
+  roiLabel: string;
+  totalRoiLabel: string;
+  showSaleWarning: boolean;
+  duringSale: boolean;
+  duringEarningsBoost: boolean;
+  earningsDelta: number;
+  purchaseTimestamp: number;
+  buyToHereSeconds?: number;
+}
+
+/** A row of a research list: a research level, or (enlightenment only) a farm purchase. */
+export type ResearchListItem = ResearchViewItem | FarmViewItem;
+
+export function isFarmViewItem<T extends object>(item: T | FarmViewItem): item is FarmViewItem {
+  return (item as FarmViewItem).kind === 'farm';
+}
+
+function roiDurationLabel(seconds: number): string {
+  return seconds === Infinity || seconds > 999 * 86400 ? '>999d' : seconds < 1 ? '0s' : formatDuration(seconds);
+}
+
+function timeToBuyLabel(seconds: number): string {
+  return seconds === Infinity ? '∞' : seconds < 1 ? '0s' : formatDuration(seconds);
+}
+
+/** Name, detail line and icon for a farm purchase row. */
+export function describeFarmPurchase(purchase: FarmPurchase): { name: string; detail: string; iconPath: string } {
+  const slot = purchase.slotIndex + 1;
+  if (purchase.kind === 'hab') {
+    const hab = isHabId(purchase.habId) ? getHabById(purchase.habId) : null;
+    const from = purchase.fromHabId !== null && isHabId(purchase.fromHabId) ? getHabById(purchase.fromHabId) : null;
+    return {
+      name: hab?.name ?? `Hab ${purchase.habId}`,
+      detail: from ? `Hab slot ${slot}, replacing ${from.name}` : `Hab slot ${slot}`,
+      iconPath: hab?.iconPath ?? '',
+    };
+  }
+  if (purchase.kind === 'train_car') {
+    const coupling = purchase.couplingResearch ? getResearchById(purchase.couplingResearch.researchId) : undefined;
+    return {
+      name: 'Hyperloop Train Car',
+      detail: coupling
+        ? `Vehicle slot ${slot}, car ${purchase.toLength}, with ${coupling.name} (Lv ${purchase.couplingResearch!.fromLevel + 1}/${coupling.levels})`
+        : `Vehicle slot ${slot}, car ${purchase.toLength}`,
+      iconPath: getVehicleType(HYPERLOOP_ID)?.iconPath ?? '',
+    };
+  }
+  const vehicle = getVehicleType(purchase.vehicleId);
+  const from = purchase.fromVehicleId !== null ? getVehicleType(purchase.fromVehicleId) : undefined;
+  const fleet = purchase.fleetResearch ? getResearchById(purchase.fleetResearch.researchId) : undefined;
+  return {
+    name: vehicle?.name ?? `Vehicle ${purchase.vehicleId}`,
+    detail: fleet
+      ? `New vehicle slot ${slot}, with ${fleet.name} (Lv ${purchase.fleetResearch!.fromLevel + 1}/${fleet.levels})`
+      : from
+        ? `Vehicle slot ${slot}, replacing ${from.name}`
+        : `Vehicle slot ${slot}`,
+    iconPath: vehicle?.iconPath ?? '',
+  };
+}
+
+/** Smart Buy preview lines for a plan's farm purchases, after its research summary. */
+export function farmPurchaseSummaryItems(purchases: { purchase: FarmPurchase }[]): ResearchSummaryItem[] {
+  return purchases.map(({ purchase }) => {
+    const { name, detail } = describeFarmPurchase(purchase);
+    return { text: `${name} (${detail})` };
+  });
+}
+
+function toFarmViewItem(item: FarmRankingItem, absoluteSimTime: number): FarmViewItem {
+  return farmChainViewItem(item, absoluteSimTime);
+}
+
+/** A farm row from a ranked or chained farm purchase that starts saving up at `absoluteSimTime`. */
+function farmChainViewItem(
+  item: Pick<
+    FarmRankingItem,
+    | 'purchase'
+    | 'steps'
+    | 'price'
+    | 'timeToBuySeconds'
+    | 'roiSeconds'
+    | 'totalRoiSeconds'
+    | 'showSaleWarning'
+    | 'duringSale'
+    | 'duringEarningsBoost'
+  > & { earningsDelta?: number },
+  absoluteSimTime: number
+): FarmViewItem {
+  const { purchase } = item;
+  return {
+    kind: 'farm',
+    key: `farm-${purchase.kind}-${purchase.slotIndex}-${purchase.kind === 'train_car' ? purchase.toLength : purchase.kind === 'hab' ? purchase.habId : purchase.vehicleId}`,
+    purchase,
+    steps: item.steps,
+    ...describeFarmPurchase(purchase),
+    price: item.price,
+    timeToBuy: timeToBuyLabel(item.timeToBuySeconds),
+    timeToBuySeconds: item.timeToBuySeconds,
+    roiSeconds: item.roiSeconds,
+    totalRoiSeconds: item.totalRoiSeconds,
+    roiLabel: roiDurationLabel(item.roiSeconds),
+    totalRoiLabel: roiDurationLabel(item.totalRoiSeconds),
+    showSaleWarning: item.showSaleWarning,
+    duringSale: item.duringSale,
+    duringEarningsBoost: item.duringEarningsBoost,
+    earningsDelta: item.earningsDelta ?? (isFinite(item.roiSeconds) && item.roiSeconds > 0 ? item.price / item.roiSeconds : 0),
+    purchaseTimestamp: absoluteSimTime + item.timeToBuySeconds,
+  };
+}
+
+/** The ROI view's order: buyable first, then fastest payback, then cheapest. */
+function compareByRoi(a: ResearchListItem, b: ResearchListItem): number {
+  const aCanBuy = isFarmViewItem(a) || a.canBuy;
+  const bCanBuy = isFarmViewItem(b) || b.canBuy;
+  if (aCanBuy !== bCanBuy) return aCanBuy ? -1 : 1;
+  const sortSeconds = (item: ResearchListItem) =>
+    !isFarmViewItem(item) && item.pairRoiSeconds !== undefined
+      ? Math.min(item.totalRoiSeconds!, item.pairRoiSeconds)
+      : item.totalRoiSeconds!;
+  const aSeconds = sortSeconds(a);
+  const bSeconds = sortSeconds(b);
+  if (aSeconds === bSeconds) return a.price - b.price;
+  return aSeconds - bSeconds;
+}
+
 const ALL_VIEWS = [
   { id: 'game', label: 'Game View', description: 'Grouped by tier, exactly like the game.' },
   // Hidden for now (not removed in case someone asks for it back):
@@ -166,13 +328,30 @@ const ALL_VIEWS = [
   { id: 'elr', label: 'Delivery Impact', description: 'Sorted by impact to your Delivery Rate.' },
   { id: 'milestones', label: 'Milestones', description: 'Fastest ROI path to a tier unlock or research level.' },
   {
+    id: 'hab_space',
+    label: 'Hab Space',
+    description: 'Best earnings research to buy before your habs fill, then the most hab space per purchase.',
+  },
+  {
     id: 'smart_buy',
     label: 'Smart Buy',
     description: 'Auto-buy research: sale-aware and threshold-based buying in one place.',
   },
 ] as const;
 
-export const VIEWS = ALL_VIEWS.filter(view => view.id !== 'elr' || PROFILE.hasDeliveryViews);
+export const VIEWS = ALL_VIEWS.filter(
+  view => (view.id !== 'elr' || PROFILE.hasDeliveryViews) && (view.id !== 'hab_space' || !!PROFILE.hasHabSpaceView)
+);
+
+/** Display name for a hab space target, e.g. "Planet Portal (slot 3)" or "Grav Plating (Lv 4/25)". */
+export function habSpaceTargetLabel(target: HabSpaceTarget): string {
+  if (target.kind === 'hab') {
+    const name = isHabId(target.habId) ? getHabById(target.habId).name : 'Hab';
+    return `${name} (slot ${target.slotIndex + 1})`;
+  }
+  const research = getResearchById(target.researchId);
+  return research ? `${research.name} (Lv ${target.fromLevel + 1}/${research.levels})` : 'Hab space research';
+}
 
 const RESEARCH_VIEW_STORAGE_KEY = `${PROFILE.storagePrefix}_research_view`;
 const ELR_VIEW_MODE_STORAGE_KEY = `${PROFILE.storagePrefix}_research_elr_view_mode`;
@@ -271,7 +450,7 @@ export function useResearchViews() {
   // Chrome's main-thread-only "Page Unresponsive" hang detector). `computeThresholdBuy` is unused
   // here — it's returned below purely so ResearchActions.vue's own `quickBuyPlan` watchEffect can
   // share this same worker instance instead of spawning a second one.
-  const { computeMilestoneChain, computeSaleAwareBuy, computeSaleEndsBuy, computeThresholdBuy } =
+  const { computeMilestoneChain, computeHabSpaceChain, computeSaleAwareBuy, computeSaleEndsBuy, computeThresholdBuy } =
     useResearchCalcWorker();
 
   const currentView = ref<ViewType>(loadStoredResearchView());
@@ -359,6 +538,8 @@ export function useResearchViews() {
       }
       case 'milestones':
         return 'Pick a tier unlock or a specific research level, and see the fastest ROI-optimal path to it.';
+      case 'hab_space':
+        return 'Buys the earnings research that still leaves time to afford more hab space before your habs fill, then the hab or hab research with the most space per purchase.';
       case 'smart_buy':
         return 'Auto-buy research: sale-aware ROI buying and threshold-based smart buy, all in one place.';
       default:
@@ -470,6 +651,15 @@ export function useResearchViews() {
     }
 
     return result;
+  }
+
+  // A chain's item as a list row: research through `toResearchViewItem`, farm purchases as farm rows.
+  function toChainListItem(item: ChainItem, startAbsoluteTime: number): ResearchListItem {
+    if (isResearchChainItem(item)) return toResearchViewItem(item, startAbsoluteTime);
+    return {
+      ...farmChainViewItem(item, startAbsoluteTime + item.buyToHereSeconds - item.timeToBuySeconds),
+      buyToHereSeconds: item.buyToHereSeconds,
+    };
   }
 
   // Converts the pure-calculation ResearchRankingItem shape (raw seconds, no formatting) from
@@ -708,6 +898,171 @@ export function useResearchViews() {
     };
   });
 
+  // Tier unlock note above every list view but Game View: earnings research left in the unlocked
+  // tiers, purchases needed for the next tier, and how long the Milestones path to it takes. The
+  // path runs on the worker like the milestone chain itself, so the note shows a spinner meanwhile.
+  const tierUnlockStatus = computed(() => computeTierUnlockStatus(commonResearchStore.researchLevels));
+  const isComputingTierUnlockPath = ref(false);
+  const tierUnlockPathRef = ref<{ tier: number; result: MilestoneChainResult } | null>(null);
+  let tierUnlockPathGeneration = 0;
+
+  watchEffect(async () => {
+    if (actionsStore.isPlanInitializing) return;
+    if (actionsStore.batchMode || actionsStore.isRecalculating) return;
+
+    const generation = ++tierUnlockPathGeneration;
+    const tier = tierUnlockStatus.value.nextTier;
+    if (currentView.value === 'game' || tier === null) {
+      tierUnlockPathRef.value = null;
+      isComputingTierUnlockPath.value = false;
+      return;
+    }
+
+    const context = getSimulationContext();
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const mods = costModifiers.value;
+    const deadline = researchSaleDeadline.value;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - actionsStore.planStartOffset);
+
+    isComputingTierUnlockPath.value = true;
+    let result: MilestoneChainResult;
+    try {
+      result = await computeMilestoneChain({
+        target: { kind: 'tier', tier },
+        startSnapshot,
+        context,
+        mods,
+        absoluteSimTime,
+        deadline,
+      });
+    } finally {
+      if (generation === tierUnlockPathGeneration) isComputingTierUnlockPath.value = false;
+    }
+    if (generation === tierUnlockPathGeneration) tierUnlockPathRef.value = { tier, result };
+  });
+
+  const tierUnlockNote = computed(() => {
+    if (currentView.value === 'game') return null;
+    const status = tierUnlockStatus.value;
+    const path = tierUnlockPathRef.value;
+    const pathResult = path && path.tier === status.nextTier ? path.result : null;
+    return {
+      ...status,
+      // Null while computing, or when the path is too long to work out.
+      pathSeconds: pathResult?.reached ? pathResult.totalSeconds : null,
+      pathTruncated: !!pathResult && !pathResult.reached,
+    };
+  });
+
+  // Hab Space view: when the chain is just "buy the hab space directly" and the next tier can be
+  // unlocked before the habs fill, that's worth pointing out. It isn't part of the chain: it's a
+  // different plan the player may prefer, opened in Milestones.
+  const habSpaceTierRecommendation = computed(() => {
+    if (currentView.value !== 'hab_space' || isComputingHabSpaceChain.value) return null;
+    const summary = habSpaceSummary.value;
+    const note = tierUnlockNote.value;
+    if (!summary || summary.habsFullAtStart || summary.fullAtSeconds === null) return null;
+    if (habSpaceChainResult.value.items.length > 0) return null;
+    if (!note || note.nextTier === null || note.pathSeconds === null) return null;
+    if (note.pathSeconds > summary.fullAtSeconds) return null;
+    return {
+      tier: note.nextTier,
+      purchasesNeeded: note.purchasesNeeded,
+      pathSeconds: note.pathSeconds,
+      fullAtSeconds: summary.fullAtSeconds,
+    };
+  });
+
+  /** Opens Milestones on the path to the next locked tier. */
+  function showTierUnlockPath() {
+    const tier = tierUnlockStatus.value.nextTier;
+    if (tier === null) return;
+    milestoneTarget.value = { kind: 'tier', tier };
+    currentView.value = 'milestones';
+  }
+
+  // Hab Space chain. Same worker/generation pattern as the milestone chain above; it only runs while
+  // the Hab Space view is open, since unlike a milestone it has no target the player picks.
+  const isComputingHabSpaceChain = ref(false);
+  const habSpaceChainResultRef = ref<HabSpaceChainResult>(emptyHabSpaceChainResult());
+  const habSpaceChainStartTimeRef = ref(0);
+  let habSpaceChainGeneration = 0;
+
+  watchEffect(async () => {
+    if (actionsStore.isPlanInitializing) return;
+    if (actionsStore.batchMode || actionsStore.isRecalculating) return;
+
+    const generation = ++habSpaceChainGeneration;
+    if (currentView.value !== 'hab_space') {
+      isComputingHabSpaceChain.value = false;
+      return;
+    }
+
+    const context = getSimulationContext();
+    const startSnapshot = actionsStore.effectiveSnapshot;
+    const mods = costModifiers.value;
+    const deadline = researchSaleDeadline.value;
+    const baseTimestamp = planStore.planStartTime.getTime() / 1000;
+    const absoluteSimTime = baseTimestamp + (startSnapshot.lastStepTime - actionsStore.planStartOffset);
+
+    isComputingHabSpaceChain.value = true;
+    let result: HabSpaceChainResult;
+    try {
+      result = await computeHabSpaceChain({ startSnapshot, context, mods, absoluteSimTime, deadline });
+    } finally {
+      if (generation === habSpaceChainGeneration) isComputingHabSpaceChain.value = false;
+    }
+    if (generation === habSpaceChainGeneration) {
+      habSpaceChainResultRef.value = result;
+      habSpaceChainStartTimeRef.value = absoluteSimTime;
+    }
+  });
+
+  const habSpaceChainResult = computed(() => habSpaceChainResultRef.value);
+
+  const habSpaceSummary = computed(() => {
+    const chain = habSpaceChainResult.value;
+    const target = chain.target;
+    if (!target) return null;
+
+    const baseTimestamp =
+      planStore.planStartTime.getTime() +
+      (actionsStore.effectiveSnapshot.lastStepTime - actionsStore.planStartOffset) * 1000;
+    const tz = planStore.ascensionTimezone;
+    const researchSpent = chain.items.reduce((sum, item) => sum + item.price, 0);
+    const fullAtKnown = isFinite(chain.fullAtSeconds);
+
+    return {
+      target: target.candidate.target,
+      targetLabel: habSpaceTargetLabel(target.candidate.target),
+      targetIconPath:
+        target.candidate.target.kind === 'hab' && isHabId(target.candidate.target.habId)
+          ? getHabById(target.candidate.target.habId).iconPath
+          : undefined,
+      addedCapacity: target.candidate.addedCapacity,
+      targetPrice: target.candidate.price,
+      targetDuringSale: target.candidate.duringSale,
+      targetWaitSeconds: target.candidate.waitSeconds,
+      targetDuringEarningsBoost: target.duringEarningsBoost,
+      totalSeconds: chain.totalSeconds,
+      finishAbsoluteTime: formatAbsoluteTime(chain.totalSeconds, baseTimestamp, tz),
+      habsFullAtStart: chain.habsFullAtStart,
+      beatsFull: chain.beatsFull,
+      fullAtSeconds: fullAtKnown ? chain.fullAtSeconds : null,
+      fullAtAbsoluteTime: fullAtKnown ? formatAbsoluteTime(chain.fullAtSeconds, baseTimestamp, tz) : null,
+      // Positive: how long before the habs fill the target lands. Negative: how long they sit full.
+      slackSeconds: fullAtKnown ? chain.fullAtSeconds - chain.totalSeconds : null,
+      researchCount: chain.items.length,
+      researchSpent,
+      totalSpent: researchSpent + target.candidate.price,
+      capacityBefore: chain.capacityBefore,
+      capacityAfter: chain.capacityAfter,
+      earningsBeforePerHour: chain.earningsBefore * 3600,
+      earningsAfterPerHour: chain.earningsAfter * 3600,
+    };
+  });
+
   const gameViewTimes = computed(() => {
     if (currentView.value !== 'game') return { tiers: {}, researches: {}, tierSeconds: {}, researchSeconds: {} };
 
@@ -831,6 +1186,29 @@ export function useResearchViews() {
 
     return ranked.map(item => toResearchViewItemFromROI(item, absoluteSimTime));
   });
+
+  // Enlightenment only: vehicles, train cars and habs ranked by the same payback as research. Max
+  // Vehicles mode already assumes every vehicle is bought, so it lists habs only.
+  const roiFarmItems = computed((): FarmViewItem[] => {
+    if (!PROFILE.hasFarmPurchasesInRoi) return [];
+    const context = getSimulationContext();
+    const snapshot = actionsStore.effectiveSnapshot;
+    const absoluteSimTime =
+      planStore.planStartTime.getTime() / 1000 + (snapshot.lastStepTime - actionsStore.planStartOffset);
+    const candidates = listFarmPurchaseCandidates(createBaseEngineState(snapshot), snapshot, context, absoluteSimTime, {
+      includeHabs: true,
+      includeVehicles: roiMode.value === 'immediate',
+      mods: costModifiers.value,
+      roiDeadline: getNextPacificTime(5, 9, absoluteSimTime),
+    });
+    return candidates.map(item => toFarmViewItem(item, absoluteSimTime));
+  });
+
+  const roiListItems = computed((): ResearchListItem[] =>
+    roiFarmItems.value.length === 0
+      ? roiRankedResearches.value
+      : [...roiRankedResearches.value, ...roiFarmItems.value].sort(compareByRoi)
+  );
 
   // Independent, reactive wrapper around `rankResearchByELRImpact` — see `roiRankedResearches`'
   // doc comment above for why this has no `currentView` dependency of its own either.
@@ -1017,9 +1395,10 @@ export function useResearchViews() {
 
   const saleAwarePlan70 = computed(() => saleAwarePlan70Ref.value);
 
-  const saleAwarePreview = computed(() =>
-    summarizeResearchLevelChanges(commonResearchStore.researchLevels, saleAwarePlan70.value.endLevels)
-  );
+  const saleAwarePreview = computed(() => [
+    ...summarizeResearchLevelChanges(commonResearchStore.researchLevels, saleAwarePlan70.value.endLevels),
+    ...farmPurchaseSummaryItems(saleAwarePlan70.value.entries.flatMap(entry => (entry.farm ? [entry.farm] : []))),
+  ]);
 
   // Dry-run plan for "Buy Until Sale Ends" — only computed while its card is showing and a sale is actually active, same
   // gating `canBuyUntilSaleDeadline` already applies (there's nothing meaningful to preview
@@ -1208,14 +1587,18 @@ export function useResearchViews() {
     return { before: before.elr, after: after.elr };
   });
 
-  const sortedResearches = computed(() => {
+  const sortedResearches = computed((): ResearchListItem[] => {
     if (currentView.value === 'game' || currentView.value === 'smart_buy') return [];
 
-    if (currentView.value === 'roi') return roiRankedResearches.value;
+    if (currentView.value === 'roi') return roiListItems.value;
     if (currentView.value === 'elr') return elrRankedResearches.value;
     if (currentView.value === 'milestones') {
       const startAbsoluteTime = milestoneChainStartTimeRef.value;
-      return milestoneChainResult.value.items.map(item => toResearchViewItem(item, startAbsoluteTime));
+      return milestoneChainResult.value.items.map(item => toChainListItem(item, startAbsoluteTime));
+    }
+    if (currentView.value === 'hab_space') {
+      const startAbsoluteTime = habSpaceChainStartTimeRef.value;
+      return habSpaceChainResult.value.items.map(item => toChainListItem(item, startAbsoluteTime));
     }
 
     const all = getCommonResearches();
@@ -1436,6 +1819,12 @@ export function useResearchViews() {
     milestoneSummary,
     milestoneAlreadyReached,
     isComputingMilestoneChain,
+    habSpaceSummary,
+    tierUnlockNote,
+    isComputingTierUnlockPath,
+    showTierUnlockPath,
+    habSpaceTierRecommendation,
+    isComputingHabSpaceChain,
     viewDescription,
     costModifiers,
     isResearchSaleActive,

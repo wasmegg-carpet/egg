@@ -30,11 +30,13 @@
 import { onUnmounted } from 'vue';
 import { sanitizeLongs } from '../artifacts/utils';
 import type { MilestoneChainResult } from '../calculations/milestoneChain';
+import type { HabSpaceChainResult } from '../calculations/habSpaceChain';
 import type { SaleAwareBuyPlan, SaleEndsPlan, SimpleBuyPlan } from '../calculations/smartBuyPreview';
 import type {
   WorkerRequest,
   WorkerResponse,
   MilestoneChainRequest,
+  HabSpaceChainRequest,
   SaleAwareBuyRequest,
   SaleEndsBuyRequest,
   ThresholdBuyRequest,
@@ -109,6 +111,12 @@ export function useResearchCalcWorker() {
     return request({ kind: 'milestoneChain', requestId: ++nextRequestId, ...args });
   }
 
+  function computeHabSpaceChain(
+    args: Omit<HabSpaceChainRequest, 'kind' | 'requestId'>
+  ): Promise<HabSpaceChainResult> {
+    return request({ kind: 'habSpaceChain', requestId: ++nextRequestId, ...args });
+  }
+
   function computeSaleAwareBuy(args: Omit<SaleAwareBuyRequest, 'kind' | 'requestId'>): Promise<SaleAwareBuyPlan> {
     return request({ kind: 'saleAwareBuy', requestId: ++nextRequestId, ...args });
   }
@@ -126,5 +134,5 @@ export function useResearchCalcWorker() {
   // worker down rather than leaving it around with nothing left to message it.
   onUnmounted(() => worker.terminate());
 
-  return { computeMilestoneChain, computeSaleAwareBuy, computeSaleEndsBuy, computeThresholdBuy };
+  return { computeMilestoneChain, computeHabSpaceChain, computeSaleAwareBuy, computeSaleEndsBuy, computeThresholdBuy };
 }

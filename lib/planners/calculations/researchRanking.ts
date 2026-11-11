@@ -60,6 +60,11 @@ function filterByCategories(r: CommonResearch, excluded: string[]): boolean {
   return !categories.some(c => excluded.includes(c));
 }
 
+/** Whether the Earnings ROI ranking scores this research (it isn't hatchery or running chicken research). */
+export function isEarningsResearch(r: CommonResearch): boolean {
+  return filterByCategories(r, ROI_EXCLUDED_CATEGORIES);
+}
+
 function buildMaxVehiclesSnapshot(
   baseSnapshot: CalculationsSnapshot,
   researchLevels: Record<string, number>,
@@ -1059,7 +1064,7 @@ export function simulatePurchaseSequence(
 export function buildRoiCandidateSequences(
   candidate: ResearchRankingItem,
   levels: Record<string, number>,
-  excludeResearchId?: string
+  excludeResearchId?: string | ReadonlySet<string>
 ): { research: CommonResearch; level: number }[][] {
   const sequences: { research: CommonResearch; level: number }[][] = [
     [{ research: candidate.research, level: candidate.currentLevel }],
@@ -1068,7 +1073,9 @@ export function buildRoiCandidateSequences(
   const partner = candidate.pairPartnerResearch;
   const partnerLevel = partner ? levels[partner.id] || 0 : undefined;
   const partnerEligible =
-    !!partner && partner.id !== excludeResearchId && partnerLevel !== undefined && partnerLevel < partner.levels;
+    !!partner &&
+    !(typeof excludeResearchId === 'string' ? partner.id === excludeResearchId : excludeResearchId?.has(partner.id)) &&
+    partnerLevel !== undefined && partnerLevel < partner.levels;
 
   if (partnerEligible && partner) {
     sequences.push([
