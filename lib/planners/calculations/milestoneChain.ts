@@ -140,7 +140,8 @@ function sweepUntilNextSale(
     nextSaleStart,
     'immediate',
     false,
-    70,
+    // Single-gate mode: 70% payback by this deadline (or the calendar's next sale), not Smart Buy's
+    // `fullRoiDeadline` gates.
     roiDeadlineOverride
   );
 
