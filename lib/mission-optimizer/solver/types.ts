@@ -38,8 +38,9 @@ export interface PlanProblem {
   // Seconds. Note the asymmetry with `fuelCapacity` above, which is for the whole plan.
   readonly timeCapacityPerSlot: number;
   // Whole sleep windows available per slot, alongside `timeCapacityPerSlot`, which then counts waking
-  // seconds only. Absent means today's problem: no sleep, and no option carries `nights`. Nothing in the
-  // solver reads it yet.
+  // seconds only. Absent means today's problem: no sleep, and no option carries `nights`; the model then
+  // reads it as 0, so an option that does carry nights is dropped rather than flown for free. See SPEC.md
+  // section 9. Not yet reachable from the app.
   readonly nightsPerSlot?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
@@ -60,6 +61,11 @@ function capacityOf(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+// Nights are whole: a fraction of a sleep window is not one the player can fly through.
+function wholeCapacityOf(value: number): number {
+  return Math.floor(capacityOf(value));
+}
+
 // Idempotent, which is what lets both boundaries — `optimizeFull` and `buildModel` — enter through
 // it without either having to know whether the other already did.
 export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
@@ -78,6 +84,8 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
     fuelCapacity: capacityOf(problem.fuelCapacity),
     fuelAxes: axes.length > 0 ? axes.map(ax => ({ egg: ax.egg, capacity: capacityOf(ax.capacity) })) : [EMPTY_TANK],
     timeCapacityPerSlot: capacityOf(problem.timeCapacityPerSlot),
+    // Left absent when absent, so a problem without a sleep window normalizes to exactly what it did before.
+    ...(problem.nightsPerSlot === undefined ? {} : { nightsPerSlot: wholeCapacityOf(problem.nightsPerSlot) }),
   };
 }
 

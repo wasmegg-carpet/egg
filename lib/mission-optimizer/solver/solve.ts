@@ -52,13 +52,15 @@ function fuelExceeded(model: Model, counts: readonly number[]): boolean {
   return false;
 }
 
-function slotLoads(model: Model, layout: Layout, columnValues: Float64Array): number[] {
+// Per slot, `perLaunch` summed over the MILP's own rounded class columns: seconds for the slot rows, nights
+// for the night rows.
+function slotLoads(model: Model, layout: Layout, columnValues: Float64Array, perLaunch: readonly number[]): number[] {
   const loads = new Array<number>(model.slots).fill(0);
   for (let c = 0; c < layout.classes; c++) {
-    const seconds = layout.classSeconds[c];
+    const unit = perLaunch[c];
     for (let k = 0; k < model.slots; k++) {
       const v = columnValues[nCol(layout, c, k)];
-      if (Number.isFinite(v) && v > 0) loads[k] += Math.round(v) * seconds;
+      if (Number.isFinite(v) && v > 0) loads[k] += Math.round(v) * unit;
     }
   }
   return loads;
@@ -70,8 +72,13 @@ function slotLoads(model: Model, layout: Layout, columnValues: Float64Array): nu
 function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, counts: readonly number[]): boolean {
   if (fuelExceeded(model, counts)) return false;
   const capacity = model.timeCapacitySeconds;
-  for (const load of slotLoads(model, layout, columnValues)) {
+  for (const load of slotLoads(model, layout, columnValues, layout.classSeconds)) {
     if (load > capacity + SLOT_TOL) return false;
+  }
+  // Whole nights summed from whole counts: exact, so no tolerance. Without a sleep window every load is 0
+  // against a budget of 0. See SPEC.md section 9.
+  for (const nights of slotLoads(model, layout, columnValues, layout.classNights)) {
+    if (nights > model.nightsPerSlot) return false;
   }
   return true;
 }

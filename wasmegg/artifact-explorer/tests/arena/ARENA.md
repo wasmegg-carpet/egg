@@ -227,7 +227,10 @@ scales from there. The deep tier adds substantially more. Over the default seed 
 
 ## The roster
 
-`highs` — the shipped planner, `lib/mission-optimizer/solver/SPEC.md`.
+`highs` — the shipped planner, `lib/mission-optimizer/solver/SPEC.md`. Sleep-aware: it
+budgets nights per slot (that file's section 9), so A10-sleep runs for it on
+every instance, `ARENA_SLEEP` or not. Its plans are checked against the
+two-resource packer only, not against real days.
 
 The arena is not a bake-off between methodologies. It is the bar a change to the
 shipped planner has to clear before it lands. A proposed change may be registered

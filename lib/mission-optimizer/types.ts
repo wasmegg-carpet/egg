@@ -15,7 +15,8 @@ export interface LaunchOption {
   actualTime: number;
   rawTime: number; // true (unfloored) boosted duration
   // Sleep windows this launch flies through; absent or 0 is a daytime launch. Only the arena sets it so far,
-  // and only alongside `PlanProblem.nightsPerSlot`, in which case `actualTime` counts waking seconds.
+  // and only alongside `PlanProblem.nightsPerSlot`, in which case `actualTime` counts waking seconds. The
+  // solver budgets it per slot (`solver/SPEC.md` section 9).
   nights?: number;
   cost: number;
   // everything this launch drops, per single ship — display only

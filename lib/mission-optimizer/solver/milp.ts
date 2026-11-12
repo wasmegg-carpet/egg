@@ -15,12 +15,14 @@ export interface Layout {
   groups: number;
   crafts: number;
   targets: number;
-  // Slot columns are per duration class, not per group: the slot and order rows read only a mission's
-  // duration, so groups of one duration share `slots` columns and a `class_c` row ties their totals to
-  // them. See SPEC.md section 2. `classCap` is the per-slot column bound; `classSeconds` the row coefficient.
+  // Slot columns are per duration class, not per group: the slot, night and order rows read only a mission's
+  // duration and nights, so groups sharing both share `slots` columns and a `class_c` row ties their totals
+  // to them. See SPEC.md sections 2 and 9. `classCap` is the per-slot column bound; `classSeconds` and
+  // `classNights` the row coefficients.
   classes: number;
   classOf: number[];
   classSeconds: number[];
+  classNights: number[];
   classCap: number[];
   groupTotalBase: number;
   craftBase: number;
@@ -32,33 +34,47 @@ export interface Layout {
 
 export type Variant = 'scale' | 'oa';
 
-// A group shares a class only when its duration alone bounds its per-slot count (the same test the
-// dominance pass applies): a group on the `UNBOUNDED_PER_SLOT` stand-in has a per-group per-slot cap no
-// shared column can carry, so it keeps a class of its own with exactly the bound it had before.
-function durationClasses(model: Model): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classCap'> {
+// A group shares a class only when its rows alone bound its per-slot count (the same test the dominance
+// pass applies): a group on the `UNBOUNDED_PER_SLOT` stand-in has a per-group per-slot cap no shared column
+// can carry, so it keeps a class of its own with exactly the bound it had before. A class is keyed by the
+// pair (seconds, nights): a daytime launch and an overnight one of equal waking seconds spend different
+// budgets. Without a sleep window every group has 0 nights and the classes are exactly the durations.
+function durationClasses(
+  model: Model
+): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classCap'> {
   const classOf = new Array<number>(model.groups.length);
   const classSeconds: number[] = [];
+  const classNights: number[] = [];
   const classCap: number[] = [];
-  const shared = new Map<number, number>();
+  const shared = new Map<number, Map<number, number>>();
   model.groups.forEach((grp, g) => {
     // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
-    if (boundsFollowFromRows(grp, model.timeCapacitySeconds)) {
-      let c = shared.get(grp.timeSeconds);
+    // And in whole nights, like the night row (SPEC.md section 9).
+    const byNights = grp.nights > 0 ? Math.floor(model.nightsPerSlot / grp.nights) : UNBOUNDED_PER_SLOT;
+    if (boundsFollowFromRows(grp, model.timeCapacitySeconds, model.nightsPerSlot)) {
+      let bySeconds = shared.get(grp.timeSeconds);
+      if (bySeconds === undefined) {
+        bySeconds = new Map();
+        shared.set(grp.timeSeconds, bySeconds);
+      }
+      let c = bySeconds.get(grp.nights);
       if (c === undefined) {
         c = classSeconds.length;
-        shared.set(grp.timeSeconds, c);
+        bySeconds.set(grp.nights, c);
         classSeconds.push(grp.timeSeconds);
-        classCap.push(byTime);
+        classNights.push(grp.nights);
+        classCap.push(Math.min(byTime, byNights));
       }
       classOf[g] = c;
     } else {
       classOf[g] = classSeconds.length;
       classSeconds.push(grp.timeSeconds);
-      classCap.push(Math.max(0, Math.min(grp.cap, byTime, UNBOUNDED_PER_SLOT)));
+      classNights.push(grp.nights);
+      classCap.push(Math.max(0, Math.min(grp.cap, byTime, byNights, UNBOUNDED_PER_SLOT)));
     }
   });
-  return { classes: classSeconds.length, classOf, classSeconds, classCap };
+  return { classes: classSeconds.length, classOf, classSeconds, classNights, classCap };
 }
 
 export function layoutOf(model: Model, variant: Variant): Layout {
@@ -277,6 +293,15 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.begin(`slot_k${k}`);
     for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classSeconds[c]);
     rows.end(-INF, model.timeCapacitySeconds);
+  }
+
+  // Whole nights against whole nights, so no scaling question arises. Without a sleep window every class
+  // has 0 nights, the row has no entries, and `Rows.end` drops it: the model is today's exactly. Slots stay
+  // interchangeable under this row, so `order_k` below remains a pure symmetry break. See SPEC.md section 9.
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`night_k${k}`);
+    for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classNights[c]);
+    rows.end(-INF, model.nightsPerSlot);
   }
 
   for (let k = 0; k + 1 < layout.slots; k++) {

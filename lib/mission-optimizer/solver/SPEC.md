@@ -95,7 +95,8 @@ The per-slot columns go the other way: they are per **duration class**, not per
 group. The only rows that read them, `slot_k` and `order_k`, read a mission's
 duration and nothing else, so every group of one duration shares `slots` integer
 columns and a `class_c` row ties the sum of their totals to the class's slot
-counts.
+counts. With a sleep window the `night_k` rows read its nights too, and the class
+is keyed by both (section 9).
 
 Crafts stay continuous deliberately: the judge re-optimises the craft split as an
 LP for whatever allocation it is handed, so integralising crafts here would
@@ -306,7 +307,8 @@ left to find.
 Both budgets are rows of the model, so a decoded plan is feasible by construction;
 `fitsBudgets` says so out loud rather than assuming it, re-checking the fuel row
 against the rounded counts and reading the three slot loads straight off the
-MILP's own columns — the packing witness that summing over slots threw away.
+MILP's own columns — the packing witness that summing over slots threw away. With
+a sleep window it reads each slot's nights off the same columns (section 9).
 
 The craft budget is deliberately not among them: no allocation can breach it, because
 it binds on the craft split rather than on missions, and the judge re-solves that split
@@ -410,3 +412,49 @@ are not in this package's typings, and of the three values it does expose,
 Presolve only reformulates; it cannot change the feasible set, so running without
 it can turn a failure into an answer but never a wrong answer into a right-looking
 one.
+
+## 9. The night budget
+
+A problem may carry `nightsPerSlot`, the whole sleep windows each slot has, and
+its options `nights`, the sleep windows each launch flies through.
+`timeCapacityPerSlot` then counts waking seconds only, and each option's
+`actualTime` the waking seconds it charges. The variants (a daytime one and
+one per number of nights a launch can span) are the caller's to generate; today
+only the arena does (`tests/arena/ARENA.md`, "Sleep"), and the app does not
+set the field. **Absent means today's problem**: the model reads it as 0, every
+option with `nights > 0` is dropped, the `night_k` rows have no entries and
+`Rows.end` drops them, and the matrix HiGHS is handed is the one it was handed
+before.
+
+What changes when it is present:
+
+- **Preprocessing.** An option spending more nights than a slot has is dropped,
+  as one charging more seconds than a slot has is. `nights` is part of the
+  group key, and a group's cap gains `floor(slots * N / nights)`.
+- **Dominance.** A taker may not spend more nights than the group it stands
+  in for, and spending fewer is strict. Without that an overnight variant,
+  which charges fewer waking seconds, would prune its own daytime twin. The
+  section 1 argument carries over unchanged: moving launches onto the
+  dominator in the same slot only lowers the night rows too.
+- **Classes and bounds.** Duration classes are keyed by the pair (seconds,
+  nights). A class's per-slot bound is the smaller of its time bound and
+  `floor(N / nights)`. `boundsFollowFromRows` accepts a group that spends a
+  night, whatever its duration, because the night row bounds it; otherwise a
+  zero-second overnight launch (a short ship sent at bedtime, which still
+  spends a night) would sit in a private class and could not stand in for
+  anything.
+- **Rows.** `night_k`, one per slot, sums `nights * n[c][k]` against `N`. Its
+  coefficients and right-hand side are small whole numbers, far inside the
+  ingestion window. `order_k` is unchanged: slots stay interchangeable under
+  both rows, so sorting them by waking load is still only a symmetry break.
+- **Certify.** `fitsBudgets` re-reads each slot's nights off the class
+  columns, as it reads seconds, and compares exactly.
+
+**It is a relaxation, and it over-promises.** The slot row pools a slot's
+waking seconds across all its days, but real days are separate bins: a daytime
+launch has to fit inside one waking window. Every schedule that respects the
+sleep windows satisfies both rows, and not every plan satisfying both rows is
+a schedule. A plan from this model alone can list launches no real day has room
+for. Nothing here proves a plan fits real days yet; per-day fit rows, a layout
+of each slot's launches and a verifier are the step that would, and until then
+the field stays unreachable from the app.

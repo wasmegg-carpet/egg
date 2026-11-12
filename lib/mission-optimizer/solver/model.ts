@@ -16,6 +16,9 @@ export interface Group {
   fuelFractions: number[];
   timeFraction: number;
   timeSeconds: number;
+  // Sleep windows each launch flies through; 0 for a daytime launch and for every launch of a problem
+  // without a sleep window. See SPEC.md section 9.
+  nights: number;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -39,6 +42,9 @@ export interface Model {
   // load-bearing downstream, but the axes themselves make a model self-describing.
   fuelAxes: readonly FuelAxis[];
   timeCapacitySeconds: number;
+  // Whole sleep windows per slot; 0 when the problem has none, which also drops every option that
+  // spends one. The `night_k` rows read it (SPEC.md section 9).
+  nightsPerSlot: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -52,6 +58,7 @@ interface Candidate {
   fuelFractions: number[];
   timeFraction: number;
   timeSeconds: number;
+  nights: number;
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
@@ -80,6 +87,8 @@ function cmpKey(a: Candidate, b: Candidate): number {
   const fuel = cmpFractions(a.fuelFractions, b.fuelFractions);
   if (fuel !== 0) return fuel;
   if (a.timeFraction !== b.timeFraction) return a.timeFraction - b.timeFraction;
+  // A daytime launch and its overnight twin may charge the same waking seconds; they spend different budgets.
+  if (a.nights !== b.nights) return a.nights - b.nights;
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
 
@@ -152,9 +161,15 @@ export function maxLaunches(capacity: number, unitCost: number): number {
 // Whether the rows alone bound this group's columns. They do not when a zero fraction leaves `perSlotCap`
 // or `cap` on a stand-in, and a group taking another's launches on is the one thing that can walk a column
 // into such a cap. A positive duration whose slot-row bound is under `UNBOUNDED_PER_SLOT` settles it: every other
-// term in either minimum is then that bound or smaller.
-export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number): boolean {
-  return grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT;
+// term in either minimum is then that bound or smaller. So does a night: the `night_k` row bounds a group that
+// spends one by `floor(nightsPerSlot / nights)` per slot, whatever its duration. Without that second clause a
+// zero-second overnight launch (a short ship sent at bedtime) would get a private class and could never
+// stand in for anything. See SPEC.md section 9.
+export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number, nightsPerSlot: number): boolean {
+  if (grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT) return true;
+  return (
+    grp.nights > 0 && Number.isFinite(nightsPerSlot) && Math.floor(nightsPerSlot / grp.nights) <= UNBOUNDED_PER_SLOT
+  );
 }
 
 // `taker` dominates `given` when every launch of `given` could have been flown as a `taker` in the same
@@ -163,7 +178,10 @@ export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number): b
 // relation transitive. See SPEC.md section 1.
 function dominates(taker: Group, given: Group): boolean {
   if (taker.timeSeconds > given.timeSeconds) return false;
-  let strict = taker.timeSeconds < given.timeSeconds;
+  // Nights are a budget of their own: without this an overnight variant, which charges fewer waking seconds,
+  // would prune its own daytime twin.
+  if (taker.nights > given.nights) return false;
+  let strict = taker.timeSeconds < given.timeSeconds || taker.nights < given.nights;
   // Every axis, not the total: drawing less of one egg does not excuse drawing more of another, or a
   // pruned group's launches would land on a dominator the player cannot fuel.
   for (let a = 0; a < taker.fuelFractions.length; a++) {
@@ -184,11 +202,12 @@ function dominates(taker: Group, given: Group): boolean {
 // Requiring strictness makes `dominates` a strict partial order, so every dropped group has a dominator
 // that itself survives, and testing each group against the whole menu, dropped ones included, leaves the
 // survivors a function of the group set rather than of the order it was walked in.
-function pruneDominated(groups: readonly Group[], timeCapacitySeconds: number): Group[] {
+function pruneDominated(groups: readonly Group[], timeCapacitySeconds: number, nightsPerSlot: number): Group[] {
   return groups.filter(
     given =>
       !groups.some(
-        taker => taker !== given && boundsFollowFromRows(taker, timeCapacitySeconds) && dominates(taker, given)
+        taker =>
+          taker !== given && boundsFollowFromRows(taker, timeCapacitySeconds, nightsPerSlot) && dominates(taker, given)
       )
   );
 }
@@ -281,6 +300,8 @@ export function buildModel(raw: PlanProblem): Model {
   // out on `cap < 1` below, exactly as `timeFraction` already handles a zero time budget.
   const axes = problem.fuelAxes;
   const timeCap = problem.timeCapacityPerSlot;
+  // Absent is 0: a problem with no sleep window has no night to spend (SPEC.md section 9).
+  const nightsCap = problem.nightsPerSlot ?? 0;
   const slots = problem.slots;
 
   const candidates: Candidate[] = [];
@@ -300,6 +321,10 @@ export function buildModel(raw: PlanProblem): Model {
     const fuelFractions = axes.map((ax, a) => (ax.capacity > 0 ? costs[a] / ax.capacity : costs[a] > 0 ? Infinity : 0));
     const timeFraction = timeCap > 0 ? opt.actualTime / timeCap : Infinity;
     if (timeFraction > 1) return;
+    // More nights than a slot has fits no slot, exactly as more seconds than one does not. A malformed count
+    // falls out with it rather than reaching a row.
+    const nights = opt.nights ?? 0;
+    if (!Number.isInteger(nights) || nights < 0 || nights > nightsCap) return;
 
     const yieldEntries: Entry[] = [];
     for (const [item, qty] of opt.yieldVector) {
@@ -325,6 +350,8 @@ export function buildModel(raw: PlanProblem): Model {
     const cap = Math.min(
       ...costs.map((cost, a) => (cost > 0 ? maxLaunches(axes[a].capacity, cost) : UNBOUNDED_GROUP)),
       opt.actualTime > 0 ? maxLaunches(slots * timeCap, opt.actualTime) : UNBOUNDED_GROUP,
+      // Whole numbers on both sides, so the quotient is exact.
+      nights > 0 ? Math.floor((slots * nightsCap) / nights) : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
     if (cap < 1) return;
@@ -333,6 +360,7 @@ export function buildModel(raw: PlanProblem): Model {
       fuelFractions,
       timeFraction,
       timeSeconds: opt.actualTime,
+      nights,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -358,6 +386,7 @@ export function buildModel(raw: PlanProblem): Model {
       fuelFractions: cand.fuelFractions,
       timeFraction: cand.timeFraction,
       timeSeconds: cand.timeSeconds,
+      nights: cand.nights,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,
@@ -368,7 +397,7 @@ export function buildModel(raw: PlanProblem): Model {
 
   // Dropped before `craftUpperBounds`, which counts every group at its cap: fewer groups only tightens a
   // bound that stays an over-statement of what the remaining ones can supply.
-  const kept = pruneDominated(groups, timeCap);
+  const kept = pruneDominated(groups, timeCap, nightsCap);
 
   return {
     sortedTargets: targets,
@@ -383,6 +412,7 @@ export function buildModel(raw: PlanProblem): Model {
     slots,
     fuelAxes: axes,
     timeCapacitySeconds: timeCap,
+    nightsPerSlot: nightsCap,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,
