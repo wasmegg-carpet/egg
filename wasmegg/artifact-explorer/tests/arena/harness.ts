@@ -9,7 +9,8 @@ import type { CraftBudget, LaunchOption, RecipeDAG } from 'lib/mission-optimizer
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
 import type { ArenaInstance } from './instances';
-import { packFeasible, type PackVerdict } from './pack-feasibility';
+import { packFeasible, packFeasibleNights, type PackVerdict } from './pack-feasibility';
+import { sleepCapacity, sleepVariants } from './sleep';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
 // plan that lands exactly on the cap can read a few ulps over it.
@@ -47,6 +48,9 @@ export interface SolveOverrides {
   craftingLevel?: number;
   previousCrafts?: number;
   ownedStock?: Map<string, number>;
+  // Seconds of sleep a day, replacing the instance's own window. `timeCapacityPerSlot` stays the horizon
+  // either way; `buildProblem` turns the pair into waking seconds and nights.
+  sleepSeconds?: number;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -67,8 +71,15 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     null,
     over.previousCrafts ?? inst.previousCrafts
   );
-  let options = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  // Variants are split off the enumerated menu before any menu perturbation, so a shuffle shuffles the
+  // variants too and a duplicate duplicates one variant. With no sleep this is the menu itself.
+  const sleep = over.sleepSeconds ?? inst.sleepSeconds;
+  const horizon = over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot;
+  let options = [...sleepVariants(enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]), sleep)];
   if (over.transformOptions) options = over.transformOptions(options);
+  // With sleep, the slot budget becomes waking seconds plus whole nights. Without, `nightsPerSlot` is absent
+  // rather than undefined, so a sleep-free instance states today's problem exactly.
+  const capacity = sleep > 0 ? sleepCapacity(horizon, sleep) : null;
 
   return {
     options,
@@ -77,7 +88,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     // sorted it in place would silently change every later check instead of producing a violation.
     targets: [...targets],
     fuelCapacity: over.fuelCapacity ?? inst.fuelCapacity,
-    timeCapacityPerSlot: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
+    timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : horizon,
+    ...(capacity ? { nightsPerSlot: capacity.nightsPerSlot } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -120,7 +132,8 @@ function problemKey(problem: PlanProblem): string {
   const options = problem.options
     .map(
       (o: LaunchOption) =>
-        `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}`
+        `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}` +
+        (o.nights === undefined ? '' : `|n${o.nights}`)
     )
     .join(';');
   const dag = [...problem.dag.keys()]
@@ -140,6 +153,7 @@ function problemKey(problem: PlanProblem): string {
     problem.targets.join(','),
     problem.fuelCapacity,
     problem.timeCapacityPerSlot,
+    ...(problem.nightsPerSlot === undefined ? [] : [`nights${problem.nightsPerSlot}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),
@@ -233,27 +247,42 @@ function contractBreaches(problem: PlanProblem, result: PlanResult): string[] {
 export interface Budgets {
   fuel: number;
   totalTime: number;
+  // Sleep windows the plan flies through, summed over launches. 0 for a problem without a sleep window.
+  totalNights: number;
   pack: PackVerdict;
 }
 
 export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budgets {
   let fuel = 0;
   let totalTime = 0;
+  let totalNights = 0;
   const durations: number[] = [];
+  const nights: number[] = [];
   const counts: number[] = [];
   for (let i = 0; i < alloc.length; i++) {
     const n = alloc[i];
     if (!(n > 0)) continue;
     fuel += n * problem.options[i].actualFuel;
     totalTime += n * problem.options[i].actualTime;
+    totalNights += n * (problem.options[i].nights ?? 0);
     durations.push(problem.options[i].actualTime);
+    nights.push(problem.options[i].nights ?? 0);
     counts.push(n);
   }
-  return {
-    fuel,
-    totalTime,
-    pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots),
-  };
+  // Two resources only once a launch actually spends a night. A plan of daytime launches packs exactly as
+  // it always has, so the one-dimensional rule stays the one every sleep-free result was measured against.
+  const pack =
+    problem.nightsPerSlot === undefined || totalNights === 0
+      ? packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots)
+      : packFeasibleNights(
+          durations,
+          nights,
+          counts,
+          problem.timeCapacityPerSlot,
+          problem.nightsPerSlot,
+          problem.slots
+        );
+  return { fuel, totalTime, totalNights, pack };
 }
 
 // The golden egg budget is deliberately absent: missions cost no golden eggs, so no allocation can breach

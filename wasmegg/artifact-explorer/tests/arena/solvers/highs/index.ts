@@ -13,4 +13,6 @@ export const highs: ArenaSolver = {
   id: 'highs',
   description: 'MILP over slots and crafts, outer-approximated objective, solved by HiGHS (WebAssembly)',
   plan: (problem: PlanProblem): PlanResult => solveWith(problem, solve, DEFAULT_TUNING, { report: true }),
+  // The solver does not read `nightsPerSlot` yet, so sleep-on instances and A10-sleep are skipped for it.
+  sleepAware: false,
 };

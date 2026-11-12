@@ -20,10 +20,15 @@ probability of getting a legendary of **every** target artifact.
 | `dag`                 | the recipe graph for the targets: what crafts into what, how many of each ingredient a craft consumes, and each node's legendary craft chance.             |
 | `targets`             | the desired artifact node ids.                                                                                                                             |
 | `fuelCapacity`        | total fuel for the whole plan.                                                                                                                             |
-| `timeCapacityPerSlot` | seconds available **per slot**.                                                                                                                            |
+| `timeCapacityPerSlot` | seconds available **per slot**. Waking seconds only, when the problem has a sleep window.                                                                  |
+| `nightsPerSlot`       | optional; whole sleep windows available per slot. **Absent means no sleep window** and is every problem unless sleep is switched on (see **Sleep**).       |
 | `slots`               | how many missions can be in flight at once. Always 3.                                                                                                      |
 | `ownedStock`          | copies of each node the player already owns.                                                                                                               |
 | `craftBudget`         | optional golden-egg cap on the plan's crafts, with a unit price per node. Absent on every generated instance; only **A9** supplies one.                    |
+
+Each option's `actualTime` is the seconds it charges its slot; with a sleep
+window, an option may also carry `nights`, the sleep windows it flies through
+(absent or 0 is a daytime launch).
 
 You return an `allocation` parallel to `problem.options`, plus an optional
 `reported` (see below).
@@ -43,8 +48,17 @@ reporting a plan whose craft accounting you did not work out yourself.
   packing, not a check that the total fits in `3 * timeCapacityPerSlot` — a plan
   can pass the volume bound and still be infeasible.
 
-The harness decides this with its own packer (`pack-feasibility.ts`), which
-imports nothing and which no candidate may import. Returning an infeasible plan
+- **Nights**, when `nightsPerSlot` is present. Each slot then holds at most
+  `timeCapacityPerSlot` waking seconds **and** at most `nightsPerSlot` nights,
+  so packing is a two-resource 3-way bin packing: a group must fit both at once,
+  and neither total fitting says the plan packs. A launch with `actualTime` 0
+  and `nights` 1 (a short ship launched at bedtime) is not free: it uses a night.
+  Only a launch costing neither is free.
+
+The harness decides this with its own packer (`pack-feasibility.ts`:
+`packFeasible`, and `packFeasibleNights` once any launch in the plan spends a
+night; a plan of daytime launches is judged by the one-dimensional rule exactly
+as before), which imports nothing and which no candidate may import. Returning an infeasible plan
 is a hard failure, not a low score.
 
 **The golden egg budget is not part of this.** Missions cost no golden eggs, so
@@ -62,10 +76,48 @@ Prices are the harness's own, derived from the game's price curve in `harness.ts
 rather than shared with `optimizer-cost.ts`: a pricing helper used by both the
 planner and its judge would agree with itself no matter what it computed.
 
+## Sleep
+
+A day is a waking window `W` followed by a sleep window `S` (`W + S = D =
+86400`), the same every day, shared by all three slots, and the plan starts at
+wake-up. Sleep forbids launching and nothing else: ships fly and land through
+the night. `S = 0` is the arena as it always was.
+
+`sleep.ts` (imports nothing; harness-owned like the packer) turns the menu the
+instance already enumerates into the menu a sleeping player has. With `d` an
+option's `actualTime`, already `max(rawTime, launch period)` so the effort floor
+applies to every variant:
+
+- a **daytime** variant, when `d <= W`: `actualTime d`, `nights 0`, same `id`;
+- an **overnight** variant for each `m` from `max(1, ceil((d - W) / D))` to
+  `floor(d / D) + 1`: `actualTime max(d - m*S, (m - 1)*W)`, `nights m`, id
+  suffixed `~night<m>`. Zero-second overnight variants are normal.
+
+`rawTime` and everything else are kept. Variants are split before any menu
+perturbation, so B1 shuffles and B6 duplicates variants. With horizon `H`
+(the instance's `timeCapacityPerSlot`), `n = floor(H / D)`, `rho = H - n*D`:
+the problem's `timeCapacityPerSlot` becomes `n*W + min(rho, W)` waking seconds
+and `nightsPerSlot` is `n` (a trailing partial night is unused). With `S = 0`
+the menu and the problem are exactly today's: no variant, no `nights` field, no
+`nightsPerSlot` key.
+
+**Instances.** `generateInstance` draws a window from 0, 4, 6, 8, 10 or 12
+hours, **last** in its RNG sequence, so every other field of every seed is what
+it always was. `ARENA_SLEEP` decides whether it is used: unset, every instance
+sleeps 0 and the arena is unchanged; a number of hours (`ARENA_SLEEP=8`) puts
+that window on every instance; `draw` uses each seed's drawn window.
+
+**Candidates declare sleep support** with `sleepAware: true` on their
+`ArenaSolver` entry (`contract.ts`). A candidate without it is never handed a
+problem with a sleep window: an instance with one is reported as skipped (not
+solved, not clean, not failed, left out of quality and latency and of the
+head-to-head), and **A10-sleep** is reported as skipped on every instance. The
+scorecard prints both.
+
 ## Rules
 
 - **Do not import the harness.** Not `evaluate.ts`, `pack-feasibility.ts`,
-  `invariants.ts`, `harness.ts`, `instances.ts` or `scorecard.ts`.
+  `invariants.ts`, `harness.ts`, `instances.ts`, `scorecard.ts` or `sleep.ts`.
   `independence.spec.ts` enforces this. Deriving your own copy of the objective
   or of a packing routine is fine and expected — sharing the harness's is not,
   because then the grader and the candidate are the same code.
@@ -107,15 +159,15 @@ factors must multiply to your `jointProbability`).
 **Correctness**, as invariant violations. Every invariant is a property that
 holds without knowing the optimum, so none needs a reference answer:
 
-| group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                 |
-| **C1** feasibility         | the plan fits the fuel tank and packs into the slots                                                                                                                                                                                                                                                                                                                                                             |
-| **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                    |
-| **A1-A9** monotonicity     | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely): each is solved alongside the original, and the relaxed solve must not score below it |
-| **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                            |
-| **M1-M3** cross-path       | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3)                                                                                                                               |
-| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every _pair_ — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass.                                                   |
+| group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **C1** feasibility         | the plan fits the fuel tank and packs into the slots (waking seconds and nights both, with a sleep window)                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                                                                                                                                              |
+| **A1-A10** monotonicity    | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely), a shorter sleep window (**A10-sleep**: 12, 10, 8, 6, 4 hours, then none; sleep-aware candidates only, skipped otherwise): each is solved alongside the original, and the relaxed solve must not score below it |
+| **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                                                                                                                                                      |
+| **M1-M3** cross-path       | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3; options are matched on ship, target, nights and charge, so sleep variants stay apart)                                                                                                                                                                   |
+| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every _pair_ — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass.                                                                                                                                                                             |
 
 **Quality**, as the judged joint probability on the unperturbed instance,
 reported in log10 and compared head-to-head. This is the only relative measure.
@@ -136,17 +188,19 @@ pnpm arena                                  # smoke: 4 instances, whole roster
 ARENA=sweep pnpm arena                      # 40 instances, cheap checks
 ARENA=deep pnpm arena                       # + D1/D2 local optimality
 SOLVER=my-solver ARENA=sweep pnpm arena     # one entry
+ARENA_SLEEP=8 ARENA=sweep pnpm arena        # an 8-hour sleep window on every instance
 ARENA_INSTANCES=80 ARENA_SEED_BASE=9000 ARENA=sweep pnpm arena
 pnpm arena:check                            # independence guard only
 ```
 
-| variable          | default                | meaning                                               |
-| ----------------- | ---------------------- | ----------------------------------------------------- |
-| `ARENA`           | `smoke`                | tier; also the switch that makes the suite run at all |
-| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count                                        |
-| `ARENA_SEED_BASE` | 2000                   | first seed                                            |
-| `SOLVER`          | whole roster           | run one entry                                         |
-| `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure      |
+| variable          | default                | meaning                                                |
+| ----------------- | ---------------------- | ------------------------------------------------------ |
+| `ARENA`           | `smoke`                | tier; also the switch that makes the suite run at all  |
+| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count                                         |
+| `ARENA_SEED_BASE` | 2000                   | first seed                                             |
+| `SOLVER`          | whole roster           | run one entry                                          |
+| `ARENA_SLEEP`     | unset (no sleep)       | hours of sleep on every instance, or `draw`; see Sleep |
+| `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure       |
 
 The sweep is opt-in and `pnpm test` does not run it: every tier here is minutes
 at best. `vitest.config.ts` drops `invariants.spec.ts` from the selection when

@@ -37,6 +37,10 @@ export interface PlanProblem {
   readonly fuelAxes?: readonly FuelAxis[];
   // Seconds. Note the asymmetry with `fuelCapacity` above, which is for the whole plan.
   readonly timeCapacityPerSlot: number;
+  // Whole sleep windows available per slot, alongside `timeCapacityPerSlot`, which then counts waking
+  // seconds only. Absent means today's problem: no sleep, and no option carries `nights`. Nothing in the
+  // solver reads it yet.
+  readonly nightsPerSlot?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
   readonly ownedStock: ReadonlyMap<string, number>;

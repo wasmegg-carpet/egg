@@ -59,6 +59,7 @@ export type InvariantId =
   | 'A7-crafting'
   | 'A8-targets'
   | 'A9-golden-eggs'
+  | 'A10-sleep'
   | 'B1-option-order'
   | 'B2-target-order'
   | 'B3-fuel-scale'
@@ -102,6 +103,10 @@ export interface CheckContext {
   planner: Planner;
   inst: ArenaInstance;
   out: Violation[];
+  // The candidate's declared `sleepAware`. A check that needs a sleep window and does not have it records its
+  // id in `skipped` instead of running, so the scorecard can say it was skipped rather than passed.
+  sleepAware: boolean;
+  skipped: InvariantId[];
 }
 
 const solve = (c: CheckContext, over: SolveOverrides = {}): Solved => run(c.planner, c.inst, over);
@@ -171,6 +176,21 @@ export function checkA9GoldenEggs(c: CheckContext) {
     })),
     { label: 'no golden egg cap', over: {} as SolveOverrides },
   ]);
+}
+
+// A shorter sleep window only adds launch opportunities, and the last step is today's problem.
+const A10_SLEEP_HOURS = [12, 10, 8, 6, 4, 0];
+
+export function checkA10Sleep(c: CheckContext) {
+  if (!c.sleepAware) {
+    c.skipped.push('A10-sleep');
+    return;
+  }
+  monotone(
+    'A10-sleep',
+    c,
+    A10_SLEEP_HOURS.map(h => ({ label: `sleep=${h}h`, over: { sleepSeconds: h * 3600 } }))
+  );
 }
 
 export function checkA3Menu(c: CheckContext) {
@@ -406,18 +426,23 @@ export function checkC1Feasibility(c: CheckContext) {
       `plan burns ${b.fuel.toExponential(4)} fuel against a ${s.problem.fuelCapacity.toExponential(4)} tank`
     );
   }
+  const nightsPerSlot = s.problem.nightsPerSlot;
+  const slotText =
+    nightsPerSlot === undefined
+      ? `${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s`
+      : `${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s waking and ${nightsPerSlot} night(s)`;
+  const loadText =
+    nightsPerSlot === undefined
+      ? `${b.totalTime.toFixed(0)}s total`
+      : `${b.totalTime.toFixed(0)}s and ${b.totalNights} night(s) total`;
   if (b.pack === 'undecided') {
     reportFlat(
       c,
       'C1-inconclusive',
-      `packing undecided within the node budget (${b.totalTime.toFixed(0)}s over ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s)`
+      `packing undecided within the node budget (${b.totalTime.toFixed(0)}s over ${slotText})`
     );
   } else if (b.pack !== 'packs') {
-    reportFlat(
-      c,
-      'C1-feasibility',
-      `plan does not pack into ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s (${b.totalTime.toFixed(0)}s total)`
-    );
+    reportFlat(c, 'C1-feasibility', `plan does not pack into ${slotText} (${loadText})`);
   }
 }
 
@@ -511,8 +536,14 @@ export function checkM3UnionLowerBound(c: CheckContext) {
       part.allocation.forEach((count, idx) => {
         if (!(count > 0)) return;
         const o = part.problem.options[idx];
+        // Sleep variants of one launch share its ship and target, so they are told apart by nights and by
+        // charge too; matching on ship and target alone would move overnight launches onto the daytime line.
         const k = joint.problem.options.findIndex(
-          q => q.ship.missionTypeId === o.ship.missionTypeId && q.targetAfxId === o.targetAfxId
+          q =>
+            q.ship.missionTypeId === o.ship.missionTypeId &&
+            q.targetAfxId === o.targetAfxId &&
+            (q.nights ?? 0) === (o.nights ?? 0) &&
+            q.actualTime === o.actualTime
         );
         if (k >= 0) union[k] += count;
       });
@@ -676,17 +707,25 @@ export const CHEAP_CHECKS: Check[] = [
   checkA7CraftingLevel,
   checkA8Targets,
   checkA9GoldenEggs,
+  checkA10Sleep,
   checkM1M2SoloDominance,
   checkM3UnionLowerBound,
 ];
 
 export const DEEP_CHECKS: Check[] = [checkD1LocalOptimality, checkD2DeepLocalOptimality];
 
-export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[]): Violation[] {
+export interface CheckRun {
+  violations: Violation[];
+  // Checks that did not run because the candidate does not declare sleep support.
+  skipped: InvariantId[];
+}
+
+export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[], sleepAware = false): CheckRun {
   const out: Violation[] = [];
+  const skipped: InvariantId[] = [];
   for (const check of checks) {
     try {
-      check({ planner, inst, out });
+      check({ planner, inst, out, sleepAware, skipped });
     } catch (err) {
       out.push({
         invariant: `${check.name}-threw`,
@@ -695,5 +734,5 @@ export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[]
       });
     }
   }
-  return out;
+  return { violations: out, skipped };
 }

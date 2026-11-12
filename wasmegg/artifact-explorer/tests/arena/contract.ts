@@ -6,7 +6,8 @@ export type { PlanProblem, PlanReport, PlanResult } from 'lib/mission-optimizer/
 import type { PlanProblem, PlanResult } from 'lib/mission-optimizer/solver/types';
 
 // Every plan is packed into this many concurrent mission slots, each holding `timeCapacityPerSlot` seconds of
-// flight. It is a property of the game, not of any solver, so it is stated here.
+// flight (waking seconds, and `nightsPerSlot` sleep windows besides, when the problem has a sleep window).
+// It is a property of the game, not of any solver, so it is stated here.
 export const NUM_SLOTS = 3;
 
 export type Planner = (problem: PlanProblem) => PlanResult;
@@ -17,4 +18,8 @@ export interface ArenaSolver {
   // One line for the scorecard.
   description: string;
   plan: Planner;
+  // Whether `plan` honours `PlanProblem.nightsPerSlot` and `LaunchOption.nights`. Absent or false, the
+  // harness never hands this candidate a problem with a sleep window: instances with one, and A10-sleep,
+  // are reported as skipped for it rather than solved, failed or passed.
+  sleepAware?: boolean;
 }

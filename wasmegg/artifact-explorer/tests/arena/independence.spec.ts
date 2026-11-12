@@ -93,6 +93,7 @@ const HARNESS_FILES = [
   'invariants.ts',
   'pack-feasibility.ts',
   'scorecard.ts',
+  'sleep.ts',
 ];
 
 // The planner and everything downstream of it. The harness must not run any of
@@ -182,7 +183,7 @@ describe('arena independence', () => {
   });
 
   it('no solver imports the judge, the feasibility rule or the checks', () => {
-    const forbidden = ['evaluate', 'pack-feasibility', 'invariants', 'scorecard', 'harness', 'instances'];
+    const forbidden = ['evaluate', 'pack-feasibility', 'invariants', 'scorecard', 'harness', 'instances', '/sleep'];
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
@@ -251,6 +252,11 @@ describe('arena independence', () => {
     // It is the goalpost for C1 and for every k-opt move, so it must not be
     // reachable from anything a candidate can change.
     expect(importsOf(readSource('pack-feasibility.ts'))).toEqual([]);
+  });
+
+  it('the sleep model stands alone', () => {
+    // It decides what a launch costs once the player sleeps, which is as much the goalpost as the packer.
+    expect(importsOf(readSource('sleep.ts'))).toEqual([]);
   });
 
   it('every registered solver has a distinct id', () => {

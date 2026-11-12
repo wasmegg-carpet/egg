@@ -14,6 +14,9 @@ export interface LaunchOption {
   // level's launch period
   actualTime: number;
   rawTime: number; // true (unfloored) boosted duration
+  // Sleep windows this launch flies through; absent or 0 is a daytime launch. Only the arena sets it so far,
+  // and only alongside `PlanProblem.nightsPerSlot`, in which case `actualTime` counts waking seconds.
+  nights?: number;
   cost: number;
   // everything this launch drops, per single ship — display only
   supplyVector: Map<string, number>;

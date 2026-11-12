@@ -3,7 +3,7 @@
 // two feasible production plans as C1 failures. It stays.
 
 import { describe, expect, it } from 'vitest';
-import { packFeasible } from './pack-feasibility';
+import { packFeasible, packFeasibleNights } from './pack-feasibility';
 
 const SLOTS = 3;
 
@@ -304,4 +304,151 @@ describe('agrees with brute force on near-exact instances built from a known pac
     expect(undecided).toBe(0);
     expect(wrong.slice(0, 10)).toEqual([]);
   }, 60_000);
+});
+
+// The two-resource rule, for problems with a sleep window: each slot holds `capacity` waking seconds and
+// `nightCapacity` nights, and a launch charges both.
+function brutePacksNights(
+  seconds: number[],
+  nights: number[],
+  counts: number[],
+  capacity: number,
+  nightCapacity: number,
+  slots: number
+): boolean {
+  const items: [number, number][] = [];
+  for (let j = 0; j < seconds.length; j++) for (let k = 0; k < counts[j]; k++) items.push([seconds[j], nights[j]]);
+  items.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  const ls = new Array<number>(slots).fill(0);
+  const ln = new Array<number>(slots).fill(0);
+  const go = (i: number): boolean => {
+    if (i === items.length) return true;
+    for (let s = 0; s < slots; s++) {
+      if (ls[s] + items[i][0] > capacity + 1e-9 || ln[s] + items[i][1] > nightCapacity + 1e-9) continue;
+      if (s > 0 && ls[s] === ls[s - 1] && ln[s] === ln[s - 1]) continue; // slots are interchangeable
+      ls[s] += items[i][0];
+      ln[s] += items[i][1];
+      const ok = go(i + 1);
+      ls[s] -= items[i][0];
+      ln[s] -= items[i][1];
+      if (ok) return true;
+    }
+    return false;
+  };
+  return go(0);
+}
+
+describe('packFeasibleNights', () => {
+  it('charges a zero-second overnight launch its night', () => {
+    // A short ship launched at bedtime costs no waking time, and still uses up the night.
+    expect(packFeasibleNights([0], [1], [3], 100, 1, SLOTS)).toBe('packs');
+    expect(packFeasibleNights([0], [1], [4], 100, 1, SLOTS)).toBe('infeasible');
+    expect(packFeasibleNights([0], [1], [1], 100, 0, SLOTS)).toBe('infeasible');
+    // Only a launch costing neither resource is free.
+    expect(packFeasibleNights([0, 10], [0, 1], [500, 3], 10, 1, SLOTS)).toBe('packs');
+  });
+
+  it('rejects by either resource alone', () => {
+    // Waking seconds fit with room to spare; nights do not.
+    expect(packFeasibleNights([1, 1], [2, 1], [2, 3], 100, 2, SLOTS)).toBe('infeasible');
+    // Nights fit with room to spare; waking seconds do not.
+    expect(packFeasibleNights([60, 40], [0, 1], [3, 1], 100, 5, SLOTS)).toBe('packs');
+    expect(packFeasibleNights([60, 50], [0, 1], [3, 1], 100, 5, SLOTS)).toBe('infeasible');
+    // A launch that alone exceeds a slot's nights is fatal, whatever the totals say.
+    expect(packFeasibleNights([0], [3], [1], 100, 2, SLOTS)).toBe('infeasible');
+  });
+
+  it('does not let the two resources trade against each other across slots', () => {
+    // Three launches of (1s, 2 nights) fill every slot's nights, so each slot has one, leaving 9s per slot:
+    // room for one 5s launch each. Either resource alone packs four 5s launches; together they do not.
+    expect(packFeasibleNights([1, 5], [0, 0], [3, 4], 10, 2, SLOTS)).toBe('packs');
+    expect(packFeasibleNights([0, 0], [2, 0], [3, 4], 10, 2, SLOTS)).toBe('packs');
+    expect(packFeasibleNights([1, 5], [2, 0], [3, 4], 10, 2, SLOTS)).toBe('infeasible');
+    expect(packFeasibleNights([1, 5], [2, 0], [3, 3], 10, 2, SLOTS)).toBe('packs');
+  });
+
+  it('reports `undecided` rather than guessing when the node budget runs out', () => {
+    expect(packFeasibleNights([1, 5], [2, 0], [3, 4], 10, 2, SLOTS, 1)).toBe('undecided');
+  });
+
+  it('agrees with the one-dimensional rule when nothing spends a night', () => {
+    const { rnd, ri } = lcg(31337);
+    let tested = 0;
+    for (let attempts = 0; attempts < 200_000 && tested < 3_000; attempts++) {
+      const durations: number[] = [];
+      const counts: number[] = [];
+      for (let j = 0, D = ri(1, 4); j < D; j++) {
+        durations.push(ri(1, 9) + Math.round(rnd() * 4) / 4);
+        counts.push(ri(1, 6));
+      }
+      const capacity = ri(3, 14);
+      const one = packFeasible(durations, counts, capacity, SLOTS, 1_000_000);
+      const two = packFeasibleNights(
+        durations,
+        durations.map(() => 0),
+        counts,
+        capacity,
+        0,
+        SLOTS,
+        1_000_000
+      );
+      expect(two).toBe(one);
+      tested++;
+    }
+    expect(tested).toBe(3_000);
+  });
+
+  it('matches brute force on tight two-resource instances', () => {
+    const { rnd, ri } = lcg(8080);
+    let tested = 0;
+    let infeasible = 0;
+    let undecided = 0;
+    const wrong: string[] = [];
+    for (let attempts = 0; attempts < 2_000_000 && tested < 10_000; attempts++) {
+      const capacity = ri(4, 16);
+      const nightCapacity = ri(1, 5);
+      const seconds: number[] = [];
+      const nights: number[] = [];
+      const counts: number[] = [];
+      for (let j = 0, D = ri(1, 4); j < D; j++) {
+        // Some daytime launches, some overnight ones, including zero-second overnight launches.
+        const overnight = rnd() < 0.5;
+        seconds.push(overnight && rnd() < 0.3 ? 0 : ri(1, capacity) + (rnd() < 0.3 ? 0.5 : 0));
+        nights.push(overnight ? ri(1, 2) : 0);
+        counts.push(ri(1, 5));
+      }
+      let totalS = 0;
+      let totalN = 0;
+      let items = 0;
+      let byInspection = false;
+      for (let j = 0; j < seconds.length; j++) {
+        if (seconds[j] > capacity || nights[j] > nightCapacity) byInspection = true;
+        totalS += counts[j] * seconds[j];
+        totalN += counts[j] * nights[j];
+        items += counts[j];
+      }
+      if (byInspection || items > 12) continue;
+      if (totalS > SLOTS * capacity || totalN > SLOTS * nightCapacity) continue;
+      // Tight in at least one resource, so the verdict comes from the search.
+      if (totalS < 0.75 * SLOTS * capacity && totalN < 0.75 * SLOTS * nightCapacity) continue;
+
+      tested++;
+      const got = packFeasibleNights(seconds, nights, counts, capacity, nightCapacity, SLOTS, 1_000_000);
+      if (got === 'undecided') {
+        undecided++;
+        continue;
+      }
+      const want = brutePacksNights(seconds, nights, counts, capacity, nightCapacity, SLOTS);
+      if ((got === 'packs') !== want) {
+        wrong.push(
+          `s=${JSON.stringify(seconds)} n=${JSON.stringify(nights)} c=${JSON.stringify(counts)} cap=${capacity}/${nightCapacity} got=${got}`
+        );
+      }
+      if (got === 'infeasible') infeasible++;
+    }
+    expect(tested).toBe(10_000);
+    expect(infeasible).toBeGreaterThan(500);
+    expect(undecided).toBe(0);
+    expect(wrong.slice(0, 10)).toEqual([]);
+  }, 120_000);
 });
