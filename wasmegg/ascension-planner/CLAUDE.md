@@ -11,6 +11,6 @@
 - Composables in /src/composables/
 
 ## Key Files
-- Types: /src/types/actions.ts
+- Types: /src/types/actions/
 - Snapshot system: /src/lib/actions/snapshot.ts
 - Formatting: /src/lib/format.ts
