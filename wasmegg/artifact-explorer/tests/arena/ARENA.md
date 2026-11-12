@@ -22,6 +22,7 @@ probability of getting a legendary of **every** target artifact.
 | `fuelCapacity`        | total fuel for the whole plan.                                                                                                                             |
 | `timeCapacityPerSlot` | seconds available **per slot**. Waking seconds only, when the problem has a sleep window.                                                                  |
 | `nightsPerSlot`       | optional; whole sleep windows available per slot. **Absent means no sleep window** and is every problem unless sleep is switched on (see **Sleep**).       |
+| `sleep`               | optional; `{ sleepSeconds, horizonSeconds }`, the day the night budget is cut from. Present exactly when `nightsPerSlot` is (see **Sleep**).               |
 | `slots`               | how many missions can be in flight at once. Always 3.                                                                                                      |
 | `ownedStock`          | copies of each node the player already owns.                                                                                                               |
 | `craftBudget`         | optional golden-egg cap on the plan's crafts, with a unit price per node. Absent on every generated instance; only **A9** supplies one.                    |
@@ -55,10 +56,28 @@ reporting a plan whose craft accounting you did not work out yourself.
   and `nights` 1 (a short ship launched at bedtime) is not free: it uses a night.
   Only a launch costing neither is free.
 
+- **Real days**, when `sleep` is present. A sleep-aware candidate returns
+  `calendar` beside its allocation: per slot, its launches in launch order, each
+  `{ option, optionId, launchAt }` (`launchAt` in seconds from wake-up on day 0;
+  further fields are allowed and ignored). The harness verifies it
+  (`calendar.ts`) against its own menu and its own statement of the day, never
+  against figures the candidate wrote down: each launch occupies its slot for the
+  menu's `actualTime + nights * sleepSeconds`, must start while the player is
+  awake (time of day at most `W`), may not start before the previous launch in
+  its slot is free, and the slot must be free again by `horizonSeconds`; the
+  calendar's launches per option must equal the allocation exactly. Tolerance
+  one microsecond. A sleep-on plan with no calendar fails.
+
 The harness decides this with its own packer (`pack-feasibility.ts`:
 `packFeasible`, and `packFeasibleNights` once any launch in the plan spends a
 night; a plan of daytime launches is judged by the one-dimensional rule exactly
-as before), which imports nothing and which no candidate may import. Returning an infeasible plan
+as before), which imports nothing and which no candidate may import. With a
+sleep window both the packer and the calendar verifier run, and C1 needs both:
+the packer checks the budgets the problem states, the calendar that the plan
+fits real days. The checks that build plans of their own (M3's union, D1/D2's
+neighbours) still accept one by the packer alone, since the harness has no
+layout of its own; an "improvement" they find may be one no real day holds,
+which is a soft finding, not a gate. Returning an infeasible plan
 is a hard failure, not a low score.
 
 **The golden egg budget is not part of this.** Missions cost no golden eggs, so
@@ -97,9 +116,10 @@ applies to every variant:
 perturbation, so B1 shuffles and B6 duplicates variants. With horizon `H`
 (the instance's `timeCapacityPerSlot`), `n = floor(H / D)`, `rho = H - n*D`:
 the problem's `timeCapacityPerSlot` becomes `n*W + min(rho, W)` waking seconds
-and `nightsPerSlot` is `n` (a trailing partial night is unused). With `S = 0`
-the menu and the problem are exactly today's: no variant, no `nights` field, no
-`nightsPerSlot` key.
+and `nightsPerSlot` is `n` (a trailing partial night is unused), and `sleep` is
+`{ sleepSeconds: S, horizonSeconds: H }`. With `S = 0` the menu and the problem
+are exactly today's: no variant, no `nights` field, no `nightsPerSlot` or
+`sleep` key, and no calendar is asked for.
 
 **Instances.** `generateInstance` draws a window from 0, 4, 6, 8, 10 or 12
 hours, **last** in its RNG sequence, so every other field of every seed is what
@@ -117,7 +137,8 @@ scorecard prints both.
 ## Rules
 
 - **Do not import the harness.** Not `evaluate.ts`, `pack-feasibility.ts`,
-  `invariants.ts`, `harness.ts`, `instances.ts`, `scorecard.ts` or `sleep.ts`.
+  `invariants.ts`, `harness.ts`, `instances.ts`, `scorecard.ts`, `sleep.ts` or
+  `calendar.ts`.
   `independence.spec.ts` enforces this. Deriving your own copy of the objective
   or of a packing routine is fine and expected — sharing the harness's is not,
   because then the grader and the candidate are the same code.
@@ -162,7 +183,7 @@ holds without knowing the optimum, so none needs a reference answer:
 | group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **C1** feasibility         | the plan fits the fuel tank and packs into the slots (waking seconds and nights both, with a sleep window)                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **C1** feasibility         | the plan fits the fuel tank and packs into the slots (waking seconds and nights both, with a sleep window); with a sleep window, also that the returned calendar verifies                                                                                                                                                                                                                                                                                                                                                                  |
 | **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                                                                                                                                              |
 | **A1-A10** monotonicity    | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely), a shorter sleep window (**A10-sleep**: 12, 10, 8, 6, 4 hours, then none; sleep-aware candidates only, skipped otherwise): each is solved alongside the original, and the relaxed solve must not score below it |
 | **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                                                                                                                                                      |
@@ -228,9 +249,12 @@ scales from there. The deep tier adds substantially more. Over the default seed 
 ## The roster
 
 `highs` — the shipped planner, `lib/mission-optimizer/solver/SPEC.md`. Sleep-aware: it
-budgets nights per slot (that file's section 9), so A10-sleep runs for it on
-every instance, `ARENA_SLEEP` or not. Its plans are checked against the
-two-resource packer only, not against real days.
+budgets nights per slot (that file's section 9), lays each plan out on real days
+and trims what does not fit (section 10), so A10-sleep runs for it on every
+instance, `ARENA_SLEEP` or not, and its sleep-on plans are checked by their
+calendar. It also reports `layoutStats`, which the scorecard sums over fresh
+solves into one `layout` line for sleep-on runs; that line is the candidate's
+own account and nothing gates on it.
 
 The arena is not a bake-off between methodologies. It is the bar a change to the
 shipped planner has to clear before it lands. A proposed change may be registered

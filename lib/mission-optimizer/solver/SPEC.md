@@ -458,3 +458,129 @@ a schedule. A plan from this model alone can list launches no real day has room
 for. Nothing here proves a plan fits real days yet; per-day fit rows, a layout
 of each slot's launches and a verifier are the step that would, and until then
 the field stays unreachable from the app.
+
+## 10. Fit rows, layout, verifier and trim
+
+Section 9's budget is a relaxation; this section is what stops it from being
+reported as a plan. A problem that also carries `sleep` (`types.ts`:
+`sleepSeconds` `S` and `horizonSeconds` `H`, the horizon `timeCapacityPerSlot`
+was before it came to count waking seconds) gets three more things, and every
+plan it returns has been laid out on real days and verified. **Absent means
+today's problem**: no fit rows, no layout, no `calendar`, and the matrix and the
+result are the ones section 9 produced. `normalizeProblem` leaves the field
+absent when absent, normalizes `H` like any other budget, and throws on an
+`S` outside `[0, 86400)`, since neither "no sleep" nor "no waking" is a safe
+reading of a malformed window.
+
+`days.ts` derives one slot's day structure from the three fields: `W = 86400 -
+S`; `N`, the nights the layout uses, the smaller of `nightsPerSlot` and
+`floor(H / 86400)`; `ceil(H / 86400)` waking windows; and the trailing partial
+day's waking `tail`, the smallest of what `timeCapacityPerSlot`, `H` and `W`
+leave for it (0 on a whole-day horizon). A caller whose fields disagree gets the
+smallest day any of them describes.
+
+**Fit rows.** The slot row pools a slot's waking seconds over all its days, so
+it plans 65 launches of 5.88 hours into 24 sixteen-hour days that hold 48. For
+each `q` in the distinct values of `min(floor(W / seconds + 1e-9), 96)` over the
+daytime classes with a duration, each slot gets a row `fit_k<k>_q<q>`:
+
+```
+sum over daytime classes  u^(q)(seconds / W) * n[c][k]
+  + sum over overnight classes  (nights - 1) * n[c][k]   <=  waking windows
+```
+
+`u^(q)` is Fekete and Schepers' dual feasible function: `x` where `(q + 1) x` is
+within 1e-9 of a whole number, `floor((q + 1) x) / q` elsewhere. Daytime
+launches inside one window sum to at most 1 under it, and a launch spanning `m`
+nights flies straight through `m - 1` windows no daytime launch can use, so the
+rows are valid inequalities: they cut off no plan that fits real days, and cost
+no columns. They are in the scale LPs too, which only tightens `theta` towards
+what can actually be flown. They do not close the gap: a mix (several mid-length
+launches leaving room for two short ones) is caught by no single `q`, and the
+`m - 1` term leaves a one-night ship's waking hours to the slot row. The layout
+is what is relied on; the rows only leave it less to trim.
+
+**Layout** (`layout.ts`), per slot, from the MILP's own class columns `n[c][k]`
+(the packing `fitsBudgets` certified):
+
+- **Connectors.** Each overnight launch, plus a null connector (one night,
+  nothing flying) until the nights sum to `N`. Each has `flex = waking seconds -
+(nights - 1) W`, split into a head (before bed on the day it leaves) and a
+  landing (after wake-up on the day it lands). They are ordered by flex,
+  alternately largest and smallest, the smallest last, so a long landing meets a
+  short take-off and nothing long lands into the tail. **The order is a
+  heuristic**: another may place more, so what the layout places is a lower bound
+  on what fits, never an over-statement.
+- **Segments.** `K` connectors cut the slot into segments `0..K`: each of the
+  first `K` is one waking window ending with its connector's take-off; segment
+  `K` is the tail.
+- **Exact chain.** Given the daytime seconds in each segment, taking every head
+  as large as its segment allows is exact (a larger head only shortens the next
+  landing), so whether a set of segment loads stands, and the heads that make it
+  stand, is a linear pass in seconds. Overnight ships that cannot stand on their
+  own (two long flexes meeting in one day, or more nights than the horizon has)
+  are dropped first, one at a time by the judge, preferring a drop that stands
+  the chain up by itself.
+- **Greedy first.** Daytime classes largest first, each launch into the earliest
+  segment that takes it with the chain still standing. When it places every
+  launch it is optimal and no MILP is built; that is the common case.
+- **MILP otherwise.** Integer `x[c][j]` per daytime class and segment, bounded
+  by `min(count, floor(window / seconds))`; continuous `head[j]` within
+  `[max(0, flex - landing room), min(flex, W)]`; one row per segment (its
+  launches, its own head, the previous connector's landing) and one per class;
+  maximize the waking time placed. Hours, not seconds. Node limit 1000
+  (`LAYOUT_LIMITS`) and **never a timeout**, for section 7's reason. Solved by
+  the same `MilpSolve` as the main model. Its rounded `x` are re-checked with
+  the exact chain; heads are recomputed from them, never read off the
+  continuous column.
+- **Margin, only when needed.** HiGHS accepts an integer column within 1e-6 of a
+  whole number, so a rounded layout can over-fill a day by hundredths of a
+  second. Only when the exact re-check fails is the MILP solved again with one
+  second off every segment row; if that fails too, launches come off the failing
+  segment, shortest first, until the chain stands. The margin is not applied up
+  front because it forbids exact fits (sixteen one-hour High-effort launches in a
+  sixteen-hour day) and can make a day its overnight ships already fill
+  infeasible.
+- **No incumbent.** An infeasible layout MILP, or one that hits its node limit
+  without an incumbent, leaves the greedy's placement, which always stands. The
+  better of greedy and MILP by waking time placed is kept.
+- **K = 0** (a horizon under a day): the greedy lays launches end to end.
+
+Launch times follow: zero-second daytime launches at the start, each segment's
+daytime launches end to end from the previous landing, each connector at `W -
+head` on its day.
+
+**Verifier** (`verify.ts`, a few dozen lines reading only launch times and block lengths):
+every launch's time of day is at most `W`; each launch is at least the previous
+launch plus its block (`waking seconds + nights * S`, which covers the flight and
+the effort floor); the last block ends by `H`. Tolerance 1e-6 s
+(`VERIFY_TOL_SECONDS`): far below anything a player acts on, far above the float
+drift of summing a few hundred durations on a horizon of millions of seconds.
+The layout's own arithmetic works to 1e-7 s so it never reaches that edge.
+
+**Trim.** Every launch the layout drops (an unplaced daytime launch, an
+overnight ship that cannot stand) decrements, among the groups of the allowed
+classes, the one whose loss leaves the highest `evaluateCounts(model, counts,
+STEERING_PRECISION).logJoint`, one launch at a time; an unjudgeable candidate
+scores `-Infinity`. A slot the verifier rejects loses one more launch, chosen
+the same way among the classes in it, and is laid out again; an empty slot
+always verifies, so this ends. There is no cap-and-re-solve. The trimmed plan
+is then judged against the empty one exactly as the untrimmed plan was, and
+everything reported (allocation, joint, per-target, craft split) is computed
+from the trimmed counts. **Trimming is not monotone**: a relaxed problem can
+come back with a plan that trims worse than a tighter one's, and the arena's
+monotonicity checks see that.
+
+**The hard rule.** `emit` refuses to return a sleep-aware plan without a
+calendar, and `assertVerified` checks the calendar it does return: each launch
+against the option it names (its `actualTime` and `nights`, not what the layout
+wrote down), each slot against `verify.ts`, and the launches per option against
+the allocation, exactly. A failure throws, as the solver's other internal
+failures do (`Rows.end`, `logGrid`); an unverified plan is never returned.
+
+**Result.** `PlanResult.calendar`: per slot, launches in order, each with its
+option index and id, `launchAt` (seconds from wake-up on day 0), waking seconds
+and nights. A group's launches are flown as its first member, as `emit`
+allocates them. `PlanResult.layoutStats`: launches trimmed (overnight ones
+counted apart), layout MILPs solved, margin re-solves, verifier retries.
+Diagnostics only.

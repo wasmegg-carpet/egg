@@ -4,7 +4,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { ArenaSolver } from './contract';
-import { run } from './harness';
+import { run, takeLayoutTally, type LayoutTally } from './harness';
 import { generateInstance } from './instances';
 import { runChecks, type Check, type InvariantId, type Violation, type ViolationId } from './invariants';
 
@@ -31,6 +31,8 @@ export interface SweepResult {
   description: string;
   instances: InstanceResult[];
   totalMs: number;
+  // What the candidate reported about laying its sleep-aware plans out, over every fresh solve of the sweep.
+  layout: LayoutTally;
 }
 
 export function sweep(
@@ -41,6 +43,7 @@ export function sweep(
 ): SweepResult {
   const instances: InstanceResult[] = [];
   const started = Date.now();
+  takeLayoutTally(solver.plan);
   for (const seed of seeds) {
     const inst = generateInstance(seed);
     if (inst.sleepSeconds > 0 && !solver.sleepAware) {
@@ -99,7 +102,13 @@ export function sweep(
     instances.push(r);
     onInstance?.(r);
   }
-  return { solverId: solver.id, description: solver.description, instances, totalMs: Date.now() - started };
+  return {
+    solverId: solver.id,
+    description: solver.description,
+    instances,
+    totalMs: Date.now() - started,
+    layout: takeLayoutTally(solver.plan),
+  };
 }
 
 const log10 = (p: number) => (p > 0 ? Math.log10(p) : -Infinity);
@@ -203,6 +212,15 @@ export function formatScorecard(r: SweepResult): string {
     lines.push('');
     lines.push(
       `    solve latency: median ${q(0.5).toFixed(0)}ms, p90 ${q(0.9).toFixed(0)}ms, max ${solveTimes[solveTimes.length - 1].toFixed(0)}ms`
+    );
+  }
+
+  const lt = r.layout;
+  if (lt.solves > 0) {
+    lines.push(
+      `    layout (candidate-reported, ${lt.solves} fresh sleep-on solve(s)): ${lt.plansTrimmed} plan(s) trimmed, ` +
+        `${lt.launchesTrimmed} launch(es) dropped (${lt.overnightTrimmed} overnight), ${lt.layoutSolves} layout MILP(s) ` +
+        `(${lt.marginResolves} margin re-solve(s)), ${lt.verifierRetries} verifier retr${lt.verifierRetries === 1 ? 'y' : 'ies'}`
     );
   }
 

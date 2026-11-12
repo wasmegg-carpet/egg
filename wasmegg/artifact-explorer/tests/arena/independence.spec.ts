@@ -87,6 +87,7 @@ function libModules(): string[] {
 // Files that make up the fixed part of the arena: the problem, the rules, the
 // judge and the scoreboard.
 const HARNESS_FILES = [
+  'calendar.ts',
   'contract.ts',
   'harness.ts',
   'instances.ts',
@@ -115,13 +116,16 @@ const IMPLEMENTATION = [
   'plan/read.ts',
   'plan/schema.ts',
   'plan/write.ts',
+  'solver/days.ts',
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
   'solver/highs.ts',
+  'solver/layout.ts',
   'solver/milp.ts',
   'solver/model.ts',
   'solver/simplex.ts',
   'solver/solve.ts',
   'solver/types.ts',
+  'solver/verify.ts', // the planner's own calendar verifier; the arena verifies with `calendar.ts` instead
 ];
 
 // Game data, problem construction and pure types. The harness needs these to state a problem at all, and
@@ -183,7 +187,16 @@ describe('arena independence', () => {
   });
 
   it('no solver imports the judge, the feasibility rule or the checks', () => {
-    const forbidden = ['evaluate', 'pack-feasibility', 'invariants', 'scorecard', 'harness', 'instances', '/sleep'];
+    const forbidden = [
+      'evaluate',
+      'pack-feasibility',
+      'invariants',
+      'scorecard',
+      'harness',
+      'instances',
+      '/sleep',
+      '/calendar',
+    ];
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
@@ -257,6 +270,14 @@ describe('arena independence', () => {
   it('the sleep model stands alone', () => {
     // It decides what a launch costs once the player sleeps, which is as much the goalpost as the packer.
     expect(importsOf(readSource('sleep.ts'))).toEqual([]);
+  });
+
+  it('the calendar verifier stands alone', () => {
+    // C1 for a sleep-aware problem. Sharing anything with the planner's own verifier (`src/lib/solver/verify.ts`)
+    // or its layout would let a wrong rule pass on both sides at once.
+    expect(importsOf(readSource('calendar.ts'))).toEqual([]);
+    const code = stripComments(readSource('calendar.ts'));
+    expect(/verify|layout|slotFault/.test(code)).toBe(false);
   });
 
   it('every registered solver has a distinct id', () => {

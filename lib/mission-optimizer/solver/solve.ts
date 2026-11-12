@@ -1,10 +1,20 @@
 // The outer approximation: holds each concave g(s_T) under a fixed tangent grid so
 // HiGHS sees a MILP, and returns an incumbent only once `./evaluator` certifies it.
 
-import type { CraftSplitReport, MilpLimits, MilpSolve, PlanProblem, PlanResult } from './types';
+import type {
+  CalendarLaunch,
+  CraftSplitReport,
+  LayoutStats,
+  MilpLimits,
+  MilpSolve,
+  PlanProblem,
+  PlanResult,
+} from './types';
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } from './evaluator';
 import { buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
+import { layOutPlan } from './layout';
+import { slotFault } from './verify';
 
 export interface Tuning {
   maxNodes: number;
@@ -87,12 +97,74 @@ export interface SolveOptions {
   report?: boolean;
 }
 
-function emit(problem: PlanProblem, model: Model, counts: readonly number[], report: boolean): PlanResult {
+// What a sleep-aware result carries besides its allocation. Absent for today's problem, so its result is
+// exactly what it was.
+interface Laid {
+  calendar: CalendarLaunch[][];
+  layoutStats: LayoutStats;
+}
+
+const NO_LAYOUT: LayoutStats = {
+  launchesTrimmed: 0,
+  overnightTrimmed: 0,
+  layoutSolves: 0,
+  marginResolves: 0,
+  verifierRetries: 0,
+};
+
+// The plan with nothing in it, which every sleep window admits.
+function emptyLaid(model: Model): Laid | undefined {
+  return model.day
+    ? { calendar: Array.from({ length: model.slots }, () => []), layoutStats: { ...NO_LAYOUT } }
+    : undefined;
+}
+
+// The last gate before a sleep-aware plan leaves the solver, and the one that makes "only verified plans are
+// reported" a property of the code rather than of the layout being right: every launch is checked against the
+// option it names (not the figures the layout wrote down), every slot against the sleep rule, and the
+// calendar's launches against the allocation, count for count. A plan that fails is not returned at all.
+export function assertVerified(
+  problem: PlanProblem,
+  model: Model,
+  allocation: readonly number[],
+  calendar: CalendarLaunch[][]
+): void {
+  const day = model.day!;
+  const sleep = { sleepSeconds: day.sleepSeconds, horizonSeconds: day.horizonSeconds };
+  const fail = (detail: string): never => {
+    throw new Error(`solver: refusing to return a plan whose calendar fails verification: ${detail}`);
+  };
+  if (calendar.length !== model.slots)
+    fail(`${calendar.length} slot(s) in the calendar, ${model.slots} in the problem`);
+  const flown = new Array<number>(allocation.length).fill(0);
+  calendar.forEach((launches, k) => {
+    for (const l of launches) {
+      const opt = problem.options[l.option];
+      if (opt === undefined || opt.id !== l.optionId) fail(`slot ${k} names option ${l.option} as ${l.optionId}`);
+      if (opt.actualTime !== l.wakingSeconds || (opt.nights ?? 0) !== l.nights) {
+        fail(`slot ${k} times option ${l.option} as ${l.wakingSeconds}s and ${l.nights} night(s)`);
+      }
+      flown[l.option]++;
+    }
+    const fault = slotFault(launches, sleep);
+    if (fault !== null) fail(`slot ${k}: ${fault}`);
+  });
+  for (let i = 0; i < allocation.length; i++) {
+    if (flown[i] !== allocation[i]) fail(`option ${i} is allocated ${allocation[i]} but flown ${flown[i]} time(s)`);
+  }
+}
+
+function emit(problem: PlanProblem, model: Model, counts: readonly number[], report: boolean, laid?: Laid): PlanResult {
   const allocation = new Array<number>(problem.options.length).fill(0);
   for (let g = 0; g < model.groups.length; g++) {
     if (counts[g] > 0) allocation[model.groups[g].members[0]] += counts[g];
   }
-  if (!report) return { allocation };
+  if (model.day) {
+    if (!laid) throw new Error('solver: a sleep-aware plan reached emit without a calendar');
+    assertVerified(problem, model, allocation, laid.calendar);
+  }
+  const extra = laid ? { calendar: laid.calendar, layoutStats: laid.layoutStats } : {};
+  if (!report) return { allocation, ...extra };
 
   // Inside the guard the rest of the pass works under: `evaluateCounts` runs a simplex that throws on
   // an unbounded column, a lost basis or its iteration cap, and a report is the one part of the result
@@ -102,7 +174,7 @@ function emit(problem: PlanProblem, model: Model, counts: readonly number[], rep
   try {
     finalEval = evaluateCounts(model, counts, EXACT_PRECISION);
   } catch {
-    return { allocation };
+    return { allocation, ...extra };
   }
   const scored = finalEval.scores.map(s => (s > 0 ? -Math.expm1(-s) : 0));
   const craftSplit = splitOf(model, finalEval.crafts);
@@ -112,7 +184,7 @@ function emit(problem: PlanProblem, model: Model, counts: readonly number[], rep
   // associative, so the caller's order would leak back into the reported joint.
   let jointProbability = 1;
   for (const p of scored) jointProbability *= p;
-  return { allocation, reported: { jointProbability, perTarget }, craftSplit };
+  return { allocation, reported: { jointProbability, perTarget }, craftSplit, ...extra };
 }
 
 // Below this a craft is the LP's way of writing zero, and a node the plan does not craft has no
@@ -162,17 +234,18 @@ export function solveWith(
 ): PlanResult {
   const model = buildModel(problem);
   const empty = new Array<number>(model.groups.length).fill(0);
-  if (model.groups.length === 0 || model.sortedTargets.length === 0) return emit(problem, model, empty, report);
+  const none = emptyLaid(model);
+  if (model.groups.length === 0 || model.sortedTargets.length === 0) return emit(problem, model, empty, report, none);
 
   const qs = effectiveQs(model);
   const limits: MilpLimits = { maxNodes: tuning.maxNodes, relGap: MIP_REL_GAP };
   const theta = scales(model, qs, solve, limits);
-  if (!theta) return emit(problem, model, empty, report);
+  if (!theta) return emit(problem, model, empty, report, none);
 
   const solution = solve(buildOaMilp(model, qs, theta, tuning.sigmaGrid), limits);
   // A whitelist, not a blacklist of the failures known today: only these two carry a point that is a
   // plan rather than a waypoint on a ray or a leftover from an errored solve.
-  if (solution.status !== 'optimal' && solution.status !== 'feasible') return emit(problem, model, empty, report);
+  if (solution.status !== 'optimal' && solution.status !== 'feasible') return emit(problem, model, empty, report, none);
 
   const layout = layoutOf(model, 'oa');
   const counts = decodeCounts(model, layout, solution.columnValues);
@@ -188,6 +261,19 @@ export function solveWith(
   } catch {
     keep = false;
   }
+  if (!keep || !model.day) return emit(problem, model, keep ? counts : empty, report, none);
 
-  return emit(problem, model, keep ? counts : empty, report);
+  // With a sleep window the MILP's plan is a relaxation of real days (SPEC.md section 9): it is laid out, what
+  // does not fit is trimmed, and only then judged again, the way the plan above was, against the empty one.
+  // Everything reported from here describes the trimmed plan.
+  const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
+  const laid = layOutPlan(model, layout, solution.columnValues, counts, problem.options, solve, judge);
+  let keepLaid: boolean;
+  try {
+    keepLaid = laid.stats.launchesTrimmed === 0 || judge(laid.counts) > judge(empty);
+  } catch {
+    keepLaid = false;
+  }
+  if (!keepLaid) return emit(problem, model, empty, report, { ...none!, layoutStats: laid.stats });
+  return emit(problem, model, laid.counts, report, { calendar: laid.calendar, layoutStats: laid.stats });
 }

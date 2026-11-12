@@ -17,6 +17,7 @@ import {
   type Solved,
 } from './harness';
 import type { ArenaInstance } from './instances';
+import { calendarFaults } from './calendar';
 import { evaluateAllocationJoint, evaluateAllocationJointFloat } from '../oracle/evaluate';
 import { mulberry32 } from '../oracle/generate';
 
@@ -416,6 +417,9 @@ export function checkC0Contract(c: CheckContext) {
   }
 }
 
+// One broken calendar can break every launch after the first fault; a handful says what is wrong.
+const CALENDAR_FAULTS_SHOWN = 5;
+
 export function checkC1Feasibility(c: CheckContext) {
   const s = solve(c);
   const b = budgetsOf(s.problem, s.allocation);
@@ -443,6 +447,21 @@ export function checkC1Feasibility(c: CheckContext) {
     );
   } else if (b.pack !== 'packs') {
     reportFlat(c, 'C1-feasibility', `plan does not pack into ${slotText} (${loadText})`);
+  }
+  // With a sleep window the packing above is necessary and no longer enough: the plan has to fit real days,
+  // and a sleep-aware candidate shows that it does by returning its calendar, which the harness verifies
+  // against its own menu and its own statement of the day. No calendar is a failure, not a pass.
+  if (s.day !== null && c.sleepAware) {
+    const calendar = s.result.calendar;
+    if (calendar === undefined) {
+      reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a sleep window');
+      return;
+    }
+    const faults = calendarFaults(calendar, s.problem.options, s.allocation, s.day);
+    for (const f of faults.slice(0, CALENDAR_FAULTS_SHOWN)) reportFlat(c, 'C1-feasibility', `calendar: ${f}`);
+    if (faults.length > CALENDAR_FAULTS_SHOWN) {
+      reportFlat(c, 'C1-feasibility', `calendar: ... and ${faults.length - CALENDAR_FAULTS_SHOWN} more fault(s)`);
+    }
   }
 }
 

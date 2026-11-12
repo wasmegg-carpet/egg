@@ -8,6 +8,7 @@ import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
 import type { CraftBudget, LaunchOption, RecipeDAG } from 'lib/mission-optimizer/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
+import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
 import { packFeasible, packFeasibleNights, type PackVerdict } from './pack-feasibility';
 import { sleepCapacity, sleepVariants } from './sleep';
@@ -60,6 +61,14 @@ export interface SolveOverrides {
   fresh?: boolean;
 }
 
+// The sleep window and horizon an instance is stated with, after overrides: what C1 verifies a calendar
+// against, kept by the harness rather than read back off the problem a candidate was handed.
+function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay | null {
+  const sleepSeconds = over.sleepSeconds ?? inst.sleepSeconds;
+  if (!(sleepSeconds > 0)) return null;
+  return { sleepSeconds, horizonSeconds: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot, slots: NUM_SLOTS };
+}
+
 function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProblem {
   const targets = over.targets ?? inst.targets;
   const config = over.config ?? inst.config;
@@ -90,6 +99,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     fuelCapacity: over.fuelCapacity ?? inst.fuelCapacity,
     timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : horizon,
     ...(capacity ? { nightsPerSlot: capacity.nightsPerSlot } : {}),
+    // The day itself, which the candidate needs to lay its plan out on real days and return a calendar.
+    ...(capacity ? { sleep: { sleepSeconds: sleep, horizonSeconds: horizon } } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -154,6 +165,7 @@ function problemKey(problem: PlanProblem): string {
     problem.fuelCapacity,
     problem.timeCapacityPerSlot,
     ...(problem.nightsPerSlot === undefined ? [] : [`nights${problem.nightsPerSlot}`]),
+    ...(problem.sleep === undefined ? [] : [`sleep${problem.sleep.sleepSeconds}/${problem.sleep.horizonSeconds}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),
@@ -170,7 +182,59 @@ function copyResult(result: PlanResult): PlanResult {
     reported: result.reported
       ? { jointProbability: result.reported.jointProbability, perTarget: result.reported.perTarget.slice() }
       : undefined,
+    // C1 reads the calendar off every solve, cached ones included; dropping it here would fail a cache hit.
+    ...(result.calendar === undefined ? {} : { calendar: result.calendar.map(slot => slot.map(l => ({ ...l }))) }),
+    ...(result.layoutStats === undefined ? {} : { layoutStats: { ...result.layoutStats } }),
   };
+}
+
+// What candidates say it took to lay their plans out, summed over fresh solves (cache hits replay a plan and
+// are not counted again). Diagnostics for the scorecard only: nothing scores or gates on a figure a candidate
+// reports about itself.
+export interface LayoutTally {
+  solves: number;
+  plansTrimmed: number;
+  launchesTrimmed: number;
+  overnightTrimmed: number;
+  layoutSolves: number;
+  marginResolves: number;
+  verifierRetries: number;
+}
+
+const layoutTallies = new WeakMap<Planner, LayoutTally>();
+
+function emptyTally(): LayoutTally {
+  return {
+    solves: 0,
+    plansTrimmed: 0,
+    launchesTrimmed: 0,
+    overnightTrimmed: 0,
+    layoutSolves: 0,
+    marginResolves: 0,
+    verifierRetries: 0,
+  };
+}
+
+// Returns the tally so far and starts a new one.
+export function takeLayoutTally(planner: Planner): LayoutTally {
+  const t = layoutTallies.get(planner) ?? emptyTally();
+  layoutTallies.set(planner, emptyTally());
+  return t;
+}
+
+function tallyLayout(planner: Planner, result: PlanResult): void {
+  const stats = result.layoutStats;
+  if (stats === undefined) return;
+  const t = layoutTallies.get(planner) ?? emptyTally();
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  t.solves++;
+  if (n(stats.launchesTrimmed) > 0) t.plansTrimmed++;
+  t.launchesTrimmed += n(stats.launchesTrimmed);
+  t.overnightTrimmed += n(stats.overnightTrimmed);
+  t.layoutSolves += n(stats.layoutSolves);
+  t.marginResolves += n(stats.marginResolves);
+  t.verifierRetries += n(stats.verifierRetries);
+  layoutTallies.set(planner, t);
 }
 
 // One instance per problem, not one per call: the judge caches its compiled LP template on `OracleInstance`
@@ -302,6 +366,8 @@ export interface Solved {
   judged: OracleJointEvaluation;
   joint: number;
   elapsedMs: number;
+  // The day the problem was stated with; null without a sleep window.
+  day: CalendarDay | null;
 }
 
 export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides = {}): Solved {
@@ -312,6 +378,7 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
   const started = performance.now();
   const result = hit ? copyResult(hit.result) : planner(problem);
   const elapsedMs = hit ? hit.elapsedMs : performance.now() - started;
+  if (!hit) tallyLayout(planner, result);
 
   const breaches = contractBreaches(problem, result);
   // Cached only once it is known well-formed: `copyResult` assumes the arrays
@@ -340,6 +407,7 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
     judged,
     joint: judged.jointProbability,
     elapsedMs,
+    day: dayOf(inst, over),
   };
 }
 

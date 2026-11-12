@@ -4,6 +4,7 @@
 import type { LaunchOption, RecipeDAG } from '../types';
 import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
 import { qOf } from '../objective';
+import { daySchedule, type DaySchedule } from './days';
 
 // Stand-ins for a bound no budget gives; see SPEC.md section 2. `UNBOUNDED_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
@@ -45,6 +46,9 @@ export interface Model {
   // Whole sleep windows per slot; 0 when the problem has none, which also drops every option that
   // spends one. The `night_k` rows read it (SPEC.md section 9).
   nightsPerSlot: number;
+  // The day the nights are cut from, when the problem carries `sleep`: what the fit rows and the layout read
+  // (SPEC.md section 10). Null is today's problem.
+  day: DaySchedule | null;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -413,6 +417,7 @@ export function buildModel(raw: PlanProblem): Model {
     fuelAxes: axes,
     timeCapacitySeconds: timeCap,
     nightsPerSlot: nightsCap,
+    day: problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,

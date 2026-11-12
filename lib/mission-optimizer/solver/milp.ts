@@ -4,6 +4,7 @@
 import { UNBOUNDED_PER_SLOT, boundsFollowFromRows, maxLaunches, type Model } from './model';
 import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
+import { fitCoefficient, fitQs } from './days';
 
 // Uncapped on purpose — deliberately not `objective.gPrime`. See SPEC.md section 4.
 function slopeAt(s: number): number {
@@ -302,6 +303,27 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.begin(`night_k${k}`);
     for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classNights[c]);
     rows.end(-INF, model.nightsPerSlot);
+  }
+
+  // Per-day fit rows, only with a sleep window: the slot row pools a slot's waking seconds across its days,
+  // and these say how many launches of each length one waking window holds. Valid inequalities, so they cut
+  // off no plan that fits real days; they cost no columns. Absent `sleep`, nothing here runs. See SPEC.md
+  // section 10.
+  const day = model.day;
+  if (day !== null) {
+    const fitQ = fitQs(layout.classSeconds, layout.classNights, day.wakingSeconds);
+    for (let k = 0; k < layout.slots; k++) {
+      for (const q of fitQ) {
+        rows.begin(`fit_k${k}_q${q}`);
+        for (let c = 0; c < layout.classes; c++) {
+          rows.add(
+            nCol(layout, c, k),
+            fitCoefficient(layout.classSeconds[c], layout.classNights[c], day.wakingSeconds, q)
+          );
+        }
+        rows.end(-INF, day.windows);
+      }
+    }
   }
 
   for (let k = 0; k + 1 < layout.slots; k++) {

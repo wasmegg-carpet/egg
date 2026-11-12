@@ -42,11 +42,27 @@ export interface PlanProblem {
   // reads it as 0, so an option that does carry nights is dropped rather than flown for free. See SPEC.md
   // section 9. Not yet reachable from the app.
   readonly nightsPerSlot?: number;
+  // The day the night budget above is cut from, which the per-day fit rows, the layout and the verifier need
+  // and `nightsPerSlot` alone does not say (SPEC.md section 10). Absent means today's problem: no fit rows,
+  // no layout, no `calendar` in the result. Present, every plan returned has been laid out on real days
+  // and verified.
+  readonly sleep?: SleepWindow;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
   readonly ownedStock: ReadonlyMap<string, number>;
   // Optional cap on the plan's craft cost in golden eggs; absent means unconstrained.
   readonly craftBudget?: CraftBudget;
+}
+
+export const DAY_SECONDS = 86400;
+
+// A day is a waking window of `DAY_SECONDS - sleepSeconds` followed by `sleepSeconds` of sleep, the same every
+// day and shared by every slot; the plan starts at wake-up and runs `horizonSeconds`, which is what
+// `timeCapacityPerSlot` was before it came to count waking seconds only. Sleep forbids launching and nothing
+// else. See SPEC.md section 10.
+export interface SleepWindow {
+  readonly sleepSeconds: number;
+  readonly horizonSeconds: number;
 }
 
 // A problem that has been through `normalizeProblem`: its axes are materialized, so nothing
@@ -86,7 +102,18 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
     timeCapacityPerSlot: capacityOf(problem.timeCapacityPerSlot),
     // Left absent when absent, so a problem without a sleep window normalizes to exactly what it did before.
     ...(problem.nightsPerSlot === undefined ? {} : { nightsPerSlot: wholeCapacityOf(problem.nightsPerSlot) }),
+    ...(problem.sleep === undefined ? {} : { sleep: sleepWindowOf(problem.sleep) }),
   };
+}
+
+// The horizon is a budget and follows the rule above. The sleep window is not one: no reading of a malformed
+// value is the safe one (0 would hand back the nights, a whole day would forbid every launch), and the only
+// path to one is a programming error, so it throws, as a malformed `craftBudget` does.
+function sleepWindowOf(sleep: SleepWindow): SleepWindow {
+  if (!Number.isFinite(sleep.sleepSeconds) || sleep.sleepSeconds < 0 || sleep.sleepSeconds >= DAY_SECONDS) {
+    throw new Error(`sleep window must be in [0, ${DAY_SECONDS}) seconds, got ${sleep.sleepSeconds}`);
+  }
+  return { sleepSeconds: sleep.sleepSeconds, horizonSeconds: capacityOf(sleep.horizonSeconds) };
 }
 
 // Optional self-report of what a planner believes its own plan is worth; supplying
@@ -104,6 +131,31 @@ export interface CraftSplitReport {
   byTarget: Map<string, number>;
 }
 
+// One launch on a slot's timeline. `launchAt` is seconds from the plan's start (wake-up on day 0); the launch
+// occupies its slot for `wakingSeconds + nights * sleepSeconds`, after which the next launch may go.
+export interface CalendarLaunch {
+  // Index into `problem.options`, and that option's id, so a reader can check one against the other.
+  option: number;
+  optionId: string;
+  launchAt: number;
+  wakingSeconds: number;
+  nights: number;
+}
+
+// What it took to lay a plan out; diagnostics only, nothing reads them to decide anything.
+export interface LayoutStats {
+  // Launches the solve wanted and the layout could not place, so the plan went without (overnight ones included).
+  launchesTrimmed: number;
+  // Of those, overnight launches dropped because the slot's overnight ships could not be ordered to fit.
+  overnightTrimmed: number;
+  // Layout MILPs handed to the backend, margin re-solves included; a slot the greedy places whole needs none.
+  layoutSolves: number;
+  // Re-solves with the one-second margin, after a rounded layout failed its own exact re-check.
+  marginResolves: number;
+  // Slot layouts the verifier rejected, each followed by a drop and a re-lay.
+  verifierRetries: number;
+}
+
 export interface PlanResult {
   // Missions launched per option, parallel to `problem.options`. Non-negative
   // integers, fuel within capacity, packable into `slots` slots of `timeCapacityPerSlot`.
@@ -111,6 +163,10 @@ export interface PlanResult {
   reported?: PlanReport;
   // Alongside `reported`, and absent for the same reason: the judge could not re-derive the plan.
   craftSplit?: CraftSplitReport;
+  // Present exactly when the problem carries `sleep`: per slot, its launches in launch order, already passed
+  // by the verifier, and accounting for every launch in `allocation` (SPEC.md section 10).
+  calendar?: CalendarLaunch[][];
+  layoutStats?: LayoutStats;
 }
 
 // HiGHS treats any bound at or beyond this magnitude as infinite.
