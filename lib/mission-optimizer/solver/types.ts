@@ -40,7 +40,8 @@ export interface PlanProblem {
   // Whole sleep windows available per slot, alongside `timeCapacityPerSlot`, which then counts waking
   // seconds only. Absent means today's problem: no sleep, and no option carries `nights`; the model then
   // reads it as 0, so an option that does carry nights is dropped rather than flown for free. See SPEC.md
-  // section 9. Not yet reachable from the app.
+  // section 9. The app sets it, always together with `sleep` below, when the player has a sleep window
+  // (`optimizeFull`, via `../sleep.ts`).
   readonly nightsPerSlot?: number;
   // The day the night budget above is cut from, which the per-day fit rows, the layout and the verifier need
   // and `nightsPerSlot` alone does not say (SPEC.md section 10). Absent means today's problem: no fit rows,

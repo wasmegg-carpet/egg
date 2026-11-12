@@ -14,9 +14,9 @@ export interface LaunchOption {
   // level's launch period
   actualTime: number;
   rawTime: number; // true (unfloored) boosted duration
-  // Sleep windows this launch flies through; absent or 0 is a daytime launch. Only the arena sets it so far,
-  // and only alongside `PlanProblem.nightsPerSlot`, in which case `actualTime` counts waking seconds. The
-  // solver budgets it per slot (`solver/SPEC.md` section 9).
+  // Sleep windows this launch flies through; absent or 0 is a daytime launch. Set only alongside
+  // `PlanProblem.nightsPerSlot` (by `sleepVariants` in `sleep.ts`, and by the arena's own copy), in which
+  // case `actualTime` counts waking seconds. The solver budgets it per slot (`solver/SPEC.md` section 9).
   nights?: number;
   cost: number;
   // everything this launch drops, per single ship — display only
@@ -53,6 +53,9 @@ export interface LaunchSolution {
   actualFuel: number;
   actualFuelByEgg: Map<ei.Egg, number>;
   actualTime: number;
+  // Sleep windows each of these launches flies through. Absent on a plan made without a sleep window; on a
+  // sleep-aware plan 0 is a launch flown while awake and anything more is launched to fly overnight.
+  nights?: number;
   target: string;
   targetAfxId: ei.ArtifactSpec.Name;
   // total count of single-ship missions of this type across all three slots
@@ -62,7 +65,8 @@ export interface LaunchSolution {
 }
 
 // The three slots run concurrently, so the plan's wall-clock is the busiest
-// slot's load.
+// slot's load. On a sleep-aware plan `loadSeconds` is read off the verified calendar: the moment the slot's
+// last launch is back and the player is awake to collect it, nights and idle hours included.
 export interface SlotSummary {
   loadSeconds: number;
   rawLoadSeconds: number;
@@ -94,8 +98,13 @@ export interface OptimizerSolution {
   expectedCrafts: number;
   fuelUsed: number;
   fuelByEgg: Map<ei.Egg, number>;
-  timeUnitsUsed: integer; // makespan: the busiest slot's floored load
+  // Makespan: the busiest slot's floored load. With a sleep window, wall-clock seconds from the plan's first
+  // wake-up to the end of the last-finishing slot's calendar, so it counts the nights too.
+  timeUnitsUsed: integer;
   runningTimeSeconds: integer; // the busiest slot's real (raw) flight time
+  // The sleep window the plan was laid out around, in seconds a day. Absent when it was planned around the
+  // clock, which is also what tells the card and the export that `choiceHistory` carries no `nights`.
+  sleepSeconds?: number;
   slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];

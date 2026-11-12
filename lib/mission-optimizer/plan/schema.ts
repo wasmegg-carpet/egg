@@ -93,6 +93,9 @@ export interface HumilityMissionsVisit {
 
   launches: HumilityMissionsLaunch[];
 
+  // Wall-clock seconds from the first launch until the busiest slot's last ship is back, which is how long
+  // AP waits the visit out. On a plan made around a sleep window it is read off the day-by-day calendar and
+  // so counts the nights, and the hours a ship that landed overnight waited for the player to wake.
   makespanSeconds: number;
   rawMakespanSeconds: number;
   // No humility key. The importer re-derives all five figures from AP's own table and treats
@@ -100,7 +103,12 @@ export interface HumilityMissionsVisit {
   fuelRequired: Partial<Record<VirtueEgg, number>>;
   gemCost: number;
   gemBudget: number;
+  // The launch cadence the plan was solved at. With `sleepSeconds` present it is the cadence while awake.
   effort: string;
+  // Seconds a day the plan leaves launch-free for sleep. Absent on a plan made around the clock, so a file
+  // exported without a sleep window is exactly what it was before the field existed. AP does not read it;
+  // `launches` already folds daytime and overnight launches of a mission into one line.
+  sleepSeconds?: number;
 }
 
 export interface HumilityMissionsFile {

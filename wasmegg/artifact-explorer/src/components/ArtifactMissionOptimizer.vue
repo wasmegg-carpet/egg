@@ -87,6 +87,7 @@ import {
   gemCostMode,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
+  effectiveSleepSeconds,
   effectiveWaitTimeSeconds,
   EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
@@ -223,6 +224,7 @@ export default defineComponent({
         price: effectiveMaxGemCost.value,
         craftBudget: effectiveCraftingBudget.value,
         effort: missionFilters.value.effort,
+        sleep: effectiveSleepSeconds.value,
         valid: inputsValid.value,
       })
     );
@@ -266,6 +268,8 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
+        // Absent rather than 0 when the player plans around the clock, so that request is the one it always was.
+        ...(effectiveSleepSeconds.value > 0 && { sleepSeconds: effectiveSleepSeconds.value }),
         ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
         craftBudget,

@@ -419,9 +419,10 @@ A problem may carry `nightsPerSlot`, the whole sleep windows each slot has, and
 its options `nights`, the sleep windows each launch flies through.
 `timeCapacityPerSlot` then counts waking seconds only, and each option's
 `actualTime` the waking seconds it charges. The variants (a daytime one and
-one per number of nights a launch can span) are the caller's to generate; today
-only the arena does (`tests/arena/ARENA.md`, "Sleep"), and the app does not
-set the field. **Absent means today's problem**: the model reads it as 0, every
+one per number of nights a launch can span) are the caller's to generate: the
+arena does (`tests/arena/ARENA.md`, "Sleep"), and so does the app, in
+`optimizeFull` (`../sleep.ts`), when the player sets a sleep window. **Absent
+means today's problem**: the model reads it as 0, every
 option with `nights > 0` is dropped, the `night_k` rows have no entries and
 `Rows.end` drops them, and the matrix HiGHS is handed is the one it was handed
 before.
@@ -455,9 +456,9 @@ waking seconds across all its days, but real days are separate bins: a daytime
 launch has to fit inside one waking window. Every schedule that respects the
 sleep windows satisfies both rows, and not every plan satisfying both rows is
 a schedule. A plan from this model alone can list launches no real day has room
-for. Nothing here proves a plan fits real days yet; per-day fit rows, a layout
-of each slot's launches and a verifier are the step that would, and until then
-the field stays unreachable from the app.
+for. Nothing in this section proves a plan fits real days; the per-day fit
+rows, the layout of each slot's launches and the verifier of section 10 do, and
+the app never sets this field without the `sleep` field that turns them on.
 
 ## 10. Fit rows, layout, verifier and trim
 

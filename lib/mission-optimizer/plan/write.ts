@@ -100,6 +100,7 @@ export function projectSolvedVisit(args: {
     gemCost,
     gemBudget,
     effort,
+    ...(solution.sleepSeconds !== undefined && { sleepSeconds: solution.sleepSeconds }),
   };
 }
 

@@ -153,6 +153,25 @@
         </div>
 
         <div>
+          <label for="sleepHoursInput" class="block text-sm text-gray-600">Sleep</label>
+          <div class="mt-1 flex items-center gap-2">
+            <input
+              id="sleepHoursInput"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              :max="MAX_SLEEP_HOURS"
+              step="0.5"
+              :value="missionFilters.sleepHours"
+              class="block w-24 sm:text-sm rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 px-2 py-1 border border-gray-300"
+              @change="onSleepHoursChange"
+            />
+            <span class="text-xs text-gray-500">hours a day</span>
+          </div>
+          <p class="mt-1 text-xs text-gray-400">{{ sleepHint }}</p>
+        </div>
+
+        <div>
           <label for="gemCostMode" class="block text-sm text-gray-600">Maximum purchase cost</label>
           <select
             id="gemCostMode"
@@ -392,6 +411,7 @@ import {
   effectiveFuelByEggCapacity,
   EFFORT_LEVELS,
   extras,
+  MAX_SLEEP_HOURS,
   missionFilters,
   openPlayerOverridesModal,
   overrides,
@@ -414,6 +434,7 @@ import {
   setOverrideTankLevel,
   setOverrideZerog,
   setPreviousCraftCount,
+  setSleepHours,
   setTankLevel,
 } from '@/store';
 import {
@@ -563,6 +584,23 @@ export default defineComponent({
 
     const totalShips = spaceshipList.length;
     const shipsVisibleCount = computed(() => spaceshipList.filter(s => effectiveConfig.value.shipVisibility[s]).length);
+
+    // Committed on change rather than on every keystroke, so typing "10" does not solve for one hour of
+    // sleep on the way. The field is rewritten from the store because a clamped value that equals the old
+    // one would otherwise leave what was typed on screen.
+    function onSleepHoursChange(event: Event) {
+      const input = event.target as HTMLInputElement;
+      setSleepHours(input.value.trim() === '' ? 0 : Number(input.value));
+      input.value = String(missionFilters.value.sleepHours);
+    }
+    const sleepHint = computed(() => {
+      const hours = missionFilters.value.sleepHours;
+      if (!(hours > 0)) return 'Hours a day you cannot launch. At 0 the plan relaunches around the clock.';
+      return (
+        `No launches for ${hours} ${hours === 1 ? 'hour' : 'hours'} a day. Ships still fly and land ` +
+        'while you sleep, and Effort sets how often you launch while awake.'
+      );
+    });
 
     const effortTrack = ref<HTMLElement | null>(null);
     const effortRail = ref<HTMLElement | null>(null);
@@ -755,6 +793,9 @@ export default defineComponent({
       closeExportHelp,
       onUnloadPlan,
       EFFORT_LEVELS,
+      MAX_SLEEP_HOURS,
+      onSleepHoursChange,
+      sleepHint,
       effortMeta,
       effortTrack,
       effortRail,

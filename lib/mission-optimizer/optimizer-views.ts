@@ -41,15 +41,28 @@ export function lambdaFromDropProbability(p: number): number {
   return p > 0 && p < 1 ? -Math.log(1 - p) : 0;
 }
 
+// One row per mission and target. A sleep-aware plan can launch the same mission both by day and overnight,
+// as two entries of `choiceHistory`; where a legendary comes from does not depend on when the ship left, so
+// those are one source here.
 export function computeMissionLegendaryRows(solution: OptimizerSolution, rootId: string): MissionLegendaryRow[] {
-  return solution.choiceHistory
-    .map(choice => ({
-      ship: choice.ship,
-      targetAfxId: choice.targetAfxId,
-      numShipsLaunched: choice.numShipsLaunched,
-      legendaryDrops: choice.numShipsLaunched * (choice.legendarySupplyVector.get(rootId) ?? 0),
-    }))
-    .filter(row => row.legendaryDrops > 0.0001);
+  const rows = new Map<string, MissionLegendaryRow>();
+  for (const choice of solution.choiceHistory) {
+    const key = `${choice.ship.shipType}|${choice.ship.durationType}|${choice.targetAfxId}`;
+    const legendaryDrops = choice.numShipsLaunched * (choice.legendarySupplyVector.get(rootId) ?? 0);
+    const row = rows.get(key);
+    if (row) {
+      row.numShipsLaunched += choice.numShipsLaunched;
+      row.legendaryDrops += legendaryDrops;
+    } else {
+      rows.set(key, {
+        ship: choice.ship,
+        targetAfxId: choice.targetAfxId,
+        numShipsLaunched: choice.numShipsLaunched,
+        legendaryDrops,
+      });
+    }
+  }
+  return [...rows.values()].filter(row => row.legendaryDrops > 0.0001);
 }
 
 export function legendaryCraftProbabilityOf(solution: OptimizerSolution, rootId: string): number {

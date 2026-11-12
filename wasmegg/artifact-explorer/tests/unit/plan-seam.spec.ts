@@ -500,6 +500,42 @@ describe('writing a humility missions file', () => {
     expect(solved.launches[0].count).toBe(12);
   });
 
+  // A sleep-aware plan launches one mission both by day and overnight, as two entries. AP flies them the
+  // same way, so they are one line, and the sleep window rides along for whoever reads the file.
+  it('folds the daytime and overnight launches of one mission into one line', () => {
+    const [visit] = sliceHumilityVisits(planSave());
+    const solved = projectSolvedVisit({
+      visit,
+      effort: 'max',
+      gemBudget: 0,
+      solution: solutionOf(
+        [
+          { ...launch(Spaceship.HENERPRISE, DurationType.SHORT, SHIP_IN_A_BOTTLE, 30), nights: 0 },
+          { ...launch(Spaceship.HENERPRISE, DurationType.SHORT, SHIP_IN_A_BOTTLE, 12), nights: 1 },
+        ],
+        { sleepSeconds: 28800, timeUnitsUsed: 864000, runningTimeSeconds: 700000 }
+      ),
+    });
+    expect(solved.launches).toHaveLength(1);
+    expect(solved.launches[0].count).toBe(42);
+    expect(solved.sleepSeconds).toBe(28800);
+    // The wall-clock length of the laid-out plan, nights included: what AP waits the visit out for.
+    expect(solved.makespanSeconds).toBe(864000);
+    expect(solved.rawMakespanSeconds).toBe(700000);
+    expect(solved.effort).toBe('max');
+  });
+
+  it('writes no sleep window for a plan made around the clock', () => {
+    const [visit] = sliceHumilityVisits(planSave());
+    const solved = projectSolvedVisit({
+      visit,
+      effort: 'medium',
+      gemBudget: 0,
+      solution: solutionOf([launch(Spaceship.ATREGGIES, DurationType.EPIC, SHIP_IN_A_BOTTLE, 1)]),
+    });
+    expect('sleepSeconds' in solved).toBe(false);
+  });
+
   it('separates the same ship aimed at two targets, which a {ship, duration, count} triple cannot', () => {
     const [visit] = sliceHumilityVisits(planSave());
     const solved = projectSolvedVisit({

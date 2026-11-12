@@ -180,6 +180,50 @@ and takes the target's demand-weighted share. Under a linear price, the two orde
 agree, so the split decides which target carries a shared node's bill, not how
 large it is.
 
+## Sleep
+
+The sidebar's Sleep setting (`missionFilters.sleepHours`, 0 by default) is the
+hours a day the player cannot launch. Ships still fly and land through the
+night; one that lands while the player is asleep waits. The plan starts at
+wake-up, every day is the same, and all three slots share the schedule. At 0
+the request, the problem and the plan are what they were before the setting
+existed.
+
+**`optimizeFull` owns the translation.** Its `timeCapacityPerSlot` stays the
+wall-clock horizon whether or not the player sleeps. Given `sleepSeconds`, it
+splits that horizon into waking seconds and nights per slot and each option into
+its daytime and overnight variants (`sleep.ts`), and hands the solver the
+sleep-aware problem of `solver/SPEC.md` sections 9 and 10. The variants are made
+in the worker, after the menu crosses the wire, so the menu the main thread
+enumerates does not depend on the setting. The effort floor is applied before
+the split, so it is the minimum spacing between launches while awake and
+overnight alike.
+
+**Only a laid-out plan reaches the card.** The solver returns a calendar with
+every sleep-aware plan and refuses to return one that fails its own verifier;
+`optimizeFull` throws if the calendar is missing. Three things downstream read
+the plan differently because of it:
+
+- _Slots._ `slots`, `timeUnitsUsed` and `runningTimeSeconds` are read off the
+  calendar, not repacked by `packing.ts`, which knows one budget and no time of
+  day. The makespan is wall-clock: where the last-finishing slot's calendar
+  ends, nights included. The card's idle figure is still the horizon minus the
+  busiest slot's real flight time, so it now also counts the rest of a night
+  after a ship has landed.
+- _The launch list._ A choice carries `nights`, and the card shows the launches
+  flown while awake and the ones flown overnight as two lists. The same mission
+  can appear in both.
+- _The export._ The humility missions file folds a mission's daytime and
+  overnight launches into one line, as it folds any two entries of one mission.
+  `makespanSeconds` is the wall-clock makespan above, `effort` is the cadence
+  while awake, and the visit carries `sleepSeconds` when the plan had a sleep
+  window. The ascension planner reads `makespanSeconds` as how long to wait the
+  visit out and does not read the other two.
+
+`sleep.ts` is not shared with the arena, which keeps its own copy of the variant
+rule (`tests/arena/sleep.ts`); `tests/unit/sleep.spec.ts` holds the two to the
+same answers.
+
 ## Module boundaries that are load-bearing
 
 Most of `lib/mission-optimizer` reads as it looks. Two edges do not, and both exist to keep

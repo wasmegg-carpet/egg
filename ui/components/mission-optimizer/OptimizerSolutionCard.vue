@@ -66,7 +66,26 @@
       : {{ formatDuration(idleTimeSeconds, true) }}
     </div>
     <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mt-3">Launch plan</div>
-    <optimizer-choice-list :choices="solution.choiceHistory" />
+    <!-- A sleep-aware plan is a day and night routine: what to launch while awake, and what to have in the air overnight. -->
+    <template v-if="sleepHours > 0">
+      <p class="text-xs text-gray-500">
+        Totals over all three slots, planned around {{ sleepHours }} {{ sleepHours === 1 ? 'hour' : 'hours' }} of sleep
+        a day.
+      </p>
+      <template v-if="daytimeChoices.length > 0">
+        <div class="mt-2 -mb-1 font-medium text-gray-700">While awake</div>
+        <optimizer-choice-list :choices="daytimeChoices" />
+      </template>
+      <template v-if="overnightChoices.length > 0">
+        <div class="mt-2 -mb-1 font-medium text-gray-700">
+          <span v-tippy="overnightTooltip" class="cursor-help border-b border-dotted border-gray-400/60"
+            >Overnight</span
+          >
+        </div>
+        <optimizer-choice-list :choices="overnightChoices" overnight />
+      </template>
+    </template>
+    <optimizer-choice-list v-else :choices="solution.choiceHistory" />
 
     <optimizer-expected-drops :drops="solution.expectedDrops" />
 
@@ -148,7 +167,18 @@ export default defineComponent({
       'Probability of crafting at least one legendary from the gathered ingredients and everything already in inventory.';
     const dropTooltip = 'Probability of at least one legendary dropping directly from the missions.';
     const craftingCostTooltip = 'Total golden eggs for all crafts at your current prices.';
-    const idleTooltip = 'Time with no ships in flight, including launch gaps and unused budget.';
+    // Absent on a plan made around the clock, whose launch list is then shown undivided, as it always was.
+    const sleepHours = computed(() => Number(((props.solution.sleepSeconds ?? 0) / 3600).toFixed(2)));
+    const daytimeChoices = computed(() => props.solution.choiceHistory.filter(c => !((c.nights ?? 0) > 0)));
+    const overnightChoices = computed(() => props.solution.choiceHistory.filter(c => (c.nights ?? 0) > 0));
+    const overnightTooltip =
+      'Launch each of these so it is in the air when you go to sleep. A ship that lands during the night ' +
+      'waits for you, and its slot launches again after you wake.';
+    const idleTooltip = computed(() =>
+      sleepHours.value > 0
+        ? 'Time with no ships in flight, including launch gaps, the rest of a night after a ship has landed, and unused budget.'
+        : 'Time with no ships in flight, including launch gaps and unused budget.'
+    );
     const oom = (value: number) => formatEIValue(value, { trim: true });
     const unaffordable = computed(
       () => props.goldenEggBalance !== null && props.planCost.total > props.goldenEggBalance
@@ -175,6 +205,10 @@ export default defineComponent({
       craftTooltip,
       dropTooltip,
       idleTooltip,
+      sleepHours,
+      daytimeChoices,
+      overnightChoices,
+      overnightTooltip,
       unaffordable,
       unaffordableTooltip,
       idleTimeSeconds,

@@ -5,9 +5,16 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { NUM_SLOTS, packWitness } from './packing';
+import { sleepCapacity, sleepSecondsOf, sleepVariants } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
-import { fuelCostOnAxis, normalizeProblem, type CraftSplitReport, type PlanProblem } from './solver/types';
+import {
+  fuelCostOnAxis,
+  normalizeProblem,
+  type CalendarLaunch,
+  type CraftSplitReport,
+  type PlanProblem,
+} from './solver/types';
 
 // Below this, a mission's duration counts as zero — the only quantity it's compared against.
 const ZERO_TOL = 1e-9;
@@ -23,7 +30,14 @@ export interface OptimizeArgs {
   // the plan is limited by the fuel actually stocked, egg by egg, rather than by how
   // much the tank could hold.
   fuelByEggCapacity?: Map<ei.Egg, number>;
+  // The wall-clock horizon of each slot, whether or not the player sleeps: with a sleep window it is
+  // `optimizeFull` that splits it into waking seconds and nights, so every caller keeps saying how long the
+  // plan may run rather than how much of that is launchable.
   timeCapacityPerSlot: number;
+  // Seconds a day the player cannot launch. Absent or 0 is today's problem, planned around the clock.
+  // Present, the menu is split into daytime and overnight variants and only a plan laid out on real days is
+  // returned (`solver/SPEC.md` sections 9 and 10).
+  sleepSeconds?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
   // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal
   // way to say "the whole menu" where an infinite capacity would be malformed.
@@ -83,10 +97,37 @@ function slotSummariesOf(options: LaunchOption[], alloc: Map<number, number>, ca
   }));
 }
 
+// Per-slot occupancy of a sleep-aware plan, read off the calendar the solver verified rather than repacked:
+// two budgets and a time of day are more than `packWitness` knows about, and the calendar is already the
+// arrangement the plan was accepted on. A slot's load is where its last block ends, which is the moment its
+// last ship is back and the player is awake to collect it.
+function slotSummariesOfCalendar(
+  options: LaunchOption[],
+  calendar: CalendarLaunch[][],
+  sleepSeconds: number
+): SlotSummary[] {
+  if (calendar.every(launches => launches.length === 0)) return [];
+  return calendar.map(launches => {
+    const last = launches[launches.length - 1];
+    return {
+      loadSeconds: last ? last.launchAt + last.wakingSeconds + last.nights * sleepSeconds : 0,
+      rawLoadSeconds: launches.reduce((total, launch) => total + options[launch.option].rawTime, 0),
+      missionCount: launches.length,
+    };
+  });
+}
+
 // The whole plan, start to finish. Async because the solver is a WebAssembly module instantiated once;
 // every call after the first resolves off a cached promise.
 export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolution> {
-  const { options, recipeDag, fuelByEggCapacity, maximumCost, ownedStock, craftBudget } = args;
+  const { recipeDag, fuelByEggCapacity, maximumCost, ownedStock, craftBudget } = args;
+
+  // A sleep window turns the wall-clock horizon into two budgets per slot, waking seconds and nights, and
+  // each option into the ways it can sit against those nights (`sleep.ts`). Without one this is today's
+  // problem field for field: the menu as given, and neither sleep field on it.
+  const sleepSeconds = sleepSecondsOf(args.sleepSeconds);
+  const capacity = sleepSeconds > 0 ? sleepCapacity(args.timeCapacityPerSlot, sleepSeconds) : undefined;
+  const options = capacity ? sleepVariants(args.options, sleepSeconds) : args.options;
 
   // The whole boundary: budgets validated and clamped, targets deduplicated, fuel axes materialized.
   // Everything below reads the normalized problem rather than `args`, so no rule is applied twice or
@@ -99,12 +140,17 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     // A per-egg budget replaces the tank entirely: the egg amounts already sum to no more
     // than the tank holds, so an aggregate row on top of them would be redundant.
     fuelAxes: fuelByEggCapacity && [...fuelByEggCapacity].map(([egg, capacity]) => ({ egg, capacity })),
-    timeCapacityPerSlot: args.timeCapacityPerSlot,
+    timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : args.timeCapacityPerSlot,
+    ...(capacity && {
+      nightsPerSlot: capacity.nightsPerSlot,
+      sleep: { sleepSeconds, horizonSeconds: args.timeCapacityPerSlot },
+    }),
     slots: NUM_SLOTS,
     ownedStock,
     craftBudget,
   });
   const S = normalized.timeCapacityPerSlot;
+  const nightsPerSlot = normalized.nightsPerSlot ?? 0;
   const axes = normalized.fuelAxes;
   const targets = [...normalized.targets];
 
@@ -112,13 +158,18 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // Fuel is bounded from above only, since a zero-fuel mission is legitimate, and the per-axis bound is what
   // still holds a NaN fuel budget to the zero-fuel missions. It is also what keeps an egg the player has *none* of
   // from reading as free downstream, where a zero capacity means "ignore this axis".
-  const feasibleOptions = options.filter(
-    o =>
-      ZERO_TOL < o.actualTime &&
+  // An overnight variant is kept at zero seconds: a short ship launched at bedtime takes no waking time and
+  // is still a launch, paid for with its night. Dropping it would silently turn that launch into none.
+  const feasibleOptions = options.filter(o => {
+    const nights = o.nights ?? 0;
+    return (
+      (ZERO_TOL < o.actualTime || nights > 0) &&
       o.actualTime <= S &&
+      nights <= nightsPerSlot &&
       axes.every(ax => fuelCostOnAxis(o, ax) <= ax.capacity) &&
       (maximumCost === undefined || o.cost <= maximumCost)
-  );
+    );
+  });
 
   const assembly: Assembly = { options: feasibleOptions, recipeDag, targets, ownedStock };
 
@@ -128,21 +179,28 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // `report` is what makes the judge hand back the craft split as well as the plan, so the counts the
   // card prints are the ones the plan was selected on rather than a second solver's answer to the same
   // question. See `solver/SPEC.md` section 5.
-  const { allocation, craftSplit } = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
+  const { allocation, craftSplit, calendar } = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
+  // The solver returns a calendar with every sleep-aware plan and refuses to return one that fails its own
+  // verifier, so a missing one is a broken seam rather than a plan to fall back from.
+  if (capacity && !calendar) throw new Error('optimizer: a sleep-aware plan came back without a calendar');
 
   const alloc = new Map<number, number>();
   for (let i = 0; i < allocation.length; i++) {
     if (allocation[i] > 0) alloc.set(i, allocation[i]);
   }
 
-  return assembleFullSolution(assembly, alloc, slotSummariesOf(feasibleOptions, alloc, S), craftSplit);
+  const slots = calendar
+    ? slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds)
+    : slotSummariesOf(feasibleOptions, alloc, S);
+  return assembleFullSolution(assembly, alloc, slots, craftSplit, capacity ? sleepSeconds : undefined);
 }
 
 function assembleFullSolution(
   a: Assembly,
   bestAlloc: Map<number, number>,
   bestSlots: SlotSummary[],
-  craftSplit: CraftSplitReport | undefined
+  craftSplit: CraftSplitReport | undefined,
+  sleepSeconds: number | undefined
 ): OptimizerSolution {
   const { recipeDag, ownedStock, targets } = a;
   const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
@@ -188,6 +246,7 @@ function assembleFullSolution(
     fuelByEgg: fuelByEgg,
     timeUnitsUsed: Math.round(makespan),
     runningTimeSeconds: Math.round(running),
+    ...(sleepSeconds !== undefined && { sleepSeconds }),
     slots: bestSlots.length > 0 ? bestSlots : undefined,
     choiceHistory: choiceHistory,
     expectedDrops: [], // populated by index.ts
@@ -224,6 +283,7 @@ function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number
       actualFuel: opt.actualFuel,
       actualFuelByEgg: opt.fuelByEgg,
       actualTime: opt.actualTime,
+      ...(opt.nights !== undefined && { nights: opt.nights }),
       target: opt.target ?? '',
       targetAfxId: opt.targetAfxId,
       numShipsLaunched: k,
