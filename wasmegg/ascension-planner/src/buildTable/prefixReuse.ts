@@ -64,17 +64,30 @@ export function crossesBoundary(start: number, seconds: number): boolean {
  */
 export const LOOKAHEAD_SECONDS = 4 * 3600;
 
-export type PrefixSource ={ kind: 'seed' } | { kind: 'reuse'; seedHour: number } | { kind: 'fresh'; reason: 'crosses' | 'seedCrosses' };
+/**
+ * The lowest start TE whose hours reuse a seed's prefix: --verify found no differences from 120 to
+ * 489, but below 120 the prefix runs longer and looks further ahead than the rule allows (2026-11-13,
+ * maxed gear: 0 differing cells at TE 110, 1 at 90, 5 at 70, 14 at 50, some with prefixes the same
+ * length as the seed's). Lower start TEs build every hour fresh.
+ */
+export const REUSE_FROM_TE = 120;
+
+export type PrefixSource =
+  | { kind: 'seed' }
+  | { kind: 'reuse'; seedHour: number }
+  | { kind: 'fresh'; reason: 'crosses' | 'seedCrosses' | 'lowTE' };
 
 /**
- * Where hour `h`'s prefix comes from, given each seed's prefix length in seconds. A seed whose own
- * prefix crosses a boundary can't stand in for anything: its class's hours are all built fresh.
+ * Where start TE `te`'s hour `h` gets its prefix, given each seed's prefix length in seconds. A
+ * seed whose own prefix crosses a boundary can't stand in for anything: its class's hours are all
+ * built fresh, as are all hours below REUSE_FROM_TE.
  */
-export function prefixSourceFor(h: number, seedSeconds: Record<EventClass, number>): PrefixSource {
+export function prefixSourceFor(h: number, seedSeconds: Record<EventClass, number>, te: number): PrefixSource {
   const start = hourStart(h);
   const cls = eventClassAt(start);
   const seedHour = SEED_HOURS[cls];
   if (h === seedHour) return { kind: 'seed' };
+  if (te < REUSE_FROM_TE) return { kind: 'fresh', reason: 'lowTE' };
   const horizon = seedSeconds[cls] + LOOKAHEAD_SECONDS;
   if (crossesBoundary(hourStart(seedHour), horizon)) return { kind: 'fresh', reason: 'seedCrosses' };
   if (crossesBoundary(start, horizon)) return { kind: 'fresh', reason: 'crosses' };

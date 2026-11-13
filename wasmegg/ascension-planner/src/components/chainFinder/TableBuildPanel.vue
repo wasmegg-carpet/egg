@@ -4,10 +4,11 @@
       <button
         v-if="store.status !== 'running'"
         type="button"
-        class="px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-colors"
+        class="px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-colors disabled:opacity-50 disabled:hover:bg-emerald-600"
+        :disabled="!store.minTEValid || !store.plan.tes.length"
         @click="store.startBuild()"
       >
-        Build lookup table
+        {{ store.plan.keep ? 'Extend lookup table' : 'Build lookup table' }}
       </button>
       <button
         v-else
@@ -42,8 +43,10 @@
         <img :src="iconURL('egginc-extras/silo.png', 64)" class="w-5 h-5 object-contain" alt="silo" />
       </button>
 
-      <span class="text-xs text-slate-500">Start TEs {{ CHAIN_FINDER_TE_FROM }}–{{ CHAIN_FINDER_TE_TO }}</span>
+      <span class="text-xs text-slate-500">Start TEs {{ rangeText }}</span>
     </div>
+
+    <p v-if="store.preparing" class="text-xs text-slate-500">{{ store.preparing }}</p>
 
     <p v-if="store.status === 'running'" class="text-xs text-slate-500">
       {{
@@ -111,11 +114,15 @@
     </div>
 
     <div
-      v-if="store.status === 'done' && store.result"
+      v-if="(store.status === 'done' || store.status === 'cancelled') && store.result"
       class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-100"
     >
       <div class="text-xs text-emerald-800">
         <div class="font-bold">{{ store.result.fileName }}</div>
+        <div v-if="store.result.partial">
+          Cancelled: start TE {{ store.result.from }}–{{ store.result.to }} finished. Extend this file later to build the
+          rest.
+        </div>
         <div>
           {{ store.result.cells }} cells, {{ formatBytes(store.result.gzipped.length) }} gzipped ({{
             formatBytes(store.result.bytes.length)
@@ -133,7 +140,9 @@
       </button>
     </div>
 
-    <div v-if="store.status === 'cancelled'" class="text-xs text-slate-500">Build cancelled.</div>
+    <div v-if="store.status === 'cancelled' && !store.result" class="text-xs text-slate-500">
+      Build cancelled before any start TE finished, so there's no table to save.
+    </div>
     <div v-if="store.status === 'error'" class="text-xs text-red-600">Build failed: {{ store.error }}</div>
   </div>
 </template>
@@ -143,7 +152,7 @@ import { computed } from 'vue';
 import { WEEK_HOURS } from '@/buildTable/cell';
 import { iconURL } from 'lib';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
-import { CHAIN_FINDER_TE_FROM, CHAIN_FINDER_TE_TO, useChainFinderStore } from '@/stores/chainFinder';
+import { CHAIN_FINDER_TE_TO, useChainFinderStore } from '@/stores/chainFinder';
 
 const store = useChainFinderStore();
 
@@ -157,6 +166,13 @@ function handleWorkersKeydown(e: KeyboardEvent) {
   if (isTestingEnvironment) store.siloMode = true;
 }
 const progress = computed(() => store.progress);
+
+/** The finished table's start TEs: the kept table's below the lowest asked for stay in it. */
+const rangeText = computed(() => {
+  const keep = store.plan.keep;
+  const from = Math.min(store.lowestTE, keep?.from ?? Infinity);
+  return `${from}–${CHAIN_FINDER_TE_TO}`;
+});
 const maxWorkers = navigator.hardwareConcurrency || 2;
 
 /** By estimated time, not cells: the high start TEs built first are the cheap ones. */

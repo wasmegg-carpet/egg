@@ -32,6 +32,11 @@
       </div>
     </div>
 
+    <p v-if="!collapsed" class="text-[11px] text-slate-400">
+      Tables cover start TE {{ CHAIN_FINDER_TE_FROM }}–{{ CHAIN_FINDER_TE_TO }} unless a range is shown.
+    </p>
+    <p v-if="store.downloadError" class="text-[11px] text-red-600">{{ store.downloadError }}</p>
+
     <ul v-if="!collapsed" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
       <li
         v-for="row in shown"
@@ -51,6 +56,22 @@
           </span>
         </span>
         <span class="flex-1 min-w-0 truncate text-[11px]" :class="statusClass[row.status]">{{ row.text }}</span>
+        <span v-if="row.range" class="shrink-0 text-[10px] font-mono-premium text-slate-500" title="Start TEs covered">{{
+          row.range
+        }}</span>
+        <button
+          v-if="row.entry"
+          type="button"
+          class="shrink-0 w-6 h-6 rounded-md border border-slate-200 text-slate-500 bg-white hover:bg-slate-50 flex items-center justify-center disabled:opacity-50"
+          :disabled="store.downloading.has(row.entry.name)"
+          :title="`Download ${row.entry.name}`"
+          :aria-label="`Download ${row.entry.name}`"
+          @click="store.downloadStored(row.entry)"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14" />
+          </svg>
+        </button>
         <span v-if="row.selected" class="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600"
           >Selected</span
         >
@@ -78,7 +99,7 @@ import { getArtifact } from '@/lib/artifacts';
 import type { ArtifactOption } from '@/lib/artifacts/types';
 import { changesBehind } from '@/lib/chainFinder/existingTable';
 import { CHAIN_FINDER_DELIVERY_FAMILIES } from '@/lib/chainFinder/deliveryArtifacts';
-import { useChainFinderStore } from '@/stores/chainFinder';
+import { CHAIN_FINDER_TE_FROM, CHAIN_FINDER_TE_TO, useChainFinderStore } from '@/stores/chainFinder';
 
 const store = useChainFinderStore();
 
@@ -120,6 +141,11 @@ const rows = computed(() => {
         (a): a is ArtifactOption => !!a
       ),
       status,
+      entry: table?.entry ?? null,
+      range:
+        table && (table.header.from !== CHAIN_FINDER_TE_FROM || table.header.to !== CHAIN_FINDER_TE_TO)
+          ? `TE ${table.header.from}–${table.header.to}`
+          : '',
       text:
         status === 'missing'
           ? 'Not built'
