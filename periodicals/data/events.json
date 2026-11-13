@@ -29734,5 +29734,23 @@
     "startTimestamp": 1794502800,
     "type": "mission-fuel",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1794675600,
+    "id": "event-11-13",
+    "message": "70% OFF RESEARCH!",
+    "multiplier": 0.3,
+    "startTimestamp": 1794589200,
+    "type": "research-sale",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1794675600,
+    "id": "ultra-11-13",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1794589200,
+    "type": "vehicle-sale",
+    "ultra": true
   }
 ]
