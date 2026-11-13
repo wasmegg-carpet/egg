@@ -47,7 +47,7 @@ describe('max offline earnings loadout', () => {
     const wide = optimizeOfflineEarnings(state, context, { beamWidth: 8000 });
     expect(wide.ok && wide.offlineEarnings).toBeCloseTo(result.offlineEarnings, -1);
     expect(elapsed).toBeLessThan(3000);
-  });
+  }, 20000); // The wide search alone takes a few seconds, more alongside the other suites.
 
   test('keeps a gusset when the population needs it', () => {
     const base = farm({ population: 0 });

@@ -107,6 +107,9 @@ export interface MilestoneChainResult {
   items: ChainItem[];
   reached: boolean;
   totalSeconds: number;
+  /** The farm after the chain (research-level chains only). */
+  endState?: EngineState;
+  endSnapshot?: CalculationsSnapshot;
 }
 
 // Pure crash-safety net for `computeResearchMilestoneChain`'s sweep loop below — NOT a "give up
@@ -558,7 +561,11 @@ export function computeResearchMilestoneChain(
   // Omitted (manual/default callers): every purchase must clear 70% ROI by the calendar's very next
   // sale. Supplied (C3, already committed to riding out several sales): a later deadline, so a
   // purchase gets judged against the runway actually available.
-  roiDeadlineOverride?: number
+  roiDeadlineOverride?: number,
+  // Give up (unreached) once the chain has run longer than this: for a caller that only wants the
+  // target if it comes in time (Smart Wait for Population: before the habs fill), so an
+  // out-of-reach target doesn't sweep sale after sale for nothing.
+  maxSeconds?: number
 ): MilestoneChainResult {
   const targetResearch = getResearchById(target.researchId);
   if (!targetResearch) return { items: [], reached: false, totalSeconds: 0 };
@@ -582,6 +589,7 @@ export function computeResearchMilestoneChain(
   while (
     items.length < MILESTONE_MAX_STEPS &&
     round < MAX_SALE_SWEEPS_SAFETY_CAP &&
+    (maxSeconds === undefined || totalSeconds <= maxSeconds) &&
     (state.researchLevels[targetResearch.id] || 0) < target.targetLevel
   ) {
     round++;
@@ -746,7 +754,13 @@ export function computeResearchMilestoneChain(
     );
   }
 
-  return { items, reached: (state.researchLevels[targetResearch.id] || 0) >= target.targetLevel, totalSeconds };
+  return {
+    items,
+    reached: (state.researchLevels[targetResearch.id] || 0) >= target.targetLevel,
+    totalSeconds,
+    endState: state,
+    endSnapshot: snapshot,
+  };
 }
 
 // Tier-unlock milestone, cheapest-first strategy from an arbitrary starting point: buys whatever's

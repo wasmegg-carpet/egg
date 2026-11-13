@@ -27,6 +27,7 @@ import {
 import { parseEnlightenmentFarm } from '@/lib/backupFarm';
 import { defaultResearchCube, type ResearchCubeSetting } from '@/lib/artifacts/researchCube';
 import { inventoryFromBackup, type PlayerInventory } from '@/lib/artifacts/inventory';
+import type { SmartWaitTarget } from '@/calculations/smartPopulationWait';
 import { createEmptyFuelAmounts, eiEggToFuelEgg } from '@/types';
 import { useFuelTankStore } from './fuelTank';
 
@@ -84,7 +85,11 @@ export interface InitialStateStoreState {
 
   // What the player owns; null when unknown, and then everything counts as owned
   inventory: PlayerInventory | null;
+
+  // What Smart Wait for Population aims for; null until the player picks, on first opening it
+  smartWaitTarget: SmartWaitTarget | null;
 }
+
 
 /** Soul Eggs a plan assumes with no backup loaded. */
 const DEFAULT_SOUL_EGGS = 1e21;
@@ -125,6 +130,7 @@ export const useInitialStateStore = defineStore('initialState', {
     activeMissions: [],
     rawBackup: null,
     inventory: null,
+    smartWaitTarget: null,
   }),
 
   getters: {
@@ -276,6 +282,11 @@ export const useInitialStateStore = defineStore('initialState', {
       this.researchCube = { ...this.researchCube, ...setting };
     },
 
+    /** Set what Smart Wait for Population aims for. */
+    setSmartWaitTarget(target: SmartWaitTarget) {
+      this.smartWaitTarget = target;
+    },
+
     /**
      * Set assume double earnings
      */
@@ -332,6 +343,7 @@ export const useInitialStateStore = defineStore('initialState', {
         this.rawBackup = data.rawBackup;
       }
       this.inventory = data.inventory ?? null;
+      this.smartWaitTarget = data.smartWaitTarget ?? null;
 
       // Sync Fuel Tank Store
       const fuelTankStore = useFuelTankStore();
@@ -371,6 +383,7 @@ export const useInitialStateStore = defineStore('initialState', {
       this.initialTankLevel = 0;
       this.initialFuelAmounts = createEmptyFuelAmounts();
       this.inventory = null;
+      this.smartWaitTarget = null;
     },
   },
 });

@@ -169,6 +169,11 @@ export interface OptimizeOptions {
   beamWidth?: number;
   /** What the player owns; null or missing counts everything as owned. */
   inventory?: PlayerInventory | null;
+  /**
+   * Only loadouts whose habs hold more than this many chickens (Smart Wait for Population: room to
+   * keep growing past full habs). Ties in IHR then go to the bigger habs before earnings.
+   */
+  habCapacityAbove?: number;
 }
 
 export function optimizeOfflineEarnings(state: EngineState, context: SimulationContext, options: OptimizeOptions = {}) {
@@ -188,6 +193,9 @@ export function optimizeArtifacts(
   const beamWidth = options.beamWidth ?? 1500;
   const slotCount = artifactSlotCount(state.proPermit);
   const population = state.population || 0;
+  const above = options.habCapacityAbove;
+  /** Whether a hab capacity is enough: holds the population, and more than `above` when it's set. */
+  const roomy = (capacity: number) => capacity >= population && (above === undefined || capacity > above);
 
   const inventory = options.inventory;
   const allowEmpty = inventory != null;
@@ -271,7 +279,8 @@ export function optimizeArtifacts(
     const ship = baseNow.shippingCapacity * e.shipping;
     const now = perEgg * Math.min(baseNow.layRate * e.layRate, ship);
     const full = perEgg * Math.min(baseFull.layRate * e.layRate * e.habCap, ship);
-    return goal === 'ihr' ? [e.ihr, now, full] : [now, full];
+    if (goal !== 'ihr') return [now, full];
+    return above === undefined ? [e.ihr, now, full] : [e.ihr, e.habCap, now, full];
   };
 
   // A gusset goes in first when the population wouldn't fit without one.
@@ -281,15 +290,18 @@ export function optimizeArtifacts(
     score: Score;
   }
   let beam: Partial[];
-  const neededHabCap = population / baseNow.habCapacity;
-  if (neededHabCap > 1 + 1e-12) {
+  const neededHabCap = Math.max(population, above ?? 0) / baseNow.habCapacity;
+  const strict = above !== undefined && above >= population;
+  if (strict ? neededHabCap >= 1 - 1e-12 : neededHabCap > 1 + 1e-12) {
     const gussets = bestVersionsByFamily(a => owned(a) && GUSSET_FAMILIES.includes(a.familyId)).flat();
     const noneUsed = new Map<string, number>();
     const placed = gussets
       .flatMap(g => slotPlans(g, -1, stoneFamilies, allowEmpty))
       .map(plan => place(plan, noneUsed))
       .filter((c): c is SlotConfig => c !== null);
-    const fits = [...new Set(placed)].filter(c => c.effects.habCap >= neededHabCap);
+    const fits = [...new Set(placed)].filter(c =>
+      strict ? c.effects.habCap > neededHabCap * (1 + 1e-12) : c.effects.habCap >= neededHabCap
+    );
     if (fits.length === 0 || slotCount === 0) {
       return { ok: false, reason: 'No loadout keeps hab capacity above the current population.' };
     }
@@ -340,12 +352,12 @@ export function optimizeArtifacts(
     const loadout = toLoadout(p);
     const trial: EngineState = { ...state, artifactLoadout: loadout };
     const now = computeSnapshot(trial, context, { freezePopulation: true });
-    if (now.habCapacity < population) continue;
+    if (!roomy(now.habCapacity)) continue;
     const full = computeSnapshot(trial, context, { skipGrowth: true });
     // Unclamped IHR multiplier: the engine's 500/min floor would hide differences below it.
     const ihr = calculateArtifactModifiers(loadout).internalHatcheryRate.totalMultiplier;
     const earnings = [now.offlineEarnings, full.offlineEarnings];
-    const s = goal === 'ihr' ? [ihr, ...earnings] : earnings;
+    const s = goal !== 'ihr' ? earnings : above === undefined ? [ihr, ...earnings] : [ihr, now.habCapacity, ...earnings];
     if (!best || better(s, best.score)) {
       best = { loadout, score: s, offlineEarnings: now.offlineEarnings, offlineIHR: now.offlineIHR };
     }

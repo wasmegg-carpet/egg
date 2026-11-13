@@ -58,6 +58,7 @@ export function exportPlanData(actions: Action[], initialSnapshot?: Calculations
       initialFuelAmounts: baseFuelAmounts,
       rawBackup: redactedBackup,
       inventory: initialStateStore.inventory,
+      smartWaitTarget: initialStateStore.smartWaitTarget,
     },
     planState: {
       ascensionDate: planStore.ascensionDate,

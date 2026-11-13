@@ -63,7 +63,9 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
                 absoluteSimTime,
                 deadline
               );
-        post({ type: 'result', requestId: msg.requestId, result });
+        // The end state is for in-thread callers (Smart Wait for Population); the view doesn't need it.
+        const chain = { items: result.items, reached: result.reached, totalSeconds: result.totalSeconds };
+        post({ type: 'result', requestId: msg.requestId, result: chain });
         break;
       }
 
