@@ -4,7 +4,8 @@
  * then `--pack`, scheduled the same way (seeds first, then the hours that reuse them; the next start
  * TE begins only when nothing else is queued), on a pool of Web Workers.
  *
- * Nothing is kept between runs: a closed tab or a cancel loses the build.
+ * Nothing is kept between runs: a closed tab or a cancel loses the build. `keep` extends a table
+ * already built (extendTable.ts): its cells go into the file unchanged, beside the new ones.
  */
 import { REFERENCE_WEEK, WEEK_HOURS } from '@/buildTable/cell';
 import { tableGear } from '@/buildTable/header';
@@ -17,6 +18,7 @@ import { currentColleggtibles } from '@/lib/instantSearch/colleggtibleChanges';
 import { LATEST_SIM_CHANGE } from '@/lib/instantSearch/simChanges';
 import { gzipBytes } from 'lib/planners/utils/gzip';
 import { BuildEta } from './eta';
+import { partialTEs } from './extendTable';
 import { ChainFinderWorkerPool } from './workerPool';
 
 export interface TableBuildOptions {
@@ -24,8 +26,10 @@ export interface TableBuildOptions {
   deliveryIds: string[];
   /** Silo mode: the auto-planner's defer-for-earnings. */
   deferForEarnings?: boolean;
-  /** Start TEs to build. The file spans their min..max; TEs in between are left empty. */
+  /** Start TEs to build. The file spans their min..max (and `keep`'s); TEs in between are left empty. */
   tes: number[];
+  /** Cells of a table already built, for start TEs not in `tes`, packed in as they are. */
+  keep?: Cell[];
   workers: number;
   /** Receives a function that changes the worker count while the build runs. */
   onResizable?: (setWorkers: (workers: number) => void) => void;
@@ -66,6 +70,8 @@ export interface TableBuildResult {
   cells: number;
   simVersion: string;
   elapsedMs: number;
+  /** Cancelled: the file holds only the finished start TEs (see `partialTEs`), to extend later. */
+  partial?: boolean;
 }
 
 /** A start TE in flight: its three seeds, then the other hours. */
@@ -104,9 +110,8 @@ export function buildChainFinderTable(options: TableBuildOptions): Promise<Table
     };
     pool.onError = fail;
     if (options.signal?.aborted) return fail(new DOMException('Table build cancelled', 'AbortError'));
-    options.signal?.addEventListener('abort', () => fail(new DOMException('Table build cancelled', 'AbortError')), {
-      once: true,
-    });
+    // A cancel hands back what's finished, when that's anything; else it's an AbortError.
+    options.signal?.addEventListener('abort', () => finishPartial(), { once: true });
 
     const report = () => {
       const now = performance.now();
@@ -132,13 +137,40 @@ export function buildChainFinderTable(options: TableBuildOptions): Promise<Table
       pool.terminate();
       const toError = (err: unknown) => (err instanceof Error ? err : new Error(String(err)));
       try {
-        const packed = pack(jobs, k3, maxedContext(options.deliveryIds, deferForEarnings), builtAt);
+        const packed = pack(jobs, options.keep ?? [], k3, maxedContext(options.deliveryIds, deferForEarnings), builtAt);
         gzipBytes(packed.bytes).then(
           gzipped => resolve({ ...packed, gzipped, elapsedMs: performance.now() - t0 }),
           err => reject(toError(err))
         );
       } catch (err) {
         reject(toError(err));
+      }
+    };
+
+    const finishPartial = () => {
+      const cancelled = new DOMException('Table build cancelled', 'AbortError');
+      if (settled) return;
+      const keep = options.keep ?? [];
+      const done = jobs.filter(j => j.cells.size === WEEK_HOURS).map(j => j.te);
+      const run = k3 ? partialTEs(done, keep.map(c => c.te)) : null;
+      if (!run) return fail(cancelled);
+      settled = true;
+      pool.terminate();
+      try {
+        const inRun = (te: number) => te >= run.from && te <= run.to;
+        const packed = pack(
+          jobs.filter(j => j.cells.size === WEEK_HOURS && inRun(j.te)),
+          keep.filter(c => inRun(c.te)),
+          k3!,
+          maxedContext(options.deliveryIds, deferForEarnings),
+          builtAt
+        );
+        gzipBytes(packed.bytes).then(
+          gzipped => resolve({ ...packed, gzipped, elapsedMs: performance.now() - t0, partial: true }),
+          err => reject(err instanceof Error ? err : new Error(String(err)))
+        );
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     };
 
@@ -169,7 +201,7 @@ export function buildChainFinderTable(options: TableBuildOptions): Promise<Table
             number
           >;
           for (const hh of allHours()) {
-            const source = prefixSourceFor(hh, seedSeconds);
+            const source = prefixSourceFor(hh, seedSeconds, te);
             if (source.kind === 'seed') continue;
             const prefix =
               source.kind === 'reuse'
@@ -201,16 +233,21 @@ export function buildChainFinderTable(options: TableBuildOptions): Promise<Table
   });
 }
 
-/** The header scripts/buildTable.ts `--pack` writes, over this build's cells. */
+/** The header scripts/buildTable.ts `--pack` writes, over this build's cells and the kept ones. The
+ *  kept ones were checked to come from the same simulator (extendTable.ts), so one stamp covers both. */
 function pack(
   jobs: TeJob[],
+  keep: Cell[],
   k3: K3Record,
   context: SimulationContext,
   builtAt: string
 ): Omit<TableBuildResult, 'gzipped' | 'elapsedMs'> {
-  const cells = jobs.flatMap(j => [...j.cells.values()]).sort((a, b) => a.te - b.te || a.h - b.h);
-  const from = Math.min(...jobs.map(j => j.te));
-  const to = Math.max(...jobs.map(j => j.te));
+  const built = new Set(jobs.map(j => j.te));
+  const cells = [...keep.filter(c => !built.has(c.te)), ...jobs.flatMap(j => [...j.cells.values()])].sort(
+    (a, b) => a.te - b.te || a.h - b.h
+  );
+  const from = cells[0].te;
+  const to = cells[cells.length - 1].te;
   const bytes = packTable(
     {
       version: 1,

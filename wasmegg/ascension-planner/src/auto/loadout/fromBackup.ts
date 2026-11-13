@@ -3,7 +3,7 @@ import { Inventory } from 'lib/artifacts';
 import { getArtifact } from '@/lib/artifacts/data';
 import { createEmptyLoadout } from '@/lib/artifacts/calculator';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import { buildDeliveryPoolFromBackup, getOptimalEarningsSet, isDeliveryTargetArtifact } from '@/lib/artifacts/virtue';
+import { buildDeliveryPoolFromBackup, getOptimalEarningsSet, isDeliveryTargetArtifact } from 'lib/planners/artifacts/virtue';
 import {
   createEmptyStonePool,
   STONE_FAMILIES,

@@ -14,10 +14,16 @@
  * As a table build (`BuildParams`) it is a build with nothing left to buy: no sale, waits starting at
  * once, at the farm's rate (AutoAutoAP's `continueTailParams`), so the route search prices continuing
  * to any stop with the same tail arithmetic as a fresh build.
+ *
+ * A farm part-way through its build (auto/buildStep.ts) continues as the Auto Planner continues it:
+ * the rest of the build from the start of its step up to K3's wait, one build per C3 variant
+ * (lib/instantSearch/continueBuilds.ts, from `continueBuild`). That can take a while, so Chain Finder
+ * runs it in a worker at search time. While the farm lays on until a later prestige, it lays at its
+ * current rate.
  */
 import type { ei } from 'lib';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { makeContinueState, VIRTUE_EGGS_MAP } from '@/auto/continueState';
 import { getOptimalEarningsSet } from '@/lib/artifacts';
 import { parseVirtueFarm, parseVirtueProgress } from '@/lib/backupVirtue';
@@ -25,6 +31,9 @@ import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { epicResearchDefs } from 'lib/planners/epicResearch';
 import { getColleggtibleTiers, modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import { EGG_ORDER, type BuildParams } from './precomputedLeg';
+import { detectBuildStep, type BuildStep } from '@/auto/buildStep';
+import { TIER_13_MIN_STARTING_TE } from '@/buildTable/cell';
+import type { ContinueBuildInput } from './continueBuilds';
 import type { VirtueEgg } from '@/types';
 
 export interface CurrentAscension {
@@ -42,8 +51,12 @@ export interface CurrentAscension {
   catchUpEggs: number;
   /** Eggs delivered per egg at `now` (EGG_ORDER), catch-up included. */
   delivered: number[];
-  /** Continuing, as a build the route search can price. */
+  /** The farm laying on at its own rate, as a build the route search can price. */
   build: BuildParams;
+  /** The build step the farm is on, or null when its build is done. */
+  buildStep: BuildStep | null;
+  /** With a `buildStep`: what `simulateContinueBuilds` continues it from. */
+  continueBuild: ContinueBuildInput | null;
 }
 
 /** `backup`'s ascension in progress at unix second `now`, or null when it has no virtue farm. */
@@ -74,6 +87,19 @@ export function readCurrentAscension(backup: ei.IBackup, now: number): CurrentAs
   const claimedTE = Object.values(progress.teEarned).reduce((a, b) => a + (b || 0), 0);
   const fromDelivered = EGG_ORDER.reduce((n, e) => n + countTEThresholdsPassed(delivered[e] || 0), 0);
   const counts = EGG_ORDER.map(e => delivered[e] || 0);
+  const build: BuildParams = { sales: 0, tier13: false, waitStart: 0, saleEnd: 0, peakELR: elr, delivered: counts };
+
+  const buildStep = detectBuildStep(state);
+  // From now, with the catch-up's eggs counted, as the Auto Planner's Continue starts.
+  const continueBuild: ContinueBuildInput | null = buildStep
+    ? {
+        step: buildStep,
+        state: { ...state, eggsDelivered: delivered, lastStepTime: 0 },
+        context,
+        skipTier13Attempts: fromDelivered < TIER_13_MIN_STARTING_TE,
+      }
+    : null;
+
   return {
     claimedTE,
     pendingTE: Math.max(0, fromDelivered - claimedTE),
@@ -83,7 +109,9 @@ export function readCurrentAscension(backup: ei.IBackup, now: number): CurrentAs
     lastSync,
     catchUpEggs,
     delivered: counts,
-    build: { sales: 0, tier13: false, waitStart: 0, saleEnd: 0, peakELR: elr, delivered: counts },
+    build,
+    buildStep,
+    continueBuild,
   };
 }
 

@@ -23,13 +23,4 @@ export interface WaitForPopulationPayload {
   totalTimeSeconds: number;
 }
 
-/**
- * Payload for waiting to reach a target bock count.
- */
-export interface WaitForCashPayload {
-  targetCash: number;
-  currentCash: number;
-  requiredCash: number;
-  earningsPerSecond: number;
-  timeSeconds: number;
-}
+export type { WaitForCashPayload } from 'lib/planners/actions/currencyWait';

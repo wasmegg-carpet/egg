@@ -1,10 +1,10 @@
 import type { Action } from '@/types/actions/meta';
 import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext, ShiftResult } from '../../types';
-import { computeSnapshot } from '../../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction } from '../../../engine/apply';
 import { advanceTimeFlat } from './advanceTime';
-import { simulateHabPurchases, type HabMultipliers } from '../../../calculations/habPurchasePlan';
+import { simulateHabPurchases, type HabMultipliers } from 'lib/planners/calculations/plannerHabPurchasePlan';
 import { calculateTotalResearchMultipliers } from 'lib/planners/calculations/habCapacity';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
 import type { HabCostModifiers } from '../../../lib/habs';

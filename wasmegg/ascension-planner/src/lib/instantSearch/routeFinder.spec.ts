@@ -136,6 +136,32 @@ describe('instant search', () => {
     }
   });
 
+  it('continues a part-done build as the fastest of its builds to each stop', () => {
+    const start = pt('2026-10-22', '01:30');
+    const cont = inProgress(300, 0.3, 0);
+    const day = 86400;
+    const quick: BuildParams = { ...cont, sales: 1, waitStart: day, saleEnd: 2 * day, peakELR: cont.peakELR * 2 };
+    const steep: BuildParams = { ...cont, sales: 2, waitStart: 5 * day, saleEnd: 8 * day, peakELR: cont.peakELR * 4 };
+    const o = { startTE: 300, start, final: 490, maxAscensions: 6, startDelivered: cont.delivered, cont, contEgg: 2 };
+    const continued = (contBuilds?: BuildParams[]) =>
+      new Map(firstLegOptions(table.lookup, { ...o, contBuilds }).filter(f => f.continued).map(f => [f.to, f]));
+
+    const both = continued([quick, steep]);
+    const onlyQuick = continued([quick]);
+    const onlySteep = continued([steep]);
+    expect(both.size).toBeGreaterThan(0);
+    const sales = new Set<number>();
+    for (const [to, f] of both) {
+      const ends = [onlyQuick.get(to)?.end, onlySteep.get(to)?.end].filter((e): e is number => e !== undefined);
+      expect(f.end).toBe(Math.min(...ends));
+      sales.add(f.sales);
+    }
+    // Near stops the quick build wins; far ones, the steeper rate.
+    expect([...sales].sort()).toEqual([1, 2]);
+    // Without builds, continuing is the farm laying at its own rate.
+    for (const f of continued().values()) expect(f.sales).toBe(0);
+  });
+
   describe('dates to avoid', () => {
     const start = pt('2026-10-22', '01:30');
     const base = { startTE: 226, start, final: 490, maxAscensions: 12 };

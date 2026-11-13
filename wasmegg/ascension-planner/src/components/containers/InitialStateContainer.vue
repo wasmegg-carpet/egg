@@ -3,49 +3,58 @@
     ref="displayRef"
     :has-data="store.hasData"
     :epic-research-levels="store.epicResearchLevels"
-    :artifact-loadout="store.artifactLoadout"
-    :initial-shift-count="virtueStore.initialShiftCount"
-    :initial-egg="startAction?.payload.initialEgg ?? 'curiosity'"
-    :te="virtueStore.te"
-    :ascension-date="virtueStore.ascensionDate"
-    :ascension-time="virtueStore.ascensionTime"
-    :ascension-timezone="virtueStore.ascensionTimezone"
+    :ascension-date="planStore.ascensionDate"
+    :ascension-time="planStore.ascensionTime"
+    :ascension-timezone="planStore.ascensionTimezone"
     :tank-level="fuelTankStore.tankLevel"
     :fuel-amounts="store.initialFuelAmounts"
     :tank-capacity="fuelTankStore.tankCapacity"
-    :eggs-delivered="store.initialEggsDelivered"
-    :te-earned="store.initialTeEarned"
-    :te-pending="store.initialTePending"
-    :total-te="initialTotalTe"
-    :soul-eggs="store.soulEggs"
     :assume-double-earnings="store.assumeDoubleEarnings"
     :pro-permit="store.proPermit"
-    :artifact-sets="store.artifactSets"
-    :active-artifact-set="store.activeArtifactSet"
     :colleggtible-tiers="store.colleggtibleTiers"
-    :clothed-te="earningsClothedTe"
     @set-epic-research-level="handleSetEpicResearchLevel"
-    @update:artifact-loadout="handleArtifactLoadout"
-    @set-initial-egg="handleSetInitialEgg"
-    @set-te="handleSetTE"
-    @set-initial-shift-count="handleSetInitialShiftCount"
     @set-ascension-date="handleSetAscensionDate"
     @set-ascension-time="handleSetAscensionTime"
     @set-ascension-timezone="handleSetAscensionTimezone"
     @apply-ascension-settings="handleApplyAscensionSettings"
     @set-tank-level="handleSetTankLevel"
     @set-fuel-amount="handleSetFuelAmount"
-    @set-eggs-delivered="handleSetEggsDelivered"
-    @set-te-earned="handleSetTEEarned"
-    @include-pending-te="handleIncludePendingTe"
-    @set-soul-eggs="handleSetSoulEggs"
     @set-assume-double-earnings="handleSetAssumeDoubleEarnings"
     @set-pro-permit="handleSetProPermit"
-    @save-current-to-set="handleSaveCurrentToSet"
-    @update-artifact-set="handleUpdateArtifactSet"
-    @set-active-artifact-set="handleSetActiveArtifactSet"
     @set-colleggtible-tier="handleSetColleggtibleTier"
-  />
+  >
+    <template #settings-rows>
+      <AscensionSettingsRows
+        :initial-egg="startAction?.payload.initialEgg ?? 'curiosity'"
+        :initial-shift-count="planStore.initialShiftCount"
+        :soul-eggs="store.soulEggs"
+        @set-initial-egg="handleSetInitialEgg"
+        @set-initial-shift-count="handleSetInitialShiftCount"
+        @set-soul-eggs="handleSetSoulEggs"
+      />
+    </template>
+    <template #sections>
+      <VirtueProgressSections
+        :has-data="store.hasData"
+        :pro-permit="store.proPermit"
+        :artifact-loadout="store.artifactLoadout"
+        :eggs-delivered="store.initialEggsDelivered"
+        :te-earned="store.initialTeEarned"
+        :te-pending="store.initialTePending"
+        :total-te="initialTotalTe"
+        :artifact-sets="store.artifactSets"
+        :active-artifact-set="store.activeArtifactSet"
+        :clothed-te="earningsClothedTe"
+        @update:artifact-loadout="handleArtifactLoadout"
+        @set-eggs-delivered="handleSetEggsDelivered"
+        @set-te-earned="handleSetTEEarned"
+        @include-pending-te="handleIncludePendingTe"
+        @save-current-to-set="handleSaveCurrentToSet"
+        @update-artifact-set="handleUpdateArtifactSet"
+        @set-active-artifact-set="handleSetActiveArtifactSet"
+      />
+    </template>
+  </InitialStateDisplay>
 </template>
 
 <script setup lang="ts">
@@ -55,22 +64,24 @@
  */
 import { computed, ref } from 'vue';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 import { useCommonResearchStore } from 'lib/planners/stores/commonResearch';
 import { useHabCapacityStore } from 'lib/planners/stores/habCapacity';
 import { useShippingCapacityStore } from 'lib/planners/stores/shippingCapacity';
-import { useSilosStore } from '@/stores/silos';
-import InitialStateDisplay from '@/components/presenters/InitialStateDisplay.vue';
+import { useSilosStore } from 'lib/planners/stores/silos';
+import InitialStateDisplay from 'ui/components/planners/presenters/InitialStateDisplay.vue';
+import AscensionSettingsRows from '@/components/presenters/AscensionSettingsRows.vue';
+import VirtueProgressSections from '@/components/presenters/VirtueProgressSections.vue';
 import type { VirtueEgg, Action, ArtifactSetName } from '@/types';
 import { VIRTUE_EGGS } from '@/types';
 import type { EquippedArtifact } from '@/lib/artifacts';
 import { calculateClothedTEForSet } from '@/lib/artifacts';
 
 const store = useInitialStateStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const actionsStore = useActionsStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
@@ -81,8 +92,8 @@ const silosStore = useSilosStore();
 
 const startAction = computed(() => actionsStore.getStartAction() as Action<'start_ascension'> | undefined);
 
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 
 function updateInitialSnapshotAndRecalculate() {
   // Recompute the pure initial snapshot from base conditions (ignoring simulated head state)
@@ -128,7 +139,7 @@ function handleSetInitialEgg(egg: VirtueEgg) {
   actionsStore.setInitialEgg(egg);
 
   // Update the virtue store's current egg
-  virtueStore.setCurrentEgg(egg);
+  planStore.setCurrentEgg(egg);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -160,8 +171,8 @@ function handleSetEggsDelivered(egg: VirtueEgg, amount: number) {
   }
 
   // Also update the virtue store's total TE and initial TE baseline
-  virtueStore.setTE(truthEggsStore.totalTE);
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -181,8 +192,8 @@ function handleSetTEEarned(egg: VirtueEgg, count: number) {
   }
 
   // Also update the virtue store's total TE and initial TE baseline
-  virtueStore.setTE(truthEggsStore.totalTE);
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
 
   updateInitialSnapshotAndRecalculate();
 }
@@ -219,43 +230,43 @@ function handleIncludePendingTe() {
     }
 
     // Update virtue store
-    virtueStore.setTE(truthEggsStore.totalTE);
-    virtueStore.setInitialTE(truthEggsStore.totalTE);
+    planStore.setTE(truthEggsStore.totalTE);
+    planStore.setInitialTE(truthEggsStore.totalTE);
 
     updateInitialSnapshotAndRecalculate();
   }
 }
 
 function handleSetTE(te: number) {
-  virtueStore.setTE(te);
-  virtueStore.setInitialTE(te);
+  planStore.setTE(te);
+  planStore.setInitialTE(te);
   updateInitialSnapshotAndRecalculate();
 }
 
 function handleSetInitialShiftCount(count: number) {
-  virtueStore.setInitialShiftCount(count);
+  planStore.setInitialShiftCount(count);
   updateInitialSnapshotAndRecalculate();
 }
 
 function handleSetAscensionDate(date: string) {
-  virtueStore.setAscensionDate(date);
+  planStore.setAscensionDate(date);
   actionsStore.recalculateFrom(0);
 }
 
 function handleSetAscensionTime(time: string) {
-  virtueStore.setAscensionTime(time);
+  planStore.setAscensionTime(time);
   actionsStore.recalculateFrom(0);
 }
 
 function handleSetAscensionTimezone(timezone: string) {
-  virtueStore.setAscensionTimezone(timezone);
+  planStore.setAscensionTimezone(timezone);
   actionsStore.recalculateFrom(0);
 }
 
 function handleApplyAscensionSettings(date: string, time: string, timezone: string) {
-  virtueStore.setAscensionDate(date);
-  virtueStore.setAscensionTime(time);
-  virtueStore.setAscensionTimezone(timezone);
+  planStore.setAscensionDate(date);
+  planStore.setAscensionTime(time);
+  planStore.setAscensionTimezone(timezone);
   actionsStore.recalculateFrom(0);
 }
 

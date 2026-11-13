@@ -23,7 +23,7 @@ import { distributeTargetTE } from '@/auto/shifts/te-wait';
 import { computeTEEarned, timeToEarnTE } from '@/auto/te-thresholds';
 import { applyShiftAction } from '@/auto/shifts/helpers/actionHelpers';
 import { runMaxVehiclesPlan } from '@/auto/shifts/helpers/vehicles';
-import { computeRealisticELR } from '@/calculations/realisticELR';
+import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
 import { getLocalTimestampInTimezone, PACIFIC_TIMEZONE } from 'lib/planners/events';
 import { countTEThresholdsPassed, TE_BREAKPOINTS } from '@/lib/truthEggs';

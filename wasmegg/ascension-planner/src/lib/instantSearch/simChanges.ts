@@ -31,6 +31,11 @@ export const SIM_CHANGES: SimChange[] = [
     date: '2026-11-04T12:07:21-06:00',
     note: 'Buy Until Sale Ends and Auto now choose delivery research as a whole set, weighing delivery rate against a later start, and hr/% uses the price actually charged. Against the last table: about 0.24% less total time at +20 to +50 TE.',
   },
+  {
+    commit: 'c983b800',
+    date: '2026-11-11T11:13:07-06:00',
+    note: "Fixed Auto's Multi-Layering milestones buying earnings research by the wrong payback rule. Mostly affects around 200 TE: total times change by less than 0.25% either way.",
+  },
 ];
 
 /** The newest change in the code doing the building: what a new table's `simChange` stamp says. */

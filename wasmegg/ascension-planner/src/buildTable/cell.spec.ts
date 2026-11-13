@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { runAscensionFromC3Variant } from '@/auto/ascension';
 import { buildsFrom, contextAt, prefixAt, startStateAt, tailTo, variantsFrom } from './cell';
 import { maxedBaseState, maxedContext } from './maxedAccount';
-import { crossesBoundary, eventClassAt, hourStart, prefixSourceFor, SEED_HOURS } from './prefixReuse';
+import { crossesBoundary, eventClassAt, hourStart, prefixSourceFor, REUSE_FROM_TE, SEED_HOURS } from './prefixReuse';
 
 describe('tailTo matches the simulator', () => {
   // One fresh cell: TE 150 at Monday 00:00 Pacific of the reference week.
@@ -40,11 +40,18 @@ describe('prefix reuse schedule', () => {
   test('an hour reuses its seed only when its prefix window crosses no boundary', () => {
     const seconds = { none: 10 * 3600, sale: 10 * 3600, boost: 10 * 3600 };
     // Thursday 12:00: next boundary is Friday 9:00, 21 h away.
-    expect(prefixSourceFor(3 * 24 + 12, seconds)).toEqual({ kind: 'reuse', seedHour: SEED_HOURS.none });
+    expect(prefixSourceFor(3 * 24 + 12, seconds, 150)).toEqual({ kind: 'reuse', seedHour: SEED_HOURS.none });
     // Thursday 23:00: Friday 9:00 is 10 h away, inside the window.
     expect(crossesBoundary(hourStart(3 * 24 + 23), seconds.none)).toBe(true);
-    expect(prefixSourceFor(3 * 24 + 23, seconds)).toEqual({ kind: 'fresh', reason: 'crosses' });
+    expect(prefixSourceFor(3 * 24 + 23, seconds, 150)).toEqual({ kind: 'fresh', reason: 'crosses' });
     // Friday 12:00 is inside the sale, 21 h before it ends.
-    expect(prefixSourceFor(4 * 24 + 12, seconds)).toEqual({ kind: 'reuse', seedHour: SEED_HOURS.sale });
+    expect(prefixSourceFor(4 * 24 + 12, seconds, 150)).toEqual({ kind: 'reuse', seedHour: SEED_HOURS.sale });
+  });
+
+  test('below REUSE_FROM_TE every hour but the seeds is built fresh', () => {
+    const seconds = { none: 3600, sale: 3600, boost: 3600 };
+    expect(prefixSourceFor(3 * 24 + 12, seconds, REUSE_FROM_TE)).toEqual({ kind: 'reuse', seedHour: SEED_HOURS.none });
+    expect(prefixSourceFor(3 * 24 + 12, seconds, REUSE_FROM_TE - 1)).toEqual({ kind: 'fresh', reason: 'lowTE' });
+    expect(prefixSourceFor(SEED_HOURS.sale, seconds, 50)).toEqual({ kind: 'seed' });
   });
 });

@@ -2,5 +2,5 @@
  * Actions store re-export.
  */
 
-export * from './actions/index';
+export * from 'lib/planners/stores/actions/index';
 export type { ActionsState } from './actions/types';

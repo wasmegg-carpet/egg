@@ -38,6 +38,10 @@ import { colleggtibleChanges as colleggtibleChangesSince } from '@/lib/instantSe
 import { simChangesSince } from '@/lib/instantSearch/simChanges';
 import { getArtifact, getOptimalEarningsSet } from '@/lib/artifacts';
 import { readCurrentAscension, type CurrentAscension } from '@/lib/instantSearch/currentAscension';
+import type { BuildStep } from '@/auto/buildStep';
+import type { ContinueBuildInput } from '@/lib/instantSearch/continueBuilds';
+import type { BuildParams } from '@/lib/instantSearch/precomputedLeg';
+import type { ContinueBuildRequest, ContinueBuildResponse } from '@/workers/continueBuild.worker';
 import {
   chainFinderLoadout,
   chainFinderLoadoutFromBackup,
@@ -52,7 +56,7 @@ import {
 } from '@/auto/loadout';
 import { maxedLoadoutInputs } from '@/buildTable/maxedAccount';
 import { parseVirtueProgress } from '@/lib/backupVirtue';
-import { fetchPlayerBackup } from '@/lib/modes/fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { resolveFetchablePlayerId } from '@/lib/modes/utils';
 import type { ei } from 'lib';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
@@ -95,7 +99,7 @@ export interface InstantAnswer {
   /** A hypothetical start (a chosen TE and moment), not the save right now. */
   hypothetical: boolean;
   /** The ascension in progress the routes start from (continued, or ended by prestiging now), or null. */
-  inProgress: { claimedTE: number } | null;
+  inProgress: { claimedTE: number; buildStep?: BuildStep | null } | null;
   /** The filters the search ran with (`blockFilters`): days to avoid and blocked weekly hours, in
    *  `timezone`. */
   blocks: BlockFilters;
@@ -599,6 +603,42 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     return '';
   });
 
+  /** Simulating the rest of a part-done build in the ascension in progress, before a search. */
+  const simulatingBuild = ref(false);
+  let buildWorker: Worker | null = null;
+  let nextBuildRequestId = 0;
+
+  /** The builds continuing `input`'s part-done build can take (lib/instantSearch/continueBuilds.ts),
+   *  simulated in their own worker. */
+  function simulateBuilds(input: ContinueBuildInput): Promise<BuildParams[]> {
+    if (!buildWorker)
+      buildWorker = new Worker(new URL('../workers/continueBuild.worker.ts', import.meta.url), { type: 'module' });
+    const worker = buildWorker;
+    const requestId = nextBuildRequestId++;
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        worker.removeEventListener('message', onMessage);
+        worker.removeEventListener('error', onError);
+      };
+      const onMessage = (event: MessageEvent<ContinueBuildResponse>) => {
+        if (event.data.requestId !== requestId) return;
+        done();
+        if (event.data.type === 'builds') resolve(event.data.builds);
+        else reject(new Error(event.data.message));
+      };
+      const onError = (event: ErrorEvent) => {
+        done();
+        buildWorker?.terminate();
+        buildWorker = null;
+        reject(new Error(event.message || 'Chain Finder build worker failed'));
+      };
+      worker.addEventListener('message', onMessage);
+      worker.addEventListener('error', onError);
+      // Plain data only: the stores' reactive proxies can't be cloned.
+      worker.postMessage({ requestId, input: JSON.parse(JSON.stringify(input)) } satisfies ContinueBuildRequest);
+    });
+  }
+
   async function search(): Promise<void> {
     if (status.value === 'running') return;
     if (tableStatus.value !== 'ready') await loadTable();
@@ -608,6 +648,23 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     if (fromSave.value) detect(now);
     const te = startTE.value;
     const cont = fromSave.value ? (current.value?.build ?? null) : null;
+    // A part-done build continues as the rest of that build, simulated from the same moment.
+    let contBuilds: BuildParams[] | null = null;
+    const continueBuild = cont ? current.value?.continueBuild : null;
+    if (continueBuild) {
+      status.value = 'running';
+      simulatingBuild.value = true;
+      error.value = '';
+      try {
+        contBuilds = await simulateBuilds(continueBuild);
+      } catch (err) {
+        status.value = 'error';
+        error.value = `Could not simulate the rest of your current build: ${err instanceof Error ? err.message : err}`;
+        return;
+      } finally {
+        simulatingBuild.value = false;
+      }
+    }
     // The save's real counts only when starting from the save's own TE; a typed start TE uses the
     // table's canonical share.
     const delivered = fromSave.value ? saveDelivered.value : null;
@@ -619,7 +676,8 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       ...(mode.value === 'date' ? { deadline: deadline.value } : {}),
       timezone: timezone.value,
       hypothetical: !fromSave.value,
-      inProgress: cont && current.value ? { claimedTE: current.value.claimedTE } : null,
+      inProgress:
+        cont && current.value ? { claimedTE: current.value.claimedTE, buildStep: current.value.buildStep } : null,
       blocks: blockFilters.value,
       waitForEggs: waitForEggs.value,
       startDelivered: [...(delivered ?? canonicalDelivered(te))],
@@ -635,6 +693,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       ...(asked.deadline !== undefined ? { deadline: asked.deadline } : {}),
       ...(delivered ? { startDelivered: [...delivered] } : {}),
       ...(cont ? { cont: { ...cont, delivered: [...cont.delivered] } } : {}),
+      ...(contBuilds?.length ? { contBuilds } : {}),
       ...(avoid.length ? { avoid } : {}),
       ...(cont && current.value ? { contEgg: EGG_ORDER.indexOf(current.value.egg) } : {}),
       ...(asked.waitForEggs ? { waitForEggs: true } : {}),
@@ -832,6 +891,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     tableStatus,
     status,
     progress,
+    simulatingBuild,
     answer,
     error,
     comparison,

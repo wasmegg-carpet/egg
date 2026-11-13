@@ -14,15 +14,8 @@
 
 import type { Action, CalculationsSnapshot } from '@/types';
 import { createEmptySnapshot, generateActionId } from '@/types';
-import {
-  applyAction,
-  applyTime,
-  getActionDuration,
-  boostTransitionsFrom,
-} from '@/engine/apply';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext } from '@/engine/adapter';
-import { withCalendarResearchSale } from '@/engine/researchSale';
+import { getSimulationContext } from 'lib/planners/engine/adapter';
+import { simulateStep } from 'lib/planners/engine/simulate';
 import { type EngineState } from '@/engine/types';
 
 /**
@@ -60,24 +53,6 @@ export function calculateActionResult(
   prevSnapshot: CalculationsSnapshot,
   prevState: EngineState // EngineState
 ): { newSnapshot: CalculationsSnapshot; durationSeconds: number } {
-  const context = getSimulationContext();
-
-  let newState = applyAction(prevState, action);
-  const durationSeconds = getActionDuration(action, prevSnapshot, context);
-  const absoluteSimTime = context.ascensionStartTime + (prevSnapshot.lastStepTime - context.planStartOffset);
-  newState = applyTime(newState, durationSeconds, prevSnapshot, {
-    skipGrowth: action.type === 'wait_for_no_earnings',
-    skipEarnings: action.type === 'store_fuel',
-    transitions: boostTransitionsFrom(prevSnapshot, absoluteSimTime),
-  });
-
-  const newSnapshot = withCalendarResearchSale(
-    computeSnapshot(newState, context, {
-      freezePopulation: action.type === 'wait_for_no_earnings',
-      skipEpochConversion: true,
-    }),
-    context.ascensionStartTime,
-    context.planStartOffset
-  );
-  return { newSnapshot, durationSeconds };
+  const step = simulateStep(action, prevSnapshot, prevState, getSimulationContext());
+  return { newSnapshot: step.snapshot, durationSeconds: step.durationSeconds };
 }

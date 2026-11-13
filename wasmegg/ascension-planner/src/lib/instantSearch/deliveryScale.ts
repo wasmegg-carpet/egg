@@ -7,7 +7,7 @@
  */
 import { calculateArtifactModifiers, getOptimalELRSet, sanitizeLongs } from '@/lib/artifacts';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import { computeRealisticELR } from '@/calculations/realisticELR';
+import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
 import type { GearContext } from './tableGear';
 
 /** The waiting research and delivery set a table's header records (its `k3`). */

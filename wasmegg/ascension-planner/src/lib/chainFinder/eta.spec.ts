@@ -5,7 +5,9 @@ describe('teCost', () => {
   it('interpolates the measured profile and clamps outside it', () => {
     expect(teCost(120)).toBe(320);
     expect(teCost(150)).toBe(245);
-    expect(teCost(100)).toBe(320);
+    expect(teCost(100)).toBe(1260);
+    expect(teCost(50)).toBe(2650);
+    expect(teCost(10)).toBe(2650);
     expect(teCost(489)).toBe(20);
     expect(teCost(600)).toBe(20);
   });

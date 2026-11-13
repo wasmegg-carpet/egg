@@ -11,6 +11,13 @@
  * and machines are fine as long as their costs vary with TE in roughly the same way.
  */
 const TE_COST: [te: number, coreSeconds: number][] = [
+  // Below 120 every hour builds its prefix fresh (prefixReuse.ts REUSE_FROM_TE): measured 2026-11-13
+  // without reuse at 50, 70, 90, 110 and doubled, as these older figures predate the 2026-11-02 speedup.
+  [50, 2650],
+  [70, 4270],
+  [90, 1950],
+  [110, 570],
+  [119, 570],
   [120, 320],
   [180, 170],
   [189, 170],

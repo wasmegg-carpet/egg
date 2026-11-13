@@ -70,6 +70,20 @@ reuses its class's seed when no sale/boost start or end falls within **seed pref
   built both ways: **zero mismatches**, tier-13 builds included. 141–149 of 168 hours reuse a seed.
 - Saves 30–81% of the work depending on TE.
 
+## Start TEs below 120 (2026-11-13)
+
+- The Table Builder takes a lowest start TE of 50–120 (default 120), and can extend a table already built (the
+  store's for the picks, or a file) instead of rebuilding it: `src/lib/chainFinder/extendTable.ts`. Only a table
+  with the same delivery set, silo setting, doubler, earnings, stones and reference week, and no `SIM_CHANGES` or
+  colleggtible changes since it was built, can be extended; anything else is rebuilt from scratch.
+- **Prefix reuse does not hold below 120.** `--verify` on maxed gear: 0 differing cells at TE 110, 1 at 90 (hour 97,
+  8 h before the Friday sale, with a 3.9 h seed prefix), 5 at 70, 14 at 50 (Friday 10:00–23:00, prefixes the same
+  length as the seed's but different cells). So `REUSE_FROM_TE = 120` in `prefixReuse.ts`: lower TEs build every
+  hour fresh. Cost without reuse (today's core-s): ~290 at 110, ~970 at 90, ~2100 at 70, ~1300 at 50; 100–119 is
+  ~25 min on 7 workers, 50–119 ~3–4 h.
+- A "5-week" practicality floor was tried and dropped: on maxed gear the slowest 3-sale build (start to last sale
+  end, hours 0, 24, …, 144) is 2.91 weeks from TE 10 to 120, pinned by the sale calendar; 3.13 at TE 5, 3.31 at TE 1.
+
 ## Build speed work (2026-11-02)
 
 Against a table built at `129f5daa`, three single-worker TEs ran concurrently:

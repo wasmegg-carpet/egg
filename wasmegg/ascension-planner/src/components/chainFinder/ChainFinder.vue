@@ -30,15 +30,22 @@
     <h3 class="text-sm font-bold text-slate-800 mt-8 mb-1">Lookup table</h3>
     <p class="text-xs text-slate-500 mb-4">
       Simulates every hour of the week for each start TE on a maxed account with this delivery set, then downloads
-      the table as a .bin file.
+      the table as a .bin file. A table already built for this set (the stored one, or a file) can be extended
+      instead: only the start TEs it lacks are simulated.
     </p>
+    <ExistingTablePanel class="mb-4" />
+    <ExtendTablePanel class="mb-4" />
     <TableBuildPanel />
+    <TableSummary class="mt-8" />
   </div>
 </template>
 
 <script setup lang="ts">
 import DeliveryArtifactPicker from './DeliveryArtifactPicker.vue';
 import TableBuildPanel from './TableBuildPanel.vue';
+import ExistingTablePanel from './ExistingTablePanel.vue';
+import ExtendTablePanel from './ExtendTablePanel.vue';
+import TableSummary from './TableSummary.vue';
 import StandardPermitWarning from '@/components/StandardPermitWarning.vue';
 import { useChainFinderStore } from '@/stores/chainFinder';
 

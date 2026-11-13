@@ -1,7 +1,7 @@
 import type { Action } from '@/types/actions/meta';
 import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext, ShiftResult } from '../../types';
-import { computeSnapshot } from '../../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction } from '../../../engine/apply';
 import { advanceTimeFlat } from './advanceTime';
 import { planSilosWithinBudget } from 'lib/planners/calculations/siloPurchasePlan';

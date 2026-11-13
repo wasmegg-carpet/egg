@@ -3,7 +3,7 @@ import { createSimAction } from '@/types/actions/meta';
 import type { NotificationPayload } from '@/types';
 import type { EngineState, SimulationContext, ShiftResult } from '../../types';
 import { getResearchById, isTierUnlocked, type ResearchCostModifiers } from '../../../calculations/commonResearch';
-import { findSmartBuyCandidate } from '../../../calculations/smartBuyCandidate';
+import { findSmartBuyCandidate } from 'lib/planners/calculations/smartBuyCandidate';
 import {
   computeTierMilestoneChain,
   computeResearchMilestoneChain,
@@ -11,14 +11,24 @@ import {
   computeMilestoneSummaryCore,
   isCheapestTierPurchaseAffordable,
   type MilestoneChainItem,
-} from '../../../calculations/milestoneChain';
-import { getSaleAwareTimeToSave, shouldDeferToNextSale } from '../../../calculations/researchROI';
+  type ChainItem,
+  isResearchChainItem,
+} from 'lib/planners/calculations/milestoneChain';
+
+/**
+ * The research purchases of a chain. The ascension planner never ranks vehicles or habs as earnings
+ * purchases (that's PROFILE.hasFarmPurchasesInRoi, enlightenment only), so this is every item.
+ */
+function researchItems(items: ChainItem[]): MilestoneChainItem[] {
+  return items.filter(isResearchChainItem);
+}
+import { getSaleAwareTimeToSave, shouldDeferToNextSale } from 'lib/planners/calculations/researchROI';
 import { calculateArtifactModifiers } from '../../../lib/artifacts';
-import { computeSnapshot } from '../../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction, boostTransitionsFrom } from '../../../engine/apply';
 import { advanceTimeWithBoundaries } from './advanceTime';
 import { isResearchSaleActive, getNextSaleStart, getNextSaleEnd } from 'lib/planners/events';
-import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from '@/lib/actions/notes';
+import { buildQuickBuyNotePayload, buildMilestoneNotePayload } from 'lib/planners/actions/notes';
 import { runWithEarningsEventDeferral } from './earningsEventDeferral';
 import type { DeferralCheckpoint, EarningsEventDeferralHost } from './earningsEventDeferral';
 
@@ -275,7 +285,7 @@ export function createMilestoneShiftHelpers(
     // Actual price paid, not `item.price` — see `executeChainItem`'s doc comment for why the
     // plan's own precomputed price can no longer be trusted as of whatever real state replay has
     // reached by this point.
-    const { executedCount, totalGemsSpent } = deferForEarningsMode
+    const { executedCount, totalSpent } = deferForEarningsMode
       ? runWithEarningsEventDeferral(
           items,
           item => item.research.id,
@@ -286,14 +296,14 @@ export function createMilestoneShiftHelpers(
         )
       : (() => {
           let executedCount = 0;
-          let totalGemsSpent = 0;
+          let totalSpent = 0;
           for (const item of items) {
             const paid = executeChainItem(item, timeLimit);
             if (paid === false) break;
             executedCount++;
-            totalGemsSpent += paid;
+            totalSpent += paid;
           }
-          return { executedCount, totalGemsSpent };
+          return { executedCount, totalSpent };
         })();
 
     if (executedCount > 0) {
@@ -301,7 +311,7 @@ export function createMilestoneShiftHelpers(
         targetLabel,
         executedCount,
         elapsedSeconds,
-        totalGemsSpent,
+        totalSpent,
         executedCount === items.length ? timeSavedSeconds : undefined
       );
       if (notePayload) addNotification(notePayload);
@@ -340,7 +350,7 @@ export function runSmartBuyForSeconds(
 ): ShiftResult {
   const helpers = createMilestoneShiftHelpers(startState, context);
   let purchaseCount = 0;
-  let totalGemsSpent = 0;
+  let totalSpent = 0;
 
   while (helpers.getElapsedSeconds() <= timeLimit) {
     const snapshot = computeSnapshot(helpers.getState(), context, { skipGrowth: true });
@@ -356,7 +366,7 @@ export function runSmartBuyForSeconds(
     if (!candidate) break;
     if (!helpers.buyResearch(candidate.research.id, timeLimit)) break;
     purchaseCount++;
-    totalGemsSpent += candidate.price;
+    totalSpent += candidate.price;
   }
 
   // Elapsed time here doubles as "total time to save" — unlike the manual planner's dry-run
@@ -366,7 +376,7 @@ export function runSmartBuyForSeconds(
     thresholdSeconds,
     purchaseCount,
     helpers.getElapsedSeconds(),
-    totalGemsSpent
+    totalSpent
   );
   if (notePayload) helpers.addNotification(notePayload);
 
@@ -448,7 +458,7 @@ export function runTierUnlockMilestone(
   const timeSavedSeconds =
     chain.reached && baseline.reached ? baseline.totalSeconds - chain.totalSeconds : undefined;
 
-  helpers.executeChain(chain.items, `Unlock Tier ${targetTier}`, timeLimit, timeSavedSeconds, deferForEarningsMode);
+  helpers.executeChain(researchItems(chain.items), `Unlock Tier ${targetTier}`, timeLimit, timeSavedSeconds, deferForEarningsMode);
 
   return {
     actions: helpers.getActions(),
@@ -515,7 +525,7 @@ export function runResearchMilestoneIfWorthwhile(
   const research = getResearchById(researchId);
   const targetLabel = research ? `${research.name} (Lv ${targetLevel}/${research.levels})` : 'Milestone';
 
-  helpers.executeChain(chain.items, targetLabel, timeLimit, summary.timeSavedSeconds, deferForEarningsMode);
+  helpers.executeChain(researchItems(chain.items), targetLabel, timeLimit, summary.timeSavedSeconds, deferForEarningsMode);
 
   return {
     actions: helpers.getActions(),

@@ -3,11 +3,13 @@ import { formatNumber, formatDuration, formatUnixToDateInput, formatUnixToTimeIn
 import { createEmptySnapshot } from '@/types';
 import { migrateExportedPlanV1, type ExportedPlan, type ExportedPlanV1 } from './export';
 import { pickVariant, type VariantKey, type VariantResult } from '@/stores/autoPlanner';
+import { continueLabel } from './buildStep';
+import type { AscensionSummary } from './types';
 
 /** Human-readable form of a `VariantKey` for library plan names, e.g. `1-sale`, `2-sale Tier 13`,
  * `Continue`. */
-function formatVariantLabel(key: VariantKey): string {
-  if (key === 'continue') return 'Continue';
+function formatVariantLabel(key: VariantKey, summary: AscensionSummary): string {
+  if (key === 'continue') return continueLabel(summary.continueFromStep);
   return key.endsWith('-tier13') ? `${key.slice(0, -'-tier13'.length)} Tier 13` : key;
 }
 
@@ -85,7 +87,7 @@ export function buildLibraryPlansFromExport(
     const startStr = new Date(summary.startTime * 1000).toISOString().split('T')[0];
     const peakELR = formatNumber(summary.maxELR * 3600, 3);
     const duration = formatDuration(summary.totalDurationSeconds);
-    const variantSuffix = bestKey ? `${formatVariantLabel(bestKey)}` : '';
+    const variantSuffix = bestKey ? `${formatVariantLabel(bestKey, best.summary)}` : '';
     const name = `${namePrefix} A${idx + 1} - ${peakELR}/hr from ${summary.startTE} to ${summary.endTE} - ${variantSuffix} - ${duration} - starting ${startStr}`;
 
     return {

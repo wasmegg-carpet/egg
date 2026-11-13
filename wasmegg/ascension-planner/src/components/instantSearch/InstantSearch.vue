@@ -72,7 +72,9 @@
               <RefreshBackupButton />
             </div>
             <div class="mt-0.5 text-[11px] text-indigo-700/80">
-              On {{ VIRTUE_EGG_NAMES[store.current.egg] }}.
+              On {{ VIRTUE_EGG_NAMES[store.current.egg] }}<template v-if="store.current.buildStep"
+                >, part-way through the build: continuing finishes it from {{ store.current.buildStep }}</template
+              >.
               <template v-if="store.current.pendingTE > store.current.pendingAtBackup">
                 {{ store.current.pendingAtBackup }} pending in the backup, +{{
                   store.current.pendingTE - store.current.pendingAtBackup
@@ -159,7 +161,8 @@
       >
         {{ store.status === 'running' ? 'Searching…' : 'Find routes' }}
       </button>
-      <span v-if="store.status === 'running' && store.progress" class="text-xs text-slate-500">
+      <span v-if="store.simulatingBuild" class="text-xs text-slate-500">Simulating the rest of your current build…</span>
+      <span v-else-if="store.status === 'running' && store.progress" class="text-xs text-slate-500">
         {{ store.progress.stage === 'waits' ? 'Finding prestiges worth waiting for…' : 'Finding routes…' }}
       </span>
       <span v-else-if="store.problem" class="text-xs text-amber-700">{{ store.problem }}</span>

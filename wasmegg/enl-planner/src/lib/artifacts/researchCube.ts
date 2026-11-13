@@ -1,10 +1,12 @@
 /**
  * "Assume cube used for research purchases": research is priced as if the player swaps this puzzle
- * cube in right before each purchase and their saved set back afterwards. The planner doesn't know
- * the player's inventory, so the default is the best there is: T4L with three T4 clarity stones.
+ * cube in right before each purchase and their saved set back afterwards. The default is the best
+ * the player has; with no inventory that's the best there is, T4L with three T4 clarity stones. The
+ * cube can reuse stones from the artifact set, because they can be moved over for each purchase.
  */
-import { getArtifact, getArtifactsByFamily, getStone } from './data';
+import { getArtifact, getArtifactsByFamily, getStone, getStonesByFamily } from './data';
 import { puzzleCubeFactor } from './calculator';
+import { ownedStoneCount, ownsArtifact, type PlayerInventory } from './inventory';
 
 export interface ResearchCubeSetting {
   enabled: boolean;
@@ -22,9 +24,32 @@ export function puzzleCubeOptions() {
   );
 }
 
-export function defaultResearchCube(): ResearchCubeSetting {
-  const best = puzzleCubeOptions()[0];
-  return { enabled: true, artifactId: best.id, stones: Array(best.slots).fill(`${CLARITY_FAMILY}-4`) };
+/** The cubes the player has, strongest discount first. */
+export function ownedPuzzleCubes(inventory: PlayerInventory | null | undefined) {
+  return puzzleCubeOptions().filter(cube => ownsArtifact(inventory, cube.id));
+}
+
+/** The best the player can put together: each owned cube filled with their strongest clarity stones. */
+export function defaultResearchCube(inventory: PlayerInventory | null = null): ResearchCubeSetting {
+  const clarityStones = [...getStonesByFamily(CLARITY_FAMILY)].sort((a, b) => b.tier - a.tier);
+  let best: ResearchCubeSetting = { enabled: true, artifactId: null, stones: [] };
+  let bestMultiplier = Infinity;
+  for (const cube of ownedPuzzleCubes(inventory)) {
+    const stones: (string | null)[] = [];
+    for (const stone of clarityStones) {
+      const room = cube.slots - stones.length;
+      const take = Math.min(room, ownedStoneCount(inventory, stone.id));
+      for (let i = 0; i < take; i++) stones.push(stone.id);
+    }
+    while (stones.length < cube.slots) stones.push(null);
+    const setting = { enabled: true, artifactId: cube.id, stones };
+    const multiplier = researchCubeMultiplier(setting);
+    if (multiplier < bestMultiplier) {
+      best = setting;
+      bestMultiplier = multiplier;
+    }
+  }
+  return best;
 }
 
 /** The cube's clarity: its clarity stones added up (non-clarity stones do nothing for price). */
