@@ -18,7 +18,12 @@
           class="w-full flex items-center justify-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm rounded-md text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer"
         >
           {{ plan ? 'Load another plan…' : 'Load ascension plan…' }}
-          <input type="file" accept=".json,application/json" class="hidden" @change="onPlanFilePicked" />
+          <input
+            type="file"
+            accept=".json,.json.gz,.gz,application/json,application/gzip"
+            class="hidden"
+            @change="onPlanFilePicked"
+          />
         </label>
 
         <p v-if="planLoadError" class="text-xs text-red-500">{{ planLoadError }}</p>
@@ -424,6 +429,7 @@ import {
   solvedVisitCount,
 } from '@/store/plan';
 import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import { readImportedJson } from 'lib/planners/utils/export';
 import { normalizeBudgetInput } from '@/store/budget-input';
 import { buildHumilityMissionsFile, humilityMissionsFilename } from '@/lib/plan/write';
 
@@ -658,7 +664,7 @@ export default defineComponent({
       if (!file) return;
       planLoadError.value = '';
       try {
-        const json: unknown = JSON.parse(await file.text());
+        const json: unknown = JSON.parse(await readImportedJson(await file.arrayBuffer()));
         const save = parsePlanSave(json);
         setLoadedPlan(planLabelFor(json, file.name), sliceHumilityVisits(save));
       } catch (err) {
