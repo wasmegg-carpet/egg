@@ -18,7 +18,7 @@ import { currentColleggtibles } from '@/lib/instantSearch/colleggtibleChanges';
 import { LATEST_SIM_CHANGE } from '@/lib/instantSearch/simChanges';
 import { gzipBytes } from 'lib/planners/utils/gzip';
 import { BuildEta } from './eta';
-import { partialTEs } from './extendTable';
+import { buildOrder, partialTEs } from './extendTable';
 import { ChainFinderWorkerPool } from './workerPool';
 
 export interface TableBuildOptions {
@@ -84,7 +84,8 @@ interface TeJob {
 }
 
 export function buildChainFinderTable(options: TableBuildOptions): Promise<TableBuildResult> {
-  const tes = [...new Set(options.tes)].sort((a, b) => b - a);
+  const kept = keptRange(options.keep ?? []);
+  const tes = buildOrder(options.tes, kept);
   const bad = tes.filter(te => !Number.isInteger(te) || te < 1 || te > 489);
   if (!tes.length || bad.length) return Promise.reject(new Error(`start TEs must be whole numbers 1-489, got ${bad.join(', ')}`));
 
@@ -268,4 +269,16 @@ function pack(
   );
   checkPacked(bytes, cells);
   return { bytes, from, to, cells: cells.length, simVersion: __SIM_VERSION__ };
+}
+
+/** The start TEs `cells` span, or undefined for none. */
+function keptRange(cells: Cell[]): { from: number; to: number } | undefined {
+  if (!cells.length) return undefined;
+  let from = Infinity;
+  let to = -Infinity;
+  for (const c of cells) {
+    if (c.te < from) from = c.te;
+    if (c.te > to) to = c.te;
+  }
+  return { from, to };
 }

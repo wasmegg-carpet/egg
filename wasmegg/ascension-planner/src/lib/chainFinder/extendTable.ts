@@ -72,20 +72,36 @@ function sorted(o: unknown): [string, unknown][] {
 
 /**
  * The start TEs to simulate for a table covering `from..to`, given a base table's range (or none):
- * those the base lacks. The base's own TEs below `from` are kept, never thrown away.
+ * those the base lacks. The base's own TEs outside `from..to` are kept, never thrown away, and a gap
+ * between the base and `from..to` is built too, so the file stays one unbroken run.
  */
 export function tesToBuild(from: number, to: number, base?: { from: number; to: number }): number[] {
   const lo = Math.min(from, base?.from ?? from);
+  const hi = Math.max(to, base?.to ?? to);
   const tes: number[] = [];
-  for (let te = lo; te <= to; te++) if (!base || te < base.from || te > base.to) tes.push(te);
+  for (let te = lo; te <= hi; te++) if (!base || te < base.from || te > base.to) tes.push(te);
   return tes;
+}
+
+/**
+ * The order to build `tes` in: top down without a kept table; with one, outward from it (those above
+ * it bottom up, then those below it top down), so a cancel at any point leaves an unbroken run joined
+ * to the kept table for `partialTEs` to save.
+ */
+export function buildOrder(tes: number[], kept?: { from: number; to: number }): number[] {
+  const unique = [...new Set(tes)];
+  if (!kept) return unique.sort((a, b) => b - a);
+  const above = unique.filter(te => te > kept.to).sort((a, b) => a - b);
+  const below = unique.filter(te => te < kept.from).sort((a, b) => b - a);
+  return [...above, ...below];
 }
 
 /**
  * The start TEs a cancelled build's file can hold: one unbroken run of finished and kept ones, so a
  * later build extends it with no gap left inside (extendTable.ts treats `from..to` as complete). The
- * run around the kept table when there is one, else around the highest finished TE (builds run top
- * down). Null when it would add nothing the kept table doesn't already have.
+ * run around the kept table when there is one (builds run outward from it, `buildOrder`), else around
+ * the highest finished TE (builds run top down). Null when it would add nothing the kept table doesn't
+ * already have.
  */
 export function partialTEs(done: number[], kept: number[]): { from: number; to: number } | null {
   const have = new Set([...done, ...kept]);

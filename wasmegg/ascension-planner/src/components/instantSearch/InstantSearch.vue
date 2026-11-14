@@ -192,6 +192,7 @@
       </label>
     </div>
     <p v-if="store.tableNote" class="mt-2 text-[11px] text-amber-700">{{ store.tableNote }}</p>
+    <p v-for="w in store.rangeWarnings" :key="w" class="mt-2 text-[11px] text-amber-700">{{ w }}</p>
 
     <div
       v-if="store.tableStatus === 'ready' && store.headerWarnings.length"

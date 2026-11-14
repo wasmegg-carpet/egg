@@ -5,7 +5,7 @@
         v-if="store.status !== 'running'"
         type="button"
         class="px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-colors disabled:opacity-50 disabled:hover:bg-emerald-600"
-        :disabled="!store.minTEValid || !store.plan.tes.length"
+        :disabled="!store.rangeValid || !store.plan.tes.length"
         @click="store.startBuild()"
       >
         {{ store.plan.keep ? 'Extend lookup table' : 'Build lookup table' }}
@@ -152,7 +152,7 @@ import { computed } from 'vue';
 import { WEEK_HOURS } from '@/buildTable/cell';
 import { iconURL } from 'lib';
 import { isTestingEnvironment } from '@/lib/isTestingEnvironment';
-import { CHAIN_FINDER_TE_TO, useChainFinderStore } from '@/stores/chainFinder';
+import { useChainFinderStore } from '@/stores/chainFinder';
 
 const store = useChainFinderStore();
 
@@ -167,11 +167,12 @@ function handleWorkersKeydown(e: KeyboardEvent) {
 }
 const progress = computed(() => store.progress);
 
-/** The finished table's start TEs: the kept table's below the lowest asked for stay in it. */
+/** The finished table's start TEs: the kept table's outside the range asked for stay in it. */
 const rangeText = computed(() => {
   const keep = store.plan.keep;
   const from = Math.min(store.lowestTE, keep?.from ?? Infinity);
-  return `${from}–${CHAIN_FINDER_TE_TO}`;
+  const to = Math.max(store.highestTE, keep?.to ?? -Infinity);
+  return `${from}–${to}`;
 });
 const maxWorkers = navigator.hardwareConcurrency || 2;
 

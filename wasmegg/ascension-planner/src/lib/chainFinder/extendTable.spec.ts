@@ -8,7 +8,10 @@ import { currentColleggtibles } from '@/lib/instantSearch/colleggtibleChanges';
 import { LATEST_SIM_CHANGE } from '@/lib/instantSearch/simChanges';
 import type { TableHeader } from '@/lib/instantSearch/table';
 import { gzipBytes } from 'lib/planners/utils/gzip';
-import { extendProblems, partialTEs, readTableFile, tesToBuild } from './extendTable';
+import { buildOrder, extendProblems, partialTEs, readTableFile, tesToBuild } from './extendTable';
+
+/** a..b inclusive. */
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 const COMMON = ['quantum-metronome-4-0', 'interstellar-compass-4-0', 'gusset-4-0', 'lunar-totem-4-3'];
 
@@ -77,6 +80,38 @@ describe('tesToBuild', () => {
 
   it('builds everything without a base', () => {
     expect(tesToBuild(50, 489)).toHaveLength(440);
+    expect(tesToBuild(200, 350)).toHaveLength(151);
+  });
+
+  it("extends upward, keeping the base's TEs above the highest asked for", () => {
+    expect(tesToBuild(200, 360, { from: 200, to: 350 })).toEqual(range(351, 360));
+    expect(tesToBuild(200, 300, { from: 200, to: 350 })).toEqual([]);
+  });
+
+  it('extends both ways at once', () => {
+    expect(tesToBuild(195, 352, { from: 200, to: 350 })).toEqual([...range(195, 199), 351, 352]);
+  });
+
+  it('fills a gap between the base and the range asked for', () => {
+    expect(tesToBuild(400, 410, { from: 200, to: 350 })).toEqual(range(351, 410));
+    expect(tesToBuild(120, 130, { from: 200, to: 350 })).toEqual(range(120, 199));
+  });
+});
+
+describe('buildOrder', () => {
+  it('runs top down without a kept table', () => {
+    expect(buildOrder([3, 1, 2, 2])).toEqual([3, 2, 1]);
+  });
+
+  it('runs outward from a kept table: above bottom up, then below top down', () => {
+    expect(buildOrder([195, 196, 351, 352, 353], { from: 200, to: 350 })).toEqual([351, 352, 353, 196, 195]);
+  });
+
+  it('leaves an unbroken run joined to the kept table whenever it stops', () => {
+    const order = buildOrder(tesToBuild(190, 360, { from: 200, to: 350 }), { from: 200, to: 350 });
+    for (let n = 1; n <= order.length; n++)
+      expect(partialTEs(order.slice(0, n), range(200, 350))).not.toBeNull();
+    expect(partialTEs(range(351, 355), range(200, 350))).toEqual({ from: 200, to: 355 });
   });
 });
 
@@ -95,7 +130,6 @@ describe('readTableFile', () => {
 });
 
 describe('partialTEs', () => {
-  const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
   it('keeps the unbroken run down from the top, leaving out TEs finished below a gap', () => {
     // 489..470 done, 469 still running, 468 finished early.

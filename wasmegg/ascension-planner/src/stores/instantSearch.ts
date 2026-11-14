@@ -15,6 +15,7 @@ import {
   type FindOptions,
   type FoundRoutes,
   type Route,
+  USEFUL_STOP_MAX,
 } from '@/lib/instantSearch/routeFinder';
 import { chainGaps, type SpaceFilter } from '@/lib/instantSearch/chainSpace';
 import { avoidBlocked, hoursBlocked } from '@/lib/instantSearch/blockedTime';
@@ -593,14 +594,48 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     const canContinue = fromSave.value && !!current.value;
     const row = rowFor(te);
     if (!Number.isInteger(te) || (!canContinue && (row < h.from || row > h.to)))
-      return row === te
-        ? `The table covers start TEs ${h.from}–${h.to}; you start at ${te}.`
-        : `The table covers start TEs ${h.from}–${h.to}; you start at ${te}, which your earnings artifacts search as ${row}.`;
+      return (
+        (row === te
+          ? `The table covers start TEs ${h.from}–${h.to}; you start at ${te}.`
+          : `The table covers start TEs ${h.from}–${h.to}; you start at ${te}, which your earnings artifacts search as ${row}.`) +
+        ' Extend it to cover that in the Table Builder.'
+      );
     if (mode.value === 'te' && !(Number.isInteger(targetTE.value) && targetTE.value > te && targetTE.value <= MAX_TE))
       return `Pick a target TE above ${te}, up to ${MAX_TE}.`;
     if (mode.value === 'date' && !(deadline.value > startAt(Date.now() / 1000)))
       return fromSave.value ? 'Pick a date in the future.' : 'Pick a date after the hypothetical start.';
     return '';
+  });
+
+  /**
+   * What a table built over part of the start TEs (the Table Builder's lowest and highest) leaves out of
+   * this search, one sentence each: it still runs. No ascension can start above the table's top row, so
+   * a target above it is reached by one long last ascension from there or below. Stops above
+   * `usefulStopMax` are never taken anyway, so a top at or past it loses nothing.
+   */
+  const rangeWarnings = computed<string[]>(() => {
+    const h = header.value;
+    if (!h || problem.value) return [];
+    const shift = earningsShift.value;
+    // The highest TE of the player's whose row is in the table (rowFor(te) <= h.to).
+    const top = Math.floor(h.to + shift);
+    const target = mode.value === 'date' ? MAX_TE : targetTE.value;
+    const useful = USEFUL_STOP_MAX + Math.ceil(shift);
+    const warnings: string[] = [];
+    const lastStop = Math.min(useful, target - 1);
+    const extend = "Raise the table's highest start TE in the Table Builder to search them.";
+    if (startTE.value > top && target > startTE.value)
+      warnings.push(
+        `This table's start TEs stop at ${top} and you're at ${startTE.value}, so routes can only continue your ` +
+          `current ascension to ${target} TE: any route that ascends again on the way isn't searched. ${extend}`
+      );
+    else if (target > top + 1 && top < lastStop)
+      warnings.push(
+        `This table's start TEs stop at ${top}, so no ascension in these routes starts above ${top}: the last one ` +
+          `runs from ${top} or below all the way to ${target} TE. Routes that ascend again between ${top + 1} and ` +
+          `${lastStop} aren't searched and could be faster. ${extend}`
+      );
+    return warnings;
   });
 
   /** Simulating the rest of a part-done build in the ascension in progress, before a search. */
@@ -914,6 +949,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     artifactsChanged,
     deadline,
     problem,
+    rangeWarnings,
     loadTable,
     loadFile,
     search,

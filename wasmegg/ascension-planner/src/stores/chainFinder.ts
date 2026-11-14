@@ -28,12 +28,16 @@ import { fetchTableBytes, fetchTableHeader } from '@/lib/instantSearch/tableFetc
 import { extendProblems, readTableFile, tesToBuild, type BaseTable } from '@/lib/chainFinder/extendTable';
 import { deliveryOptions, CHAIN_FINDER_DELIVERY_FAMILIES } from '@/lib/chainFinder/deliveryArtifacts';
 import type { TableHeader } from '@/lib/instantSearch/table';
+import { USEFUL_STOP_MAX } from '@/lib/instantSearch/routeFinder';
 
 /** The start TEs a table covers by default: the CLI's with `--to 489` (490 is the last target, not a start). */
 export const CHAIN_FINDER_TE_FROM = 120;
 export const CHAIN_FINDER_TE_TO = 489;
 /** The lowest start TE the Table Builder builds from. */
 export const CHAIN_FINDER_MIN_TE = 50;
+/** The Table Builder's default highest start TE: Chain Finder never stops to ascend above it
+ *  (routeFinder.ts USEFUL_STOP_MAX), so higher rows only serve routes that start above it. */
+export const CHAIN_FINDER_DEFAULT_TOP = USEFUL_STOP_MAX;
 
 /** The table to extend: a file the player picked, or the store's table for the picks. */
 export type BaseChoice =
@@ -53,9 +57,10 @@ export function defaultWorkerCount(): number {
 export const useChainFinderStore = defineStore('chainFinder', () => {
   const deliverySelection = ref<ChainFinderDeliverySelection>(defaultDeliverySelection());
   const workerCount = ref(defaultWorkerCount());
-  /** The lowest start TE to build, CHAIN_FINDER_MIN_TE..CHAIN_FINDER_TE_TO: up to the top, for a table
-   *  of a few rows that is extended later. */
+  /** The lowest and highest start TEs to build, CHAIN_FINDER_MIN_TE..CHAIN_FINDER_TE_TO: a part of the
+   *  range (e.g. the TEs a player will pass this year), extended either way later. */
   const minTE = ref(CHAIN_FINDER_TE_FROM);
+  const maxTE = ref(CHAIN_FINDER_DEFAULT_TOP);
   /** A table file the player picked to extend, and what went wrong reading the last one. */
   const uploaded = shallowRef<BaseTable | null>(null);
   const uploadError = ref('');
@@ -151,21 +156,22 @@ export const useChainFinderStore = defineStore('chainFinder', () => {
     return b ? extendProblems(baseHeader(b), chainFinderDeliveryIds(deliverySelection.value), siloMode.value) : [];
   });
 
-  /** Whether the lowest start TE is a whole number in range: the input can hold anything while it's
-   *  typed in, and a build waits until it is. */
-  const minTEValid = computed(() => {
-    const n = minTE.value;
-    return Number.isInteger(n) && n >= CHAIN_FINDER_MIN_TE && n <= CHAIN_FINDER_TE_TO;
-  });
-  /** The lowest start TE, or the default while the input isn't valid. */
-  const lowestTE = computed(() => (minTEValid.value ? minTE.value : CHAIN_FINDER_TE_FROM));
+  /** Whether the lowest and highest start TEs are whole numbers in range, lowest ≤ highest: the inputs
+   *  can hold anything while they're typed in, and a build waits until they are. */
+  const inRange = (n: number) => Number.isInteger(n) && n >= CHAIN_FINDER_MIN_TE && n <= CHAIN_FINDER_TE_TO;
+  const minTEValid = computed(() => inRange(minTE.value));
+  const maxTEValid = computed(() => inRange(maxTE.value));
+  const rangeValid = computed(() => minTEValid.value && maxTEValid.value && minTE.value <= maxTE.value);
+  /** The lowest and highest start TEs, or the defaults while the inputs aren't valid. */
+  const lowestTE = computed(() => (rangeValid.value ? minTE.value : CHAIN_FINDER_TE_FROM));
+  const highestTE = computed(() => (rangeValid.value ? maxTE.value : CHAIN_FINDER_DEFAULT_TOP));
 
   /** The start TEs a build would simulate now, and the base range it keeps (null: none). */
   const plan = computed(() => {
     const b = base.value;
     const keep = b && !baseProblems.value.length ? baseHeader(b) : null;
     return {
-      tes: tesToBuild(lowestTE.value, CHAIN_FINDER_TE_TO, keep ?? undefined),
+      tes: tesToBuild(lowestTE.value, highestTE.value, keep ?? undefined),
       keep: keep ? { from: keep.from, to: keep.to } : null,
     };
   });
@@ -225,8 +231,9 @@ export const useChainFinderStore = defineStore('chainFinder', () => {
     const silo = siloMode.value;
     const deliveryIds = chainFinderDeliveryIds(selection);
     const choice = baseProblems.value.length ? null : base.value;
-    if (!minTEValid.value) return;
+    if (!rangeValid.value) return;
     const lowest = lowestTE.value;
+    const highest = highestTE.value;
     controller = new AbortController();
     const signal = controller.signal;
     status.value = 'running';
@@ -247,8 +254,8 @@ export const useChainFinderStore = defineStore('chainFinder', () => {
         keep = { name: choice.entry.name, source: 'store', ...read };
       }
       preparing.value = '';
-      const tes = tesToBuild(lowest, CHAIN_FINDER_TE_TO, keep?.header);
-      if (!tes.length) throw new Error(`${keep?.name ?? 'the table'} already covers start TE ${lowest}–${CHAIN_FINDER_TE_TO}`);
+      const tes = tesToBuild(lowest, highest, keep?.header);
+      if (!tes.length) throw new Error(`${keep?.name ?? 'the table'} already covers start TE ${lowest}–${highest}`);
       const built = await buildChainFinderTable({
         deliveryIds,
         deferForEarnings: silo,
@@ -288,8 +295,12 @@ export const useChainFinderStore = defineStore('chainFinder', () => {
 
   return {
     minTE,
+    maxTE,
     minTEValid,
+    maxTEValid,
+    rangeValid,
     lowestTE,
+    highestTE,
     uploaded,
     uploadError,
     extendStored,

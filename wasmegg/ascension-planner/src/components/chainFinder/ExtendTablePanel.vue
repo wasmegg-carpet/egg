@@ -11,7 +11,21 @@
           class="w-16 px-2 py-1 rounded-lg border border-slate-200 text-xs"
           :class="store.minTEValid ? '' : 'border-red-300'"
         />
-        <span class="text-slate-400">{{ CHAIN_FINDER_MIN_TE }}–{{ CHAIN_FINDER_TE_TO }}, usually {{ CHAIN_FINDER_TE_FROM }}</span>
+      </label>
+
+      <label class="flex items-center gap-2 text-slate-600">
+        Highest
+        <input
+          v-model.number="store.maxTE"
+          type="number"
+          :min="CHAIN_FINDER_MIN_TE"
+          :max="CHAIN_FINDER_TE_TO"
+          class="w-16 px-2 py-1 rounded-lg border border-slate-200 text-xs"
+          :class="store.maxTEValid && store.rangeValid ? '' : 'border-red-300'"
+        />
+        <span class="text-slate-400"
+          >{{ CHAIN_FINDER_MIN_TE }}–{{ CHAIN_FINDER_TE_TO }}, usually {{ CHAIN_FINDER_TE_FROM }}–{{ CHAIN_FINDER_DEFAULT_TOP }}</span
+        >
       </label>
 
       <label v-if="store.existing && !store.uploaded" class="flex items-center gap-2 text-slate-600">
@@ -28,8 +42,16 @@
       </label>
     </div>
 
-    <p v-if="!store.minTEValid" class="text-red-600">
-      Lowest start TE must be a whole number from {{ CHAIN_FINDER_MIN_TE }} to {{ CHAIN_FINDER_TE_TO }}.
+    <p v-if="!store.rangeValid" class="text-red-600">
+      Start TEs must be whole numbers from {{ CHAIN_FINDER_MIN_TE }} to {{ CHAIN_FINDER_TE_TO }}, lowest no higher than
+      highest.
+    </p>
+    <p v-else class="text-slate-500">
+      Start TEs above {{ CHAIN_FINDER_DEFAULT_TOP }} are <strong>only</strong> needed for a route whose
+      <strong>start</strong> TE is above {{ CHAIN_FINDER_DEFAULT_TOP }}. A route that starts at or below
+      {{ CHAIN_FINDER_DEFAULT_TOP }} still plans all the way to 490 TE, since Chain Finder never stops to ascend above
+      {{ CHAIN_FINDER_DEFAULT_TOP }}. No player can pass {{ CHAIN_FINDER_DEFAULT_TOP }} TE before mid-July 2027, so
+      building higher before then is wasted time. Any table extends later in either direction.
     </p>
 
     <div v-if="store.uploaded" class="flex items-center gap-2 text-slate-700">
@@ -49,7 +71,7 @@
         </ul>
       </div>
       <p v-else-if="!store.plan.tes.length" class="text-emerald-700">
-        It already covers start TE {{ store.lowestTE }}–{{ CHAIN_FINDER_TE_TO }}: nothing to build.
+        It already covers start TE {{ store.lowestTE }}–{{ store.highestTE }}: nothing to build.
       </p>
       <p v-else class="text-emerald-700">{{ planText }}</p>
     </template>
@@ -59,6 +81,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
+  CHAIN_FINDER_DEFAULT_TOP,
   CHAIN_FINDER_MIN_TE,
   CHAIN_FINDER_TE_FROM,
   CHAIN_FINDER_TE_TO,
@@ -75,7 +98,7 @@ function pick(e: Event) {
   input.value = '';
 }
 
-/** e.g. "Keeps start TE 120–489 and builds 100–119 (20 start TEs)." */
+/** e.g. "Keeps start TE 200–350 and builds 190–199 and 351–400 (60 start TEs)." */
 const planText = computed(() => {
   const { tes, keep } = store.plan;
   if (!keep) return '';
