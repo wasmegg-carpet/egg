@@ -41,31 +41,50 @@ export function packTable(header: Record<string, unknown> & { from: number; to: 
   return bytes;
 }
 
-/** The packed file read back the way their `readTable` reads it: every cell must come back exact. */
-export function checkPacked(bytes: Uint8Array, cells: Cell[]): void {
+/** A packed file's header and every cell in it, as `packTable` was given them (empty slots dropped). */
+export function unpackTable(bytes: Uint8Array): { header: Record<string, unknown> & { from: number; to: number; slots: number }; cells: Cell[] } {
+  if (bytes.byteLength < 4) throw new Error('that file is not a precomputed table');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const len = view.getUint32(0, true);
-  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + len)));
+  let header;
+  try {
+    header = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + len)));
+  } catch {
+    throw new Error('that file is not a precomputed table');
+  }
+  if (!header || !Number.isInteger(header.from) || !Number.isInteger(header.to) || !Number.isInteger(header.slots))
+    throw new Error('that file is not a precomputed table');
   const start = Math.ceil((4 + len) / 8) * 8;
   const expected = start + (header.to - header.from + 1) * WEEK_HOURS * header.slots * FIELDS * 8;
-  if (bytes.byteLength !== expected) throw new Error(`packed ${bytes.byteLength} bytes, header says ${expected}`);
+  if (bytes.byteLength !== expected) throw new Error(`the table is incomplete: ${bytes.byteLength} bytes, its header says ${expected}`);
   const body = new Float64Array(bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + bytes.byteLength));
-  for (const c of cells) {
-    const key = (c.te - header.from) * WEEK_HOURS + c.h;
-    const back: BuildParams[] = [];
-    for (let i = 0; i < header.slots; i++) {
-      const at = (key * header.slots + i) * FIELDS;
-      const flags = body[at];
-      if (!flags) continue;
-      back.push({
-        sales: flags % 8,
-        tier13: flags >= 8,
-        waitStart: body[at + 1],
-        saleEnd: body[at + 2],
-        peakELR: body[at + 3],
-        delivered: Array.from(body.subarray(at + 4, at + 4 + EGG_ORDER.length)),
-      });
+  const cells: Cell[] = [];
+  for (let te = header.from; te <= header.to; te++)
+    for (let h = 0; h < WEEK_HOURS; h++) {
+      const key = (te - header.from) * WEEK_HOURS + h;
+      const builds: BuildParams[] = [];
+      for (let i = 0; i < header.slots; i++) {
+        const at = (key * header.slots + i) * FIELDS;
+        const flags = body[at];
+        if (!flags) continue;
+        builds.push({
+          sales: flags % 8,
+          tier13: flags >= 8,
+          waitStart: body[at + 1],
+          saleEnd: body[at + 2],
+          peakELR: body[at + 3],
+          delivered: Array.from(body.subarray(at + 4, at + 4 + EGG_ORDER.length)),
+        });
+      }
+      cells.push({ te, h, builds });
     }
-    if (JSON.stringify(back) !== JSON.stringify(c.builds)) throw new Error(`cell TE ${c.te} hour ${c.h} did not read back`);
-  }
+  return { header, cells };
+}
+
+/** The packed file read back the way their `readTable` reads it: every cell must come back exact. */
+export function checkPacked(bytes: Uint8Array, cells: Cell[]): void {
+  const back = new Map(unpackTable(bytes).cells.map(c => [c.te * WEEK_HOURS + c.h, c.builds]));
+  for (const c of cells)
+    if (JSON.stringify(back.get(c.te * WEEK_HOURS + c.h)) !== JSON.stringify(c.builds))
+      throw new Error(`cell TE ${c.te} hour ${c.h} did not read back`);
 }

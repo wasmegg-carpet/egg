@@ -62,6 +62,34 @@ describe('runContinueCurrent: targetTE mode (regression — unaffected by the ta
   });
 });
 
+describe('runContinueCurrent: the plan carries the farm it starts from', () => {
+  test("its start action holds the farm, so a saved plan replays from it", () => {
+    const state = fakeState({
+      currentEgg: 'kindness',
+      researchLevels: { comfy_nests: 50 },
+      habIds: [18, 18, null, null],
+      vehicles: [{ vehicleId: 11, trainLength: 5 }],
+      siloCount: 4,
+      bankValue: 123,
+      lastStepTime: 1_793_000_000,
+    });
+    const { actions } = runContinueCurrent(state, fakeContext(), 0, PEAK_ELR, 3);
+    const start = actions[0];
+    expect(start.type).toBe('start_ascension');
+    expect(start.type === 'start_ascension' && start.payload.initialFarmState).toMatchObject({
+      eggType: 54,
+      commonResearches: { comfy_nests: 50 },
+      habs: [18, 18, null, null],
+      vehicles: [{ vehicleId: 11, trainLength: 5 }],
+      numSilos: 4,
+      cashEarned: 123,
+      cashSpent: 0,
+      // Eggs laid before the plan are already counted: its farm clock starts at the plan's.
+      lastStepTime: 0,
+    });
+  });
+});
+
 describe('runContinueCurrent: targetEndTime (deadline) mode', () => {
   test('never overruns the deadline', () => {
     const state = fakeState({ eggsDelivered: {} as Record<VirtueEgg, number>, lastStepTime: 0 });

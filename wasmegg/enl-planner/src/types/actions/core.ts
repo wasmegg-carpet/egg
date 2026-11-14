@@ -100,6 +100,8 @@ export interface ActionPayloadMap {
 export interface CalculationsSnapshot extends BaseCalculationsSnapshot {
   prophecyEggs: number;
   fuelTankAmounts: Record<FuelEgg, number>;
+  currentEgg: 'enlightenment';
+  eggsDelivered: Record<string, number>;
   fullOutputs?: CalculationsFullOutputs;
 }
 

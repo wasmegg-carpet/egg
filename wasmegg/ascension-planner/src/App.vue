@@ -120,7 +120,17 @@
 
             <!-- Plan Library Section -->
             <div v-if="playerId && plannerTab === 'manual'" class="max-w-6xl mx-auto mt-6">
-              <PlanLibrary @plan-loaded="handlePlanLoaded" />
+              <PlanLibrary :import-special-file="importAutoPlan" @plan-loaded="handlePlanLoaded">
+                <template #dialogs>
+                  <AutoPlanImportDialog
+                    v-if="showAutoPlanDialog"
+                    :plan-name="autoPlanName"
+                    :ascension-count="autoPlanAscensionCount"
+                    @resolve="resolveAutoPlan"
+                    @cancel="cancelAutoPlan"
+                  />
+                </template>
+              </PlanLibrary>
             </div>
 
             <!-- Ascension Action Buttons -->
@@ -358,36 +368,19 @@
         </div>
       </div>
 
-      <!-- Active Event Slide Toggle (Earnings Boost) -->
+      <!-- 2x Earnings Event: status plus a wait for its next start or end -->
       <div v-if="plannerTab === 'manual'" class="mt-4 flex flex-col items-center gap-2">
-        <div
-          class="w-full max-w-sm bg-gradient-to-r from-orange-50/80 via-white to-amber-50/80 rounded-2xl p-4 border border-orange-100/50 shadow-sm relative overflow-hidden flex items-center justify-between transition-all duration-300"
-        >
-          <div class="flex items-center gap-2 relative z-10">
-            <div class="flex flex-col gap-0.5 text-left">
-              <div class="flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></div>
-                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none"
-                  >Monday 2x Earnings Event</span
-                >
-              </div>
-              <span class="text-[11px] font-black text-orange-600 uppercase tracking-tighter">
-                {{ isEarningsBoostActive ? 'Active' : 'Inactive' }}
-              </span>
-            </div>
-          </div>
-
-          <button
-            class="relative inline-flex h-5 w-10 items-center rounded-full transition-all duration-300 focus:outline-none shadow-inner"
-            :class="isEarningsBoostActive ? 'bg-orange-500' : 'bg-slate-200'"
-            @click="handleToggleEarningsEvent"
-          >
-            <span
-              class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-all duration-300 shadow-sm"
-              :class="isEarningsBoostActive ? 'translate-x-[22px]' : 'translate-x-1'"
-            />
-          </button>
-        </div>
+        <EventEdgeWaitCard
+          class="w-full max-w-sm"
+          label="Monday 2x Earnings Event"
+          event-name="2x Earnings"
+          active-text="Active"
+          tone="orange"
+          :is-active="isEarningsBoostActive"
+          :seconds-until-change="isEarningsBoostActive ? secondsUntilEarningsBoostEnd : secondsUntilNextEarningsBoost"
+          :tooltip="earningsEventTooltip"
+          @wait="handleEarningsEventWait"
+        />
       </div>
 
       <div v-if="loading" class="text-center py-4 text-gray-600">Loading player data...</div>
@@ -463,42 +456,7 @@
         <TableBuilder />
       </div>
 
-      <!-- Undo Confirmation Dialog -->
-      <UndoConfirmationDialog
-        v-if="undoAction"
-        :action="undoAction"
-        :dependents-a="undoDependentsA"
-        :dependents-b="undoDependentsB"
-        @confirm="executeUndo"
-        @cancel="cancelUndo"
-      />
-
-      <!-- Clear All Confirmation Dialog -->
-      <ConfirmationDialog
-        v-if="showClearAllConfirmation"
-        title="Clear All Actions"
-        message="Are you sure you want to clear all actions? This cannot be undone."
-        confirm-label="Clear All"
-        @confirm="executeClearAll"
-        @cancel="showClearAllConfirmation = false"
-      />
-
-      <!-- Unsaved Changes Protection Dialog -->
-      <ConfirmationDialog
-        v-if="showUnsavedConfirm"
-        title="Unsaved Changes"
-        message="You have unsaved changes in your current plan. If you continue, these changes will be lost. Would you like to save before proceeding?"
-        confirm-label="Continue Without Saving"
-        variant="danger"
-        @confirm="
-          showUnsavedConfirm = false;
-          pendingAction?.();
-        "
-        @cancel="
-          showUnsavedConfirm = false;
-          pendingAction = null;
-        "
-      />
+      <PlannerDialogs :dialogs="dialogs" />
 
       <!-- Plan Selection Dialog (for Reconcile) -->
       <PlanSelectionDialog
@@ -554,11 +512,16 @@
       />
       <FloatingStats v-if="plannerTab === 'manual'" />
       <FloatingNotes v-if="plannerTab === 'manual'" />
+      <PlannerToast />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { usePlannerPageStatus } from 'lib/planners/composables/usePlannerPageStatus';
+import { usePlanDialogs } from 'lib/planners/composables/usePlanDialogs';
+import { usePlanSaving } from 'lib/planners/composables/usePlanSaving';
+import PlannerDialogs from 'ui/components/planners/PlannerDialogs.vue';
 import { ref, computed, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import TheNavBar from 'ui/components/NavBar.vue';
@@ -566,7 +529,7 @@ import { getSavedPlayerID, savePlayerID, requestFirstContact, resolveColleggtibl
 import ThePlayerIdForm from 'ui/components/PlayerIdForm.vue';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useUIStore, tabFromSearch, searchWithTab, type PlannerTab } from '@/stores/ui';
 import { useFuelTankStore } from '@/stores/fuelTank';
 import { useTruthEggsStore } from '@/stores/truthEggs';
@@ -576,39 +539,39 @@ import { useNotesStore } from 'lib/planners/stores/notes';
 import CustomEggWatcher from 'ui/components/planners/CustomEggWatcher.vue';
 import ActionHistory from '@/components/ActionHistory.vue';
 import AvailableActions from '@/components/AvailableActions.vue';
-import UndoConfirmationDialog from '@/components/UndoConfirmationDialog.vue';
-import PlanFinalSummary from '@/components/PlanFinalSummary.vue';
+import PlanFinalSummary from 'ui/components/planners/PlanFinalSummary.vue';
 import ContinuityDialog from '@/components/ContinuityDialog.vue';
-import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
-import FloatingStats from '@/components/FloatingStats.vue';
+import FloatingStats from 'ui/components/planners/FloatingStats.vue';
 import FloatingNotes from 'ui/components/planners/FloatingNotes.vue';
+import PlannerToast from 'ui/components/planners/PlannerToast.vue';
 import WarningDialog from 'ui/components/planners/WarningDialog.vue';
-import RecalculationOverlay from '@/components/RecalculationOverlay.vue';
+import RecalculationOverlay from 'ui/components/planners/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
-import PlanLibrary from '@/components/PlanLibrary.vue';
-import PlanSelectionDialog from '@/components/PlanSelectionDialog.vue';
+import PlanLibrary from 'ui/components/planners/PlanLibrary.vue';
+import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
+import { useAutoPlanImport } from '@/composables/useAutoPlanImport';
+import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
 import AutomaticPlanner from '@/components/auto/AutomaticPlanner.vue';
 // The Table Builder lives in components/chainFinder/ and the Chain Finder in components/instantSearch/
 // (their names before the tabs were renamed).
 import TableBuilder from '@/components/chainFinder/ChainFinder.vue';
 import ChainFinder from '@/components/instantSearch/InstantSearch.vue';
-import { useSalesStore } from 'lib/planners/stores/sales';
 import { useInstantSearchStore } from '@/stores/instantSearch';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { readHandoff, searchWithoutHandoff } from '@/lib/instantSearch/autoPlannerHandoff';
 import { hashID, saveMetadata, loadMetadata } from '@/lib/storage/db';
-import { useActionExecutor } from '@/composables/useActionExecutor';
+import { useEventWaits } from 'lib/planners/composables/usePlannerEventWaits';
+import EventEdgeWaitCard from 'ui/components/planners/actions/EventEdgeWaitCard.vue';
+import { formatDuration } from 'lib/planners/format';
 import { useTablePrefetch } from '@/composables/useTablePrefetch';
-import { usePersistence } from '@/composables/usePersistence';
-import { compactActionHistory } from '@/composables/useCompactActionHistory';
-import { generateActionId } from '@/types';
-import { computeDependencies } from '@/lib/actions/executor';
-import { restoreFromSnapshot } from '@/lib/actions/snapshot';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { usePersistence } from 'lib/planners/composables/usePersistence';
+import { compactActionHistory } from 'lib/planners/composables/useCompactActionHistory';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 import type { Action, VirtueEgg } from '@/types';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
-import { getArtifact, getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import { getArtifactLoadoutFromBackup } from '@/lib/artifacts';
+import { detectArtifactSet } from '@/lib/artifacts/detectSet';
 import {
   initStartFromScratch,
   initPlanFuture,
@@ -628,16 +591,21 @@ const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const uiStore = useUIStore();
 const { plannerTab, isHeaderCollapsed, isFooterCollapsed, loading, error } = storeToRefs(uiStore);
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
 const eventsStore = useEventsStore();
-const salesStore = useSalesStore();
 const chainFinderStore = useInstantSearchStore();
 const autoPlannerStore = useAutoPlannerStore();
 
 const notesStore = useNotesStore();
-const { prepareExecution, completeExecution } = useActionExecutor();
+const {
+  toggleEarningsBoost: handleEarningsEventWait,
+  secondsUntilNextEarningsBoost,
+  secondsUntilEarningsBoostEnd,
+} = useEventWaits();
+const { showAutoPlanDialog, autoPlanName, autoPlanAscensionCount, importAutoPlan, resolveAutoPlan, cancelAutoPlan } =
+  useAutoPlanImport();
 const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = usePersistence();
 
 // The Chain Finder's tables, fetched in the background once a save is loaded (composables/
@@ -645,88 +613,13 @@ const { partitionHash, saveActiveDraft, initPersistence, broadcastPresence } = u
 useTablePrefetch();
 
 const isEarningsBoostActive = computed(() => actionsStore.effectiveSnapshot?.earningsBoost?.active ?? false);
-
-const lastBackupFormatted = computed(() => {
-  const approxTime = initialStateStore.rawBackup?.approxTime;
-  if (approxTime == null) return 'Unknown';
-  const date = new Date(approxTime * 1000);
-
-  return date.toLocaleTimeString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-});
-
-const lastBackupAge = computed(() => {
-  const approxTime = initialStateStore.rawBackup?.approxTime;
-  if (approxTime == null) return '';
-  const now = Date.now() / 1000;
-  const diff = Math.max(0, now - approxTime);
-
-  if (diff < 60) return 'Just now';
-
-  const minutes = Math.floor(diff / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h${remainingMinutes}m ago`;
-});
-
-const pageTitle = computed(() => {
-  const name = initialStateStore.rawBackup?.userName;
-  return name ? `Ascension Planner ${name}` : 'Ascension Planner';
-});
-
-watch(
-  pageTitle,
-  newTitle => {
-    document.title = newTitle;
-  },
-  { immediate: true }
+const earningsEventTooltip = computed(() =>
+  isEarningsBoostActive.value
+    ? `2x Earnings ends Tuesday at +0. Click to wait ${formatDuration(secondsUntilEarningsBoostEnd.value)} until it ends.`
+    : `Next 2x Earnings starts Monday at +0. Click to wait ${formatDuration(secondsUntilNextEarningsBoost.value)} until it starts.`
 );
 
-function handleToggleEarningsEvent() {
-  const beforeSnapshot = prepareExecution();
-  const currentlyActive = beforeSnapshot.earningsBoost.active;
-
-  // Find the multiplier from the event store if turning ON
-  let multiplier = 2;
-  if (!currentlyActive) {
-    const event = eventsStore.getActiveEvents(initialStateStore.isUltra).find(e => e.type === 'earnings-boost');
-    if (event) multiplier = event.multiplier;
-  } else {
-    multiplier = 1;
-  }
-
-  const payload = {
-    active: !currentlyActive,
-    multiplier,
-  };
-
-  // Update store state
-  salesStore.setEarningsBoost(payload.active, payload.multiplier);
-
-  completeExecution(
-    {
-      id: generateActionId(),
-      timestamp: Date.now(),
-      type: 'toggle_earnings_boost',
-      payload,
-      cost: 0,
-      dependsOn: computeDependencies(
-        'toggle_earnings_boost',
-        payload,
-        actionsStore.actionsBeforeInsertion,
-        actionsStore.initialSnapshot.researchLevels
-      ),
-    },
-    beforeSnapshot
-  );
-}
+const { lastBackupFormatted, lastBackupAge, pageTitle } = usePlannerPageStatus();
 
 onMounted(async () => {
   eventsStore.fetchEvents();
@@ -829,73 +722,15 @@ const totalCost = computed(() => actionsStore.totalCost);
 const actionCount = computed(() => actionsStore.actionCount);
 
 // Modal state
-const undoAction = ref<Action | null>(null);
-const undoDependentsA = ref<Action[]>([]);
-const undoDependentsB = ref<Action[]>([]);
-const showClearAllConfirmation = ref(false);
 
 const showReconcileLibraryModal = ref(false);
-const showUnsavedConfirm = ref(false);
 const showArtifactSetConfirm = ref(false);
-const pendingAction = ref<(() => void) | null>(null);
 
-/**
- * Confirm unsaved changes before potentially destructive actions.
- */
-function confirmUnsavedChanges(action: () => void) {
-  if (actionsStore.isDirty) {
-    pendingAction.value = action;
-    showUnsavedConfirm.value = true;
-  } else {
-    action();
-  }
-}
+const dialogs = usePlanDialogs();
+const { confirmUnsavedChanges, showUndoConfirmation, handleClearAll } = dialogs;
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function showUndoConfirmation(action: Action, options?: { skipConfirmation: boolean }) {
-  const validationA = actionsStore.prepareUndo(action.id);
-  const validationB = actionsStore.prepareUndoUntilShift(action.id);
-
-  undoAction.value = action;
-  undoDependentsA.value = validationA.dependentActions;
-  undoDependentsB.value = validationB.dependentActions;
-
-  if (options?.skipConfirmation) {
-    executeUndo('truncate');
-  }
-}
-
-function cancelUndo() {
-  undoAction.value = null;
-  undoDependentsA.value = [];
-  undoDependentsB.value = [];
-}
-
-function executeUndo(mode: 'dependents' | 'truncate' = 'dependents') {
-  if (!undoAction.value) return;
-
-  actionsStore.executeUndo(undoAction.value.id, mode, snapshot => {
-    // Restore stores to the snapshot of the last remaining action
-    restoreFromSnapshot(snapshot);
-  });
-
-  cancelUndo();
-}
-
-function handleClearAll(options?: { skipConfirmation: boolean }) {
-  if (options?.skipConfirmation) {
-    executeClearAll();
-  } else {
-    showClearAllConfirmation.value = true;
-  }
-}
-
-function executeClearAll() {
-  actionsStore.clearAll();
-  showClearAllConfirmation.value = false;
 }
 
 /**
@@ -1077,53 +912,6 @@ async function submitPlayerId(id: string) {
   }
 }
 
-/**
- * Try to determine which artifact set they have on based on stones.
- */
-function detectArtifactSet(loadout: import('@/lib/artifacts').EquippedArtifact[]): 'earnings' | 'elr' | null {
-  let totalSlots = 0;
-  const allStones: string[] = [];
-
-  for (const slot of loadout) {
-    if (slot.artifactId) {
-      const artifact = getArtifact(slot.artifactId);
-      if (artifact) {
-        totalSlots += artifact.slots;
-      }
-    }
-    for (const stoneId of slot.stones) {
-      if (stoneId) {
-        allStones.push(stoneId);
-      }
-    }
-  }
-
-  // 1. If their artifact set has at least 3 stone slots, we can try to determine which set it is
-  if (totalSlots < 3) {
-    return null;
-  }
-
-  // If no stones are equipped, we can't reliably determine the set
-  if (allStones.length === 0) {
-    return null;
-  }
-
-  const isLunar = (id: string) => id.startsWith('lunar-stone-');
-  const isELR = (id: string) => id.startsWith('quantum-stone-') || id.startsWith('tachyon-stone-');
-
-  // 2. If all the stones are lunar stones, it's the earnings set
-  if (allStones.every(isLunar)) {
-    return 'earnings';
-  }
-
-  // 3. If all the stones are either quantum or tachyon, it's the elr set
-  if (allStones.every(isELR)) {
-    return 'elr';
-  }
-
-  return null;
-}
-
 async function triggerQuickContinue() {
   if (!playerId.value) return;
   loading.value = true;
@@ -1200,41 +988,7 @@ async function planNextAscension() {
   }
 }
 
-async function saveCurrentPlan() {
-  if (!partitionHash.value) return;
-
-  if (actionsStore.activePlanId) {
-    const { safeImport } = await import('lib/planners/import');
-    const plans = await (await safeImport(() => import('@/lib/storage/db'))).loadLibraryPlans(partitionHash.value!);
-    const current = plans.find(p => p.id === actionsStore.activePlanId);
-    if (current) {
-      await actionsStore.savePlan(current.name, partitionHash.value);
-      return;
-    }
-  }
-
-  // Prompt for name if no active plan
-  const name = prompt('Enter a name for this plan:');
-  if (name) {
-    await actionsStore.savePlan(name, partitionHash.value);
-  }
-}
-
-async function savePlanAs() {
-  if (!partitionHash.value) return;
-  const name = prompt('Enter a new name for this plan:');
-  if (name) {
-    // Reset ID to trigger a new save
-    const tempId = actionsStore.activePlanId;
-    actionsStore.activePlanId = null;
-    try {
-      await actionsStore.savePlan(name, partitionHash.value);
-    } catch (err) {
-      actionsStore.activePlanId = tempId;
-      alert('Save failed: ' + err);
-    }
-  }
-}
+const { saveCurrentPlan, savePlanAs } = usePlanSaving(partitionHash);
 
 // Chevron icon component
 const ChevronIcon = {

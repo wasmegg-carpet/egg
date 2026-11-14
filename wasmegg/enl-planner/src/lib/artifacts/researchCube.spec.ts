@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { calculateArtifactModifiers } from './calculator';
 import { defaultResearchCube, researchCubeMultiplier, researchCubeOverride } from './researchCube';
-import { researchCostModifiersAt } from '@/engine/researchSale';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { researchCostModifiersAt } from 'lib/planners/engine/researchSale';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { useInitialStateStore } from '@/stores/initialState';
 
 const cube = (stones: (string | null)[], artifactId = 'puzzle-cube-4-3') => ({ enabled: true, artifactId, stones });

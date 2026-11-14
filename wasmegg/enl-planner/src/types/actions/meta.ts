@@ -151,6 +151,8 @@ export function createEmptySnapshot(): CalculationsSnapshot {
     siloTimeMinutes: 60,
     tankLevel: 0,
     fuelTankAmounts: createEmptyFuelAmounts(),
+    currentEgg: 'enlightenment',
+    eggsDelivered: {},
     population: 1,
     lastStepTime: 0,
     vehicles: [{ vehicleId: 0, trainLength: 1 }],

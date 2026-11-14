@@ -77,14 +77,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { iconURL } from 'lib';
-import VehicleActions from './actions/VehicleActions.vue';
-import HabActions from './actions/HabActions.vue';
-import ResearchActions from './actions/ResearchActions.vue';
+import VehicleActions from 'ui/components/planners/actions/VehicleActions.vue';
+import HabActions from 'ui/components/planners/actions/HabActions.vue';
+import ResearchActions from 'ui/components/planners/actions/ResearchActions.vue';
 import ShiftActions from './actions/ShiftActions.vue';
 import ArtifactActions from './actions/ArtifactActions.vue';
-import SiloActions from './actions/SiloActions.vue';
-import FuelTankActions from './actions/FuelTankActions.vue';
-import WaitActions from './actions/WaitActions.vue';
+import SiloActions from 'ui/components/planners/actions/SiloActions.vue';
+import FuelTankActions from 'ui/components/planners/actions/FuelTankActions.vue';
+import WaitActions from 'ui/components/planners/actions/WaitActions.vue';
 import RocketActions from './actions/RocketActions.vue';
 import InitialStateContainer from './containers/InitialStateContainer.vue';
 import { useActionsStore } from '@/stores/actions';

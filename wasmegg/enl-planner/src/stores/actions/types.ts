@@ -23,6 +23,9 @@ export interface ActionsState {
   isReconciling: boolean;
   reconciledBackupTime: number;
   reconcileFarmState: CurrentFarmState | null;
+  // Only ascension fills these in; shared store code clears them.
+  reconcileEggsDelivered: Record<string, number> | null;
+  reconcileTeEarned: Record<string, number> | null;
   showIncompleteOnly: boolean;
   // ID of the library plan currently being edited, or null if it's a new draft
   activePlanId: string | null;

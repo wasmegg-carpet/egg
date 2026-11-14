@@ -4,6 +4,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
+      '@planner': new URL('./src', import.meta.url).pathname,
     },
   },
   // vite.config.ts stamps the real commit; tests only need the global to exist.

@@ -1,13 +1,13 @@
 import { useTruthEggsStore, VIRTUE_TE_ORDER } from '@/stores/truthEggs';
 import { useInitialStateStore } from '@/stores/initialState';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { useActionsStore } from '@/stores/actions';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import { parseVirtueFarm, parseVirtueProgress } from '@/lib/backupVirtue';
 import { makeContinueState } from '@/auto/continueState';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
-import { computeSnapshot } from '@/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import type { VirtueEgg } from '@/types';
 
 /** Claimed TE for one egg, eggs delivered at that threshold's minimum (no partial progress, nothing
@@ -26,10 +26,10 @@ function writeClaimedTE(egg: VirtueEgg, count: number) {
 
 async function syncVirtueAndSnapshot(refreshSnapshot: boolean) {
   const truthEggsStore = useTruthEggsStore();
-  const virtueStore = useVirtueStore();
+  const planStore = usePlanStore();
 
-  virtueStore.setInitialTE(truthEggsStore.totalTE);
-  virtueStore.setTE(truthEggsStore.totalTE);
+  planStore.setInitialTE(truthEggsStore.totalTE);
+  planStore.setTE(truthEggsStore.totalTE);
 
   if (!refreshSnapshot) return;
   const baseState = createBaseEngineState(null);

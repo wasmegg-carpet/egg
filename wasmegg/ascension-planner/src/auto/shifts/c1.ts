@@ -2,7 +2,7 @@ import type { Action } from '@/types/actions/meta';
 import { createSimAction } from '@/types/actions/meta';
 import type { EngineState, SimulationContext, ShiftResult } from '../types';
 import { isTierUnlocked, getTiers, getResearchById } from '../../calculations/commonResearch';
-import { rankResearchByROI, buyWhilePassingCheck } from '../../calculations/researchRanking';
+import { rankResearchByROI, buyWhilePassingCheck } from 'lib/planners/calculations/researchRanking';
 import {
   runBuyResearchLevelByLevel,
   runTierUnlockMilestone,
@@ -10,7 +10,7 @@ import {
   createMilestoneShiftHelpers,
 } from './helpers/milestones';
 import { applyDecoratedAction } from './helpers/actionHelpers';
-import { computeSnapshot } from '../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { isResearchSaleActive, getNextSaleEnd } from 'lib/planners/events';
 import { getOptimalEarningsSet, activeSlots } from '@/lib/artifacts';
 import { socketEarningsStones } from '../loadout/resolve';

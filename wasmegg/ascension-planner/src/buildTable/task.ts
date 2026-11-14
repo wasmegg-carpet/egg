@@ -3,7 +3,7 @@
  * scripts/buildTable.ts's worker processes and the Table Builder's Web Workers; Node-free.
  */
 import { cteFromArtifacts } from 'lib/virtue';
-import { equippedArtifactsToLibArtifacts } from '@/lib/artifacts/utils';
+import { equippedArtifactsToLibArtifacts } from 'lib/planners/artifacts/utils';
 import { socketEarningsStones } from '@/auto/loadout';
 import type { SimulationContext } from '@/auto/types';
 import { buildsFrom, contextAt, k3StateOf, paramsOf, prefixAt, REFERENCE_WEEK, startStateAt, variantsFrom } from './cell';

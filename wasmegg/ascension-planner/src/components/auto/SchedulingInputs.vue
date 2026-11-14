@@ -65,11 +65,11 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAutoPlannerStore } from '@/stores/autoPlanner';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatUnixToDateInput, formatUnixToTimeInput } from '@/lib/format';
 
 const { startDate, startTime, timezone, startTimeOverride } = storeToRefs(useAutoPlannerStore());
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 // Live clock for the default "starts now" display.
 const nowMs = ref(Date.now());
@@ -132,7 +132,7 @@ const addOverride = () => {
 // Back to the default: starts now, in the default timezone.
 const removeOverride = () => {
   startTimeOverride.value = false;
-  timezone.value = virtueStore.ascensionTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  timezone.value = planStore.ascensionTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   setStartTimeToNow();
 };
 

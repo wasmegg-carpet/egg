@@ -56,6 +56,8 @@ export interface SimulationContext {
   ascensionStartTime: number; // Unix timestamp in seconds
   planStartOffset: number; // Seconds since ascension start at which planning begins
   assumeDoubleEarnings: boolean;
+  /** Enlightenment only; ascension always uses the equipped set's cube. */
+  researchCubeMultiplier?: number | null;
   rawBackup?: any; // ei.IBackup
   /**
    * Auto planner only: the artifact/stone inputs this ascension runs with. When set, C1/C3/H1 read

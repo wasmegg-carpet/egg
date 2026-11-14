@@ -19,6 +19,8 @@ export default defineConfig({
     __SIM_VERSION__: JSON.stringify(simVersionOrUnknown()),
   },
   resolve: {
+    // Lets code shared between the planners import this planner's own modules.
+    alias: { '@planner': new URL('./src', import.meta.url).pathname },
     tsconfigPaths: true,
   },
   plugins: [vue(), vueJsx()],

@@ -11,8 +11,8 @@
 
 import { resetAllStores } from './reset';
 import { useActionsStore } from '@/stores/actions';
-import { computeSnapshot } from '@/engine/compute';
-import { getSimulationContext, createBaseEngineState } from '@/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { getSimulationContext, createBaseEngineState } from 'lib/planners/engine/adapter';
 
 export async function initStartFromScratch(): Promise<void> {
   // 1. Clean slate — all stores to defaults

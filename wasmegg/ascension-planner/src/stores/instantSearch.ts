@@ -15,6 +15,7 @@ import {
   type FindOptions,
   type FoundRoutes,
   type Route,
+  USEFUL_STOP_MAX,
 } from '@/lib/instantSearch/routeFinder';
 import { chainGaps, type SpaceFilter } from '@/lib/instantSearch/chainSpace';
 import { avoidBlocked, hoursBlocked } from '@/lib/instantSearch/blockedTime';
@@ -38,6 +39,10 @@ import { colleggtibleChanges as colleggtibleChangesSince } from '@/lib/instantSe
 import { simChangesSince } from '@/lib/instantSearch/simChanges';
 import { getArtifact, getOptimalEarningsSet } from '@/lib/artifacts';
 import { readCurrentAscension, type CurrentAscension } from '@/lib/instantSearch/currentAscension';
+import type { BuildStep } from '@/auto/buildStep';
+import type { ContinueBuildInput } from '@/lib/instantSearch/continueBuilds';
+import type { BuildParams } from '@/lib/instantSearch/precomputedLeg';
+import type { ContinueBuildRequest, ContinueBuildResponse } from '@/workers/continueBuild.worker';
 import {
   chainFinderLoadout,
   chainFinderLoadoutFromBackup,
@@ -52,7 +57,7 @@ import {
 } from '@/auto/loadout';
 import { maxedLoadoutInputs } from '@/buildTable/maxedAccount';
 import { parseVirtueProgress } from '@/lib/backupVirtue';
-import { fetchPlayerBackup } from '@/lib/modes/fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { resolveFetchablePlayerId } from '@/lib/modes/utils';
 import type { ei } from 'lib';
 import { countTEThresholdsPassed } from '@/lib/truthEggs';
@@ -95,7 +100,7 @@ export interface InstantAnswer {
   /** A hypothetical start (a chosen TE and moment), not the save right now. */
   hypothetical: boolean;
   /** The ascension in progress the routes start from (continued, or ended by prestiging now), or null. */
-  inProgress: { claimedTE: number } | null;
+  inProgress: { claimedTE: number; buildStep?: BuildStep | null } | null;
   /** The filters the search ran with (`blockFilters`): days to avoid and blocked weekly hours, in
    *  `timezone`. */
   blocks: BlockFilters;
@@ -589,15 +594,85 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     const canContinue = fromSave.value && !!current.value;
     const row = rowFor(te);
     if (!Number.isInteger(te) || (!canContinue && (row < h.from || row > h.to)))
-      return row === te
-        ? `The table covers start TEs ${h.from}–${h.to}; you start at ${te}.`
-        : `The table covers start TEs ${h.from}–${h.to}; you start at ${te}, which your earnings artifacts search as ${row}.`;
+      return (
+        (row === te
+          ? `The table covers start TEs ${h.from}–${h.to}; you start at ${te}.`
+          : `The table covers start TEs ${h.from}–${h.to}; you start at ${te}, which your earnings artifacts search as ${row}.`) +
+        ' Extend it to cover that in the Table Builder.'
+      );
     if (mode.value === 'te' && !(Number.isInteger(targetTE.value) && targetTE.value > te && targetTE.value <= MAX_TE))
       return `Pick a target TE above ${te}, up to ${MAX_TE}.`;
     if (mode.value === 'date' && !(deadline.value > startAt(Date.now() / 1000)))
       return fromSave.value ? 'Pick a date in the future.' : 'Pick a date after the hypothetical start.';
     return '';
   });
+
+  /**
+   * What a table built over part of the start TEs (the Table Builder's lowest and highest) leaves out of
+   * this search, one sentence each: it still runs. No ascension can start above the table's top row, so
+   * a target above it is reached by one long last ascension from there or below. Stops above
+   * `usefulStopMax` are never taken anyway, so a top at or past it loses nothing.
+   */
+  const rangeWarnings = computed<string[]>(() => {
+    const h = header.value;
+    if (!h || problem.value) return [];
+    const shift = earningsShift.value;
+    // The highest TE of the player's whose row is in the table (rowFor(te) <= h.to).
+    const top = Math.floor(h.to + shift);
+    const target = mode.value === 'date' ? MAX_TE : targetTE.value;
+    const useful = USEFUL_STOP_MAX + Math.ceil(shift);
+    const warnings: string[] = [];
+    const lastStop = Math.min(useful, target - 1);
+    const extend = "Raise the table's highest start TE in the Table Builder to search them.";
+    if (startTE.value > top && target > startTE.value)
+      warnings.push(
+        `This table's start TEs stop at ${top} and you're at ${startTE.value}, so routes can only continue your ` +
+          `current ascension to ${target} TE: any route that ascends again on the way isn't searched. ${extend}`
+      );
+    else if (target > top + 1 && top < lastStop)
+      warnings.push(
+        `This table's start TEs stop at ${top}, so no ascension in these routes starts above ${top}: the last one ` +
+          `runs from ${top} or below all the way to ${target} TE. Routes that ascend again between ${top + 1} and ` +
+          `${lastStop} aren't searched and could be faster. ${extend}`
+      );
+    return warnings;
+  });
+
+  /** Simulating the rest of a part-done build in the ascension in progress, before a search. */
+  const simulatingBuild = ref(false);
+  let buildWorker: Worker | null = null;
+  let nextBuildRequestId = 0;
+
+  /** The builds continuing `input`'s part-done build can take (lib/instantSearch/continueBuilds.ts),
+   *  simulated in their own worker. */
+  function simulateBuilds(input: ContinueBuildInput): Promise<BuildParams[]> {
+    if (!buildWorker)
+      buildWorker = new Worker(new URL('../workers/continueBuild.worker.ts', import.meta.url), { type: 'module' });
+    const worker = buildWorker;
+    const requestId = nextBuildRequestId++;
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        worker.removeEventListener('message', onMessage);
+        worker.removeEventListener('error', onError);
+      };
+      const onMessage = (event: MessageEvent<ContinueBuildResponse>) => {
+        if (event.data.requestId !== requestId) return;
+        done();
+        if (event.data.type === 'builds') resolve(event.data.builds);
+        else reject(new Error(event.data.message));
+      };
+      const onError = (event: ErrorEvent) => {
+        done();
+        buildWorker?.terminate();
+        buildWorker = null;
+        reject(new Error(event.message || 'Chain Finder build worker failed'));
+      };
+      worker.addEventListener('message', onMessage);
+      worker.addEventListener('error', onError);
+      // Plain data only: the stores' reactive proxies can't be cloned.
+      worker.postMessage({ requestId, input: JSON.parse(JSON.stringify(input)) } satisfies ContinueBuildRequest);
+    });
+  }
 
   async function search(): Promise<void> {
     if (status.value === 'running') return;
@@ -608,6 +683,23 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     if (fromSave.value) detect(now);
     const te = startTE.value;
     const cont = fromSave.value ? (current.value?.build ?? null) : null;
+    // A part-done build continues as the rest of that build, simulated from the same moment.
+    let contBuilds: BuildParams[] | null = null;
+    const continueBuild = cont ? current.value?.continueBuild : null;
+    if (continueBuild) {
+      status.value = 'running';
+      simulatingBuild.value = true;
+      error.value = '';
+      try {
+        contBuilds = await simulateBuilds(continueBuild);
+      } catch (err) {
+        status.value = 'error';
+        error.value = `Could not simulate the rest of your current build: ${err instanceof Error ? err.message : err}`;
+        return;
+      } finally {
+        simulatingBuild.value = false;
+      }
+    }
     // The save's real counts only when starting from the save's own TE; a typed start TE uses the
     // table's canonical share.
     const delivered = fromSave.value ? saveDelivered.value : null;
@@ -619,7 +711,8 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       ...(mode.value === 'date' ? { deadline: deadline.value } : {}),
       timezone: timezone.value,
       hypothetical: !fromSave.value,
-      inProgress: cont && current.value ? { claimedTE: current.value.claimedTE } : null,
+      inProgress:
+        cont && current.value ? { claimedTE: current.value.claimedTE, buildStep: current.value.buildStep } : null,
       blocks: blockFilters.value,
       waitForEggs: waitForEggs.value,
       startDelivered: [...(delivered ?? canonicalDelivered(te))],
@@ -635,6 +728,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
       ...(asked.deadline !== undefined ? { deadline: asked.deadline } : {}),
       ...(delivered ? { startDelivered: [...delivered] } : {}),
       ...(cont ? { cont: { ...cont, delivered: [...cont.delivered] } } : {}),
+      ...(contBuilds?.length ? { contBuilds } : {}),
       ...(avoid.length ? { avoid } : {}),
       ...(cont && current.value ? { contEgg: EGG_ORDER.indexOf(current.value.egg) } : {}),
       ...(asked.waitForEggs ? { waitForEggs: true } : {}),
@@ -832,6 +926,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     tableStatus,
     status,
     progress,
+    simulatingBuild,
     answer,
     error,
     comparison,
@@ -854,6 +949,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     artifactsChanged,
     deadline,
     problem,
+    rangeWarnings,
     loadTable,
     loadFile,
     search,

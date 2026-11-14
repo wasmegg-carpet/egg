@@ -5,9 +5,10 @@ import type { FuelEgg, CalculationsSnapshot } from '@/types';
 import type { ei } from 'lib';
 import { getSavedPlayerID } from 'lib';
 import { PlayerIdSchema } from 'lib/schema';
-import { fetchPlayerBackup } from './fetchBackup';
+import { fetchPlayerBackup } from 'lib/planners/modes/fetchBackup';
 import { optimizeOfflineEarnings } from '@/lib/artifacts/optimizeArtifacts';
-import { createBaseEngineState, getSimulationContext } from '@/engine/adapter';
+import { inventoryFromBackup } from '@/lib/artifacts/inventory';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
 import type { PlanData } from '@/lib/storage/db';
 
 /**
@@ -101,19 +102,24 @@ export function resolveFetchablePlayerId(): string | undefined {
 /**
  * If a loaded plan didn't bring its own redacted backup along — saved before
  * `redactBackupForStorage` existed, or saved with no resolvable player ID —
+ * or came from a backup but was saved before inventories were kept,
  * fetch a fresh one now and persist it back into the plan. One-time
  * backfill: every later load of this same plan then already has what
  * artifact recalculation (optimal set search, beam search) needs, without a
  * live fetch every time.
  *
- * Best-effort and silent: does nothing if a backup is already present, no
- * usable player ID can be resolved, or the fetch/save fails. The plan still
+ * A plan with no backup at all was built from scratch: it stays hypothetical,
+ * so it doesn't pick up an inventory.
+ *
+ * Best-effort and silent: does nothing if a backup and inventory are already
+ * present, no usable player ID can be resolved, or the fetch/save fails. The plan still
  * loads fine either way — recalculation-dependent panels just keep showing
  * their existing "Artifact Data Required" fallback, same as today.
  */
 export async function backfillMissingBackup(plan: PlanData): Promise<void> {
   const initialStateStore = useInitialStateStore();
-  if (initialStateStore.rawBackup) return;
+  const cameFromBackup = initialStateStore.rawBackup !== null;
+  if (cameFromBackup && initialStateStore.inventory) return;
 
   const playerId = resolveFetchablePlayerId();
   if (!playerId) return;
@@ -121,6 +127,7 @@ export async function backfillMissingBackup(plan: PlanData): Promise<void> {
   try {
     const { backup, pHash } = await fetchPlayerBackup(playerId);
     initialStateStore.rawBackup = backup;
+    if (cameFromBackup) initialStateStore.inventory = inventoryFromBackup(backup);
 
     const actionsStore = useActionsStore();
     await actionsStore.savePlan(plan.name, pHash);
@@ -135,7 +142,9 @@ export async function backfillMissingBackup(plan: PlanData): Promise<void> {
  */
 export function equipMaxEarningsSet(): void {
   const store = useInitialStateStore();
-  const result = optimizeOfflineEarnings(createBaseEngineState(null), getSimulationContext());
+  const result = optimizeOfflineEarnings(createBaseEngineState(null), getSimulationContext(), {
+    inventory: store.inventory,
+  });
   if (!result.ok) return;
   store.updateArtifactSet('earnings', result.loadout);
   store.artifactSets.elr = null;

@@ -11,6 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Shared planner code (lib/planners) imports this planner's own files through `@planner`.
+      '@planner': fileURLToPath(new URL('./src', import.meta.url)),
       lib: fileURLToPath(new URL('../../lib', import.meta.url)),
     },
   },

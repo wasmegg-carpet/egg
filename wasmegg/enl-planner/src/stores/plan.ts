@@ -3,6 +3,8 @@
  */
 
 import { defineStore } from 'pinia';
+import { FARM_EGG, type FuelEgg } from '@/types';
+import { useInitialStateStore } from '@/stores/initialState';
 import { getLocalTimestampInTimezone } from 'lib/planners/events';
 
 /**
@@ -54,6 +56,16 @@ export const usePlanStore = defineStore('virtue', {
   }),
 
   getters: {
+    /** An enlightenment plan stays on one egg. */
+    currentEgg(): FuelEgg {
+      return FARM_EGG;
+    },
+
+    /** Truth Eggs are fixed for the length of an enlightenment plan. */
+    te(): number {
+      return useInitialStateStore().truthEggs;
+    },
+
     /**
      * Get the base start time for the planning session as a Date object.
      */

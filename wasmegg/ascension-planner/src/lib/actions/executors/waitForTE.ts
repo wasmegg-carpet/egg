@@ -5,7 +5,7 @@
  * Cost is 0 (free action, just time-based).
  */
 
-import type { ActionExecutor, ExecutorContext } from '../executor';
+import type { ActionExecutor, ExecutorContext } from 'lib/planners/actions/executor';
 import type { WaitForTEPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';

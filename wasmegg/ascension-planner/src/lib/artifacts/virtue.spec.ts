@@ -6,7 +6,7 @@ import { calculateShippingCapacity } from 'lib/planners/calculations/shippingCap
 import { calculateArtifactModifiers } from './calculator';
 import { getArtifact } from './data';
 import type { EquippedArtifact } from './types';
-import { getOptimalELRSetFromPool, type DeliveryPool, type DeliveryPoolStone } from './virtue';
+import { getOptimalELRSetFromPool, type DeliveryPool, type DeliveryPoolStone } from 'lib/planners/artifacts/virtue';
 
 const SET = ['quantum-metronome-4-3', 'interstellar-compass-4-3', 'gusset-4-3', 'lunar-totem-4-3'];
 const colleggtibleModifiers = modifiersFromColleggtibleTiers({});

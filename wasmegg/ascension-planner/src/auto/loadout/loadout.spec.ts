@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { allModifiersFromColleggtibles, modifiersFromColleggtibleTiers } from 'lib/collegtibles';
-import { getOptimalELRSet, getOptimalELRSetFromPool, getOptimalELRSetFromSource } from '@/lib/artifacts/virtue';
-import { redactBackupForStorage } from '@/lib/artifacts/utils';
+import { getOptimalELRSet, getOptimalELRSetFromPool, getOptimalELRSetFromSource } from 'lib/planners/artifacts/virtue';
+import { redactBackupForStorage } from 'lib/planners/artifacts/utils';
 import { createSimAction } from '@/types/actions/meta';
 import {
   buildLoadoutInputsFromBackup,

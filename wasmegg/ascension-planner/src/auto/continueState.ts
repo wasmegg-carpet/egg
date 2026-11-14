@@ -18,6 +18,30 @@ export const VIRTUE_EGGS_MAP: Record<number, VirtueEgg> = {
   54: 'kindness',
 };
 
+/**
+ * `state`'s farm, as a backup's farm reads (`CurrentFarmState`): what a Continue plan's start action
+ * carries as its `initialFarmState`, so the plan replays from that farm wherever it's loaded (a
+ * library plan in the manual planner) rather than from an empty one. Its clock starts with the plan,
+ * at 0: the eggs laid before that are already counted in the plan's eggs delivered.
+ */
+export function farmStateOf(state: EngineState): CurrentFarmState {
+  const eggType = Object.entries(VIRTUE_EGGS_MAP).find(([, egg]) => egg === state.currentEgg)?.[0];
+  return {
+    eggType: Number(eggType ?? 50),
+    cash: state.bankValue,
+    numSilos: state.siloCount,
+    commonResearches: { ...state.researchLevels },
+    habs: [...state.habIds],
+    vehicles: state.vehicles.map(v => ({ ...v })),
+    population: state.population,
+    deliveredEggs: state.eggsDelivered[state.currentEgg] || 0,
+    lastStepTime: 0,
+    // The engine starts a farm's bank at cashEarned - cashSpent.
+    cashEarned: state.bankValue,
+    cashSpent: 0,
+  };
+}
+
 export function makeContinueState(
   base: EngineState,
   farmState: CurrentFarmState,

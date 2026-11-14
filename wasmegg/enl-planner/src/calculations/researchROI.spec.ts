@@ -4,7 +4,7 @@ import {
   computeShowBuyNowRoiWarning,
   computeShowFullRoiWarning,
   findEventCrossings,
-} from './researchROI';
+} from 'lib/planners/calculations/researchROI';
 import { getNextSaleStart, getNextSaleEnd, isResearchSaleActive, BOUNDARY_EPSILON_SECONDS } from 'lib/planners/events';
 import type { CommonResearch, ResearchCostModifiers } from './commonResearch';
 import type { CalculationsSnapshot } from '@/types';
@@ -58,6 +58,8 @@ function fakeSnapshot(bankValue = 0): CalculationsSnapshot {
     siloTimeMinutes: 0,
     tankLevel: 0,
     fuelTankAmounts: {} as CalculationsSnapshot['fuelTankAmounts'],
+    currentEgg: 'enlightenment',
+    eggsDelivered: {},
     population: 1e18,
     lastStepTime: 0,
     vehicles: [],

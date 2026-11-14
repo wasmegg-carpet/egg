@@ -8,14 +8,17 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { FUEL_EGGS } from '@/types';
 import { initContinueCurrent } from './continueCurrent';
 import { initPlanFuture } from './planFuture';
+import { exportPlanData } from '@/stores/actions/io';
 
 const backupRef = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock('./fetchBackup', () => ({
+vi.mock('lib/planners/modes/fetchBackup', () => ({
   fetchPlayerBackup: async () => ({ backup: backupRef.current, pHash: 'hash' }),
 }));
 
 const necklace = allPossibleTiers.find(t => t.family.id === 'demeters-necklace' && t.tier_number === 4)!;
 const clarity = allPossibleTiers.find(t => t.family.id === 'clarity-stone' && t.tier_number === 4)!;
+const lunarTotem = allPossibleTiers.find(t => t.family.id === 'lunar-totem' && t.tier_number === 4)!;
+const light = allPossibleTiers.find(t => t.family.id === 'light-of-eggendil' && t.tier_number === 4)!;
 
 function syntheticBackup(eggType: number) {
   const now = Date.now() / 1000;
@@ -37,11 +40,15 @@ function syntheticBackup(eggType: number) {
       inventoryItems: [
         {
           itemId: 7,
+          quantity: 1,
           artifact: {
             spec: { name: necklace.afx_id, level: necklace.afx_level, rarity: 3 },
             stones: [{ name: clarity.afx_id, level: clarity.afx_level, rarity: 0 }],
           },
         },
+        { itemId: 8, quantity: 1, artifact: { spec: { name: lunarTotem.afx_id, level: lunarTotem.afx_level, rarity: 3 } } },
+        { itemId: 9, quantity: 1, artifact: { spec: { name: light.afx_id, level: light.afx_level, rarity: 3 } } },
+        { itemId: 10, quantity: 3, artifact: { spec: { name: clarity.afx_id, level: clarity.afx_level, rarity: 0 } } },
       ],
       activeArtifactSets: [{ slots: [{ occupied: true, itemId: 7 }] }],
       virtueAfxDb: { inventoryItems: [], activeArtifacts: { slots: [] } },
@@ -79,12 +86,15 @@ describe('planning a new farm from a backup', () => {
     expect(store.prophecyEggs).toBe(150);
     expect(store.truthEggs).toBe(105);
     expect(store.initialTankLevel).toBe(3);
-    // Starts with the max offline earnings set, not what the backup has equipped
+    // Starts with the max offline earnings set from what's owned, not what the backup has equipped
     const ids = store.artifactLoadout.map(s => s.artifactId);
     expect(ids).toContain('lunar-totem-4-3');
     expect(ids).toContain('light-of-eggendil-4-3');
     expect(store.activeArtifactSet).toBe('earnings');
     expect(store.currentFarmState).toBeNull();
+    // No puzzle cube in this save.
+    expect(store.researchCube.artifactId).toBeNull();
+    expect(store.inventory?.stones['clarity-stone-4']).toBe(4);
 
     const first = useActionsStore().currentSnapshot;
     expect(first.soulEggs).toBe(1e21);
@@ -92,6 +102,18 @@ describe('planning a new farm from a backup', () => {
     expect(first.te).toBe(105);
     expect(first.researchLevels).toEqual({});
     expect(first.offlineEarnings).toBeGreaterThan(0);
+  });
+
+  test('keeps the inventory when a plan is saved and loaded', async () => {
+    backupRef.current = syntheticBackup(ei.Egg.EDIBLE);
+    await initPlanFuture('EI0000000000000000');
+    const store = useInitialStateStore();
+    const inventory = JSON.parse(JSON.stringify(store.inventory));
+    const saved = JSON.parse(JSON.stringify(exportPlanData([]).initialState));
+    store.$reset();
+    expect(store.inventory).toBeNull();
+    store.hydrate(saved);
+    expect(store.inventory).toEqual(inventory);
   });
 
   test('reads the regular fuel tank, ignoring virtue fuel', async () => {

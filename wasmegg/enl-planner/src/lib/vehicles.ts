@@ -1,3 +1,4 @@
+import { applyDiscount } from 'lib/planners/utils/pricing';
 import { isVehicleId } from 'lib/farm/shipping_capacity';
 
 import { VEHICLE_REGULAR_COSTS, HYPERLOOP_CAR_REGULAR_COSTS } from './vehicleCosts';
@@ -40,7 +41,7 @@ export function getDiscountedVehiclePrice(
   const costs = VEHICLE_REGULAR_COSTS[vehicle.id];
   if (purchaseIndex < 0 || purchaseIndex >= costs.length) return 0;
 
-  return costs[purchaseIndex] * getVehicleCostMultiplier(modifiers, isActiveSale);
+  return applyDiscount(costs[purchaseIndex], getVehicleCostMultiplier(modifiers, isActiveSale));
 }
 
 /**
@@ -56,5 +57,5 @@ export function getDiscountedTrainCarPrice(
 ): number {
   if (carIndex < 0 || carIndex >= HYPERLOOP_CAR_COSTS.length) return 0;
 
-  return HYPERLOOP_CAR_COSTS[carIndex] * getVehicleCostMultiplier(modifiers, isActiveSale);
+  return applyDiscount(HYPERLOOP_CAR_COSTS[carIndex], getVehicleCostMultiplier(modifiers, isActiveSale));
 }

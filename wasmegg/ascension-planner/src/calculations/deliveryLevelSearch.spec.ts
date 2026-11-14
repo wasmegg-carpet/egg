@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getCommonResearches, getDiscountedVirtuePrice, getResearchById, isTierUnlocked } from './commonResearch';
+import { getCommonResearches, getDiscountedResearchPrice, getResearchById, isTierUnlocked } from './commonResearch';
 import type { ResearchCostModifiers } from './commonResearch';
 import {
   deliveryPlanCost,
@@ -8,11 +8,11 @@ import {
   dropLevelsNotWorthTheirTime,
   findBestDeliveryLevels,
   searchEveryDeliveryCombination,
-} from './deliveryLevelSearch';
-import { computeRealisticELR } from './realisticELR';
-import { DELIVERY_IMPACT_CATEGORIES, rankResearchByELRImpact } from './researchRanking';
-import { runDeliveryBuyLoop, simulateSaleEndsBuy } from './smartBuyPreview';
-import { computeSnapshot } from '@/engine/compute';
+} from 'lib/planners/calculations/deliveryLevelSearch';
+import { computeRealisticELR } from 'lib/planners/calculations/realisticELR';
+import { DELIVERY_IMPACT_CATEGORIES, rankResearchByELRImpact } from 'lib/planners/calculations/researchRanking';
+import { runDeliveryBuyLoop, simulateSaleEndsBuy } from 'lib/planners/calculations/smartBuyPreview';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { boostTransitionsFrom, getTimeToSave } from '@/engine/apply';
 import { contextDeliverySource } from '@/auto/loadout/resolve';
 import { calculateArtifactModifiers } from '@/lib/artifacts';
@@ -89,7 +89,7 @@ describe('hr/% is scored at the price actually charged', () => {
     const before = saleStart - 72 * 3600;
     const snapshot = snapshotWith(995);
     const item = rankAt(before, 995, false).find(c => c.research.id === 'wormhole_dampening')!;
-    const full = getDiscountedVirtuePrice(getResearchById('wormhole_dampening')!, 18, mods, false);
+    const full = getDiscountedResearchPrice(getResearchById('wormhole_dampening')!, 18, mods, false);
     const fromZero = getTimeToSave(full, { ...snapshot, bankValue: 0 }, boostTransitionsFrom(snapshot, before));
 
     expect(item.price).toBe(full);
@@ -100,7 +100,7 @@ describe('hr/% is scored at the price actually charged', () => {
 describe('findBestDeliveryLevels', () => {
   const unitMods: ResearchCostModifiers = { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 };
   const start = { ...researchLevels, neural_net_refine: 25, relativity_optimization: 10 };
-  const price = (id: string, level: number) => getDiscountedVirtuePrice(getResearchById(id)!, level, unitMods, true);
+  const price = (id: string, level: number) => getDiscountedResearchPrice(getResearchById(id)!, level, unitMods, true);
   const wd = price('wormhole_dampening', 18);
   const hp = price('hyper_portalling', 3);
 
@@ -206,7 +206,7 @@ describe('sorting delivery research', () => {
     const rateOf = deliveryRateScorer(source, levels, true, context);
     const firstPrices = deliveryResearch
       .filter(r => levels[r.id] < r.levels)
-      .map(r => getDiscountedVirtuePrice(r, levels[r.id], unit, true));
+      .map(r => getDiscountedResearchPrice(r, levels[r.id], unit, true));
     const lowest = Math.min(...firstPrices);
 
     let compared = 0;
@@ -271,10 +271,10 @@ describe('Buy Until Sale Ends', () => {
     const levels: Record<string, number> = { ...researchLevels };
     let expected = 0;
     for (const id of result.researchIds) {
-      expected += getDiscountedVirtuePrice(getResearchById(id)!, levels[id] || 0, mods, true);
+      expected += getDiscountedResearchPrice(getResearchById(id)!, levels[id] || 0, mods, true);
       levels[id] = (levels[id] || 0) + 1;
     }
-    expect(result.totalGemsSpent! / expected).toBeCloseTo(1, 9);
+    expect(result.totalSpent! / expected).toBeCloseTo(1, 9);
     expect(levels).toEqual(result.endLevels);
   });
 });

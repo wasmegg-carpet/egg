@@ -201,7 +201,7 @@ async function generate(): Promise<void> {
         if (classes.every(c => job.seeds[c])) {
           const seedSeconds = Object.fromEntries(classes.map(c => [c, job.seeds[c]!.prefixSeconds])) as Record<EventClass, number>;
           for (const hh of allHours()) {
-            const source = prefixSourceFor(hh, seedSeconds);
+            const source = prefixSourceFor(hh, seedSeconds, te);
             if (source.kind === 'seed') continue;
             const seedPrefix = source.kind === 'reuse' ? job.seeds[classes.find(c => SEED_HOURS[c] === source.seedHour)!]!.prefix : undefined;
             enqueue({ te, h: hh, prefix: seedPrefix, verify }, rr => record(job, hh, source, rr));

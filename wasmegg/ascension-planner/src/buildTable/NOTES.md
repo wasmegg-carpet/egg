@@ -70,6 +70,33 @@ reuses its class's seed when no sale/boost start or end falls within **seed pref
   built both ways: **zero mismatches**, tier-13 builds included. 141–149 of 168 hours reuse a seed.
 - Saves 30–81% of the work depending on TE.
 
+## Start TEs below 120 (2026-11-13)
+
+- The Table Builder takes a lowest start TE of 50–120 (default 120), and can extend a table already built (the
+  store's for the picks, or a file) instead of rebuilding it: `src/lib/chainFinder/extendTable.ts`. Only a table
+  with the same delivery set, silo setting, doubler, earnings, stones and reference week, and no `SIM_CHANGES` or
+  colleggtible changes since it was built, can be extended; anything else is rebuilt from scratch.
+- **Prefix reuse does not hold below 120.** `--verify` on maxed gear: 0 differing cells at TE 110, 1 at 90 (hour 97,
+  8 h before the Friday sale, with a 3.9 h seed prefix), 5 at 70, 14 at 50 (Friday 10:00–23:00, prefixes the same
+  length as the seed's but different cells). So `REUSE_FROM_TE = 120` in `prefixReuse.ts`: lower TEs build every
+  hour fresh. Cost without reuse (today's core-s): ~290 at 110, ~970 at 90, ~2100 at 70, ~1300 at 50; 100–119 is
+  ~25 min on 7 workers, 50–119 ~3–4 h.
+- A "5-week" practicality floor was tried and dropped: on maxed gear the slowest 3-sale build (start to last sale
+  end, hours 0, 24, …, 144) is 2.91 weeks from TE 10 to 120, pinned by the sale calendar; 3.13 at TE 5, 3.31 at TE 1.
+
+## Partial tables (2026-11-14)
+
+- The Table Builder takes a lowest and a highest start TE (50–489 each), e.g. 200–350 for "my TE now to where I'll be
+  in a year". A table extends either way later: `tesToBuild` keeps the base's TEs outside the range and fills any gap,
+  so the file is always one unbroken `from..to`. With a base, `buildOrder` builds outward from it (above bottom up,
+  below top down) so a cancel still saves a run joined to it.
+- Chain Finder needs no table above `USEFUL_STOP_MAX` (360): stops above it are never taken, and the last ascension
+  runs from the top row to any target (`tailTo`). A shorter table still finds routes to 490, just without the stops
+  above its top; `rangeWarnings` in `stores/instantSearch.ts` says so.
+- So the Table Builder's default highest start TE is 360 (`CHAIN_FINDER_DEFAULT_TOP` = `USEFUL_STOP_MAX`). Rows above
+  it only serve routes that *start* above 360, and per the user no player can pass 360 TE before mid-July 2027. The
+  CLI's own default range is unchanged.
+
 ## Build speed work (2026-11-02)
 
 Against a table built at `129f5daa`, three single-worker TEs ran concurrently:

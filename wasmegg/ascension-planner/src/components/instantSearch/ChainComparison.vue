@@ -344,7 +344,9 @@ function head(r: Route): number[] {
 const chainText = (r: Route) => [...head(r), ...r.chain].join(' → ');
 const legBuild = (l: RouteLeg) =>
   l.continued
-    ? 'continue'
+    ? props.answer.inProgress?.buildStep && l.sales > 0
+      ? `continue from ${props.answer.inProgress.buildStep} · ${l.sales}-sale${l.tier13 ? ' + T13' : ''}`
+      : 'continue'
     : `${l.sales}-sale${l.tier13 ? ' + T13' : ''}${l.waited ? ` · wait ${Math.round(l.waited / 3600)}h` : ''}`;
 
 function openInAutoPlanner(r: Route) {

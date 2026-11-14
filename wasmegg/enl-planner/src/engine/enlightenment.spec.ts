@@ -1,3 +1,5 @@
+import { ALL_SHIPS, SHIP_INFO, Spaceship } from '@/lib/missions';
+import { VIEWS } from 'lib/planners/composables/useResearchViews';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { ei } from 'lib';
@@ -7,10 +9,10 @@ import { calculateEarningBonus } from '@/calculations/earnings';
 import { calculateEggValue, ENLIGHTENMENT_EGG_VALUE } from '@/calculations/eggValue';
 import { calculateIHR } from 'lib/planners/calculations/internalHatcheryRate';
 import { computeGoalStatuses, nahPopulationTarget, secondsToReachPopulation } from '@/calculations/goals';
-import { createBaseEngineState, getSimulationContext } from './adapter';
-import { computeSnapshot } from './compute';
-import { refreshActionPayload } from './apply/duration';
-import { applyAction } from './apply/actions';
+import { createBaseEngineState, getSimulationContext } from 'lib/planners/engine/adapter';
+import { computeSnapshot } from 'lib/planners/engine/compute';
+import { refreshActionPayload } from 'lib/planners/engine/apply/duration';
+import { applyAction } from 'lib/planners/engine/apply/actions';
 import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { createSimAction, createEmptySnapshot, type Action } from '@/types';
@@ -73,9 +75,9 @@ describe('prices on an enlightenment farm', () => {
   test('habs and research charge the regular price', () => {
     const coop = getHabById(0)!;
     const mods = { cheaperContractorsLevel: 0, habCostMultiplier: 1 };
-    expect(getDiscountedHabPrice(coop, 1, mods, false)).toBe(29.12);
+    expect(getDiscountedHabPrice(coop, 1, mods, false)).toBe(29);
     const nests = getResearchById('comfy_nests')!;
-    expect(getDiscountedResearchPrice(nests, 0, { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 }, false)).toBe(0.5);
+    expect(getDiscountedResearchPrice(nests, 0, { labUpgradeLevel: 0, researchCostMultiplier: 1, puzzleCubeMultiplier: 1 }, false)).toBe(1);
   });
 });
 
@@ -185,4 +187,15 @@ describe('reading a backup', () => {
     } as never);
     expect(loadout[0].artifactId).toBe('demeters-necklace-4-3');
   });
+});
+
+test('enlightenment has no delivery research view', () => {
+  expect(VIEWS.some(view => view.id === 'elr')).toBe(false);
+});
+
+test('ships cost what the wiki says to fund them, in bocks', () => {
+  expect(SHIP_INFO[Spaceship.CHICKEN_ONE].price).toBe(7.2e9);
+  expect(SHIP_INFO[Spaceship.BCR].price).toBe(32e21);
+  expect(SHIP_INFO[Spaceship.ATREGGIES].price).toBe(15e45);
+  expect(ALL_SHIPS.map(ship => SHIP_INFO[ship].price)).toEqual([...ALL_SHIPS.map(ship => SHIP_INFO[ship].price)].sort((a, b) => b - a));
 });

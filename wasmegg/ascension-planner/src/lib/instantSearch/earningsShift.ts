@@ -8,7 +8,7 @@
  */
 import type { ei } from 'lib';
 import { cteFromArtifacts } from 'lib/virtue';
-import { equippedArtifactsToLibArtifacts } from '@/lib/artifacts/utils';
+import { equippedArtifactsToLibArtifacts } from 'lib/planners/artifacts/utils';
 import {
   buildLoadoutInputsFromBackup,
   seedFixedDeliveryFromAuto,

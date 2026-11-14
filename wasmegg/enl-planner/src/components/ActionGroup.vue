@@ -80,6 +80,9 @@
           />
         </template>
 
+        <!-- Compact single-day shift: no day layer, but smart buys still get their summaries -->
+        <CompactActionRows v-else-if="compact" :actions="actions" @undo="handleDayUndo" />
+
         <!-- Action list -->
         <template v-else>
           <ActionHistoryItem
@@ -102,8 +105,10 @@ import { useActionsStore } from '@/stores/actions';
 import { usePlanStore } from '@/stores/plan';
 import type { Action } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
-import ActionHistoryItem from './ActionHistoryItem.vue';
-import DayGroup from './DayGroup.vue';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
+import DayGroup from 'ui/components/planners/DayGroup.vue';
+import CompactActionRows from 'ui/components/planners/CompactActionRows.vue';
+import { smartBuyNoteByActionId } from 'lib/planners/actions/smartBuyGroups';
 
 const props = defineProps<{
   headerAction: Action<'start_ascension'>;
@@ -230,8 +235,11 @@ const dayGroups = computed<DayGroupItem[]>(() => {
   const dailyBuckets: DailyBucket[] = [];
   let currentDayKey = '';
 
+  // A smart buy can wait across several days; it stays whole, under the day it started.
+  const smartBuyNotes = smartBuyNoteByActionId(props.actions);
+
   for (const action of props.actions) {
-    const date = actionAbsoluteTime(action);
+    const date = actionAbsoluteTime(smartBuyNotes.get(action.id) ?? action);
     const dayKey = date.toDateString();
     if (dayKey !== currentDayKey) {
       currentDayKey = dayKey;

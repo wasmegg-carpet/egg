@@ -43,7 +43,7 @@ import EChart from 'ui/components/planners/charts/EChart.vue';
 import type { ChartOption } from 'ui/components/planners/charts/echarts';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { VIRTUE_EGG_NAMES } from '@/types/actions/virtue';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import { formatAbsoluteTime, formatNumber } from '@/lib/format';
 import {
   VARIANT_KEY_ORDER,
@@ -66,7 +66,7 @@ const props = defineProps<{
   targetTE?: number | null;
 }>();
 
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 // How far below the lowest plotted point the Y axis starts, as a fraction of that point's own
 // value — keeps the axis from defaulting to a 0 baseline that dwarfs the actual spread between
@@ -119,7 +119,7 @@ const neverCrossing = computed(() =>
 );
 
 const option = computed<ChartOption>(() => {
-  const tz = virtueStore.ascensionTimezone;
+  const tz = planStore.ascensionTimezone;
   const horizonMs = horizon.value;
 
   // echarts' time axis can only compute its own "nice" day/week tick boundaries in the browser's

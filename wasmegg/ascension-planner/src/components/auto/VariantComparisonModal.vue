@@ -170,6 +170,7 @@ import { getResearchIconPath } from 'lib/planners/assets';
 import type { Research } from '@/types';
 import type { VariantKey, VariantResult } from '@/stores/autoPlanner';
 import { variantLabel, variantColor } from '@/lib/charts/variantComparisonData';
+import { continueLabel } from '@/auto/buildStep';
 import C3ComparisonChart from './charts/C3ComparisonChart.vue';
 import TEWaitComparisonChart from './charts/TEWaitComparisonChart.vue';
 
@@ -214,7 +215,7 @@ const rows = computed(() =>
     .filter((entry): entry is [VariantKey, VariantResult] => !!entry[1])
     .map(([key, result]) => ({
       key,
-      label: variantLabel(key),
+      label: key === 'continue' ? continueLabel(result.summary.continueFromStep, 'Continue Asc.') : variantLabel(key),
       color: variantColor(key),
       summary: result.summary,
       tier13Unlocked: result.summary.tier13Unlocked,

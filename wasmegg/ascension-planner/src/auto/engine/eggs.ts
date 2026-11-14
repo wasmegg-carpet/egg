@@ -1,6 +1,6 @@
 import type { Action } from '@/types/actions/meta';
 import type { EngineState, SimulationContext } from '../types';
-import { computeSnapshot } from '../../engine/compute';
+import { computeSnapshot } from 'lib/planners/engine/compute';
 import { applyAction } from '../../engine/apply';
 
 /**

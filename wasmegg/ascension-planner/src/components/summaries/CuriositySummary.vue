@@ -42,7 +42,7 @@
       >
         <img :src="iconURL('egginc/icon_virtue_gem.png', 32)" class="w-3 h-3" alt="Gems" />
         <span class="text-[10px] font-black text-amber-600 tracking-tight">{{
-          formatGemPrice(totalResearchCost)
+          formatPrice(totalResearchCost)
         }}</span>
       </div>
     </div>
@@ -97,7 +97,7 @@
 import { computed } from 'vue';
 import type { Action, BuyResearchPayload } from '@/types';
 import { getResearchById, getResearchByTier } from '@/calculations/commonResearch';
-import { formatGemPrice, formatNumber } from '@/lib/format';
+import { formatPrice, formatNumber } from '@/lib/format';
 import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
 import { iconURL } from 'lib';
 

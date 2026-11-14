@@ -2,6 +2,7 @@ import type { Action } from '@/types/actions/meta';
 import type { EngineState, SimulationContext } from '@/engine/types';
 export type { EngineState, SimulationContext };
 import type { VirtueEgg } from '@/types/actions/virtue';
+import type { BuildStep } from './buildStep';
 
 export interface AscensionSummary {
   id: string;
@@ -49,6 +50,10 @@ export interface AscensionSummary {
 
   // Whether Tier 13 research was unlocked by the end of this ascension (not just attempted).
   tier13Unlocked: boolean;
+
+  // Continue only: the build step the player's farm was detected on, which this plan starts at.
+  // Absent when the build was already done (the plan only waits out TE at the farm's rate).
+  continueFromStep?: BuildStep;
 }
 
 export interface AutoPlanGoal {

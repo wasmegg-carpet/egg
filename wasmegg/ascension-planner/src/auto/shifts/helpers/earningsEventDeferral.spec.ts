@@ -3,7 +3,7 @@ import { modifiersFromColleggtibleTiers } from 'lib/collegtibles';
 import type { EngineState, SimulationContext } from '../../types';
 import type { Action } from '@/types/actions/meta';
 import { getNextEarningsBoostEnd, getNextEarningsBoostStart, isEarningsBoostActive } from 'lib/planners/events';
-import { totalAwayTime } from '@/stores/silos';
+import { totalAwayTime } from 'lib/planners/stores/silos';
 import { runWithEarningsEventDeferral, MULTI_LAYERING_ID } from './earningsEventDeferral';
 import type { DeferralCheckpoint, EarningsEventDeferralHost } from './earningsEventDeferral';
 

@@ -40,6 +40,14 @@
       </button>
     </div>
 
+    <div
+      v-if="setting.enabled && overages.length > 0"
+      class="mt-3 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-[11px] font-bold text-amber-800"
+    >
+      This cube uses more than you have:
+      {{ overages.map(o => `${o.label} (${o.used} used, ${o.owned} owned)`).join(', ') }}.
+    </div>
+
     <div v-if="expanded" class="mt-3 pt-3 border-t border-sky-100 space-y-2">
       <ArtifactSelector
         :model-value="[{ artifactId: setting.artifactId, stones: slotStones }]"
@@ -64,7 +72,8 @@ import { useInitialStateStore } from '@/stores/initialState';
 import { useActionsStore } from '@/stores/actions';
 import { getArtifact } from '@/lib/artifacts/data';
 import type { EquippedArtifact } from '@/lib/artifacts/types';
-import ArtifactSelector from '@/components/ArtifactSelector.vue';
+import ArtifactSelector from 'ui/components/planners/ArtifactSelector.vue';
+import { inventoryOverages } from '@/lib/artifacts/inventory';
 import {
   researchCubeClarity,
   researchCubeMultiplier,
@@ -80,6 +89,10 @@ const cube = computed(() => getArtifact(setting.value.artifactId));
 
 const slotStones = computed(() =>
   Array.from({ length: cube.value?.slots ?? 0 }, (_, i) => setting.value.stones[i] ?? null)
+);
+
+const overages = computed(() =>
+  inventoryOverages([{ artifactId: setting.value.artifactId, stones: slotStones.value }], initialStateStore.inventory)
 );
 
 const summary = computed(() => {

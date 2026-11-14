@@ -24,6 +24,10 @@ export interface ModifyBankPayload {
   amount: number;
   previousValue: number;
   delta: number;
+  earningsBoostCredit?: {
+    seconds: number;
+    multiplier: number;
+  };
 }
 
 /**

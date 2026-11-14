@@ -13,7 +13,7 @@ import type { VirtueEgg } from '@/types';
 export const TANK_CAPACITIES = [2e9, 200e9, 10e12, 100e12, 200e12, 300e12, 400e12, 500e12];
 
 // Order of virtue eggs in tankFuels array (indices 20-24)
-export const VIRTUE_FUEL_ORDER: VirtueEgg[] = ['curiosity', 'integrity', 'humility', 'resilience', 'kindness'];
+export const FUEL_ORDER: VirtueEgg[] = ['curiosity', 'integrity', 'humility', 'resilience', 'kindness'];
 
 export interface FuelTankState {
   // Tank level (0-7) - determines max capacity

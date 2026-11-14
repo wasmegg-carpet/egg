@@ -28,5 +28,6 @@
     "../../ui/**/*.vue",
     "../../ui/heroicons.d.ts",
     "vite.config.ts"
-  ]
+  ],
+  "exclude": ["../../ui/components/planners/**"]
 }

@@ -147,6 +147,9 @@
           />
         </template>
 
+        <!-- Compact single-day shift: no day layer, but smart buys still get their summaries -->
+        <CompactActionRows v-else-if="compact" :actions="actions" @undo="handleDayUndo" />
+
         <!-- Action list -->
         <template v-else>
           <ActionHistoryItem
@@ -166,14 +169,17 @@
 import { ref, computed, watch, nextTick, type Component } from 'vue';
 import { iconURL } from 'lib';
 import { useActionsStore } from '@/stores/actions';
-import { useVirtueStore } from '@/stores/virtue';
+import { usePlanStore } from '@/stores/plan';
 import type { Action, VirtueEgg, StartAscensionPayload, ShiftPayload } from '@/types';
 import { VIRTUE_EGG_NAMES } from '@/types';
 import { formatNumber, formatDuration } from '@/lib/format';
 import { safeAsyncComponent } from 'lib/planners/import';
 import { scrollToAndHighlight } from 'lib/planners/scrollToAndHighlight';
-import ActionHistoryItem from './ActionHistoryItem.vue';
-import DayGroup from './DayGroup.vue';
+import ActionHistoryItem from 'ui/components/planners/ActionHistoryItem.vue';
+import DayGroup from 'ui/components/planners/DayGroup.vue';
+import CompactActionRows from 'ui/components/planners/CompactActionRows.vue';
+import { smartBuyNoteByActionId } from 'lib/planners/actions/smartBuyGroups';
+import { expandSmartBuyContaining } from 'lib/planners/composables/useSmartBuyExpansion';
 
 // Lazy load summary components
 const CuriositySummary = safeAsyncComponent(() => import('./summaries/CuriositySummary.vue'));
@@ -209,7 +215,7 @@ const emit = defineEmits<{
 }>();
 
 const actionsStore = useActionsStore();
-const virtueStore = useVirtueStore();
+const planStore = usePlanStore();
 
 // Internal state for manually collapsing/expanding the current group
 // This is now managed by the store, but we keep the ref if needed for transition (actually we can remove it)
@@ -287,7 +293,7 @@ const headerText = computed(() => {
 const summaryComponent = computed(() => summaryComponents[currentEgg.value]);
 
 const shiftReconciliationStatus = computed(() => {
-  return actionsStore.getShiftReconciliationStatus(props.actions);
+  return actionsStore.getGroupReconciliationStatus(props.actions);
 });
 
 /**
@@ -328,7 +334,7 @@ function handleDayUndo(action: Action, options: { skipConfirmation: boolean }) {
  * hover tooltip — anchors the plan's simulated time to the ascension's actual start time.
  */
 function actionAbsoluteTime(action: Action): Date {
-  const startTime = virtueStore.planStartTime.getTime();
+  const startTime = planStore.planStartTime.getTime();
   const offset = actionsStore.planStartOffset;
   const simTime = action.endState.lastStepTime || 0;
   // `Math.round`, not a bare `new Date(...)` — see `secondsToDate`'s doc comment (lib/format.ts):
@@ -378,8 +384,11 @@ const dayGroups = computed<DayGroupItem[]>(() => {
   let prevAction: Action | null = null;
   let currentDayKey = '';
 
+  // A smart buy can wait across several days; it stays whole, under the day it started.
+  const smartBuyNotes = smartBuyNoteByActionId(props.actions);
+
   for (const action of props.actions) {
-    const date = actionAbsoluteTime(action);
+    const date = actionAbsoluteTime(smartBuyNotes.get(action.id) ?? action);
     const dayKey = date.toDateString();
     if (dayKey !== currentDayKey) {
       currentDayKey = dayKey;
@@ -462,14 +471,14 @@ function setDayExpanded(key: string, value: boolean) {
 
 /**
  * Handles a curiosity summary link click whose target action wasn't found in the DOM — meaning
- * it's inside a collapsed day (compact view). Expand that day, wait for it to render, then scroll.
+ * it's inside a collapsed day or smart buy (compact view). Expand whichever hold it, wait for them
+ * to render, then scroll.
  */
 async function handleScrollToAction(actionId: string) {
   const day = dayGroups.value.find(d => d.actions.some(a => a.id === actionId));
-  if (day) {
-    expandedDayKeys.value.add(day.key);
-    await nextTick();
-  }
+  if (day) expandedDayKeys.value.add(day.key);
+  expandSmartBuyContaining(props.actions, actionId);
+  await nextTick();
   scrollToAndHighlight(actionId);
 }
 </script>

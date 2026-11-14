@@ -18,5 +18,6 @@
       "ui/*": ["../../ui/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../../ui/**/*.vue", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../../ui/**/*.vue", "vite.config.ts"],
+  "exclude": ["../../ui/components/planners/**"]
 }

@@ -61,7 +61,19 @@
 
     <div v-if="summaryItems.length > 0" class="flex flex-wrap gap-1">
       <div v-for="(item, index) in summaryItems" :key="index" class="flex items-center">
-        <template v-if="item.isPremium">
+        <template v-if="'isTE' in item">
+          <div
+            v-tippy="`+${item.gained} Truth Eggs this shift (${item.total} total, ${item.eggTotal} ${egg})`"
+            class="flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-slate-50 border-slate-100 text-[8.5px] font-black tracking-tight text-slate-600"
+          >
+            <span>+{{ item.gained }}</span>
+            <img :src="iconURL('egginc/egg_truth.png', 32)" class="w-3 h-3 object-contain" alt="Truth Egg" />
+            <span>({{ item.total }} total | {{ item.eggTotal }}</span>
+            <img :src="iconURL(`egginc/egg_${egg}.png`, 32)" class="w-3 h-3 object-contain" :alt="egg" />
+            <span>)</span>
+          </div>
+        </template>
+        <template v-else-if="item.isPremium">
           <span class="px-1.5 py-0.5 rounded border text-[8.5px] font-black tracking-tight bg-slate-50 text-slate-600 border-slate-100">
             {{ item.text }}
           </span>
@@ -129,6 +141,7 @@ import { getResearchById, getResearchByTier } from '@/calculations/commonResearc
 import { getVehicleType } from '@/lib/vehicles';
 import { getHabById, type HabId } from '../../lib/habs';
 import { getArtifact, getStone } from '@/lib/artifacts/data';
+import { countTEThresholdsPassed } from '@/lib/truthEggs';
 import type { RarityCode, StoneOption } from '@/lib/artifacts/types';
 import type { VirtueEgg } from '@/types';
 import type { Action } from '@/types/actions/meta';
@@ -183,6 +196,7 @@ type SummaryCategory = (typeof CATEGORY_ORDER)[number];
 
 // Pill variants; the template switches on isPremium/isLoadout/isPeakELR in that order.
 type SummaryItem = { category: SummaryCategory } & (
+  | { isTE: true; gained: number; total: number; eggTotal: number }
   | { isPremium: true; text: string }
   | {
       isPremium?: false;
@@ -312,13 +326,26 @@ if (!(researchId in startResearch)) startResearch[researchId] = fromLevel;
       });
     }
     // --- TE Earned ---
-    const totalTE = props.actions.reduce((sum, a) => sum + (a.type === 'wait_for_te' ? a.payload.teGained || 0 : 0), 0);
+    // Thresholds passed between the shift's first and last action, so TE that the build phase's
+    // deliveries cross counts too — not just the wait_for_te payloads (whose teGained uses the same
+    // threshold baseline, so the two agree when a shift only waits).
+    const waitTE = props.actions.reduce((sum, a) => sum + (a.type === 'wait_for_te' ? a.payload.teGained || 0 : 0), 0);
+    const firstDelivered = props.actions[0]?.endState?.eggsDelivered?.[props.egg];
+    const lastDelivered = props.actions[props.actions.length - 1]?.endState?.eggsDelivered?.[props.egg];
+    const deliveredTE =
+      firstDelivered !== undefined && lastDelivered !== undefined
+        ? countTEThresholdsPassed(lastDelivered) - countTEThresholdsPassed(firstDelivered)
+        : 0;
+    const totalTE = Math.max(waitTE, deliveredTE);
     if (totalTE > 0) {
-      items.push({
-        category: 'te',
-        isPremium: true,
-        text: `+${totalTE} Truth Eggs`,
-      });
+      // Total across all eggs once this shift ends: each egg's thresholds passed, or its claimed
+      // count if higher (claimed TE isn't always backed by the plan's eggsDelivered).
+      const endState = props.actions[props.actions.length - 1]?.endState;
+      const eggs = Object.keys(endState?.eggsDelivered ?? {}) as VirtueEgg[];
+      const eggTE = (e: VirtueEgg) =>
+        Math.max(countTEThresholdsPassed(endState.eggsDelivered[e] || 0), endState.teEarned?.[e] || 0);
+      const total = eggs.reduce((sum, e) => sum + eggTE(e), 0);
+      items.push({ category: 'te', isTE: true, gained: totalTE, total, eggTotal: eggTE(props.egg) });
     }
 
   // --- Equipped Loadout (combines "Equipped X Set" with the artifact/stone icons) ---

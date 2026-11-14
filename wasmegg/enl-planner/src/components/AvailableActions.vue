@@ -34,7 +34,9 @@
     <!-- Tab content -->
     <div class="min-h-[200px]">
       <InitialStateContainer v-if="activeTab === 'initial'" ref="initialStateContainerRef" />
-      <ResearchActions v-if="activeTab === 'research'" @refresh-backup="$emit('refresh-backup')" />
+      <ResearchActions v-if="activeTab === 'research'" @refresh-backup="$emit('refresh-backup')">
+        <template #top><ResearchCubeToggle /></template>
+      </ResearchActions>
 
       <template v-if="activeTab === 'farm'">
         <SectionSwitch v-model="farmSection" :sections="FARM_SECTIONS" />
@@ -47,7 +49,7 @@
 
       <template v-if="activeTab === 'rockets'">
         <SectionSwitch v-model="rocketSection" :sections="ROCKET_SECTIONS" />
-        <FuelTankActions v-if="rocketSection === 'fuel'" />
+        <FuelTankLevels v-if="rocketSection === 'fuel'" />
         <RocketActions v-if="rocketSection === 'launch'" />
       </template>
 
@@ -57,14 +59,15 @@
 </template>
 
 <script setup lang="ts">
+import ResearchCubeToggle from './actions/ResearchCubeToggle.vue';
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import VehicleActions from './actions/VehicleActions.vue';
-import HabActions from './actions/HabActions.vue';
-import ResearchActions from './actions/ResearchActions.vue';
+import VehicleActions from 'ui/components/planners/actions/VehicleActions.vue';
+import HabActions from 'ui/components/planners/actions/HabActions.vue';
+import ResearchActions from 'ui/components/planners/actions/ResearchActions.vue';
 import ArtifactActions from './actions/ArtifactActions.vue';
-import SiloActions from './actions/SiloActions.vue';
-import FuelTankActions from './actions/FuelTankActions.vue';
-import WaitActions from './actions/WaitActions.vue';
+import SiloActions from 'ui/components/planners/actions/SiloActions.vue';
+import FuelTankLevels from './actions/FuelTankLevels.vue';
+import WaitActions from 'ui/components/planners/actions/WaitActions.vue';
 import RocketActions from './actions/RocketActions.vue';
 import InitialStateContainer from './containers/InitialStateContainer.vue';
 import SectionSwitch from './SectionSwitch.vue';

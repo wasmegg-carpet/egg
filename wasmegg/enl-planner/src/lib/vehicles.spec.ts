@@ -6,8 +6,8 @@ const maxed = { bustUnionsLevel: 10, vehicleCostMultiplier: 0.9 };
 
 describe('regular vehicle prices', () => {
   it('match the sheet with max reductions', () => {
-    expect(getDiscountedVehiclePrice(0, 1, maxed)).toBeCloseTo(10.09, 1); // 2nd Trike
-    expect(getDiscountedVehiclePrice(1, 0, maxed)).toBeCloseTo(245, 0); // 1st Transit Van
+    expect(getDiscountedVehiclePrice(0, 1, maxed)).toBe(10); // 2nd Trike: 10.09 on the sheet, rounded down
+    expect(getDiscountedVehiclePrice(1, 0, maxed)).toBe(244); // 1st Transit Van
     expect(getDiscountedVehiclePrice(2, 15, maxed) / 621.487e6).toBeCloseTo(1, 4); // Pickup #16
     expect(getDiscountedVehiclePrice(11, 0, maxed) / 9.506e36).toBeCloseTo(1, 3); // 1st Hyperloop
     expect(getDiscountedTrainCarPrice(1, maxed) / 881.582e33).toBeCloseTo(1, 4); // 2nd car
