@@ -36,6 +36,11 @@ export const SIM_CHANGES: SimChange[] = [
     date: '2026-11-11T11:13:07-06:00',
     note: "Fixed Auto's Multi-Layering milestones buying earnings research by the wrong payback rule. Mostly affects around 200 TE: total times change by less than 0.25% either way.",
   },
+  {
+    commit: '72e0de50',
+    date: '2026-11-14T11:06:05-06:00',
+    note: "Auto's purchase plans now count 2x earnings while saving up, so the buying before the final sale no longer expects less money than it will have. Mostly affects 100 to 150 TE: total times change by less than 0.6%, almost all faster.",
+  },
 ];
 
 /** The newest change in the code doing the building: what a new table's `simChange` stamp says. */
