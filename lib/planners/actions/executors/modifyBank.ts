@@ -10,6 +10,7 @@
 import type { PayloadExecutor, BaseExecutorContext } from '../executorTypes';
 import type { ModifyBankPayload } from '../../types/actions/core';
 import type { PlannerProfile } from '../../profile';
+import { formatDuration } from '../../format';
 
 export function createModifyBankExecutor(profile: PlannerProfile): PayloadExecutor<ModifyBankPayload> {
   return {
@@ -17,13 +18,22 @@ export function createModifyBankExecutor(profile: PlannerProfile): PayloadExecut
       return 0; // No time or currency cost; the bank delta itself is reflected in bankDelta.
     },
 
-    getDisplayName(): string {
+    getDisplayName(payload?: ModifyBankPayload): string {
+      const credit = payload?.earningsBoostCredit;
+      if (credit) {
+        return `Silo Credit: last ${formatDuration(credit.seconds)} counted at ${credit.multiplier}x`;
+      }
       return 'Modify Bank Value';
     },
 
     getEffectDescription(payload: ModifyBankPayload): string {
       const sign = payload.delta >= 0 ? '+' : '-';
-      return `${sign}${profile.currency.formatPrice(Math.abs(payload.delta))} ${profile.currency.name}`;
+      const amount = `${sign}${profile.currency.formatPrice(Math.abs(payload.delta))} ${profile.currency.name}`;
+      const credit = payload.earningsBoostCredit;
+      if (credit) {
+        return `${amount}: logging in during the ${credit.multiplier}x boost pays the last ${formatDuration(credit.seconds)} offline (silo-capped) at ${credit.multiplier}x; the wait already paid it at 1x`;
+      }
+      return amount;
     },
   };
 }

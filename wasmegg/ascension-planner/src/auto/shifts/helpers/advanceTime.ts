@@ -237,6 +237,7 @@ export function advanceTimeWithBoundaries(
               amount: delta,
               previousValue: currentState.bankValue || 0,
               delta,
+              earningsBoostCredit: { seconds: creditSeconds, multiplier: 2 },
             });
             currentState = applyAction(currentState, modifyBank);
             modifyBank.bankDelta = delta;

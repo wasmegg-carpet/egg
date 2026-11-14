@@ -413,6 +413,9 @@ const displayName = computed(() => {
   const name = executor.getDisplayName(props.action.payload);
 
   if (props.action.type === 'modify_bank') {
+    if ((props.action.payload as { earningsBoostCredit?: unknown }).earningsBoostCredit) {
+      return name;
+    }
     const rate = props.action.endState.offlineEarnings;
     if (rate > 0 && Math.abs(props.action.bankDelta) >= 0.5) {
       const seconds = Math.abs(props.action.bankDelta) / rate;
