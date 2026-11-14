@@ -7,6 +7,8 @@ export interface StartAscensionPayload {
   initialEgg: VirtueEgg;
   initialFarmState?: import('../index').CurrentFarmState;
   isQuickContinue?: boolean;
+  /** Auto planner only: the build that generated this plan's actions. Kept through save, load and export. */
+  generatedBy?: import('lib/planners/diagnostics').BuildStamp;
 }
 
 /**

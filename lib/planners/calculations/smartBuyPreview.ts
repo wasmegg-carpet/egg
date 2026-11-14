@@ -34,7 +34,7 @@ import type { CalculationsSnapshot } from '@planner/types';
 import type { SimulationContext, EngineState } from '@planner/engine/types';
 import { createBaseEngineState } from '../engine/adapter';
 import { computeSnapshot } from '../engine/compute';
-import { applyAction, applyTime, boostTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@planner/engine/apply';
+import { applyAction, applyTime, boostTransitionsFrom, forecastTransitionsFrom, calculateEarningsForTime, getTimeToSave } from '@planner/engine/apply';
 import { isResearchSaleActive, getNextSaleEnd } from '../events';
 import { DEBUG_SALE_AWARE_BUY } from '../debugFlags';
 import { ei } from '../..';
@@ -334,7 +334,9 @@ export function simulateSaleAwareBuy(
       simState = pending.farm
         ? applyFarmPurchase(simState, pending.farm.steps)
         : applyAction(simState, buyResearchAction(researchId, pending.fromLevel, pending.price));
-      simState = applyTime(simState, pending.timeToBuySeconds, simSnapshot);
+      simState = applyTime(simState, pending.timeToBuySeconds, simSnapshot, {
+        transitions: boostTransitionsFrom(simSnapshot, simTime),
+      });
       simTime += pending.timeToBuySeconds;
       // `skipEpochConversion` keeps `lastStepTime` in the incoming snapshot's own reference frame
       // (relative or absolute) across this loop's repeated `computeSnapshot` calls — same reasoning
@@ -468,7 +470,7 @@ export function simulateEarningsPreludeForSaleEnd(
     const level = simState.researchLevels[candidate.research.id] || 0;
 
     simState = applyAction(simState, buyResearchAction(candidate.research.id, level, candidate.price));
-    simState = applyTime(simState, waitSeconds, simSnapshot);
+    simState = applyTime(simState, waitSeconds, simSnapshot, { transitions: boostTransitionsFrom(simSnapshot, simTime) });
     simTime += waitSeconds;
     // See `simulateSaleAwareBuy`'s identical comment — keeps `lastStepTime` in its incoming frame
     // across this loop's repeated snapshots instead of risking a mid-loop epoch flip.
@@ -580,7 +582,7 @@ export function runDeliveryBuyLoop(
       const transitions = boostTransitionsFrom(simSnapshot, simTime);
       const purchase = getSaleAwareTimeToSave(research, level, mods, isSale, simTime, simSnapshot, transitions);
       simState = applyAction(simState, buyResearchAction(researchId, level, purchase.price));
-      simState = applyTime(simState, purchase.waitSeconds, simSnapshot);
+      simState = applyTime(simState, purchase.waitSeconds, simSnapshot, { transitions });
       simTime += purchase.waitSeconds;
       // See `simulateSaleAwareBuy`'s identical comment — keeps `lastStepTime` in its incoming frame
       // across this loop's repeated snapshots instead of risking a mid-loop epoch flip.
@@ -643,6 +645,7 @@ function buyDeliveryLevels(
     const research = nextDeliveryLevel(available, simState, simSnapshot, context, mods, isSale);
 
     const level = levels[research.id] || 0;
+    const transitions = boostTransitionsFrom(simSnapshot, simTime);
     const purchase = getSaleAwareTimeToSave(
       research,
       level,
@@ -650,12 +653,12 @@ function buyDeliveryLevels(
       isResearchSaleActive(simTime),
       simTime,
       simSnapshot,
-      boostTransitionsFrom(simSnapshot, simTime)
+      transitions
     );
     simTime += purchase.waitSeconds;
     if (simTime > deadline) return null;
     simState = applyAction(simState, buyResearchAction(research.id, level, purchase.price));
-    simState = applyTime(simState, purchase.waitSeconds, simSnapshot);
+    simState = applyTime(simState, purchase.waitSeconds, simSnapshot, { transitions });
     // See `simulateSaleAwareBuy`'s identical comment: keeps `lastStepTime` in its incoming frame.
     simSnapshot = computeSnapshot(simState, context, { skipEpochConversion: true });
     purchases.push({ researchId: research.id, purchaseTimestamp: simTime, price: purchase.price });
@@ -1071,7 +1074,11 @@ export function simulateFinalSaleGapBuy(
     let projectedSnapshot = stateSnapshot;
     if (idleSeconds > 0) {
       const engineState: EngineState = { ...createBaseEngineState(stateSnapshot), researchLevels: { ...levels } };
-      const projectedState = applyTime(engineState, idleSeconds, stateSnapshot);
+      // Counts the 2x earnings boosts in the gap and, in silo mode, each boost's credit for the time
+      // since `fromTime`'s purchase — so a candidate bought closer to a boost earns less of it.
+      const projectedState = applyTime(engineState, idleSeconds, stateSnapshot, {
+        transitions: forecastTransitionsFrom(stateSnapshot, fromTime, context),
+      });
       // See `simulateSaleAwareBuy`'s identical comment — keeps `lastStepTime` in its incoming frame
       // across this projection instead of risking a mid-loop epoch flip.
       projectedSnapshot = computeSnapshot(projectedState, context, { skipEpochConversion: true });
@@ -1160,7 +1167,8 @@ export function simulateFinalSaleGapBuy(
     const candidateState = applyTime(
       applyAction(simState, buyResearchAction(candidate.research.id, level, candidate.price)),
       timeToBuySeconds,
-      simSnapshot
+      simSnapshot,
+      { transitions: boostTransitionsFrom(simSnapshot, simTime) }
     );
     // See `simulateSaleAwareBuy`'s identical comment — keeps `lastStepTime` in its incoming frame.
     const candidateSnapshot = computeSnapshot(candidateState, context, { skipEpochConversion: true });

@@ -14,6 +14,12 @@ import { isEarningsBoostActive, getNextEarningsBoostStart, getNextEarningsBoostE
 export interface EarningsRateTransition {
   atSeconds: number;
   boostActive: boolean;
+  /**
+   * Silo mode only, on a boost start (see `forecastTransitionsFrom`): seconds of pre-boost earnings
+   * credited when the boost starts, the way the auto planner's `modify_bank` credit pays them. The
+   * time since t=0 (the last purchase), up to the silos' away time.
+   */
+  siloCreditSeconds?: number;
 }
 
 /**
@@ -70,7 +76,9 @@ export const EARNINGS_BOOST_MULTIPLIER = 2;
 export function boostTransitionsFrom(
   snapshot: BaseCalculationsSnapshot,
   absTime: number,
-  horizonSeconds: number = BOOST_TRANSITION_HORIZON_SECONDS
+  horizonSeconds: number = BOOST_TRANSITION_HORIZON_SECONDS,
+  /** Silo mode's away time: each boost start then carries `siloCreditSeconds`. 0 for none. */
+  siloSeconds: number = 0
 ): EarningsRateTransition[] {
   const trueActiveNow = isEarningsBoostActive(absTime);
   const transitions: EarningsRateTransition[] = [];
@@ -112,12 +120,41 @@ export function boostTransitionsFrom(
       });
       break;
     }
-    transitions.push({ atSeconds: nextFlip - absTime, boostActive: !active });
+    const atSeconds = nextFlip - absTime;
+    transitions.push(
+      !active && siloSeconds > 0
+        ? { atSeconds, boostActive: true, siloCreditSeconds: Math.min(atSeconds, siloSeconds) }
+        : { atSeconds, boostActive: !active }
+    );
     active = !active;
     cursor = nextFlip;
   }
 
   return transitions;
+}
+
+/**
+ * `boostTransitionsFrom` for a forecast: what a plan expects to earn or how soon it expects to
+ * afford something. In silo mode (the auto planner's `deferForEarningsMode`) it also counts the
+ * credit each boost start pays for the time since the last purchase, which `absTime` is taken to be.
+ *
+ * Not for the engine's own waits or the UI's "time to afford": the engine never pays that credit
+ * itself (the auto planner adds it as a `modify_bank` action), so those use `boostTransitionsFrom`.
+ *
+ * Only the final-sale gap buy's projection uses it (`simulateFinalSaleGapBuy`). Using it in every
+ * forecast (ROI, ranking, smart buy, milestone chains) made silo-mode build tables slightly worse,
+ * up to +0.29% total time: most of those purchases are made on paths where the auto planner doesn't
+ * collect the credit, so the forecasts promised money the plan never got.
+ */
+export function forecastTransitionsFrom(
+  snapshot: BaseCalculationsSnapshot,
+  absTime: number,
+  context: object,
+  horizonSeconds: number = BOOST_TRANSITION_HORIZON_SECONDS
+): EarningsRateTransition[] {
+  const siloMode = !!(context as { deferForEarningsMode?: boolean }).deferForEarningsMode;
+  const siloSeconds = siloMode ? (snapshot.siloTimeMinutes || 0) * 60 : 0;
+  return boostTransitionsFrom(snapshot, absTime, horizonSeconds, siloSeconds);
 }
 
 /**
@@ -231,6 +268,10 @@ export function calculateEarningsForTime(
   let total = 0;
 
   for (const transition of transitions) {
+    // Paid when the boost starts, so a window ending right then still gets it.
+    if (transition.siloCreditSeconds && transition.atSeconds > 0 && transition.atSeconds <= seconds) {
+      total += siloCredit(transition, prevSnapshot, rateFor(false));
+    }
     if (transition.atSeconds >= seconds) break;
     if (transition.atSeconds > 0) {
       const eggsAtSegmentEnd = eggsAt(transition.atSeconds);
@@ -242,6 +283,23 @@ export function calculateEarningsForTime(
   total += rateFor(segmentActive) * (eggsAt(seconds) - eggsAtSegmentStart);
 
   return total;
+}
+
+/**
+ * Silo mode's credit at a boost start: the delivery rate then, at the unboosted price per egg, for
+ * the transition's `siloCreditSeconds` (`advanceTimeWithBoundaries` pays the same from its own snapshot).
+ */
+function siloCredit(
+  transition: EarningsRateTransition,
+  prevSnapshot: BaseCalculationsSnapshot,
+  unboostedPerEgg: number
+): number {
+  const population = Math.min(
+    prevSnapshot.habCapacity,
+    prevSnapshot.population + (prevSnapshot.offlineIHR / 60) * transition.atSeconds
+  );
+  const delivered = Math.min(prevSnapshot.ratePerChickenPerSecond * population, prevSnapshot.shippingCapacity);
+  return unboostedPerEgg * delivered * (transition.siloCreditSeconds || 0);
 }
 
 /**
@@ -332,7 +390,14 @@ export function getTimeToSave(
     dollarsSoFar += dollarsAvailable;
     segmentStart = regimeEnd;
     eggsAtSegmentStart = eggsAtRegimeEnd;
-    if (i < transitions.length) segmentActive = transitions[i].boostActive;
+    if (i < transitions.length) {
+      // Silo mode: still saving when the boost starts, so its credit is paid; enough lands the purchase then.
+      if (transitions[i].siloCreditSeconds) {
+        dollarsSoFar += siloCredit(transitions[i], prevSnapshot, rateFor(false));
+        if (dollarsSoFar >= effectiveCost) return regimeEnd;
+      }
+      segmentActive = transitions[i].boostActive;
+    }
   }
 
   return Infinity;

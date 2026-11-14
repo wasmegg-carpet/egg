@@ -5,6 +5,7 @@ import { migrateExportedPlanV1, type ExportedPlan, type ExportedPlanV1 } from '.
 import { pickVariant, type VariantKey, type VariantResult } from '@/stores/autoPlanner';
 import { continueLabel } from './buildStep';
 import type { AscensionSummary } from './types';
+import { buildStamp } from 'lib/planners/diagnostics';
 
 /** Human-readable form of a `VariantKey` for library plan names, e.g. `1-sale`, `2-sale Tier 13`,
  * `Continue`. */
@@ -46,7 +47,7 @@ export function buildLibraryPlansFromExport(
         index: 0,
         timestamp: best.summary.startTime * 1000,
         type: 'start_ascension',
-        payload: { initialEgg: 'curiosity' },
+        payload: { initialEgg: 'curiosity', generatedBy: buildStamp() },
         cost: 0, elrDelta: 0, offlineEarningsDelta: 0, eggValueDelta: 0,
         habCapacityDelta: 0, layRateDelta: 0, shippingCapacityDelta: 0,
         ihrDelta: 0, bankDelta: 0, populationDelta: 0, totalTimeSeconds: 0,
@@ -94,6 +95,7 @@ export function buildLibraryPlansFromExport(
       name,
       data: {
         version: 1,
+        savedBy: buildStamp(),
         actions: finalActions,
         initialState: state,
         virtueState: {
