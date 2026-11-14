@@ -5,13 +5,13 @@ import { ei, MissionType, type ShipsConfig } from 'lib';
 import type { DAGNode, LaunchOption, OptimizerConfig, OptimizerSolution, RecipeDAG } from '@/lib/types';
 import { finalizeSolutions } from '@/lib';
 import { optimizeFull, type OptimizeArgs } from '@/lib/optimizer-core';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 
 export function makeNode(id: string, isLeaf: boolean, children: [string, number][] = [], pCraft = 0): DAGNode {
   return {
     id,
     isLeaf,
-    children: children.map(([nodeId, quantity]) => ({ nodeId, quantity })),
+    children: children.map(([nodeId, qty]) => ({ nodeId, qty })),
     legendaryCraftProbability: pCraft,
   };
 }
@@ -82,15 +82,25 @@ export function makeOpt(
 
 // Everything but the menu is an override on `OptimizeArgs`, so that a spec names only what it is
 // actually varying.
-export interface OptimizeOverrides extends Partial<Omit<OptimizeArgs, 'options' | 'recipeDag' | 'baseYield'>> {
+export interface OptimizeOverrides extends Partial<Omit<OptimizeArgs, 'options' | 'recipeDag' | 'ownedStock'>> {
   launchPeriodSeconds?: number;
 }
+
+// The standard end-to-end run: one 4-star puzzle cube, a tank and a time budget both large enough not to
+// bind, and no low-observation loot. Shared because craft-budget.spec.ts and pipeline.spec.ts both mean *the*
+// default run by it, and two copies drifting apart would leave them silently testing different plans.
+export const CUBE_RUN: OptimizerConfig = {
+  desiredArtifactNodeIds: ['puzzle-cube-4'],
+  includeNotEnoughData: false,
+  fuelTankCapacity: 2_000_000_000,
+  timeBudgetSeconds: 3 * 24 * 3600,
+};
 
 export async function optimize(
   config: OptimizerConfig,
   playerConfig: ShipsConfig,
   dag: RecipeDAG,
-  baseYield: Map<string, number>,
+  ownedStock: Map<string, number>,
   { launchPeriodSeconds = 0, ...over }: OptimizeOverrides = {}
 ): Promise<OptimizerSolution> {
   const { desiredArtifactNodeIds, fuelTankCapacity, timeBudgetSeconds } = config;
@@ -101,7 +111,7 @@ export async function optimize(
     fuelCapacity: fuelTankCapacity,
     timeCapacityPerSlot: timeBudgetSeconds,
     maximumCost: undefined,
-    baseYield,
+    ownedStock,
     ...over,
   });
   return finalizeSolutions([solution], dag)[0];
@@ -119,8 +129,8 @@ export function makeSolution(overrides: Partial<OptimizerSolution>): OptimizerSo
     runningTimeSeconds: 0,
     choiceHistory: [],
     expectedDrops: [],
-    finalYieldVector: new Map(),
-    baseYield: new Map(),
+    supplyByItem: new Map(),
+    ownedStock: new Map(),
     recipeDag: new Map(),
     craftPrimal: new Map(),
     perTarget: [],

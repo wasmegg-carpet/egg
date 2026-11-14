@@ -1,3 +1,5 @@
+import { shiftCost } from '../../../earning_bonus';
+
 import { PROFILE } from '@planner/lib/profile';
 import {
   currencyWaitTarget,
@@ -41,6 +43,16 @@ export function refreshActionPayload(
   prevSnapshot: CalculationsSnapshot,
   context?: SimulationContext
 ): Action {
+  // The ascension planner's `shift` action isn't in the shared Action union; nothing else passes one.
+  if ((action.type as string) === 'shift') {
+    const shift = action as unknown as { payload: { fromEgg: string; newShiftCount: number } };
+    const prev = prevSnapshot as unknown as { currentEgg: string; shiftCount: number };
+    return {
+      ...action,
+      payload: { ...shift.payload, fromEgg: prev.currentEgg, newShiftCount: prev.shiftCount + 1 },
+      cost: shiftCost(prevSnapshot.soulEggs, prev.shiftCount),
+    } as unknown as Action;
+  }
   if (context) {
     if (action.type === 'buy_research') {
       const payload = action.payload as import('@planner/types').BuyResearchPayload;

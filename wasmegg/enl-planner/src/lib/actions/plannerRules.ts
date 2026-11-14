@@ -145,3 +145,6 @@ export function syncPlannerFarmEgg(_farm: CurrentFarmState, _startAction: Action
 export function plannerGroupName(_egg: string): string {
   return '';
 }
+
+/** Enlightenment plans carry no per-plan file state to clear on import. */
+export function onPlanImported(): void {}

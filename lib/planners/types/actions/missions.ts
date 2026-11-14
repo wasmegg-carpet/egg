@@ -9,6 +9,7 @@ export interface LaunchMissionEntry {
   ship: number; // Spaceship enum value
   duration: number; // DurationType enum value
   count: number;
+  targetAfxId?: number; // absent means untargeted
 }
 
 /**

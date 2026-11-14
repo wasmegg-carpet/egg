@@ -14,6 +14,9 @@ const ARENA_SWEEP = 'tests/arena/invariants.spec.ts';
 
 export default defineConfig({
   plugins: [vue()],
+  // Parse the 82MB loot dataset as JSON instead of generating per-key JS exports.
+  // It is imported only as a default.
+  json: { stringify: true, namedExports: false },
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
