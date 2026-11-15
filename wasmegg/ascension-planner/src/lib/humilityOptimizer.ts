@@ -89,30 +89,33 @@ export function currentHumilityVisit(
   if (!visit) return null;
 
   // The tank where the launch will be inserted, not on arrival: anything the player launched by hand
-  // earlier in this visit is fuel already gone. A staged launch is added back, since restaging removes it.
+  // earlier in this visit is fuel already gone. What this visit's own staged actions did to it is undone,
+  // since restaging removes them: the fuel a staged launch burned is back, and the stores staged for it
+  // in earlier visits are neither banked nor in the way. Measured off the snapshots on either side of
+  // each staged action rather than its payload, which says what was asked for, not what the tank allowed.
   const runStart = actionsBeforeInsertion.findIndex(action => action.id === run.visitId);
   let tank = actionsBeforeInsertion[runStart].endState;
   const staged = new Map<VirtueEgg, number>();
-  const restored = new Map<VirtueEgg, number>();
-  for (let i = runStart; i <= run.endIndex; i++) {
+  let stagedAtTank = new Map<VirtueEgg, number>();
+  for (let i = 1; i <= run.endIndex; i++) {
     const action = actionsBeforeInsertion[i];
-    if (action.sourceTag !== tag) {
-      tank = action.endState;
-      for (const [egg, amount] of staged) restored.set(egg, amount);
-    } else if (action.type === 'launch_missions') {
-      for (const [egg, amount] of Object.entries(action.payload.fuelConsumed) as [VirtueEgg, number][]) {
-        staged.set(egg, (staged.get(egg) ?? 0) + amount);
+    if (action.sourceTag === tag) {
+      const before = actionsBeforeInsertion[i - 1].endState.fuelTankAmounts;
+      for (const [egg, amount] of Object.entries(action.endState.fuelTankAmounts) as [VirtueEgg, number][]) {
+        const change = amount - (before[egg] ?? 0);
+        if (change !== 0) staged.set(egg, (staged.get(egg) ?? 0) + change);
       }
+    } else if (i >= runStart) {
+      tank = action.endState;
+      stagedAtTank = new Map(staged);
     }
   }
+  const without = (egg: VirtueEgg) => Math.max(0, (tank.fuelTankAmounts[egg] ?? 0) - (stagedAtTank.get(egg) ?? 0));
+
   const fuelByEgg = new Map<ei.Egg, number>();
-  for (const [egg, id] of NON_HUMILITY_EGG_IDS) {
-    fuelByEgg.set(id, Math.max(0, (tank.fuelTankAmounts[egg] ?? 0) + (restored.get(egg) ?? 0)));
-  }
+  for (const [egg, id] of NON_HUMILITY_EGG_IDS) fuelByEgg.set(id, without(egg));
   let stored = 0;
-  for (const [egg, amount] of Object.entries(tank.fuelTankAmounts) as [VirtueEgg, number][]) {
-    stored += Math.max(0, amount + (restored.get(egg) ?? 0));
-  }
+  for (const egg of Object.keys(tank.fuelTankAmounts) as VirtueEgg[]) stored += without(egg);
   const tankFree = Math.max(0, (fuelTankSizes[tank.tankLevel] ?? 0) - stored);
 
   return { visit: { ...visit, fuelByEgg, tankLevel: tank.tankLevel }, tankFree, visitCount: visits.length };

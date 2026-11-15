@@ -91,6 +91,56 @@ describe('the visit the planner is on', () => {
   });
 });
 
+// A plan small enough to count by hand: a 400T tank that arrives on Humility holding 100T of Curiosity.
+function smallPlan(): Action[] {
+  const actions = plan().slice(0, 3);
+  const tank = { curiosity: 100e12, integrity: 0, humility: 0, resilience: 0, kindness: 0 };
+  for (const action of actions) action.endState = { ...action.endState, tankLevel: 6, fuelTankAmounts: tank };
+  return actions;
+}
+function after(previous: Action, id: string, type: string, fuel: Record<string, number>, sourceTag?: string): Action {
+  return {
+    ...previous,
+    id,
+    type,
+    totalTimeSeconds: 0,
+    payload: {},
+    endState: { ...previous.endState, fuelTankAmounts: { ...previous.endState.fuelTankAmounts, ...fuel } },
+    sourceTag,
+  } as unknown as Action;
+}
+
+describe('what staging already did to the tank', () => {
+  const tag = humilitySourceTag('shift_a1b2c3d');
+
+  it('neither banks nor is crowded by the stores staged for this visit', () => {
+    const [start, arrival, wait] = smallPlan();
+    // A 250T Kindness store staged before the arrival, carried through every later snapshot.
+    const store = after(start, 'store_staged', 'store_fuel', { kindness: 250e12 }, tag);
+    for (const action of [arrival, wait]) {
+      action.endState = {
+        ...action.endState,
+        fuelTankAmounts: { ...action.endState.fuelTankAmounts, kindness: 250e12 },
+      };
+    }
+    const current = read([start, store, arrival, wait]);
+    expect(current?.visit.fuelByEgg.get(ei.Egg.KINDNESS)).toBe(0);
+    expect(current?.visit.fuelByEgg.get(ei.Egg.CURIOSITY)).toBe(100e12);
+    expect(current?.tankFree).toBe(fuelTankSizes[6] - 100e12);
+  });
+
+  it('gives back what a staged launch really burned, not what it asked for', () => {
+    const [start, arrival, wait] = smallPlan();
+    // Asked for 80T of Humility from a tank holding none, so the tank gave none; burned 60T of Curiosity.
+    const launch = after(wait, 'launch_staged', 'launch_missions', { curiosity: 40e12 }, tag);
+    (launch as unknown as { payload: unknown }).payload = { fuelConsumed: { curiosity: 60e12, humility: 80e12 } };
+    const later = after(launch, 'wait_later', 'wait_for_time', {});
+    const current = read([start, arrival, wait, launch, later]);
+    expect(current?.visit.fuelByEgg.get(ei.Egg.CURIOSITY)).toBe(100e12);
+    expect(current?.tankFree).toBe(fuelTankSizes[6] - 100e12);
+  });
+});
+
 describe('the time field', () => {
   it('reads units, and a bare number as days', () => {
     expect(durationSeconds('3d')).toBe(3 * 86400);

@@ -23,6 +23,19 @@
         <p v-if="store.saveError" class="w-full text-[11px] text-red-600">{{ store.saveError }}</p>
       </div>
 
+      <p v-else class="text-[11px] text-gray-400 leading-normal">
+        Ship levels, inventory and crafting level come from your save.
+        <button
+          type="button"
+          class="text-blue-600 hover:text-blue-700 disabled:opacity-50"
+          :disabled="store.saveLoading"
+          @click="store.loadSave()"
+        >
+          {{ store.saveLoading ? 'Reloading…' : 'Reload it' }}
+        </button>
+        <span v-if="store.saveError" class="block text-red-600">{{ store.saveError }}</span>
+      </p>
+
       <!-- What to aim for -->
       <section>
         <h4 class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">
@@ -42,7 +55,7 @@
               :value="settings.duration"
               placeholder="e.g. 3d, 36h"
               class="block w-24 px-2 py-1 text-xs border rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              :class="timeInvalid ? 'border-red-300' : 'border-gray-300'"
+              :class="timeRejected ? 'border-red-300' : 'border-gray-300'"
               @change="setDuration(($event.target as HTMLInputElement).value)"
             />
             <button
@@ -60,11 +73,11 @@
               {{ preset }}
             </button>
           </div>
-          <p class="mt-1 text-[11px] leading-normal" :class="timeInvalid ? 'text-red-600' : 'text-gray-400'">
+          <p class="mt-1 text-[11px] leading-normal" :class="timeRejected ? 'text-red-600' : 'text-gray-400'">
             {{
-              timeInvalid
-                ? 'Enter how long the missions may fly, e.g. 3d or 36h.'
-                : 'How long the three mission slots may fly. Saving for the ships comes on top.'
+              timeRejected
+                ? 'Enter a duration such as 3d or 36h.'
+                : 'How long the three mission slots may be kept busy.'
             }}
           </p>
         </div>
@@ -168,10 +181,11 @@
         </p>
         <p v-else-if="timeInvalid" class="text-xs text-gray-400">Enter the time on Humility to find a ship set.</p>
         <p v-else-if="error" class="text-xs text-red-600">Could not compute a ship set: {{ error }}</p>
-        <p v-else-if="!shown" role="status" class="flex items-center gap-2 text-xs text-gray-500">
-          <InlineSpinner />
+        <p v-else-if="!shown && computing" role="status" class="flex items-center gap-2 text-xs text-gray-500">
+          <InlineSpinner class="h-4 w-4 text-gray-400" />
           Finding the best ship set…
         </p>
+        <p v-else-if="!shown" class="text-xs text-gray-400">No ship set yet.</p>
 
         <div v-else class="relative">
           <div class="space-y-3" :class="stale ? 'opacity-40 pointer-events-none transition-opacity' : ''">
@@ -217,7 +231,7 @@
                   <dd class="font-semibold text-gray-800">{{ totalShips }}</dd>
                 </div>
                 <div class="rounded bg-gray-50 px-2 py-1.5">
-                  <dt class="text-gray-400">In flight</dt>
+                  <dt class="text-gray-400">Busiest slot</dt>
                   <dd class="font-semibold text-gray-800">
                     {{ formatDuration(projected.makespanSeconds) }}
                     <span class="font-normal text-gray-400">of {{ formatDuration(shown.timeSeconds) }}</span>
@@ -241,17 +255,23 @@
 
               <p v-if="fuelOverflow > 0" class="text-[11px] text-red-600 leading-normal">
                 This ship set needs {{ formatNumber(fuelToStoreTotal, 1) }} more fuel than is banked, and the tank only
-                has room for {{ formatNumber(current.tankFree, 1) }}: a full tank assumes all of it can hold what these
-                ships burn, but part of yours already holds fuel they do not. Make room in the Tank tab, give the visit
-                less time, or plan with the banked fuel.
+                has room for {{ formatNumber(current.tankFree, 1) }}.
+                <template v-if="settings.fuelBudget === 'full-tank'">
+                  A full tank assumes all of it can hold what these ships burn, and part of yours already holds fuel
+                  they do not.
+                </template>
+                Make room in the Tank tab, give the visit less time, or plan with the banked fuel.
               </p>
               <p v-else-if="fuelToStore.length > 0" class="text-[11px] text-amber-700 leading-normal">
-                Not in the tank yet:
+                {{ inPlan ? 'Stored for this launch:' : 'Not in the tank yet:' }}
                 <span v-for="fuel in fuelToStore" :key="fuel.egg" class="inline-flex items-center gap-0.5 mr-1.5">
                   <img :src="eggIcon(fuel.egg)" class="h-3 w-3" :alt="VIRTUE_EGG_NAMES[fuel.egg]" />
                   {{ formatNumber(fuel.amount, 1) }}
                 </span>
-                Staging stores it in your earlier visits to those eggs, or adds a visit where there is none.
+                <template v-if="inPlan">Staging put it in your earlier visits to those eggs.</template>
+                <template v-else>
+                  Staging stores it in your earlier visits to those eggs, or adds a visit where there is none.
+                </template>
               </p>
 
               <p v-if="current.visit.visitIndex > 0" class="text-[11px] text-gray-400 leading-normal">
@@ -270,7 +290,7 @@
                   </label>
                 </p>
                 <p v-else-if="saving && saving.seconds >= 60" class="text-[11px] text-gray-600">
-                  Saving for these ships adds {{ formatDuration(saving.seconds) }} before they launch.
+                  The launch waits {{ formatDuration(saving.seconds) }} for the gems these ships cost.
                 </p>
 
                 <div class="flex flex-wrap items-center gap-2">
@@ -289,14 +309,19 @@
                   >
                     {{ staging ? 'Staging…' : stagedLaunch ? 'Restage with this ship set' : 'Stage into plan' }}
                   </button>
-                  <span v-if="stagedLaunch && !inPlan" class="text-[11px] text-amber-700">
-                    The plan has a different ship set staged for this visit. Restaging replaces it.
+                  <span v-if="stagedLaunch && !inPlan && fuelOverflow === 0" class="text-[11px] text-amber-700">
+                    The plan has a different answer staged for this visit. Restaging replaces it.
                   </span>
                   <span v-else-if="inPlan" class="text-[11px] text-gray-500">
                     The launch, its fuel and the wait for the ships are in the action history.
                   </span>
                 </div>
                 <p v-if="stageError" class="text-[11px] text-red-600">{{ stageError }}</p>
+                <p v-if="inPlan && missionsStore.drift.length > 0" class="text-[11px] text-red-600 leading-normal">
+                  This planner charges different fuel than the optimizer assumed for
+                  {{ missionsStore.drift.map(d => VIRTUE_EGG_NAMES[d.egg]).join(', ') }}. The plan uses this planner's
+                  amounts.
+                </p>
               </div>
 
               <details class="border-t border-gray-100 pt-2">
@@ -318,8 +343,8 @@
             </template>
           </div>
 
-          <div v-if="stale && !error" role="status" class="absolute inset-0 flex items-start justify-center pt-6">
-            <InlineSpinner />
+          <div v-if="stale && computing" role="status" class="absolute inset-0 flex items-start justify-center pt-6">
+            <InlineSpinner class="h-6 w-6 text-gray-500" />
             <span class="sr-only">Finding the best ship set…</span>
           </div>
         </div>
@@ -421,6 +446,8 @@ const setDuration = (duration: string) => patch({ duration: duration.trim() });
 
 const timeSeconds = computed(() => (settings.value ? durationSeconds(settings.value.duration) : NaN));
 const timeInvalid = computed(() => !Number.isFinite(timeSeconds.value));
+// Typed, and not a duration: an empty field is only unanswered.
+const timeRejected = computed(() => timeInvalid.value && (settings.value?.duration ?? '') !== '');
 
 const bankedFuel = computed(() => {
   const visit = current.value?.visit;
@@ -475,31 +502,31 @@ let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 async function solve() {
   const mine = ++generation;
   const visit = current.value?.visit;
+  const asked = settings.value;
   const player = store.player;
   const key = questionKey.value;
-  const request = visit && settings.value && player ? buildRequest(visit, settings.value, player) : null;
-  if (!visit || !player || !request) {
+  if (!visit || !asked || !player) {
     computing.value = false;
     return;
   }
-  const effort = settings.value!.effort;
   try {
+    const request = buildRequest(visit, asked, player);
+    if (!request) return;
     const solutions = await (client ??= createOptimizerClient()).run(request.input);
     if (mine !== generation) return;
     // Null is "no result is coming": superseded, or the worker was torn down.
     if (solutions === null) return;
     const [solution] = finalizeSolutions(solutions, request.input.recipeDag);
-    store.solved = solution
-      ? {
-          visitId: visit.visitId,
-          key,
-          solution,
-          timeSeconds: request.timeSeconds,
-          gemBudget: request.gemBudget,
-          effort,
-          player,
-        }
-      : null;
+    if (!solution) throw new Error('the optimizer returned no plan');
+    store.solved = {
+      visitId: visit.visitId,
+      key,
+      solution,
+      timeSeconds: request.timeSeconds,
+      gemBudget: request.gemBudget,
+      effort: asked.effort,
+      player,
+    };
   } catch (err) {
     if (mine !== generation) return;
     error.value = err instanceof Error ? err.message : String(err);
@@ -519,6 +546,8 @@ watch(
     // An answer kept from before the tab was switched away still stands if the question does.
     computing.value = posed.value && store.solved?.key !== questionKey.value;
     if (computing.value) debounceTimer = setTimeout(solve, 250);
+    // From here on the visit keeps what it was asked, whatever another visit's choices do to the defaults.
+    if (posed.value && current.value) store.pin(current.value.visit);
   },
   { immediate: true }
 );
@@ -626,16 +655,20 @@ const stagedLaunch = computed(() => {
   return null;
 });
 
-// Whether the plan already holds exactly this ship set, so the button can say so instead of offering
-// to stage what is there.
+// Whether the plan already holds this answer, so the card can say so instead of offering to stage what is
+// there. The same ships can answer two questions, a different effort for one, and those differ in the wait
+// staged after the launch, so an answer staged in this session is also matched on what it was asked.
 const inPlan = computed(() => {
-  if (!stagedLaunch.value || launches.value.length === 0) return false;
+  const visit = current.value?.visit;
+  if (!visit || !shown.value || !stagedLaunch.value || launches.value.length === 0) return false;
   const signature = (missions: readonly { ship: number; duration: number; count: number; targetAfxId?: number }[]) =>
     missions
       .map(m => `${m.ship}|${m.duration}|${m.targetAfxId ?? ''}|${m.count}`)
       .sort()
       .join(',');
-  return signature(stagedLaunch.value.payload.missions) === signature(launches.value);
+  if (signature(stagedLaunch.value.payload.missions) !== signature(launches.value)) return false;
+  const staged = store.stagedAnswers[visit.visitId];
+  return !staged || (staged.key === shown.value.key && staged.swap === swapSet.value);
 });
 
 const staging = ref(false);
@@ -645,11 +678,14 @@ watch(questionKey, () => {
 });
 
 async function stage() {
-  if (!projected.value || staging.value) return;
+  if (!projected.value || !shown.value || staging.value) return;
   staging.value = true;
   stageError.value = '';
   try {
-    await missionsStore.stage(projected.value, { equipEarningsSet: swapSet.value });
+    const swap = swapSet.value;
+    const { visitId, key } = shown.value!;
+    await missionsStore.stage(projected.value, { equipEarningsSet: swap });
+    store.stagedAnswers[visitId] = { key, swap };
   } catch (err) {
     stageError.value = err instanceof HumilityMissionsError ? err.message : (err as Error).message;
   } finally {

@@ -233,11 +233,14 @@ describe('arena independence', () => {
   it('production never imports the arena', () => {
     // Widened with the move: production may not reach into `tests/` at all, of which the arena is one part.
     const offenders: string[] = [];
-    for (const path of walk(LIB)) {
-      for (const spec of importsOf(readFileSync(path, 'utf8'))) {
-        const target = resolveSpec(path, spec);
-        if (target !== null && within(TESTS, target)) {
-          offenders.push(`${relative(LIB, path)} imports ${spec}`);
+    // Both halves of production: the shared optimizer and what the explorer keeps of its own.
+    for (const root of [LIB, APP_LIB]) {
+      for (const path of walk(root)) {
+        for (const spec of importsOf(readFileSync(path, 'utf8'))) {
+          const target = resolveSpec(path, spec);
+          if (target !== null && within(TESTS, target)) {
+            offenders.push(`${relative(root, path)} imports ${spec}`);
+          }
         }
       }
     }

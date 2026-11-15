@@ -391,7 +391,6 @@ import {
   effectiveConfig,
   effectiveFuelByEggCapacity,
   EFFORT_LEVELS,
-  type EffortLevel,
   extras,
   missionFilters,
   openPlayerOverridesModal,

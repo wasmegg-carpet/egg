@@ -1,7 +1,6 @@
 import { ei } from 'lib';
 
 import Rarity = ei.ArtifactSpec.Rarity;
-import DurationType = ei.MissionInfo.DurationType;
 
 export function rarityFgClass500(rarity: Rarity) {
   switch (rarity) {
@@ -24,19 +23,6 @@ export function rarityFgClass400(rarity: Rarity) {
       return 'text-purple-400';
     case Rarity.LEGENDARY:
       return 'text-yellow-400';
-    default:
-      return '';
-  }
-}
-
-export function durationBorderClass(durationType: DurationType) {
-  switch (durationType) {
-    case DurationType.SHORT:
-      return 'border-blue-500';
-    case DurationType.LONG:
-      return 'border-purple-500';
-    case DurationType.EPIC:
-      return 'border-yellow-500';
     default:
       return '';
   }

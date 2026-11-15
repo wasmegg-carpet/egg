@@ -121,7 +121,11 @@ import {
   type TargetView,
 } from '@/lib';
 import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
-import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from 'lib/mission-optimizer/optimizer-client';
+import {
+  createOptimizerClient,
+  type OptimizerClient,
+  type OptimizerRequestInput,
+} from 'lib/mission-optimizer/optimizer-client';
 import OptimizerSidebar from './optimizer/OptimizerSidebar.vue';
 import OptimizerInventoryPanel from './optimizer/OptimizerInventoryPanel.vue';
 import OptimizerSolutionCard from 'ui/components/mission-optimizer/OptimizerSolutionCard.vue';

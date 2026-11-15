@@ -89,6 +89,14 @@ export const useHumilityOptimizerStore = defineStore('humilityOptimizer', () => 
     return persisted.value.visits[visit.visitId] ?? persisted.value.template;
   }
 
+  /**
+   * Gives the visit its own copy of the settings it is showing. Called once a question is posed for it,
+   * so that what it was solved for stays put when another visit's choices move the template.
+   */
+  function pin(visit: HumilityVisit) {
+    if (!persisted.value.visits[visit.visitId]) update(visit, {});
+  }
+
   function update(visit: HumilityVisit, patch: Partial<OptimizerVisitSettings>) {
     const next = { ...settingsFor(visit), ...patch };
     const visits = { ...persisted.value.visits };
@@ -140,5 +148,22 @@ export const useHumilityOptimizerStore = defineStore('humilityOptimizer', () => 
 
   const solved = shallowRef<SolvedVisit | null>(null);
 
-  return { open, settingsFor, update, player, playerRevision, saveLoading, saveError, loadSave, solved };
+  // What was last staged for each visit in this session: the question it answered and whether the
+  // earnings set was swapped in. The plan's launch alone cannot tell two answers with the same ships
+  // apart, such as the same ship set at a different effort.
+  const stagedAnswers = ref<Record<string, { key: string; swap: boolean }>>({});
+
+  return {
+    open,
+    settingsFor,
+    pin,
+    update,
+    player,
+    playerRevision,
+    saveLoading,
+    saveError,
+    loadSave,
+    solved,
+    stagedAnswers,
+  };
 });
