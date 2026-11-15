@@ -127,7 +127,9 @@ const IMPLEMENTATION = [
 // none of them decide anything about a plan.
 const PROBLEM_SURFACE = [
   'artifact-catalog.ts',
+  'effort.ts',
   'index.ts',
+  'loot-data.d.ts', // what the type checker sees in place of the dataset; no code
   'loot-json.ts',
   'loot.ts',
   'missions.ts',

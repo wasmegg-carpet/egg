@@ -1,5 +1,6 @@
 import { ei } from '../index';
-import data from './data/loot.json';
+// Not a relative path on purpose: see `loot-data.d.ts`.
+import data from '#loot-dataset';
 
 export default data as lootjson;
 

@@ -2,6 +2,14 @@
 // Free of side effects at import time, so it can be unit tested under node.
 
 import { virtueShipGemCosts, ei } from 'lib';
+import { isEffortLevel, type EffortLevel } from 'lib/mission-optimizer/effort';
+
+export {
+  EFFORT_LEVELS,
+  EFFORT_LAUNCH_PERIOD_SECONDS,
+  isEffortLevel,
+  type EffortLevel,
+} from 'lib/mission-optimizer/effort';
 
 type Spaceship = ei.MissionInfo.Spaceship;
 
@@ -65,23 +73,6 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
     typeof e.previousCrafts === 'number' &&
     (e.tankLevel === undefined || typeof e.tankLevel === 'number')
   );
-}
-
-export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max'] as const;
-
-export type EffortLevel = (typeof EFFORT_LEVELS)[number];
-
-// Launch period per effort level: a floor on each mission's effective
-// duration, so a slot runs at most one launch per period.
-export const EFFORT_LAUNCH_PERIOD_SECONDS: Record<EffortLevel, number> = {
-  low: 86400, // 1 launch / slot / day
-  medium: 43200, // 2 launches / slot / day
-  high: 3600, // 1 launch / slot / hour
-  max: 0, // as often as the optimizer wants (raw durations)
-};
-
-export function isEffortLevel(x: unknown): x is EffortLevel {
-  return (EFFORT_LEVELS as readonly unknown[]).includes(x);
 }
 
 export const DEFAULT_WAIT_TIME_DAYS = '30';

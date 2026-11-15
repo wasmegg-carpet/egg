@@ -28,6 +28,12 @@
   },
   "license": "MIT",
   "main": "index.ts",
+  "imports": {
+    "#loot-dataset": {
+      "types": "./mission-optimizer/loot-data.d.ts",
+      "default": "./mission-optimizer/data/loot.json"
+    }
+  },
   "scripts": {
     "test": "jest",
     "format": "prettier --write \"./**/*.{js,ts,vue}\""

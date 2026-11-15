@@ -46,7 +46,21 @@
 import { defineComponent, PropType } from 'vue';
 
 import { ei, getTargetName, iconURL, MissionType, getImageUrlFromId as id2url } from 'lib';
-import { durationBorderClass } from './durationBorderClass';
+
+// Kept in this file rather than a shared module: Tailwind only scans `ui/**/*.vue` in the apps that
+// render this component, so the class names have to be spelled out where it can see them.
+function durationBorderClass(durationType: ei.MissionInfo.DurationType) {
+  switch (durationType) {
+    case ei.MissionInfo.DurationType.SHORT:
+      return 'border-blue-500';
+    case ei.MissionInfo.DurationType.LONG:
+      return 'border-purple-500';
+    case ei.MissionInfo.DurationType.EPIC:
+      return 'border-yellow-500';
+    default:
+      return '';
+  }
+}
 
 export default defineComponent({
   props: {

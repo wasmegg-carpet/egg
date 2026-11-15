@@ -428,6 +428,7 @@ import {
   setVisitFuelBudget,
   solvedVisitCount,
 } from '@/store/plan';
+import { EFFORT_META } from 'lib/mission-optimizer/effort';
 import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from 'lib/mission-optimizer/plan/read';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { normalizeBudgetInput } from '@/store/budget-input';
@@ -445,28 +446,7 @@ function downloadJson(filename: string, body: unknown): void {
   URL.revokeObjectURL(url);
 }
 
-const effortMeta: Record<EffortLevel, { short: string; label: string; hint: string }> = {
-  low: {
-    short: 'Low',
-    label: 'Low',
-    hint: 'One launch per slot per day — favors long, low-maintenance missions.',
-  },
-  medium: {
-    short: 'Med',
-    label: 'Medium',
-    hint: 'Two launches per slot per day.',
-  },
-  high: {
-    short: 'High',
-    label: 'High',
-    hint: 'One launch per slot per hour.',
-  },
-  max: {
-    short: 'Max',
-    label: 'Max',
-    hint: 'No launch limit — relaunch the instant a mission lands.',
-  },
-};
+const effortMeta = EFFORT_META;
 
 export default defineComponent({
   components: { BaseIcon, BaseInput, PlayerIdForm, LootDataCredit, OptimizerSettingRow, HumilityMissionsExportHelp },
