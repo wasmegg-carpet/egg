@@ -29770,5 +29770,23 @@
     "startTimestamp": 1794675600,
     "type": "piggy-boost",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1794848400,
+    "id": "event-11-15",
+    "message": "30% OFF CRAFTING!",
+    "multiplier": 0.7,
+    "startTimestamp": 1794762000,
+    "type": "crafting-sale",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1794848400,
+    "id": "ultra-11-15",
+    "message": "80% OFF HEN HOUSES!",
+    "multiplier": 0.2,
+    "startTimestamp": 1794762000,
+    "type": "hab-sale",
+    "ultra": true
   }
 ]
