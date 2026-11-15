@@ -1,9 +1,9 @@
 // Project solved visits into the humility missions file. OptimizerSolution contains Maps
 // that JSON.stringify would lose; export only the fields the planner needs.
 
-import { ei, getArtifactTierPropsFromId } from 'lib';
+import { ei, getArtifactTierPropsFromId } from '../../index';
 
-import type { OptimizerSolution } from '@/lib/types';
+import type { OptimizerSolution } from '../types';
 
 import type { HumilityVisit } from './read';
 import {

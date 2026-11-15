@@ -1,5 +1,5 @@
-import { ei } from 'lib';
-import data from '../../data/loot.json';
+import { ei } from '../index';
+import data from './data/loot.json';
 
 export default data as lootjson;
 

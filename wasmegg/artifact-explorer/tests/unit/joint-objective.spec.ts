@@ -2,9 +2,9 @@
 // the linearization. See OPTIMIZER.md.
 
 import { describe, it, expect } from 'vitest';
-import { optimizeFull } from '@/lib/optimizer-core';
-import { buildModel } from '@/lib/solver/model';
-import { simplexMax } from '@/lib/solver/simplex';
+import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
+import { simplexMax } from 'lib/mission-optimizer/solver/simplex';
 import { craftDag, makeOpt } from './spec-helpers';
 
 describe('the product objective reduces to the linear score at n=1', () => {

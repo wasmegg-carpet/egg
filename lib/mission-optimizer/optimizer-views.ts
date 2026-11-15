@@ -1,8 +1,8 @@
 // Flat display helpers derived from an OptimizerSolution; the recipe-tree
 // builders live in optimizer-tree.ts.
 
-import type { ei, MissionType } from 'lib';
-import { formatProbability } from 'lib';
+import type { ei, MissionType } from '../index';
+import { formatProbability } from '../index';
 import type { CraftChainMetrics, RecipeTreeNode } from './optimizer-tree';
 import type { OptimizerSolution, TargetProbability } from './types';
 

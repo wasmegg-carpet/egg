@@ -1,7 +1,7 @@
 // The solver's type surface: what a plan is, and what the MILP backend behind it
 // trades in.
 
-import type { ei } from 'lib';
+import type { ei } from '../../index';
 import type { CraftBudget, LaunchOption, RecipeDAG } from '../types';
 
 // One budget the plan has to fit inside. `egg: null` charges the option's whole

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { packWitness } from '@/lib/packing';
+import { packWitness } from 'lib/mission-optimizer/packing';
 
 const NUM_SLOTS = 3;
 const TOL = 1e-9;

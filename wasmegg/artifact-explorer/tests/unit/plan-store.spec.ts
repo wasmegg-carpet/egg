@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fuelTankSizes } from 'lib';
-import { parsePlanSave, sliceHumilityVisits } from '@/lib/plan/read';
+import { parsePlanSave, sliceHumilityVisits } from 'lib/mission-optimizer/plan/read';
 import { normalizeBudgetInput, parseBudgetInput } from '@/store/budget-input';
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8'));

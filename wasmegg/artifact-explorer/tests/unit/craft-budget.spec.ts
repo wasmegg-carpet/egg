@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { ei, getArtifactTierPropsFromId, Inventory, multiCraftCost, perfectShipsConfig, singleCraftCost } from 'lib';
 
 import { buildRecipeDag, computeOwnedStock, computePlanCraftingCost, computeCraftUnitPrices } from '@/lib';
-import { loadHighs } from '@/lib/solver/highs';
-import { DEFAULT_TUNING, solveWith } from '@/lib/solver/solve';
-import type { PlanProblem } from '@/lib/solver/types';
-import type { RecipeDAG } from '@/lib/types';
+import { loadHighs } from 'lib/mission-optimizer/solver/highs';
+import { DEFAULT_TUNING, solveWith } from 'lib/mission-optimizer/solver/solve';
+import type { PlanProblem } from 'lib/mission-optimizer/solver/types';
+import type { RecipeDAG } from 'lib/mission-optimizer/types';
 import { CUBE_RUN, makeNode, makeOpt, optimize } from './spec-helpers';
 
 const Name = ei.ArtifactSpec.Name;

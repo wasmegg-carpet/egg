@@ -1,7 +1,7 @@
 // Message shapes shared by the optimizer worker and its main-thread client. Structured clone drops
 // prototypes: `ship` is a MissionType whose entire API is getters, so it is narrowed on the way out and rebuilt on the way in.
 
-import { ei, MissionType } from 'lib';
+import { ei, MissionType } from '../index';
 import type { OptimizeArgs } from './optimizer-core';
 import type { LaunchOption, LaunchSolution, OptimizerSolution } from './types';
 

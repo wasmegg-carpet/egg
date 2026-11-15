@@ -1,6 +1,6 @@
 // Recipe DAG construction and launch option enumeration for the optimizer.
 
-import { missions } from '@/lib/filter';
+import { missions } from './missions';
 import {
   ei,
   getArtifactTierPropsFromId,
@@ -8,12 +8,13 @@ import {
   getMissionTypeFromId,
   ShipsConfig,
   type MissionType,
-} from 'lib';
+} from '../index';
 
 import type { DAGChildRef, DAGNode, LaunchOption, RecipeDAG } from './types';
-import { getMissionLootData, MIN_LEGENDARY_OBSERVATIONS } from '@/lib';
-import { sum } from '@/utils';
-import { Ingredient } from 'lib/artifacts/data-json';
+import { getMissionLootData, MIN_LEGENDARY_OBSERVATIONS } from './loot';
+import { Ingredient } from '../artifacts/data-json';
+
+const sum = (counts: number[]): number => counts.reduce((total, count) => total + count);
 
 export function generateRecipeDag(id: string, recipeDag: RecipeDAG) {
   if (recipeDag.has(id)) return;

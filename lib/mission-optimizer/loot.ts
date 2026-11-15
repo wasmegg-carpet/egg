@@ -6,7 +6,7 @@ import {
   MissionType,
   targets,
   type ShipsConfig,
-} from 'lib';
+} from '../index';
 
 import type { lootjson, MissionLevelLootStore, MissionLootStore } from './loot-json';
 import data from './loot-json';

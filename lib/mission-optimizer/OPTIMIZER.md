@@ -41,7 +41,7 @@ for any plan inside the epsilon band rather than the score-maximal one.
 ## The tangent outer approximation
 
 $\sum_T g(score_T)$ is not linear, so it has to be linearized to serve as a MILP's
-objective. `src/lib/solver/SPEC.md`'s introduction defines the general terms this
+objective. `lib/mission-optimizer/solver/SPEC.md`'s introduction defines the general terms this
 section uses (MILP, concave, tangent, envelope, outer approximation). The concave
 function here is $g$, the per-target term from "The objective" above; $z_T$ is the
 one envelope variable per target, bounded by a row $z_T <= \alpha_k + \beta_k *
@@ -63,8 +63,8 @@ letting the approximation leak into a reported figure would make the tool lie.
 
 `optimizeFull` states the whole problem as one MILP and hands it to HiGHS. The model,
 the outer approximation and HiGHS's own numeric traps are in
-`src/lib/solver/SPEC.md`; the judge's simplex has a separate set, in the header of
-`src/lib/solver/simplex.ts`. What follows is only what a reader of this file needs.
+`lib/mission-optimizer/solver/SPEC.md`; the judge's simplex has a separate set, in the header of
+`lib/mission-optimizer/solver/simplex.ts`. What follows is only what a reader of this file needs.
 
 **Why an MILP.** Missions are allocated _per slot_ and crafts are continuous columns
 over the same conservation polytope — the feasible set the recipe's rows carve out — so
@@ -182,7 +182,7 @@ large it is.
 
 ## Module boundaries that are load-bearing
 
-Most of `src/lib` reads as it looks. Two edges do not, and both exist to keep
+Most of `lib/mission-optimizer` reads as it looks. Two edges do not, and both exist to keep
 something from becoming circular or from landing in the wrong bundle:
 
 - `packing.ts` imports nothing, and in particular nothing from `tests/`,
@@ -193,6 +193,6 @@ something from becoming circular or from landing in the wrong bundle:
   `tests/unit/spec-helpers.ts` holds the in-process `optimize()` for the same
   reason.
 
-A third load-bearing edge sits outside `src/lib`: `tests/arena/solvers/highs/index.ts`
+A third load-bearing edge sits outside `lib/mission-optimizer`: `tests/arena/solvers/highs/index.ts`
 is a shim registering `solver/` as the arena's entry, so the shipped solver and the
 measured one are one code path.

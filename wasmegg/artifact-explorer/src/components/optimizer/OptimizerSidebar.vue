@@ -428,10 +428,10 @@ import {
   setVisitFuelBudget,
   solvedVisitCount,
 } from '@/store/plan';
-import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from 'lib/mission-optimizer/plan/read';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { normalizeBudgetInput } from '@/store/budget-input';
-import { buildHumilityMissionsFile, humilityMissionsFilename } from '@/lib/plan/write';
+import { buildHumilityMissionsFile, humilityMissionsFilename } from 'lib/mission-optimizer/plan/write';
 
 // Set the first time the export help is dismissed, so it opens unprompted only once.
 const HUMILITY_MISSIONS_EXPORT_HELP_SEEN_LOCALSTORAGE_KEY = 'humilityMissionsExportHelpSeen';

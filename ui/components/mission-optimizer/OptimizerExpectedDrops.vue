@@ -21,7 +21,7 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 
-import type { DropRow } from '@/lib';
+import type { DropRow } from 'lib/mission-optimizer';
 
 export default defineComponent({
   props: {

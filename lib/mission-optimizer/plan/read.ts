@@ -1,7 +1,7 @@
 // Read Humility visits and their budgets from ascension-planner snapshots.
 // Earnings use the visit and pre-arrival snapshots; see earningsRateOf.
 
-import { ei } from 'lib';
+import { ei } from '../../index';
 
 import {
   AP_FTL_RESEARCH_ID,

@@ -7,8 +7,8 @@ import { ei, formatDuration, getLocalStorage, parseDurationDays, setLocalStorage
 
 import { parseBudgetInput } from '@/store/budget-input';
 
-import type { HumilityVisit } from '@/lib/plan/read';
-import type { HumilityMissionsVisit } from '@/lib/plan/schema';
+import type { HumilityVisit } from 'lib/mission-optimizer/plan/read';
+import type { HumilityMissionsVisit } from 'lib/mission-optimizer/plan/schema';
 
 // Predates the humility missions rename; kept so a plan loaded before the update survives it.
 const PLAN_LOCALSTORAGE_KEY = 'humility_plan';

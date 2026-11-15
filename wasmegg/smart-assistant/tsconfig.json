@@ -27,5 +27,5 @@
     "../../lib/heroicons.d.ts",
     "vite.config.ts"
   ],
-  "exclude": ["../../ui/components/planners/**"]
+  "exclude": ["../../ui/components/planners/**", "../../ui/components/mission-optimizer/**"]
 }

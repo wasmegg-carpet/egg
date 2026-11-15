@@ -1,4 +1,4 @@
-import { ei, MissionType } from 'lib';
+import { ei, MissionType } from '../index';
 
 type integer = number;
 export type { integer };

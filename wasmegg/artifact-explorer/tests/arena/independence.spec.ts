@@ -8,9 +8,13 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 const ARENA = __dirname;
 const TESTS = resolve(ARENA, '..');
 const SRC = resolve(TESTS, '../src');
-const LIB = join(SRC, 'lib');
+// The optimizer is shared with the ascension planner and lives in the workspace's `lib`.
+const LIB = resolve(TESTS, '../../../lib/mission-optimizer');
+const LIB_SPEC = 'lib/mission-optimizer';
+// The explorer's own barrel re-exports the shared one, so it is as much a way in as `LIB` is.
+const APP_LIB = join(SRC, 'lib');
 // The shared spec fixtures. `optimize` there runs the planner in-process, so it is as much a way to reach
-// the incumbent as `src/lib` is, and candidates are held away from both.
+// the incumbent as `lib/mission-optimizer` is, and candidates are held away from both.
 const UNIT = join(TESTS, 'unit');
 const SOLVERS = join(ARENA, 'solvers');
 
@@ -59,6 +63,7 @@ function resolveSpec(fromFile: string, spec: string): string | null {
   const bare = spec.split('?')[0];
   let base: string;
   if (bare.startsWith('@/')) base = join(SRC, bare.slice(2));
+  else if (bare === LIB_SPEC || bare.startsWith(`${LIB_SPEC}/`)) base = join(LIB, bare.slice(LIB_SPEC.length));
   else if (bare.startsWith('./') || bare.startsWith('../')) base = resolve(dirname(fromFile), bare);
   else return null;
   for (const candidate of [base, `${base}.ts`, join(base, 'index.ts'), `${base}.vue`, `${base}.json`]) {
@@ -121,25 +126,24 @@ const IMPLEMENTATION = [
 // Game data, problem construction and pure types. The harness needs these to state a problem at all, and
 // none of them decide anything about a plan.
 const PROBLEM_SURFACE = [
-  'artifacts.ts',
-  'filter.ts',
+  'artifact-catalog.ts',
   'index.ts',
   'loot-json.ts',
   'loot.ts',
   'missions.ts',
+  'player-data.ts',
   'problem-inputs.ts',
-  'tank-ids.ts',
   'types.ts',
 ];
 
 // The entries allowed to import production code, because they *are* production code: each is a shim around
-// `src/lib/solver/`. The exception stays narrow — only into `src/lib/solver/`, and only for a file that does
+// `lib/mission-optimizer/solver/`. The exception stays narrow — only into `lib/mission-optimizer/solver/`, and only for a file that does
 // no solving of its own, which the shim check below enforces on every entry in this list.
 const SHIM_ENTRIES = [join(SOLVERS, 'highs', 'index.ts')];
 const SHIMS_MAY_IMPORT = join(LIB, 'solver');
 
 describe('arena independence', () => {
-  it('the src/lib classification is exhaustive and has no dead entries', () => {
+  it('the lib/mission-optimizer classification is exhaustive and has no dead entries', () => {
     const classified = [...IMPLEMENTATION, ...PROBLEM_SURFACE].sort();
     expect(new Set(classified).size).toBe(classified.length);
     expect(classified).toEqual(libModules());
@@ -166,7 +170,7 @@ describe('arena independence', () => {
 
   it('the harness names no solver', () => {
     // `registry.ts` is the only file allowed to know which candidates exist. Code only: a comment may cite
-    // `src/lib/solver/SPEC.md` as the document an invariant was argued in.
+    // `lib/mission-optimizer/solver/SPEC.md` as the document an invariant was argued in.
     const offenders: string[] = [];
     for (const file of HARNESS_FILES) {
       const src = stripComments(readSource(file));
@@ -188,18 +192,18 @@ describe('arena independence', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('candidates re-derive everything: no value import from src/lib or tests/unit', () => {
+  it('candidates re-derive everything: no value import from lib/mission-optimizer or tests/unit', () => {
     // Types move no code. What is excluded is running any of the incumbent's machinery — its LP, its tangent
     // grid, its packer, its search. `SHIM_ENTRIES` is a named exception; everything else here is still forbidden.
     //
-    // `tests/unit` is barred on the same grounds as `src/lib`, not as a tidiness rule: `spec-helpers.ts`
+    // `tests/unit` is barred on the same grounds as `lib/mission-optimizer`, not as a tidiness rule: `spec-helpers.ts`
     // there calls `optimizeFull`, so a candidate reaching it would be the incumbent measured against itself.
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       const rel = path.slice(SOLVERS.length + 1);
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
         const target = resolveSpec(path, spec);
-        if (target === null || !(within(LIB, target) || within(UNIT, target))) continue;
+        if (target === null || !(within(LIB, target) || within(APP_LIB, target) || within(UNIT, target))) continue;
         if (SHIM_ENTRIES.includes(path) && within(SHIMS_MAY_IMPORT, target)) continue;
         offenders.push(`${rel} imports ${spec}`);
       }
@@ -219,8 +223,8 @@ describe('arena independence', () => {
       expect(code.length, entry).toBeLessThan(700);
       expect(/\bfor\s*\(|\bwhile\s*\(|\bfunction\b/.test(code), entry).toBe(false);
       // It must go through the same entry points `optimizer-core.ts` does.
-      expect(code, entry).toContain("from '@/lib/solver/solve'");
-      expect(code, entry).toContain("from '@/lib/solver/highs'");
+      expect(code, entry).toContain("from 'lib/mission-optimizer/solver/solve'");
+      expect(code, entry).toContain("from 'lib/mission-optimizer/solver/highs'");
     }
   });
 
@@ -231,7 +235,7 @@ describe('arena independence', () => {
       for (const spec of importsOf(readFileSync(path, 'utf8'))) {
         const target = resolveSpec(path, spec);
         if (target !== null && within(TESTS, target)) {
-          offenders.push(`${relative(SRC, path)} imports ${spec}`);
+          offenders.push(`${relative(LIB, path)} imports ${spec}`);
         }
       }
     }

@@ -3,8 +3,8 @@
 // terminate if handed a cycle (see optimizer-tree.spec.ts's malformed-DAG cases); the `expanded` set below
 // is what makes that true.
 
-import type { Inventory } from 'lib';
-import { getArtifactTierPropsFromId, iconURL } from 'lib';
+import type { Inventory } from '../index';
+import { getArtifactTierPropsFromId, iconURL } from '../index';
 import { craftCostOf } from './optimizer-cost';
 import type { OptimizerSolution, RecipeDAG } from './types';
 

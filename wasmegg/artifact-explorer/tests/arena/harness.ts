@@ -3,9 +3,9 @@
 
 import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
 import { buildRecipeDag } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
-import type { CraftBudget, LaunchOption, RecipeDAG } from '@/lib/types';
+import type { CraftBudget, LaunchOption, RecipeDAG } from 'lib/mission-optimizer/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
 import type { ArenaInstance } from './instances';

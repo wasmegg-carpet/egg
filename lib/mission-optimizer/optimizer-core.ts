@@ -2,7 +2,7 @@
 // solution around whatever plan the planner (`./solver/`) returned. See OPTIMIZER.md for the objective.
 
 import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
-import { ei } from 'lib';
+import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { NUM_SLOTS, packWitness } from './packing';
 import { loadHighs } from './solver/highs';

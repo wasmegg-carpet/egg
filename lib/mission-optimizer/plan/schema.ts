@@ -2,7 +2,7 @@
 // Ships and durations use enum names because AP and protobuf duration numbers differ
 // (AP EPIC = 3, protobuf EPIC = 2). Targets use the shared numeric ei.ArtifactSpec.Name.
 
-import { ei } from 'lib';
+import { ei } from '../../index';
 
 export const HUMILITY_MISSIONS_SCHEMA = 'eggverse.humility-plan';
 export const HUMILITY_MISSIONS_SCHEMA_VERSION = 1;

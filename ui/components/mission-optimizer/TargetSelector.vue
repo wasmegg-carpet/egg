@@ -1,8 +1,6 @@
 <template>
   <div class="space-y-2">
-    <label class="block text-sm font-medium text-gray-700">
-      What is the most efficient ship to get this item, or items, when on the Path of Virtue?
-    </label>
+    <label v-if="label" class="block text-sm font-medium text-gray-700">{{ label }}</label>
 
     <div v-if="selectedArtifacts.length > 0" class="flex flex-wrap gap-2">
       <span
@@ -82,7 +80,11 @@ import { computed, nextTick, PropType, ref, watch } from 'vue';
 import { XIcon } from '@heroicons/vue/solid';
 
 import { iconURL } from 'lib';
-import { artifactIdToArtifact, legendaryArtifacts, searchLegendaryArtifacts } from '@/lib/filter';
+import {
+  artifactIdToArtifact,
+  legendaryArtifacts,
+  searchLegendaryArtifacts,
+} from 'lib/mission-optimizer/artifact-catalog';
 import { GenericBaseSelectFilterable } from 'ui/components/BaseSelectFilterable.vue';
 
 const BaseSelectFilterable = GenericBaseSelectFilterable<(typeof legendaryArtifacts)[number]>();
@@ -91,6 +93,11 @@ const props = defineProps({
   modelValue: {
     type: Array as PropType<string[]>,
     required: true,
+  },
+  // The question the picker answers. An empty string drops the label, for a host that has its own heading.
+  label: {
+    type: String,
+    default: 'What is the most efficient ship to get this item, or items, when on the Path of Virtue?',
   },
 });
 

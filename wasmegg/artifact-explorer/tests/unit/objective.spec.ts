@@ -2,9 +2,9 @@
 // answer and a number a player reads, which nothing else computes.
 
 import { describe, it, expect } from 'vitest';
-import { craftsToProbability } from '@/lib/objective';
+import { craftsToProbability } from 'lib/mission-optimizer/objective';
 import { makeNode } from './spec-helpers';
-import type { RecipeDAG, DAGNode } from '@/lib/types';
+import type { RecipeDAG, DAGNode } from 'lib/mission-optimizer/types';
 
 const PREC = 9;
 

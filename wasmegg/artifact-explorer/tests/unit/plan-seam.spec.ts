@@ -16,10 +16,10 @@ import {
   planLabelFor,
   PlanSaveError,
   sliceHumilityVisits,
-} from '@/lib/plan/read';
-import { buildHumilityMissionsFile, humilityMissionsFilename, projectSolvedVisit } from '@/lib/plan/write';
-import { HUMILITY_MISSIONS_SCHEMA, type HumilityMissionsFile } from '@/lib/plan/schema';
-import type { LaunchSolution, OptimizerSolution, SlotSummary } from '@/lib/types';
+} from 'lib/mission-optimizer/plan/read';
+import { buildHumilityMissionsFile, humilityMissionsFilename, projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
+import { HUMILITY_MISSIONS_SCHEMA, type HumilityMissionsFile } from 'lib/mission-optimizer/plan/schema';
+import type { LaunchSolution, OptimizerSolution, SlotSummary } from 'lib/mission-optimizer/types';
 import { getLocalTimestampInTimezone } from 'lib/planners/events';
 
 const FIXTURES = new URL('../fixtures/', import.meta.url).pathname;

@@ -240,7 +240,7 @@ import ArtifactName from '@/components/ArtifactName.vue';
 import ConfigPrompt from '@/components/ConfigPrompt.vue';
 import DropRate from '@/components/DropRate.vue';
 import LootDataCredit from '@/components/LootDataCredit.vue';
-import MissionName from '@/components/MissionName.vue';
+import MissionName from 'ui/components/mission-optimizer/MissionName.vue';
 import Share from '@/components/Share.vue';
 
 enum ItemsSortBy {

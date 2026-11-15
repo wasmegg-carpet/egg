@@ -44,7 +44,7 @@ version behind each were not recorded with it, and no results are retained in th
 repo — `tests/arena/results/` is gitignored. A figure here is therefore a reason
 to re-measure with `pnpm arena` before leaning on it, not a bound to rely on.
 
-Section numbers are cited from code comments throughout `src/lib`. They are
+Section numbers are cited from code comments throughout `lib/mission-optimizer`. They are
 stable; add rather than renumber.
 
 ## 1. Preprocessing

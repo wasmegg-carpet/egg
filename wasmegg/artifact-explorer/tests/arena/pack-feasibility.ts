@@ -1,4 +1,4 @@
-// Exact 3-slot packing feasibility, owned by the harness and never shared with `src/lib/packing.ts`.
+// Exact 3-slot packing feasibility, owned by the harness and never shared with `lib/mission-optimizer/packing.ts`.
 // `counts[j]` missions of length `durations[j]` are feasible iff they partition into `slots` groups summing to at most `capacity` each.
 
 const EPS = 1e-9;

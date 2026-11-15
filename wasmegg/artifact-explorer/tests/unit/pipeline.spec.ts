@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag, computeOwnedStock } from '@/lib';
 import { CUBE_RUN, optimize } from './spec-helpers';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 
 const Name = ei.ArtifactSpec.Name;
 

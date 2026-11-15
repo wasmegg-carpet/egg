@@ -6,7 +6,7 @@ optimisation methodologies be tried against the same bar without any of them
 being able to move the bar.
 
 To write a candidate you need the contract (`contract.ts`), the objective
-(`src/lib/OPTIMIZER.md`), and the rules below. You do not need to read the
+(`lib/mission-optimizer/OPTIMIZER.md`), and the rules below. You do not need to read the
 harness, and you must not import it.
 
 ## The problem
@@ -50,7 +50,7 @@ is a hard failure, not a low score.
 **The golden egg budget is not part of this.** Missions cost no golden eggs, so
 no allocation can breach `craftBudget` and there is nothing here for a
 feasibility check to test. It binds on the craft split, which the judge chooses
-for itself, so the judge solves its craft polytope (`src/lib/solver/SPEC.md`'s
+for itself, so the judge solves its craft polytope (`lib/mission-optimizer/solver/SPEC.md`'s
 introduction defines this feasible set, there called the conservation polytope)
 with the budget row in it, and a candidate that ignored the cap simply scores
 worse. That is why the budget
@@ -69,7 +69,7 @@ planner and its judge would agree with itself no matter what it computed.
   `independence.spec.ts` enforces this. Deriving your own copy of the objective
   or of a packing routine is fine and expected — sharing the harness's is not,
   because then the grader and the candidate are the same code.
-- **Re-derive everything: no value import from `src/lib` or `tests/unit`.**
+- **Re-derive everything: no value import from `lib/mission-optimizer` or `tests/unit`.**
   `import type` is fine and is how you read the problem at all; the bare `lib`
   workspace package (egg, ship and artifact enums and tables) is game data rather
   than solver code and stays available. Calling into the incumbent's LP, tangent
@@ -79,13 +79,13 @@ planner and its judge would agree with itself no matter what it computed.
   planner.
 
   There is one exception, encoded by name in `independence.spec.ts`:
-  `solvers/highs/index.ts` is a shim around `src/lib/solver/`, the planner the
-  app itself runs, so that one file may import `src/lib/solver/` and nothing else
-  out of `src/lib`. It buys nothing else — it still may not touch the judge, the
+  `solvers/highs/index.ts` is a shim around `lib/mission-optimizer/solver/`, the planner the
+  app itself runs, so that one file may import `lib/mission-optimizer/solver/` and nothing else
+  out of `lib/mission-optimizer`. It buys nothing else — it still may not touch the judge, the
   feasibility rule or the checks. Note the direction that leaves: production
   calls the same `solveWith` on the same loaded module the shim does, so the
   shipped planner and the measured one are one code path. A candidate importing
-  `src/lib` would close that loop the other way and measure the app grading
+  `lib/mission-optimizer` would close that loop the other way and measure the app grading
   itself.
 
 - **Be deterministic.** Same problem in, same allocation out. If your method is
@@ -173,7 +173,7 @@ scales from there. The deep tier adds substantially more. Over the default seed 
 
 ## The roster
 
-`highs` — the shipped planner, `src/lib/solver/SPEC.md`.
+`highs` — the shipped planner, `lib/mission-optimizer/solver/SPEC.md`.
 
 The arena is not a bake-off between methodologies. It is the bar a change to the
 shipped planner has to clear before it lands. A proposed change may be registered

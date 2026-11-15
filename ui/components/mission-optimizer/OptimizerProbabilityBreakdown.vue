@@ -94,9 +94,9 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { formatExpectedCount } from 'lib';
-import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from '@/lib';
-import { formatProbabilityForDisplay, craftChainCost as computeCraftChainCost } from '@/lib';
-import MissionName from '@/components/MissionName.vue';
+import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from 'lib/mission-optimizer';
+import { formatProbabilityForDisplay, craftChainCost as computeCraftChainCost } from 'lib/mission-optimizer';
+import MissionName from './MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
 import ScaledValue from './ScaledValue.vue';
 

@@ -19,5 +19,5 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../../ui/**/*.vue", "vite.config.ts"],
-  "exclude": ["../../ui/components/planners/**"]
+  "exclude": ["../../ui/components/planners/**", "../../ui/components/mission-optimizer/**"]
 }

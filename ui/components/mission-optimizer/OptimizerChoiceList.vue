@@ -13,8 +13,8 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 
-import type { LaunchSolution } from '@/lib';
-import MissionName from '@/components/MissionName.vue';
+import type { LaunchSolution } from 'lib/mission-optimizer';
+import MissionName from './MissionName.vue';
 
 export default defineComponent({
   components: { MissionName },

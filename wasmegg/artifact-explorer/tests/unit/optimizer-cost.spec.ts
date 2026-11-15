@@ -8,10 +8,10 @@ import {
   linearCraftCost,
   previousCraftsOf,
   craftChainCost,
-} from '@/lib/optimizer-cost';
-import { computeCraftChainTree } from '@/lib/optimizer-tree';
+} from 'lib/mission-optimizer/optimizer-cost';
+import { computeCraftChainTree } from 'lib/mission-optimizer/optimizer-tree';
 import { lt1, lt2, lt3, lt4, makeNode, makeSolution, totemDag } from './spec-helpers';
-import type { RecipeDAG } from '@/lib/types';
+import type { RecipeDAG } from 'lib/mission-optimizer/types';
 
 const Name = ei.ArtifactSpec.Name;
 const Level = ei.ArtifactSpec.Level;

@@ -1,8 +1,8 @@
 // Golden egg pricing of a plan's craft chain. The price curve comes straight from lib, so this module only
 // decides how many crafts of each node to price, and from which starting craft index.
 
-import type { CraftingPriceParams, Inventory } from 'lib';
-import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
+import type { CraftingPriceParams, Inventory } from '../index';
+import { getArtifactTierPropsFromId, singleCraftCost } from '../index';
 import type { CraftChainMetrics, RecipeTreeNode } from './optimizer-tree';
 import type { OptimizerSolution, RecipeDAG } from './types';
 

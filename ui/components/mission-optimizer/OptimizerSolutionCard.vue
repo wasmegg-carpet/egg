@@ -91,8 +91,8 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { eggIconPath, formatDuration, formatEIValue } from 'lib';
-import { formatProbabilityForDisplay } from '@/lib';
-import type { OptimizerSolution, PlanCost, TargetView } from '@/lib';
+import { formatProbabilityForDisplay } from 'lib/mission-optimizer';
+import type { OptimizerSolution, PlanCost, TargetView } from 'lib/mission-optimizer';
 import BaseIcon from 'ui/components/BaseIcon.vue';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerExpectedDrops from './OptimizerExpectedDrops.vue';

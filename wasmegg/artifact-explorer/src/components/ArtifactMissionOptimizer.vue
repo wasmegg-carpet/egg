@@ -103,8 +103,8 @@ import {
   setVisitWaitTime,
   waitTimeInputFor,
 } from '@/store/plan';
-import { gemBudgetFor } from '@/lib/plan/read';
-import { projectSolvedVisit } from '@/lib/plan/write';
+import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
+import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import {
   buildRecipeDag,
   computeOwnedStock,
@@ -120,11 +120,11 @@ import {
   type OptimizerSolution,
   type TargetView,
 } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
-import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from '@/lib/optimizer-client';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
+import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from 'lib/mission-optimizer/optimizer-client';
 import OptimizerSidebar from './optimizer/OptimizerSidebar.vue';
 import OptimizerInventoryPanel from './optimizer/OptimizerInventoryPanel.vue';
-import OptimizerSolutionCard from './optimizer/OptimizerSolutionCard.vue';
+import OptimizerSolutionCard from 'ui/components/mission-optimizer/OptimizerSolutionCard.vue';
 
 export default defineComponent({
   components: { OptimizerSidebar, OptimizerInventoryPanel, OptimizerSolutionCard },

@@ -10,17 +10,14 @@ import {
   Inventory,
   isOldShipsConfig,
   isShipsConfig,
-  newShipsConfig,
   parseDurationDays,
   perfectShipsConfig,
   setLocalStorage,
-  shipLevelLaunchPointThresholds,
   ShipsConfig,
   spaceshipList,
 } from 'lib';
 
 import Spaceship = ei.MissionInfo.Spaceship;
-import DurationType = ei.MissionInfo.DurationType;
 
 import {
   DEFAULT_MAX_GOLDEN_EGG_COST,
@@ -46,7 +43,8 @@ import {
   type GemCostMode,
 } from './plan';
 import { formatBudgetValue, parseBudgetInput } from '@/store/budget-input';
-import { gemBudgetFor } from '@/lib/plan/read';
+import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
+import { readPlayerData } from 'lib/mission-optimizer/player-data';
 export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
 export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
 
@@ -258,80 +256,21 @@ function seedOverrideValuesFromPlayerData(): void {
   }
 }
 
-function computeShipLevelFromPoints(shipType: Spaceship, points: number): number {
-  const thresholds = shipLevelLaunchPointThresholds(shipType);
-  let level = 0;
-  for (; level < thresholds.length; level++) {
-    if (points < thresholds[level]) return Math.max(0, level - 1);
-  }
-  return thresholds.length - 1;
-}
-
-// `virtue.afx.tankFuels` is positional, and the virtue eggs sit at indices 20-24 as
-// [Curiosity, Integrity, Humility, Resilience, Kindness]. Humility is absent here because
-// `makeLaunchOption` in problem-inputs.ts strips it from every mission's cost, so a budget for
-// it would constrain nothing.
-const VIRTUE_TANK_FUEL_INDICES: ReadonlyArray<readonly [ei.Egg, number]> = [
-  [ei.Egg.CURIOSITY, 20],
-  [ei.Egg.INTEGRITY, 21],
-  [ei.Egg.RESILIENCE, 23],
-  [ei.Egg.KINDNESS, 24],
-];
-
-function readVirtueTankFuels(backup: ei.IBackup): Map<ei.Egg, number> | null {
-  const tankFuels = backup.virtue?.afx?.tankFuels;
-  // Too short to hold the virtue eggs at all: an old or partial save, which should fall
-  // back to the tank-capacity budget rather than read as an empty tank.
-  if (!tankFuels || tankFuels.length <= 24) return null;
-  const fuels = new Map<ei.Egg, number>();
-  for (const [egg, index] of VIRTUE_TANK_FUEL_INDICES) {
-    const amount = tankFuels[index];
-    fuels.set(egg, Number.isFinite(amount) && amount > 0 ? amount : 0);
-  }
-  return fuels;
-}
-
 export function setPlayerData(backup: ei.IBackup): void {
-  if (!backup.game || !backup.artifactsDb) return;
-
-  const base = newShipsConfig(backup.game);
-
-  const launchPoints: Partial<Record<Spaceship, number>> = {};
-  const hasLaunched: Partial<Record<Spaceship, boolean>> = {};
-
-  const missions = (backup.artifactsDb.missionArchive ?? [])
-    .concat(backup.artifactsDb.missionInfos ?? [])
-    .filter(m => (m.status ?? 0) >= ei.MissionInfo.Status.EXPLORING);
-
-  for (const mission of missions) {
-    const ship = mission.ship!;
-    let pts = 1.0;
-    if (mission.durationType === DurationType.LONG) pts = 1.4;
-    else if (mission.durationType === DurationType.EPIC) pts = 1.8;
-    launchPoints[ship] = (launchPoints[ship] ?? 0) + pts;
-    hasLaunched[ship] = true;
-  }
-
-  for (const shipType of spaceshipList) {
-    base.shipLevels[shipType] = computeShipLevelFromPoints(shipType, launchPoints[shipType] ?? 0);
-    base.shipVisibility[shipType] = shipType === Spaceship.CHICKEN_ONE ? true : (hasLaunched[shipType] ?? false);
-  }
+  const data = readPlayerData(backup);
+  if (!data) return;
 
   // targets and showNodata aren't in the backup; keep the user's settings
-  base.targets = config.value.targets;
-  base.showNodata = config.value.showNodata;
-
-  playerShipsConfig.value = base;
-
-  const inv = new Inventory(backup.artifactsDb, { virtue: true });
-  for (const item of backup.artifactsDb.virtueAfxDb?.artifactStatus || []) {
-    inv.getItem(item.spec!).crafted += item.count!;
-  }
-  playerInventory.value = inv;
-  playerTotalCraftingXp.value = Math.floor(backup.artifacts?.craftingXp ?? 0);
-  playerTankLevel.value = backup.artifacts?.tankLevel ?? null;
-  playerTankFuels.value = readVirtueTankFuels(backup);
-  playerGoldenEggs.value = Math.max(0, (backup.game.goldenEggsEarned ?? 0) - (backup.game.goldenEggsSpent ?? 0));
+  playerShipsConfig.value = {
+    ...data.shipsConfig,
+    targets: config.value.targets,
+    showNodata: config.value.showNodata,
+  };
+  playerInventory.value = data.inventory;
+  playerTotalCraftingXp.value = data.totalCraftingXp;
+  playerTankLevel.value = data.tankLevel;
+  playerTankFuels.value = data.tankFuels;
+  playerGoldenEggs.value = data.goldenEggs;
 
   // The cap tracks the save's balance for as long as it is off, so ticking it on means "what I can
   // afford right now". Once on the value is the user's, and reloading a save leaves it be.

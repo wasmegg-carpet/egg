@@ -46,7 +46,7 @@
 import { defineComponent, PropType } from 'vue';
 
 import { ei, getTargetName, iconURL, MissionType, getImageUrlFromId as id2url } from 'lib';
-import { durationBorderClass } from '@/utils';
+import { durationBorderClass } from './durationBorderClass';
 
 export default defineComponent({
   props: {

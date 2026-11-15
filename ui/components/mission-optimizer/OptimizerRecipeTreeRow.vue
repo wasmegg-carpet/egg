@@ -21,7 +21,7 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 
-import type { RecipeTreeNode } from '@/lib';
+import type { RecipeTreeNode } from 'lib/mission-optimizer';
 
 export default defineComponent({
   // named for template self-recursion

@@ -72,7 +72,7 @@ import { sum } from '@/utils';
 import ConfigPrompt from '@/components/ConfigPrompt.vue';
 import DropRate from '@/components/DropRate.vue';
 import LootDataCredit from '@/components/LootDataCredit.vue';
-import MissionName from '@/components/MissionName.vue';
+import MissionName from 'ui/components/mission-optimizer/MissionName.vue';
 
 const COLLAPSE_ARTIFACT_DROP_RATES_LOCALSTORAGE_KEY = 'expandArtifactDropRates';
 
