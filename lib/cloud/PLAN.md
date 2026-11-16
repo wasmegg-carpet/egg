@@ -205,7 +205,7 @@ bookkeeping in the body, with a revision number).
       origin
 - [ ] 5.4 Point the client at the production URL
 
-### Phase 6 — custom Chain Finder table (designed 2026-11-15, not started)
+### Phase 6 — custom Chain Finder table (built 2026-11-15)
 
 Decisions (user): only for players with a cloud library; one table per library (a new one replaces the old);
 shareable like plans; expires like everything else (a year untouched, kept alive by touch and by use).
@@ -215,13 +215,13 @@ shareable like plans; expires like everything else (a year untouched, kept alive
 - [x] 6.1 Client: `customTable` entry in the encrypted index (`{id, name, from, to, delivery, savedAt}`), outside
       plan sync; `saveTable` (create or replace the object, then the entry), `loadTable`, `deleteTable`; touch
       includes it; a local IndexedDB copy re-downloaded only when `savedAt` changes. Tests
-- [ ] 6.2 Move the cloud connection to the app level (not PlanLibrary), with a compact PIN prompt usable on any
+- [x] 6.2 Move the cloud connection to the app level (not PlanLibrary), with a compact PIN prompt usable on any
       tab. Fixes sync not starting on the Auto Planner / Chain Finder tabs
-- [ ] 6.3 Chain Finder UI: after "Load a table file" (already validated by `readTableFile`), offer "Save to your
+- [x] 6.3 Chain Finder UI (`CustomTablePanel`, `useCustomTable`): after "Load a table file" (already validated by `readTableFile`), offer "Save to your
       cloud library" (confirm replacing, naming the current one); "Your table (name, TE x–y)" beside the default;
       also offer saving a table Chain Finder built; **download** the custom table (the same `.bin.gz` file;
       user request)
-- [ ] 6.4 Sharing: share a table like a plan (`StoredPlan`-style payload with a `kind: 'table'`); importing it
+- [x] 6.4 Sharing: share a table like a plan (`StoredPlan`-style payload with a `kind: 'table'`); importing it
       with a library offers to make it your custom table (replace confirm); without a library, use it for this
       visit and offer to set one up. Browser-test the whole flow
 
@@ -258,7 +258,13 @@ shareable like plans; expires like everything else (a year untouched, kept alive
   Found along the way: R2's etag ignores metadata (marker bookkeeping moved into the body); plan routes would have
   been PIN oracles (added session tokens); the marker hash is cheap enough for the worker to verify; lifecycle
   rules + touch replace the orphan cron.
-- 2026-11-15 (night): designed phase 6 (custom Chain Finder table) with the user; not started.
+- 2026-11-15 (late): built phase 6. Cloud connects from `initPersistence` (any tab); `CloudPinPrompt` shared;
+  `useIncomingShare` routes share links (plan → Plan Library, table → Chain Finder, which needs no EID);
+  envelope v2 (no gzip) for tables; local IndexedDB copy. Browser-tested: save a loaded file, byte-identical
+  download, default/custom switch, auto-load after reload (fixed a race with the Chain Finder's own pick:
+  wait for it to finish), share → import on a fresh browser, PIN prompt in the Chain Finder, remove.
+  Download / share / remove are icon buttons (user request).
+- 2026-11-15 (night): designed phase 6 (custom Chain Finder table) with the user.
 - 2026-11-15 (night): while a cloud library is locked (or still being checked), the Plan Library and the plan
   picker hide the browser's copies and ask for the PIN (`libraryLocked`), so nobody mistakes them for a synced
   library. They still show when the cloud is unreachable.

@@ -176,7 +176,9 @@ export function useCustomTable() {
       () => {
         const e = entry.value;
         if (!e || !state.preferCustom || state.handPicked || state.busy || usingCustom.value) return;
-        if (store.tableStatus === 'loading') return;
+        // Let the Chain Finder's own pick finish first (it starts when the tab opens); loading over it while it
+        // runs lets whichever finishes last win.
+        if (store.tableStatus !== 'ready' && store.tableStatus !== 'error') return;
         const key = `${e.id}:${e.savedAt}`;
         if (tried.has(key)) return;
         tried.add(key);
