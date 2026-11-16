@@ -7,6 +7,9 @@ import { exportPlanData } from '@planner/stores/actions/io';
 const SYNC_CHANNEL_NAME = `${PROFILE.storagePrefix}_sync`;
 const channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
 const partitionHash = ref('');
+/** The EID the library partition belongs to, as the app passed it in. Not initialStateStore.playerId, which
+ *  loading a saved plan overwrites with the plan's redacted placeholder. */
+const persistenceEid = ref('');
 const isSyncing = ref(false);
 
 // Generate a unique session ID for this tab that persists through refreshes
@@ -94,6 +97,7 @@ async function loadActiveDraft() {
 
 export function usePersistence() {
   async function initPersistence(eid: string) {
+    persistenceEid.value = eid;
     partitionHash.value = await hashID(eid);
     await loadActiveDraft();
   }
@@ -146,6 +150,7 @@ export function usePersistence() {
   });
 
   return {
+    persistenceEid,
     initPersistence,
     saveActiveDraft,
     broadcastLibraryUpdate,

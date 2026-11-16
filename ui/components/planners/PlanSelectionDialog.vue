@@ -3,12 +3,15 @@ import { ref, onMounted } from 'vue';
 import { loadLibraryPlans, type PlanData } from '@planner/lib/storage/db';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { useActionsStore } from '@planner/stores/actions';
+import { useCloudLibrary } from 'lib/planners/composables/useCloudLibrary';
 import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 
 const actionsStore = useActionsStore();
 const { partitionHash, broadcastPresence, busyPlanIds } = usePersistence();
 const plans = ref<PlanData[]>([]);
 const isLoading = ref(true);
+/** While the cloud library is locked its plans stay hidden here too, as in the Plan Library. */
+const cloud = useCloudLibrary();
 
 const showAlreadyOpenWarning = ref(false);
 
@@ -50,6 +53,11 @@ const emit = defineEmits(['select', 'cancel']);
           <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
         </div>
         
+        <div v-else-if="cloud.libraryLocked.value" class="text-center py-8">
+          <p class="text-slate-500 text-sm">Your cloud library is locked.</p>
+          <p class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">Enter your PIN in the Plan Library first</p>
+        </div>
+
         <div v-else-if="plans.length === 0" class="text-center py-8">
           <p class="text-slate-500 text-sm">No plans found in your library.</p>
           <p class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">Save a plan first to use reconciliation</p>

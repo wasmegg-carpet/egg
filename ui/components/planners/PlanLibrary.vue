@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PROFILE } from '@planner/lib/profile';
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { computed, ref, onMounted, watch, nextTick } from 'vue';
 import { useActionsStore } from '@planner/stores/actions';
 import { usePersistence } from 'lib/planners/composables/usePersistence';
 import { loadLibraryPlans, deletePlanFromLibrary, savePlanToLibrary, type PlanData } from '@planner/lib/storage/db';
@@ -14,6 +14,12 @@ import ConfirmationDialog from 'ui/components/planners/ConfirmationDialog.vue';
 import ImportCollisionDialog from 'ui/components/planners/ImportCollisionDialog.vue';
 import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 import { createEmptySnapshot } from '@planner/types';
+import { useCloudLibrary } from 'lib/planners/composables/useCloudLibrary';
+import { claimShare, parseShareLink, previewShare, type ShareInfo } from 'lib/cloud/share';
+import CloudBar from 'ui/components/planners/cloud/CloudBar.vue';
+import CloudDialog from 'ui/components/planners/cloud/CloudDialog.vue';
+import CloudPinDialog from 'ui/components/planners/cloud/CloudPinDialog.vue';
+import CloudShareDialog from 'ui/components/planners/cloud/CloudShareDialog.vue';
 
 const actionsStore = useActionsStore();
 const props = defineProps<{
@@ -23,7 +29,7 @@ const props = defineProps<{
 
 const initialStateStore = useInitialStateStore();
 const uiStore = useUIStore();
-const { partitionHash, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
+const { partitionHash, persistenceEid, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
 
 const plans = ref<PlanData[]>([]);
 const isLoading = ref(true);
@@ -65,7 +71,96 @@ async function refreshPlans() {
 
 onMounted(refreshPlans);
 watch(partitionHash, refreshPlans);
-watch(() => actionsStore.libraryUpdateTick, refreshPlans);
+watch(
+  () => actionsStore.libraryUpdateTick,
+  () => {
+    void refreshPlans();
+    cloud.notifyLocalChange();
+  }
+);
+
+// ---- Cloud library ----
+const cloud = useCloudLibrary();
+/** The plans to list: none while the cloud library is locked (see useCloudLibrary libraryLocked). */
+const shownPlans = computed(() => (cloud.libraryLocked.value ? [] : plans.value));
+const sharingPlan = ref<PlanData | null>(null);
+const showCloudSetup = ref(false);
+
+// The EID the local library belongs to (not initialStateStore.playerId: loading a saved plan replaces that with
+// the plan's redacted placeholder).
+function connectCloud() {
+  void cloud.connect(persistenceEid.value, partitionHash.value);
+}
+watch([persistenceEid, partitionHash], connectCloud, { immediate: true });
+
+/** After any change to the local library: tell other tabs, and sync. */
+function libraryChanged() {
+  broadcastLibraryUpdate();
+  cloud.notifyLocalChange();
+}
+
+/** Whether deleting this plan also deletes it from the cloud (and the player's other devices). */
+function deletesInCloud(plan: PlanData | null): boolean {
+  if (!plan) return false;
+  const s = cloud.planState(plan);
+  return s === 'synced' || s === 'pending';
+}
+
+// A share link opened in this planner: `#share=<id>.<key>`. Offer to import it into this library.
+const incomingShare = ref<{ link: string; info: ShareInfo | null } | null>(null);
+const importingShare = ref(false);
+const shareError = ref('');
+
+async function checkIncomingShare() {
+  if (typeof location === 'undefined' || !parseShareLink(location.hash)) return;
+  const link = location.href;
+  try {
+    incomingShare.value = { link, info: await previewShare(cloud.api, link) };
+  } catch (err) {
+    incomingShare.value = { link, info: null };
+    shareError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+function clearIncomingShare() {
+  incomingShare.value = null;
+  shareError.value = '';
+  if (typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}`);
+}
+
+async function importIncomingShare() {
+  const share = incomingShare.value;
+  if (!share?.info || !partitionHash.value) return;
+  importingShare.value = true;
+  shareError.value = '';
+  try {
+    const plan = await claimShare<PlanData['data']>(cloud.api, share.link);
+    if (!plan) {
+      shareError.value = 'This share link has expired, was revoked, or was already used.';
+      return;
+    }
+    if (plan.planner !== PROFILE.storagePrefix) {
+      shareError.value = 'This plan was made in a different planner and can’t be opened here.';
+      return;
+    }
+    const imported: PlanData = {
+      id: Math.random().toString(36).substring(2, 15),
+      name: generateUniqueName(plan.name, plans.value.map(p => p.name)),
+      timestamp: Date.now(),
+      data: plan.data,
+    };
+    await savePlanToLibrary(partitionHash.value, imported);
+    libraryChanged();
+    await refreshPlans();
+    clearIncomingShare();
+  } catch (err) {
+    shareError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    importingShare.value = false;
+  }
+}
+
+onMounted(checkIncomingShare);
 
 async function loadPlan(plan: PlanData) {
   // Check if plan is already open in another tab
@@ -102,7 +197,7 @@ async function executeCopy() {
   };
   
   await savePlanToLibrary(partitionHash.value, newPlan);
-  broadcastLibraryUpdate();
+  libraryChanged();
   await refreshPlans();
   showCopyPrompt.value = false;
   planToCopy.value = null;
@@ -123,7 +218,7 @@ async function executeDelete() {
     if (actionsStore.activePlanId === planToDelete.value.id) {
       actionsStore.activePlanId = null;
     }
-    broadcastLibraryUpdate();
+    libraryChanged();
     await refreshPlans();
   }
   showDeleteConfirm.value = false;
@@ -153,7 +248,7 @@ async function executeBulkDelete() {
       actionsStore.activePlanId = null;
     }
   }
-  broadcastLibraryUpdate();
+  libraryChanged();
   await refreshPlans();
   selectedPlanIds.value = new Set();
   bulkSelectMode.value = false;
@@ -171,7 +266,7 @@ async function saveRename() {
   if (plan) {
     const updatedPlan = { ...plan, name: newName.value.trim(), timestamp: Date.now() };
     await savePlanToLibrary(partitionHash.value, updatedPlan);
-    broadcastLibraryUpdate();
+    libraryChanged();
     await refreshPlans();
   }
   editingPlanId.value = null;
@@ -375,7 +470,7 @@ async function handleImport(event: Event) {
         }
       }
       
-      broadcastLibraryUpdate();
+      libraryChanged();
       await refreshPlans();
       importProgress.value = null;
 
@@ -415,10 +510,10 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
         </svg>
         Plan Library
         <span
-          v-if="plans.length > 0"
+          v-if="shownPlans.length > 0"
           class="ml-2 px-1.5 py-0.5 text-[10px] bg-slate-200 text-slate-600 rounded-full font-bold"
         >
-          {{ plans.length }}
+          {{ shownPlans.length }}
         </span>
       </h3>
       <div class="flex items-center space-x-2">
@@ -430,7 +525,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
           Delete ({{ selectedPlanIds.size }})
         </button>
         <button
-          v-if="plans.length > 0"
+          v-if="shownPlans.length > 0"
           class="px-2.5 py-1 text-xs font-medium rounded border transition-colors"
           :class="bulkSelectMode
             ? 'border-gray-300 text-gray-600 hover:bg-gray-50'
@@ -441,7 +536,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
         </button>
         <button
           class="px-2.5 py-1 text-xs font-medium rounded border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          :disabled="plans.length === 0"
+          :disabled="shownPlans.length === 0"
           @click="exportAll"
         >
           Export All
@@ -452,6 +547,8 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
         </label>
       </div>
     </div>
+
+    <CloudBar :plans="plans" @retry="connectCloud" />
 
     <div class="p-2 sm:p-4">
       <!-- Import progress bar -->
@@ -474,13 +571,21 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
         <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-500"></div>
       </div>
 
-      <div v-else-if="plans.length === 0" class="text-center py-6">
+      <div v-else-if="cloud.state.status === 'checking' || (cloud.state.status === 'opening' && !cloud.library.value)" class="flex justify-center py-4">
+        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-500"></div>
+      </div>
+
+      <div v-else-if="cloud.libraryLocked.value" class="text-center py-6">
+        <p class="text-gray-500 text-sm">Enter your PIN above to open your cloud library and see your plans.</p>
+      </div>
+
+      <div v-else-if="shownPlans.length === 0" class="text-center py-6">
         <p class="text-gray-500 text-sm">Your library is empty. Save your current plan to see it here.</p>
       </div>
 
       <div v-else class="space-y-0.5 max-h-64 overflow-y-auto pr-2">
         <div
-          v-for="plan in plans"
+          v-for="plan in shownPlans"
           :key="plan.id"
           class="group flex items-center justify-between py-1 px-1 sm:py-1.5 sm:px-3 rounded-md hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all"
           :class="{
@@ -528,6 +633,18 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
             <span class="hidden sm:inline text-[10px] text-gray-400 whitespace-nowrap mr-1">
               Updated {{ new Date(plan.timestamp).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }}
             </span>
+            <template v-if="cloud.isReady.value">
+              <span v-if="cloud.planState(plan) === 'pending'" class="p-0.5 sm:p-1 text-indigo-300" v-tippy="'Waiting to sync'">
+                <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                </svg>
+              </span>
+              <button class="p-0.5 sm:p-1 text-gray-400 hover:text-indigo-600" v-tippy="'Share this plan'" @click="sharingPlan = plan">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </button>
+            </template>
             <button class="p-0.5 sm:p-1 text-gray-400 hover:text-indigo-600" v-tippy="'Export this plan'" @click="exportPlan(plan)">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -568,7 +685,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
       </div>
     </div>
 
-    <div class="bg-amber-50 px-4 py-3 border-t border-amber-100 flex items-start">
+    <div v-if="!cloud.isReady.value && !cloud.libraryLocked.value" class="bg-amber-50 px-4 py-3 border-t border-amber-100 flex items-start">
       <svg class="w-4 h-4 text-amber-500 mr-2 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
           stroke-linecap="round"
@@ -580,6 +697,13 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
       <p class="text-[11px] text-amber-700 leading-relaxed uppercase tracking-tight font-medium">
         Plans are stored locally in this browser. Clearing site data will delete your library. Use "Export All" to
         create external backups.
+        <button
+          v-if="cloud.state.status === 'none'"
+          class="normal-case tracking-normal font-semibold text-indigo-600 hover:underline"
+          @click="showCloudSetup = true"
+        >
+          Or set up cloud sync.
+        </button>
       </p>
     </div>
   </div>
@@ -587,7 +711,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
   <ConfirmationDialog
     v-if="showDeleteConfirm"
     title="Delete Plan"
-    :message="`Are you sure you want to delete '${planToDelete?.name}'? This cannot be undone.`"
+    :message="`Are you sure you want to delete '${planToDelete?.name}'?${deletesInCloud(planToDelete) ? ' It will also be deleted from your cloud library and your other devices.' : ''} This cannot be undone.`"
     confirm-label="Delete"
     variant="danger"
     @confirm="executeDelete"
@@ -600,7 +724,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
   <ConfirmationDialog
     v-if="showBulkDeleteConfirm"
     title="Delete Plans"
-    :message="`Are you sure you want to delete ${selectedPlanIds.size} plan${selectedPlanIds.size > 1 ? 's' : ''}? This cannot be undone.`"
+    :message="`Are you sure you want to delete ${selectedPlanIds.size} plan${selectedPlanIds.size > 1 ? 's' : ''}?${plans.some(p => selectedPlanIds.has(p.id) && deletesInCloud(p)) ? ' Plans in your cloud library will be deleted there and on your other devices too.' : ''} This cannot be undone.`"
     confirm-label="Delete"
     variant="danger"
     @confirm="executeBulkDelete"
@@ -637,6 +761,26 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
   </ConfirmationDialog>
 
   <PlanAlreadyOpenWarning v-if="showAlreadyOpenWarning" @dismiss="showAlreadyOpenWarning = false" />
+
+  <CloudShareDialog v-if="sharingPlan" :plan="sharingPlan" @close="sharingPlan = null" />
+  <CloudPinDialog v-if="showCloudSetup" mode="create" @close="showCloudSetup = false" />
+
+  <CloudDialog
+    v-if="incomingShare"
+    title="Shared plan"
+    :confirm-label="incomingShare.info ? 'Import' : ''"
+    :cancel-label="incomingShare.info ? 'Not now' : 'Close'"
+    :busy="importingShare"
+    :error="shareError"
+    @confirm="importIncomingShare"
+    @cancel="clearIncomingShare"
+  >
+    <p v-if="incomingShare.info" class="text-sm text-slate-600">
+      Someone shared <span class="font-semibold text-slate-800">{{ incomingShare.info.name }}</span> with you.
+      Import adds a copy to your Plan Library{{ incomingShare.info.kind === 'once' ? '. This is a one-time link: once imported, it stops working.' : '.' }}
+    </p>
+    <p v-else-if="!shareError" class="text-sm text-slate-600">This share link has expired, was revoked, or was already used.</p>
+  </CloudDialog>
 
   <slot name="dialogs" />
 </template>

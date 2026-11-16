@@ -13,8 +13,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // Shared planner code lives in lib/planners; its specs run under both planners.
-    include: ['src/**/*.{test,spec}.ts', '../../lib/planners/**/*.{test,spec}.ts'],
+    // Shared planner code lives in lib/planners, and the cloud library client in lib/cloud; their specs run
+    // under both planners.
+    include: ['src/**/*.{test,spec}.ts', '../../lib/planners/**/*.{test,spec}.ts', '../../lib/cloud/**/*.{test,spec}.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
