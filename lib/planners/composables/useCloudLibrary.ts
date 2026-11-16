@@ -6,16 +6,16 @@
  * library changes (`notifyLocalChange`, and the actions store's libraryUpdateTick), and when the tab comes back
  * into view. Downloads bump libraryUpdateTick so the library list refreshes.
  */
-import { computed, reactive, shallowRef } from 'vue';
+import { computed, reactive, shallowRef, watch } from 'vue';
 import { PROFILE } from '@planner/lib/profile';
 import { useActionsStore } from '@planner/stores/actions';
 import * as plannerDb from '@planner/lib/storage/db';
 import { CloudApi, CloudError } from '../../cloud/api';
 import type { PinType } from '../../cloud/crypto';
-import { forgetDevice, rememberDevice, rememberedLibrary } from '../../cloud/device';
-import { CloudLibrary, type ShareRecord } from '../../cloud/library';
+import { cachedTable, cacheTable, forgetCachedTable, forgetDevice, rememberDevice, rememberedLibrary } from '../../cloud/device';
+import { CloudLibrary, type CustomTableEntry, type ShareRecord } from '../../cloud/library';
 import { LINKS_KEY, plannerStores } from '../../cloud/plannerStores';
-import { createShare, forgetUsedShares, listShares, revokeShare } from '../../cloud/share';
+import { createShare, createTableShare, forgetUsedShares, listShares, revokeShare, type SharedTableMeta } from '../../cloud/share';
 import { planState, syncPlanner, type Links, type LocalPlan, type PlanCloudState, type SyncResult } from '../../cloud/sync';
 import type { ShareKind } from '../../cloud/api';
 
@@ -44,10 +44,24 @@ const state = reactive({
   lastSync: null as SyncResult | null,
   links: {} as Links,
   error: '' as string,
+  /** The open library's custom Chain Finder table (a reactive copy of its index entry). */
+  customTable: null as CustomTableEntry | null,
 });
 
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let visibilityHooked = false;
+let tickWatched = false;
+
+/** Sync after every library save the actions store makes (it bumps libraryUpdateTick), on any tab. */
+function watchLibraryTick(): void {
+  if (tickWatched) return;
+  tickWatched = true;
+  const actions = useActionsStore();
+  watch(
+    () => actions.libraryUpdateTick,
+    () => requestSync()
+  );
+}
 
 /** A message for the player from any failure. */
 export function cloudMessage(err: unknown): string {
@@ -95,6 +109,7 @@ async function loadLinks(): Promise<void> {
 
 async function opened(lib: CloudLibrary, remember: boolean): Promise<void> {
   library.value = lib;
+  state.customTable = lib.customTable;
   state.pinType = lib.settings.pinType;
   state.status = 'ready';
   state.error = '';
@@ -108,9 +123,11 @@ async function opened(lib: CloudLibrary, remember: boolean): Promise<void> {
 
 /** Point the cloud at the entered EID (and its local partition). Opens it by itself when this device is remembered. */
 async function connect(playerId: string, partitionHash: string): Promise<void> {
+  watchLibraryTick();
   const eid = eidOf(playerId);
   if (eid === state.eid && partitionHash === state.partitionHash && state.status !== 'unavailable') return;
   library.value = null;
+  state.customTable = null;
   state.eid = eid;
   state.partitionHash = partitionHash;
   state.lastSync = null;
@@ -190,6 +207,7 @@ async function forget(): Promise<void> {
   await forgetDevice(state.eid);
   state.remembered = false;
   library.value = null;
+  state.customTable = null;
   state.status = 'locked';
 }
 
@@ -204,7 +222,9 @@ async function deleteLibrary(): Promise<void> {
   }
   await forgetDevice(state.eid);
   await resetLinks();
+  await forgetCachedTable(lib.marker);
   library.value = null;
+  state.customTable = null;
   state.links = {};
   state.remembered = false;
   state.lastSync = null;
@@ -219,6 +239,7 @@ async function runSync(): Promise<SyncResult | null> {
     const { local, links } = stores();
     const result = await syncPlanner({ library: lib, planner: PROFILE.storagePrefix, local, links });
     state.lastSync = result;
+    state.customTable = lib.customTable;
     state.error = result.error ? cloudMessage(result.error) : '';
     await loadLinks();
     if (result.downloaded || result.deletedHere) {
@@ -259,6 +280,64 @@ async function share(plan: LocalPlan, kind: ShareKind): Promise<ShareRecord> {
   }
 }
 
+// ---- The custom Chain Finder table ----
+
+function openLibrary(): CloudLibrary {
+  const lib = library.value;
+  if (!lib) throw new Error('Open your cloud library first.');
+  return lib;
+}
+
+/** Store `bytes` (a gzipped table file) as the custom table, replacing any. */
+async function saveTable(bytes: Uint8Array<ArrayBuffer>, meta: Omit<CustomTableEntry, 'id' | 'size' | 'savedAt'>): Promise<CustomTableEntry> {
+  const lib = openLibrary();
+  try {
+    const entry = await lib.saveTable(bytes, meta);
+    state.customTable = entry;
+    await cacheTable(lib.marker, entry, bytes);
+    return entry;
+  } catch (err) {
+    throw new Error(cloudMessage(err));
+  }
+}
+
+/** The custom table's file: this browser's copy when it's current, else downloaded (and kept). */
+async function loadCustomTable(): Promise<Uint8Array<ArrayBuffer> | null> {
+  const lib = openLibrary();
+  const entry = lib.customTable;
+  if (!entry) return null;
+  const cached = await cachedTable(lib.marker, entry);
+  if (cached) return cached;
+  try {
+    const bytes = await lib.loadTable();
+    if (bytes) await cacheTable(lib.marker, entry, bytes);
+    return bytes;
+  } catch (err) {
+    throw new Error(cloudMessage(err));
+  }
+}
+
+async function deleteTable(): Promise<void> {
+  const lib = openLibrary();
+  try {
+    await lib.deleteTable();
+  } catch (err) {
+    throw new Error(cloudMessage(err));
+  }
+  await forgetCachedTable(lib.marker);
+  state.customTable = null;
+}
+
+async function shareTable(table: { name: string; bytes: Uint8Array } & SharedTableMeta, kind: ShareKind): Promise<ShareRecord> {
+  const lib = openLibrary();
+  try {
+    const pageUrl = typeof location === 'undefined' ? '' : `${location.origin}${location.pathname}`;
+    return await createTableShare(lib, table, kind, pageUrl);
+  } catch (err) {
+    throw new Error(cloudMessage(err));
+  }
+}
+
 export function useCloudLibrary() {
   hookVisibility();
   return {
@@ -274,6 +353,8 @@ export function useCloudLibrary() {
     libraryLocked: computed(() => state.status === 'checking' || state.status === 'locked' || (state.status === 'opening' && !library.value)),
     planState: (plan: LocalPlan): PlanCloudState | null => (state.status === 'ready' ? planState(plan, state.links) : null),
     connect,
+    /** Try again after the cloud couldn't be reached. */
+    retry: () => connect(state.eid, state.partitionHash),
     unlock,
     create,
     changePin,
@@ -282,6 +363,10 @@ export function useCloudLibrary() {
     notifyLocalChange: () => requestSync(),
     syncNow: runSync,
     share,
+    saveTable,
+    loadCustomTable,
+    deleteTable,
+    shareTable,
     listShares: () => (library.value ? listShares(library.value) : Promise.resolve([])),
     revokeShare: (id: string) => (library.value ? revokeShare(library.value, id) : Promise.resolve()),
     forgetUsedShares: () => (library.value ? forgetUsedShares(library.value) : Promise.resolve(0)),

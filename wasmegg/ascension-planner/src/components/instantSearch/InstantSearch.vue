@@ -191,6 +191,7 @@
         <input type="file" accept=".bin,.gz" class="hidden" @change="onFile" />
       </label>
     </div>
+    <CustomTablePanel />
     <p v-if="store.tableNote" class="mt-2 text-[11px] text-amber-700">{{ store.tableNote }}</p>
     <p v-for="w in store.rangeWarnings" :key="w" class="mt-2 text-[11px] text-amber-700">{{ w }}</p>
 
@@ -238,6 +239,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import InstantSearchResults from './InstantSearchResults.vue';
 import ChainComparison from './ChainComparison.vue';
+import CustomTablePanel from './CustomTablePanel.vue';
+import { useCustomTable } from '@/composables/useCustomTable';
 import InstantSearchFilters from './InstantSearchFilters.vue';
 import AutoLoadoutEditor from '@/components/auto/AutoLoadoutEditor.vue';
 import { loadoutInputsEqual } from '@/auto/loadout';
@@ -340,10 +343,13 @@ onMounted(() => {
   if (store.tableStatus === 'idle') store.loadTable();
 });
 
+const customTable = useCustomTable();
+
 function onFile(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (file) store.loadFile(file);
+  // Through the custom table, which remembers the file so it can be saved to the cloud library.
+  if (file) void customTable.pickFile(file);
   input.value = '';
 }
 </script>

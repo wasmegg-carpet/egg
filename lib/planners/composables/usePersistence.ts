@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useActionsStore } from '@planner/stores/actions';
 import { hashID, saveMetadata, loadMetadata } from '@planner/lib/storage/db';
 import { exportPlanData } from '@planner/stores/actions/io';
+import { useCloudLibrary } from './useCloudLibrary';
 
 const SYNC_CHANNEL_NAME = `${PROFILE.storagePrefix}_sync`;
 const channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
@@ -99,6 +100,8 @@ export function usePersistence() {
   async function initPersistence(eid: string) {
     persistenceEid.value = eid;
     partitionHash.value = await hashID(eid);
+    // The cloud library follows the same EID, whichever tab is showing.
+    void useCloudLibrary().connect(eid, partitionHash.value);
     await loadActiveDraft();
   }
 

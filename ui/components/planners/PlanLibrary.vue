@@ -15,7 +15,8 @@ import ImportCollisionDialog from 'ui/components/planners/ImportCollisionDialog.
 import PlanAlreadyOpenWarning from 'ui/components/planners/PlanAlreadyOpenWarning.vue';
 import { createEmptySnapshot } from '@planner/types';
 import { useCloudLibrary } from 'lib/planners/composables/useCloudLibrary';
-import { claimShare, parseShareLink, previewShare, type ShareInfo } from 'lib/cloud/share';
+import { claimShare } from 'lib/cloud/share';
+import { useIncomingShare } from 'lib/planners/composables/useIncomingShare';
 import CloudBar from 'ui/components/planners/cloud/CloudBar.vue';
 import CloudDialog from 'ui/components/planners/cloud/CloudDialog.vue';
 import CloudPinDialog from 'ui/components/planners/cloud/CloudPinDialog.vue';
@@ -29,7 +30,7 @@ const props = defineProps<{
 
 const initialStateStore = useInitialStateStore();
 const uiStore = useUIStore();
-const { partitionHash, persistenceEid, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
+const { partitionHash, broadcastLibraryUpdate, broadcastPresence, busyPlanIds } = usePersistence();
 
 const plans = ref<PlanData[]>([]);
 const isLoading = ref(true);
@@ -71,13 +72,8 @@ async function refreshPlans() {
 
 onMounted(refreshPlans);
 watch(partitionHash, refreshPlans);
-watch(
-  () => actionsStore.libraryUpdateTick,
-  () => {
-    void refreshPlans();
-    cloud.notifyLocalChange();
-  }
-);
+// The cloud syncs after these saves itself (useCloudLibrary watches the tick).
+watch(() => actionsStore.libraryUpdateTick, refreshPlans);
 
 // ---- Cloud library ----
 const cloud = useCloudLibrary();
@@ -86,12 +82,6 @@ const shownPlans = computed(() => (cloud.libraryLocked.value ? [] : plans.value)
 const sharingPlan = ref<PlanData | null>(null);
 const showCloudSetup = ref(false);
 
-// The EID the local library belongs to (not initialStateStore.playerId: loading a saved plan replaces that with
-// the plan's redacted placeholder).
-function connectCloud() {
-  void cloud.connect(persistenceEid.value, partitionHash.value);
-}
-watch([persistenceEid, partitionHash], connectCloud, { immediate: true });
 
 /** After any change to the local library: tell other tabs, and sync. */
 function libraryChanged() {
@@ -106,31 +96,26 @@ function deletesInCloud(plan: PlanData | null): boolean {
   return s === 'synced' || s === 'pending';
 }
 
-// A share link opened in this planner: `#share=<id>.<key>`. Offer to import it into this library.
-const incomingShare = ref<{ link: string; info: ShareInfo | null } | null>(null);
+// A share link the page was opened with. Plans are imported here; tables belong to the Chain Finder (the
+// ascension planner switches to it), and other planners say where to open them.
+const incoming = useIncomingShare(cloud.api);
 const importingShare = ref(false);
 const shareError = ref('');
-
-async function checkIncomingShare() {
-  if (typeof location === 'undefined' || !parseShareLink(location.hash)) return;
-  const link = location.href;
-  try {
-    incomingShare.value = { link, info: await previewShare(cloud.api, link) };
-  } catch (err) {
-    incomingShare.value = { link, info: null };
-    shareError.value = err instanceof Error ? err.message : String(err);
-  }
-}
+const incomingShare = computed(() => {
+  const s = incoming.state;
+  if (!s.link || !s.checked) return null;
+  if (s.info?.content === 'table' && PROFILE.storagePrefix === 'ascension') return null;
+  return { link: s.link, info: s.info };
+});
 
 function clearIncomingShare() {
-  incomingShare.value = null;
   shareError.value = '';
-  if (typeof history !== 'undefined') history.replaceState(null, '', `${location.pathname}${location.search}`);
+  incoming.clear();
 }
 
 async function importIncomingShare() {
   const share = incomingShare.value;
-  if (!share?.info || !partitionHash.value) return;
+  if (!share?.info || share.info.content !== 'plan' || !partitionHash.value) return;
   importingShare.value = true;
   shareError.value = '';
   try {
@@ -159,8 +144,6 @@ async function importIncomingShare() {
     importingShare.value = false;
   }
 }
-
-onMounted(checkIncomingShare);
 
 async function loadPlan(plan: PlanData) {
   // Check if plan is already open in another tab
@@ -548,7 +531,7 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
       </div>
     </div>
 
-    <CloudBar :plans="plans" @retry="connectCloud" />
+    <CloudBar :plans="plans" @retry="cloud.retry()" />
 
     <div class="p-2 sm:p-4">
       <!-- Import progress bar -->
@@ -768,18 +751,23 @@ const emit = defineEmits<{ 'plan-loaded': [name: string] }>();
   <CloudDialog
     v-if="incomingShare"
     title="Shared plan"
-    :confirm-label="incomingShare.info ? 'Import' : ''"
-    :cancel-label="incomingShare.info ? 'Not now' : 'Close'"
+    :confirm-label="incomingShare.info?.content === 'plan' ? 'Import' : ''"
+    :cancel-label="incomingShare.info?.content === 'plan' ? 'Not now' : 'Close'"
     :busy="importingShare"
     :error="shareError"
     @confirm="importIncomingShare"
     @cancel="clearIncomingShare"
   >
-    <p v-if="incomingShare.info" class="text-sm text-slate-600">
+    <p v-if="incomingShare.info?.content === 'table'" class="text-sm text-slate-600">
+      This link shares a Chain Finder table, <span class="font-semibold text-slate-800">{{ incomingShare.info.name }}</span>.
+      Open it in the Ascension Planner to import it.
+    </p>
+    <p v-else-if="incomingShare.info" class="text-sm text-slate-600">
       Someone shared <span class="font-semibold text-slate-800">{{ incomingShare.info.name }}</span> with you.
       Import adds a copy to your Plan Library{{ incomingShare.info.kind === 'once' ? '. This is a one-time link: once imported, it stops working.' : '.' }}
     </p>
-    <p v-else-if="!shareError" class="text-sm text-slate-600">This share link has expired, was revoked, or was already used.</p>
+    <p v-else-if="!shareError && !incoming.state.error" class="text-sm text-slate-600">This share link has expired, was revoked, or was already used.</p>
+    <p v-else-if="!shareError" class="text-sm text-red-600">{{ incoming.state.error }}</p>
   </CloudDialog>
 
   <slot name="dialogs" />

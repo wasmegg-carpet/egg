@@ -548,6 +548,7 @@ import WarningDialog from 'ui/components/planners/WarningDialog.vue';
 import RecalculationOverlay from 'ui/components/planners/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
 import PlanLibrary from 'ui/components/planners/PlanLibrary.vue';
+import { useIncomingShare } from 'lib/planners/composables/useIncomingShare';
 import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
 import { useAutoPlanImport } from '@/composables/useAutoPlanImport';
 import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
@@ -591,6 +592,15 @@ const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const uiStore = useUIStore();
 const { plannerTab, isHeaderCollapsed, isFooterCollapsed, loading, error } = storeToRefs(uiStore);
+
+// Opened with a share link to a Chain Finder table: go to the Chain Finder, which offers to import it.
+const incomingShare = useIncomingShare();
+watch(
+  () => incomingShare.state.info?.content,
+  content => {
+    if (content === 'table') handleChainFinderTabClick();
+  }
+);
 const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();

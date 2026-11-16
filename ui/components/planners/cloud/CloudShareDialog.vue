@@ -1,7 +1,7 @@
-<!-- Make a share link for one plan. -->
+<!-- Make a share link for one plan, or for a Chain Finder table. -->
 <template>
   <CloudDialog
-    title="Share a plan"
+    :title="table ? 'Share a table' : 'Share a plan'"
     :confirm-label="record ? '' : 'Create link'"
     :cancel-label="record ? 'Done' : 'Cancel'"
     :busy="busy"
@@ -11,8 +11,15 @@
   >
     <div class="space-y-4 text-sm text-slate-600">
       <p>
-        Anyone with the link can import a copy of <span class="font-semibold text-slate-800">{{ plan.name }}</span> into
-        their own library. The link doesn't reveal your EID.
+        <template v-if="table">
+          Anyone with the link can use a copy of your Chain Finder table
+          <span class="font-semibold text-slate-800">{{ table.name }}</span>, and keep it as their own. The link doesn't
+          reveal your EID.
+        </template>
+        <template v-else>
+          Anyone with the link can import a copy of <span class="font-semibold text-slate-800">{{ plan?.name }}</span>
+          into their own library. The link doesn't reveal your EID.
+        </template>
       </p>
 
       <fieldset v-if="!record" class="space-y-2">
@@ -47,10 +54,11 @@ import { ref } from 'vue';
 import type { ShareKind } from 'lib/cloud/api';
 import type { ShareRecord } from 'lib/cloud/library';
 import type { LocalPlan } from 'lib/cloud/sync';
+import type { SharedTableMeta } from 'lib/cloud/share';
 import { useCloudLibrary } from 'lib/planners/composables/useCloudLibrary';
 import CloudDialog from './CloudDialog.vue';
 
-const props = defineProps<{ plan: LocalPlan }>();
+const props = defineProps<{ plan?: LocalPlan; table?: { name: string; bytes: Uint8Array } & SharedTableMeta }>();
 defineEmits<{ close: [] }>();
 
 const cloud = useCloudLibrary();
@@ -64,7 +72,8 @@ async function create() {
   busy.value = true;
   error.value = '';
   try {
-    record.value = await cloud.share(props.plan, kind.value);
+    if (props.table) record.value = await cloud.shareTable(props.table, kind.value);
+    else if (props.plan) record.value = await cloud.share(props.plan, kind.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {

@@ -13,31 +13,10 @@
     </div>
 
     <!-- Library exists: ask for the PIN right away -->
-    <form v-else-if="status === 'locked' || (status === 'opening' && !cloud.library.value)" class="flex flex-wrap items-center gap-x-2 gap-y-1" @submit.prevent="open">
+    <CloudPinPrompt v-else-if="cloud.libraryLocked.value && status !== 'checking'">
       <CloudIcon />
       <span>Your cloud library</span>
-      <template v-if="cloud.state.pinType !== 'none'">
-        <input
-          v-model="pin"
-          type="password"
-          :inputmode="digits ? 'numeric' : 'text'"
-          :maxlength="digits ? (cloud.state.pinType === 'pin4' ? 4 : 6) : undefined"
-          :placeholder="digits ? 'PIN' : 'Password'"
-          autocomplete="current-password"
-          class="w-28 text-xs border-gray-300 rounded py-0.5 px-1.5 tracking-widest"
-          :disabled="status === 'opening'"
-        />
-      </template>
-      <button type="submit" class="font-semibold text-indigo-600 hover:underline disabled:opacity-40" :disabled="status === 'opening' || (!pin && cloud.state.pinType !== 'none')">
-        {{ status === 'opening' ? 'Opening…' : 'Open' }}
-      </button>
-      <label class="flex items-center gap-1 text-slate-400" v-tippy="'Opens without the PIN next time. Don’t tick this on a shared computer.'">
-        <input v-model="remember" type="checkbox" class="h-3 w-3 rounded border-gray-300 text-indigo-600" />
-        Remember this device
-      </label>
-      <button type="button" class="ml-auto text-slate-400 hover:text-slate-600 hover:underline" @click="dialog = 'replace'">Forgot PIN?</button>
-      <p v-if="error" class="basis-full text-red-600">{{ error }}</p>
-    </form>
+    </CloudPinPrompt>
 
     <!-- Open -->
     <div v-else-if="status === 'ready'" class="flex items-center gap-2">
@@ -92,6 +71,7 @@ import { useCloudLibrary } from 'lib/planners/composables/useCloudLibrary';
 import CloudDialog from './CloudDialog.vue';
 import CloudPinDialog from './CloudPinDialog.vue';
 import CloudSharesDialog from './CloudSharesDialog.vue';
+import CloudPinPrompt from './CloudPinPrompt.vue';
 
 const props = defineProps<{ plans: LocalPlan[] }>();
 defineEmits<{ retry: [] }>();
@@ -105,8 +85,6 @@ const CloudIcon = defineComponent({
 
 const cloud = useCloudLibrary();
 const status = computed(() => cloud.state.status);
-const pin = ref('');
-const remember = ref(false);
 const error = ref('');
 const busy = ref(false);
 const menuOpen = ref(false);
@@ -132,19 +110,8 @@ function dismissOffer() {
   }
 }
 
-const digits = computed(() => cloud.state.pinType === 'pin6' || cloud.state.pinType === 'pin4');
 const pending = computed(() => props.plans.filter(p => cloud.planState(p) === 'pending').length);
 const visible = computed(() => status.value !== 'off' && !(status.value === 'none' && offerDismissed.value));
-
-async function open() {
-  error.value = '';
-  try {
-    await cloud.unlock(cloud.state.pinType === 'none' ? '' : pin.value, remember.value);
-    pin.value = '';
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-  }
-}
 
 async function deleteLibrary() {
   busy.value = true;
