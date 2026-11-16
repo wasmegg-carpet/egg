@@ -17,10 +17,12 @@ import {
   markerId,
   newSettings,
   normalizeEid,
+  open,
   openJson,
   openMainFile,
   PinFormatError,
   reencodeMainFile,
+  seal,
   sealJson,
   type LibrarySettings,
   type PinKeys,
@@ -62,12 +64,38 @@ export interface ShareRecord {
   expires: number;
   /** The link itself, so it can be copied again. */
   link: string;
+  /** What it shares; absent on records made before tables could be shared (= plan). */
+  content?: ShareContent;
+}
+
+export type ShareContent = 'plan' | 'table';
+
+/**
+ * The player's custom Chain Finder table: one per library, kept apart from plan sync. The object holds the
+ * table file (gzipped, as Chain Finder reads it), encrypted without recompressing.
+ */
+export interface CustomTableEntry {
+  id: string;
+  /** The file name it was loaded or built as. */
+  name: string;
+  /** Start TEs it covers, from its header. */
+  from: number;
+  to: number;
+  /** Delivery artifact ids from its header (empty when it records none). */
+  delivery: string[];
+  /** Built in silo mode (deferForEarnings). */
+  silo: boolean;
+  /** Bytes as stored (the gzipped table). */
+  size: number;
+  savedAt: number;
 }
 
 export interface LibraryIndex {
   v: 1;
   plans: IndexEntry[];
   shares: ShareRecord[];
+  /** Absent in libraries made before custom tables. */
+  customTable?: CustomTableEntry | null;
   prefs: Record<string, unknown>;
 }
 
@@ -317,6 +345,53 @@ export class CloudLibrary {
     return body ? openJson<StoredPlan<T>>(this.master, body) : null;
   }
 
+  // ---- The custom Chain Finder table --------------------------------------------------------------------
+
+  get customTable(): CustomTableEntry | null {
+    return this._index.customTable ?? null;
+  }
+
+  /**
+   * Store `table` (the gzipped table file) as the library's custom table, replacing the one there. `meta` comes
+   * from the table's header. Returns the new entry.
+   */
+  async saveTable(table: Uint8Array, meta: Omit<CustomTableEntry, 'id' | 'size' | 'savedAt'>): Promise<CustomTableEntry> {
+    const body = await seal(this.master, table, false);
+    const previous = this.customTable?.id;
+    let id: string | undefined;
+    if (previous) {
+      try {
+        await this.withSession(s => this.api.putPlan(s, previous, body));
+        id = previous;
+      } catch (err) {
+        if (!(err instanceof CloudError && err.code === 'not_found')) throw err;
+      }
+    }
+    if (!id) id = (await this.withSession(s => this.api.createPlan(s, body))).id;
+    const entry: CustomTableEntry = { ...meta, delivery: [...meta.delivery], id, size: table.length, savedAt: Date.now() };
+    await this.updateIndex(index => {
+      index.customTable = entry;
+    });
+    return entry;
+  }
+
+  /** The custom table's file (gzipped), or null when there's none or its object is gone. */
+  async loadTable(): Promise<Uint8Array<ArrayBuffer> | null> {
+    const entry = this.customTable;
+    if (!entry) return null;
+    const body = await this.api.getPlan(entry.id);
+    return body ? open(this.master, body) : null;
+  }
+
+  async deleteTable(): Promise<void> {
+    const entry = this.customTable;
+    if (!entry) return;
+    await this.removePlan(entry.id);
+    await this.updateIndex(index => {
+      index.customTable = null;
+    });
+  }
+
   /** Delete everywhere: the object, and a tombstone in the index so other devices drop their copy. */
   async deletePlan(id: string): Promise<void> {
     await this.removePlan(id);
@@ -330,11 +405,13 @@ export class CloudLibrary {
    */
   async touch(): Promise<{ missing: string[] }> {
     const ids = this.plans().map(p => p.id);
+    if (this.customTable) ids.push(this.customTable.id);
     const { missing } = await this.withSession(s => this.api.touch(s, this.mainId, ids));
     if (missing.length) {
       const gone = new Set(missing);
       await this.updateIndex(index => {
         index.plans = index.plans.filter(p => !gone.has(p.id));
+        if (index.customTable && gone.has(index.customTable.id)) index.customTable = null;
       });
     }
     return { missing };
@@ -372,6 +449,8 @@ export class CloudLibrary {
   /** Delete every plan and the library. The EID can create a new one afterwards. */
   async deleteLibrary(): Promise<void> {
     for (const p of this._index.plans) if (!p.deletedAt) await this.withSession(s => this.api.deletePlan(s, p.id));
+    const table = this.customTable;
+    if (table) await this.withSession(s => this.api.deletePlan(s, table.id));
     await this.withSession(s => this.api.deleteLibrary(s, this.marker, this.mainId));
   }
 }

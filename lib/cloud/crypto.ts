@@ -6,7 +6,8 @@
  *   main id    P   = hex(HKDF-SHA256(PIN key, info "wasmegg-cloud:main-id:v1", 128 bits))
  *   KEK            = HKDF-SHA256(PIN key, info "wasmegg-cloud:kek:v1"), an AES-GCM-256 key
  *   master key     = random AES-GCM-256; encrypts the library's plans and main-file body; stored wrapped by the KEK
- *   envelope       = version byte (1) | 12-byte IV | AES-GCM(gzip(plaintext))
+ *   envelope       = version byte | 12-byte IV | AES-GCM(body): version 1 = body is gzip(plaintext), version 2 =
+ *                    body is the plaintext as is (for data that's already compressed, like Chain Finder tables)
  *
  * The marker id must match the worker's (joo-cloudflare src/eid.ts); both pin the same test vector. Changing any
  * constant here makes existing libraries unreachable. Don't; add a new version instead.
@@ -16,7 +17,8 @@ export const MARKER_SALT = 'wasmegg-cloud:marker:v1';
 export const MARKER_ITERATIONS = 10_000;
 const INFO_MAIN_ID = 'wasmegg-cloud:main-id:v1';
 const INFO_KEK = 'wasmegg-cloud:kek:v1';
-const ENVELOPE_VERSION = 1;
+const ENVELOPE_GZIP = 1;
+const ENVELOPE_RAW = 2;
 const IV_BYTES = 12;
 
 /** Default PIN-key iterations for new libraries (stored per library, so it can change later). */
@@ -150,19 +152,25 @@ export async function unwrapMasterKey(wrapped: string, kek: CryptoKey): Promise<
 
 // ---- Envelopes ----------------------------------------------------------------------------------------
 
-/** Gzip, then encrypt with `key`: version | IV | ciphertext. */
-export async function seal(key: CryptoKey, plaintext: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+/**
+ * Encrypt with `key`: version | IV | ciphertext. Gzipped first, unless `compress` is false (data that's
+ * already compressed gains nothing from it).
+ */
+export async function seal(key: CryptoKey, plaintext: Uint8Array, compress = true): Promise<Uint8Array<ArrayBuffer>> {
   const iv = randomBytes(IV_BYTES);
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await gzip(plaintext));
-  return concat(Uint8Array.of(ENVELOPE_VERSION), iv, new Uint8Array(ciphertext));
+  const body = compress ? await gzip(plaintext) : (plaintext as Uint8Array<ArrayBuffer>);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, body);
+  return concat(Uint8Array.of(compress ? ENVELOPE_GZIP : ENVELOPE_RAW), iv, new Uint8Array(ciphertext));
 }
 
-/** Decrypt and gunzip an envelope. Throws on a wrong key, tampering, or an unknown version. */
+/** Decrypt an envelope (and gunzip it when it was sealed compressed). Throws on a wrong key, tampering, or an
+ *  unknown version. */
 export async function open(key: CryptoKey, envelope: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
-  if (envelope[0] !== ENVELOPE_VERSION) throw new Error(`unknown envelope version ${envelope[0]}`);
+  const version = envelope[0];
+  if (version !== ENVELOPE_GZIP && version !== ENVELOPE_RAW) throw new Error(`unknown envelope version ${version}`);
   const iv = envelope.slice(1, 1 + IV_BYTES);
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, envelope.slice(1 + IV_BYTES));
-  return gunzip(new Uint8Array(plaintext));
+  const plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, envelope.slice(1 + IV_BYTES)));
+  return version === ENVELOPE_GZIP ? gunzip(plaintext) : plaintext;
 }
 
 export async function sealJson(key: CryptoKey, value: unknown): Promise<Uint8Array<ArrayBuffer>> {

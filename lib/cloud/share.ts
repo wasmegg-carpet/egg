@@ -8,8 +8,18 @@
  * this is the backstop).
  */
 import { CloudApi, type ShareKind } from './api';
-import { fromBase64, generateMasterKey, openJson, sealJson, toBase64 } from './crypto';
-import type { CloudLibrary, PlannerId, ShareRecord, StoredPlan } from './library';
+import { fromBase64, generateMasterKey, open, openJson, seal, sealJson, toBase64 } from './crypto';
+import type { CloudLibrary, CustomTableEntry, PlannerId, ShareContent, ShareRecord, StoredPlan } from './library';
+
+/** A shared table's header facts, as its link's title carries them. */
+export type SharedTableMeta = Pick<CustomTableEntry, 'from' | 'to' | 'delivery' | 'silo'>;
+
+/**
+ * A link's title, encrypted with the link key: what it holds, so a preview can route it (the plan library, or
+ * the Chain Finder) before a one-time link is used. Links made before tables were shareable have a bare string
+ * (the plan's name).
+ */
+type Title = { name: string; content: 'plan' } | ({ name: string; content: 'table' } & SharedTableMeta);
 
 const LINK_PARAM = 'share';
 /** What replaces an EID found anywhere in a shared plan. */
@@ -93,17 +103,46 @@ export async function createShare<T>(
   const key = await generateMasterKey();
   const stored: StoredPlan<T> = { v: 1, planner: plan.planner, name: plan.name, timestamp: plan.timestamp, data: scrubPlayer(plan.data, library.eid) };
   const body = await sealJson(key, stored);
-  const title = toBase64(await sealJson(key, plan.name));
-  const created = await library.sessionForApi((api, session) => api.createShare(session, { kind, title, body }));
+  return uploadShare(library, key, body, { name: plan.name, content: 'plan' }, plan.planner, kind, pageUrl);
+}
+
+/**
+ * Create a share link for a Chain Finder table (`table` = the gzipped table file) and record it in the index.
+ * A table holds no player identifiers (it's built for gear, not an account), so nothing is scrubbed.
+ */
+export async function createTableShare(
+  library: CloudLibrary,
+  table: { name: string; bytes: Uint8Array } & SharedTableMeta,
+  kind: ShareKind,
+  pageUrl: string
+): Promise<ShareRecord> {
+  const key = await generateMasterKey();
+  const body = await seal(key, table.bytes, false);
+  const title: Title = { name: table.name, content: 'table', from: table.from, to: table.to, delivery: [...table.delivery], silo: table.silo };
+  return uploadShare(library, key, body, title, 'ascension', kind, pageUrl);
+}
+
+async function uploadShare(
+  library: CloudLibrary,
+  key: CryptoKey,
+  body: Uint8Array<ArrayBuffer>,
+  title: Title,
+  planner: PlannerId,
+  kind: ShareKind,
+  pageUrl: string
+): Promise<ShareRecord> {
+  const sealedTitle = toBase64(await sealJson(key, title));
+  const created = await library.sessionForApi((api, session) => api.createShare(session, { kind, title: sealedTitle, body }));
   const record: ShareRecord = {
     id: created.id,
     revokeToken: created.revokeToken,
     kind,
-    planner: plan.planner,
-    name: plan.name,
+    planner,
+    name: title.name,
     created: Date.now(),
     expires: created.expires,
     link: shareLink(pageUrl, created.id, await exportLinkKey(key)),
+    content: title.content,
   };
   await library.updateIndex(index => {
     index.shares = [...index.shares.filter(s => s.expires > Date.now()), record];
@@ -115,6 +154,9 @@ export interface ShareInfo {
   kind: ShareKind;
   name: string;
   expires: number;
+  /** A plan, or a Chain Finder table (with its header facts). */
+  content: ShareContent;
+  table?: SharedTableMeta;
 }
 
 /** What a link holds, without using it up; null when it's gone. Needs no library. */
@@ -123,11 +165,23 @@ export async function previewShare(api: CloudApi, link: string): Promise<ShareIn
   if (!parsed) return null;
   const preview = await api.previewShare(parsed.id);
   if (!preview) return null;
-  const name = await openJson<string>(await importLinkKey(parsed.key), fromBase64(preview.title));
-  return { kind: preview.kind, name, expires: preview.expires };
+  const title = await openJson<Title | string>(await importLinkKey(parsed.key), fromBase64(preview.title));
+  if (typeof title === 'string') return { kind: preview.kind, name: title, expires: preview.expires, content: 'plan' };
+  const info: ShareInfo = { kind: preview.kind, name: title.name, expires: preview.expires, content: title.content };
+  if (title.content === 'table') info.table = { from: title.from, to: title.to, delivery: title.delivery, silo: title.silo };
+  return info;
 }
 
-/** Import: the plan (a one-time link is used up); null when it's gone. Needs no library. */
+/** Import a shared table: its gzipped file (a one-time link is used up); null when it's gone. Preview first. */
+export async function claimTableShare(api: CloudApi, link: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  const parsed = parseShareLink(link);
+  if (!parsed) return null;
+  const body = await api.claimShare(parsed.id);
+  return body ? open(await importLinkKey(parsed.key), body) : null;
+}
+
+/** Import a shared plan (a one-time link is used up); null when it's gone. Needs no library. Preview first: a
+ *  table link must go to claimTableShare. */
 export async function claimShare<T = unknown>(api: CloudApi, link: string): Promise<StoredPlan<T> | null> {
   const parsed = parseShareLink(link);
   if (!parsed) return null;

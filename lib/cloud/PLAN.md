@@ -212,14 +212,15 @@ shareable like plans; expires like everything else (a year untouched, kept alive
 
 - Facts: tables are gzipped, ~3.1–3.5 MB (the 26 on ap-table-store), under the 5 MB object cap and the 50 MB
   library quota. No worker change: a table is an opaque encrypted object like a plan.
-- [ ] 6.1 Client: `customTable` entry in the encrypted index (`{id, name, from, to, delivery, savedAt}`), outside
+- [x] 6.1 Client: `customTable` entry in the encrypted index (`{id, name, from, to, delivery, savedAt}`), outside
       plan sync; `saveTable` (create or replace the object, then the entry), `loadTable`, `deleteTable`; touch
       includes it; a local IndexedDB copy re-downloaded only when `savedAt` changes. Tests
 - [ ] 6.2 Move the cloud connection to the app level (not PlanLibrary), with a compact PIN prompt usable on any
       tab. Fixes sync not starting on the Auto Planner / Chain Finder tabs
 - [ ] 6.3 Chain Finder UI: after "Load a table file" (already validated by `readTableFile`), offer "Save to your
       cloud library" (confirm replacing, naming the current one); "Your table (name, TE x–y)" beside the default;
-      also offer saving a table Chain Finder built
+      also offer saving a table Chain Finder built; **download** the custom table (the same `.bin.gz` file;
+      user request)
 - [ ] 6.4 Sharing: share a table like a plan (`StoredPlan`-style payload with a `kind: 'table'`); importing it
       with a library offers to make it your custom table (replace confirm); without a library, use it for this
       visit and offer to set one up. Browser-test the whole flow
