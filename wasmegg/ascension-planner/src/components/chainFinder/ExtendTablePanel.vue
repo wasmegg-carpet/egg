@@ -1,5 +1,5 @@
 <template>
-  <fieldset :disabled="store.status === 'running'" class="rounded-xl border border-slate-200 p-3 text-xs space-y-2 disabled:opacity-50">
+  <fieldset :disabled="store.status === 'running'" class="min-w-0 rounded-xl border border-slate-200 p-3 text-xs space-y-2 disabled:opacity-50">
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
       <label class="flex items-center gap-2 text-slate-600">
         Lowest start TE

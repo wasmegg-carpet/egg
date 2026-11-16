@@ -26,7 +26,7 @@
       the maxed one. Weaker earnings artifacts are allowed for (the table is read lower by the Clothed TE they give up).
     </p>
 
-    <fieldset :disabled="store.status === 'running'" class="space-y-6 disabled:opacity-50">
+    <fieldset :disabled="store.status === 'running'" class="min-w-0 space-y-6 disabled:opacity-50">
       <section>
         <h3 class="text-sm font-bold text-slate-800 mb-2">Target</h3>
         <SegmentedToggle v-model="store.mode" :options="targetModes" class="mb-3" />
@@ -63,7 +63,7 @@
             class="rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900"
           >
             <div class="flex flex-wrap items-start gap-3">
-              <div class="flex-1 min-w-[16rem]">
+              <div class="min-w-0 grow basis-64">
                 <span class="font-black">Current ascension detected:</span>
                 {{ store.current.claimedTE }} TE claimed + {{ store.current.pendingTE }} pending |
                 {{ formatNumber(store.current.elr * 3600) }}/hr delivery rate |
