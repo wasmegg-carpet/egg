@@ -117,6 +117,7 @@ const IMPLEMENTATION = [
   'plan/read.ts',
   'plan/schema.ts',
   'plan/write.ts',
+  'schedule-settings.ts', // the apps' sleep and 2x event settings, bounded by `sleep.ts` and `capacity.ts`
   'sleep.ts', // the app's sleep variants and capacities; the arena states its problems with its own `sleep.ts`
   'solver/days.ts',
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
