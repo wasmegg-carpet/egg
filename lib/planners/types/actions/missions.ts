@@ -10,6 +10,9 @@ export interface LaunchMissionEntry {
   duration: number; // DurationType enum value
   count: number;
   targetAfxId?: number; // absent means untargeted
+  // Launched inside a 2x mission capacity event, per the artifact explorer's plan. Only an imported plan says
+  // so, and the planners do not model what a mission brings home, so it is carried for display only.
+  doubled?: true;
 }
 
 /**

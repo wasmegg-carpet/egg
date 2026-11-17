@@ -18,16 +18,25 @@ import {
   parseHumilityMissions,
   resolveLaunches,
   type HumilityMissionsFile,
+  type ResolvedLaunch,
 } from './humilityMissions';
+import { launchMissionsExecutor } from 'lib/planners/actions/executors/launchMissions';
 import { fuelForLaunches, launchCost } from 'lib/planners/rockets/launches';
 import { DURATION_NAMES, DurationType, SHIP_INFO, Spaceship, FUEL_REQUIREMENTS } from './missions';
 import { VIRTUE_EGGS } from '@/types';
-import type { Action } from '@/types';
+import type { Action, LaunchMissionsPayload } from '@/types';
 
 const FIXTURES = new URL('../../../artifact-explorer/tests/fixtures/', import.meta.url).pathname;
 
 const humilityMissions = () =>
   parseHumilityMissions(JSON.parse(readFileSync(FIXTURES + 'humility-missions.json', 'utf8')));
+// What staging records for a launch, as far as its description reads it.
+const launchPayloadOf = (launches: ResolvedLaunch[]): LaunchMissionsPayload => ({
+  missions: launches.map(launch => ({ ...launch })),
+  totalTimeSeconds: 3600,
+  totalMissions: launches.reduce((n, launch) => n + launch.count, 0),
+  fuelConsumed: fuelForLaunches(launches),
+});
 const planSave = JSON.parse(readFileSync(FIXTURES + 'ascension-plan.json', 'utf8')) as { actions: Action[] };
 
 describe('parsing a humility missions file', () => {
@@ -141,6 +150,32 @@ describe("mapping the wire format onto this app's enums", () => {
     // The list renders before staging validates it, so a name we cannot map shows as it came
     // rather than taking the row down.
     expect(launchLabel({ ...visit.launches[0], ship: 'CHICKEN_TWELVE' })).toBe('LONG CHICKEN_TWELVE');
+  });
+
+  // The checked-in fixture predates the marker, so "accepts the fixture" above is the old-format case.
+  it('keeps a doubled line apart from the same mission at 1x, and charges fuel for both', () => {
+    const [visit] = humilityMissions().visits;
+    const line = visit.launches[0];
+    const both = { ...visit, launches: [line, { ...line, count: 2, doubled: true as const }] };
+    const launches = resolveLaunches(both);
+    expect(launches.map(l => [l.count, l.doubled])).toEqual([
+      [line.count, undefined],
+      [2, true],
+    ]);
+    expect('doubled' in launches[0]).toBe(false);
+    const single = fuelForLaunches(resolveLaunches({ ...visit, launches: [{ ...line, count: line.count + 2 }] }));
+    expect(fuelForLaunches(launches)).toEqual(single);
+    expect(launchMissionsExecutor.getEffectDescription(launchPayloadOf(launches))).toMatch(
+      /^4× .*, 2× .* at 2× capacity \(/
+    );
+  });
+
+  it('rejects a doubled marker that is not `true`', () => {
+    const [visit] = humilityMissions().visits;
+    for (const doubled of [false, 'yes', 1]) {
+      const bad = { ...visit, launches: [{ ...visit.launches[0], doubled: doubled as unknown as true }] };
+      expect(() => resolveLaunches(bad)).toThrow(HumilityMissionsError);
+    }
   });
 
   it('rejects a count that would launch nothing or a fraction of a ship', () => {

@@ -10,6 +10,7 @@ import { isEffortLevel } from 'lib/mission-optimizer/effort';
 import { readPlayerData, type PlayerData } from 'lib/mission-optimizer/player-data';
 import type { OptimizerSolution } from 'lib/mission-optimizer/types';
 import type { HumilityVisit } from 'lib/mission-optimizer/plan/read';
+import { normalizeScheduleSettings } from 'lib/mission-optimizer/schedule-settings';
 
 import { newVisitSettings, type OptimizerVisitSettings } from '@/lib/humilityOptimizer';
 import { useInitialStateStore } from './initialState';
@@ -47,6 +48,7 @@ function normalize(stored: Partial<OptimizerVisitSettings> | undefined): Optimiz
     fuelBudget: stored.fuelBudget === 'full-tank' ? 'full-tank' : 'banked',
     gemLimit: stored.gemLimit === 'unlimited' ? 'unlimited' : 'plan',
     capCrafting: stored.capCrafting === true,
+    ...normalizeScheduleSettings(stored),
   };
 }
 

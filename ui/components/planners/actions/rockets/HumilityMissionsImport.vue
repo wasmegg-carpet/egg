@@ -54,6 +54,7 @@
           <li v-for="(launch, i) in visit.launches" :key="i" class="text-[11px] text-gray-600">
             {{ launch.count }}× {{ launchLabel(launch) }}
             <span class="text-gray-400">→ {{ getTargetName(launch.targetAfxId) }}</span>
+            <span v-if="launch.doubled" class="ml-1 font-medium text-fuchsia-600">2× capacity</span>
           </li>
         </ul>
 

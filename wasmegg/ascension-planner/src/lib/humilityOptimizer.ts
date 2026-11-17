@@ -5,6 +5,7 @@
 import { ei, fuelTankSizes, parseDurationDays } from 'lib';
 import type { EffortLevel } from 'lib/mission-optimizer/effort';
 import { sliceHumilityVisits, type HumilityVisit } from 'lib/mission-optimizer/plan/read';
+import { newScheduleSettings, type ScheduleSettings } from 'lib/mission-optimizer/schedule-settings';
 import { NON_HUMILITY_EGG_IDS, type PlanSave } from 'lib/mission-optimizer/plan/schema';
 
 import type { Action, VirtueEgg } from '@/types';
@@ -17,7 +18,9 @@ export type FuelBudget = 'banked' | 'full-tank';
 // `plan` drops ships the visit's earnings cannot pay for; `unlimited` offers the whole menu.
 export type GemLimit = 'plan' | 'unlimited';
 
-export interface OptimizerVisitSettings {
+// Sleep and the 2x capacity event (`ScheduleSettings`) sit with the visit's other choices: an event runs for
+// some visits and not others, and the template carries the last ones made to the next visit.
+export interface OptimizerVisitSettings extends ScheduleSettings {
   targetIds: string[];
   // As typed, e.g. '3d' or '36h'. Empty until the player says how long they will stay.
   duration: string;
@@ -36,6 +39,7 @@ export function newVisitSettings(): OptimizerVisitSettings {
     fuelBudget: 'banked',
     gemLimit: 'plan',
     capCrafting: false,
+    ...newScheduleSettings(),
   };
 }
 

@@ -171,6 +171,8 @@
           />
           Keep the crafting within my golden eggs ({{ formatNumber(store.player.goldenEggs, 1) }})
         </label>
+
+        <OptimizerScheduleSettings class="sm:col-span-2" compact :model-value="settings" @update:model-value="patch" />
       </section>
 
       <!-- The answer -->
@@ -180,6 +182,9 @@
           Pick at least one artifact above to find the best ship set for it.
         </p>
         <p v-else-if="timeInvalid" class="text-xs text-gray-400">Enter the time on Humility to find a ship set.</p>
+        <p v-else-if="scheduleInvalid" class="text-xs text-gray-400">
+          Enter the time left in the 2× capacity event to find a ship set.
+        </p>
         <p v-else-if="error" class="text-xs text-red-600">Could not compute a ship set: {{ error }}</p>
         <p v-else-if="!shown && computing" role="status" class="flex items-center gap-2 text-xs text-gray-500">
           <InlineSpinner class="h-4 w-4 text-gray-400" />
@@ -365,10 +370,12 @@ import { formatProbabilityForDisplay } from 'lib/mission-optimizer';
 import { EFFORT_LEVELS, EFFORT_META } from 'lib/mission-optimizer/effort';
 import { gemBudgetFor, PlanSaveError } from 'lib/mission-optimizer/plan/read';
 import { NON_HUMILITY_EGG_IDS } from 'lib/mission-optimizer/plan/schema';
+import { scheduleArgsOf } from 'lib/mission-optimizer/schedule-settings';
 import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { fuelForLaunches } from 'lib/planners/rockets/launches';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
 import OptimizerLaunchPlan from 'ui/components/mission-optimizer/OptimizerLaunchPlan.vue';
+import OptimizerScheduleSettings from 'ui/components/mission-optimizer/OptimizerScheduleSettings.vue';
 import OptimizerSolutionCard from 'ui/components/mission-optimizer/OptimizerSolutionCard.vue';
 import TargetSelector from 'ui/components/mission-optimizer/TargetSelector.vue';
 
@@ -491,8 +498,14 @@ const questionKey = computed(() => {
     save: store.playerRevision,
   });
 });
+// The event's "time left" is the one schedule setting that can be typed wrong.
+const scheduleInvalid = computed(() => settings.value !== null && scheduleArgsOf(settings.value) === null);
 const posed = computed(
-  () => questionKey.value !== '' && !timeInvalid.value && (settings.value?.targetIds.length ?? 0) > 0
+  () =>
+    questionKey.value !== '' &&
+    !timeInvalid.value &&
+    !scheduleInvalid.value &&
+    (settings.value?.targetIds.length ?? 0) > 0
 );
 
 const computing = ref(false);
@@ -665,9 +678,11 @@ const stagedLaunch = computed(() => {
 const inPlan = computed(() => {
   const visit = current.value?.visit;
   if (!visit || !shown.value || !stagedLaunch.value || launches.value.length === 0) return false;
-  const signature = (missions: readonly { ship: number; duration: number; count: number; targetAfxId?: number }[]) =>
+  const signature = (
+    missions: readonly { ship: number; duration: number; count: number; targetAfxId?: number; doubled?: true }[]
+  ) =>
     missions
-      .map(m => `${m.ship}|${m.duration}|${m.targetAfxId ?? ''}|${m.count}`)
+      .map(m => `${m.ship}|${m.duration}|${m.targetAfxId ?? ''}|${m.doubled ? 2 : 1}|${m.count}`)
       .sort()
       .join(',');
   if (signature(stagedLaunch.value.payload.missions) !== signature(launches.value)) return false;
