@@ -9,9 +9,6 @@ import {
   type ScheduleSettings,
 } from 'lib/mission-optimizer/schedule-settings';
 
-// The arena still reads the effort levels from here.
-export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from 'lib/mission-optimizer/effort';
-
 type Spaceship = ei.MissionInfo.Spaceship;
 
 // Per-field flags: true means use the manual config value instead of the
