@@ -96,7 +96,9 @@ group. The only rows that read them, `slot_k` and `order_k`, read a mission's
 duration and nothing else, so every group of one duration shares `slots` integer
 columns and a `class_c` row ties the sum of their totals to the class's slot
 counts. With a sleep window the `night_k` rows read its nights too, and the class
-is keyed by both (section 9).
+is keyed by both (section 9); with an event window the `window_k` and
+`overhang_k` rows read its capacity variant, and the class is keyed by that as
+well (section 11).
 
 Crafts stay continuous deliberately: the judge re-optimises the craft split as an
 LP for whatever allocation it is handed, so integralising crafts here would
@@ -308,7 +310,9 @@ Both budgets are rows of the model, so a decoded plan is feasible by constructio
 `fitsBudgets` says so out loud rather than assuming it, re-checking the fuel row
 against the rounded counts and reading the three slot loads straight off the
 MILP's own columns — the packing witness that summing over slots threw away. With
-a sleep window it reads each slot's nights off the same columns (section 9).
+a sleep window it reads each slot's nights off the same columns (section 9), and
+with an event window each slot's `event` seconds and `overhang` launches
+(section 11).
 
 The craft budget is deliberately not among them: no allocation can breach it, because
 it binds on the craft split rather than on missions, and the judge re-solves that split
@@ -585,3 +589,78 @@ and nights. A group's launches are flown as its first member, as `emit`
 allocates them. `PlanResult.layoutStats`: launches trimmed (overnight ones
 counted apart), layout MILPs solved, margin re-solves, verifier retries.
 Diagnostics only.
+
+## 11. The 2x capacity window
+
+Egg, Inc. periodically doubles every ship's capacity for 48 hours. A mission is
+doubled when it _launches_ inside the window; when it lands does not matter. A
+problem may carry `eventWindowSeconds` `W`, the seconds of window left, as a
+prefix of the plan starting at `t = 0` — never an interval starting later — and
+its options a capacity `variant`. **Absent means today's problem**: the model
+reads `W` as 0, drops every doubled option (there is no row to hold one inside a
+window, and flying it at 2x unconstrained is the one wrong answer), the window
+rows have no entries and `Rows.end` drops them, and the matrix HiGHS is handed is
+the one it was handed before. `tests/unit/event-window.spec.ts` holds the matrix
+and the scale LPs to that, entry for entry, with the doubled options on the menu
+and without.
+
+The variants are the caller's to generate, as the night variants are (section
+9): each launch once as `normal`, at 1x; once as `event`, at 2x, when it is no
+longer than `W`; and once as `overhang`, at 2x, always. All three are the same
+flight — fuel, seconds, nights, gem cost — and differ in yield and in which row
+holds them. The app does it in `optimizeFull` (`../capacity.ts`), the arena in
+its own copy (`tests/arena/ARENA.md`, "The 2x capacity window").
+
+**Rows.** Per slot, `window_k`, `sum over event classes seconds * n[c][k] <= W`,
+and `overhang_k`, `sum over overhang classes n[c][k] <= 1`.
+
+The pair is **exact, not a relaxation**, while a slot's launches go up back to
+back. If `j` launches go up inside the window in some slot, the first `j - 1` all
+finish launching before the last one starts, so their seconds sum to at most `W`
+and they are `event` columns; the `j`-th is the `overhang`, which spends no
+window seconds because nothing doubled follows it. Conversely any assignment
+satisfying both rows can be flown: `event` launches first, each starting before
+their total, which is at most `W`; then the `overhang`, at that total. Equality
+at `W` is admitted rather than modelled as strict. The `overhang` is what makes
+the common case right: three hours of window against a fleet whose shortest
+mission is a day leaves `event` empty, and still a launch sent now in each slot
+is doubled.
+
+Raw seconds in `window_k`, for the slot row's reason (section 3); `overhang_k`
+is whole launches against 1. One window is shared by every slot, so slots stay
+interchangeable and `order_k` is still only a symmetry break.
+
+What else changes when `W` is present:
+
+- **Preprocessing.** An `event` option longer than `W` is dropped: its column
+  would be pinned at 0. `variant` is part of the group key, so an `event` and an
+  `overhang` copy of one launch, identical in every other number, never merge
+  into one group and lose a row. A group's cap gains `slots * floor(W /
+  seconds)` for `event` and `slots` for `overhang`.
+- **Dominance only within a variant.** A doubled copy costs exactly what its
+  normal twin does and yields twice as much, so across variants it would prune
+  the twin — and then every launch of the plan would have to fly doubled, which
+  the window rows allow a few times per slot. Section 1's argument needs the
+  dominator to absorb the dropped group's launches in the same slot without
+  breaking a row; within one variant it does (a shorter `event` only lowers
+  `window_k`, an `overhang` replaces an `overhang`), across variants it does
+  not. Restricting the relation to one variant keeps it a strict partial
+  order, so the rest of section 1 stands.
+- **Classes and bounds.** Duration classes are keyed by (seconds, nights,
+  variant). An `event` class's per-slot bound is the smaller of its time bound
+  and `floor(W / seconds)`; an `overhang` class's is 1. `boundsFollowFromRows`
+  accepts every `overhang` group, whatever its duration, because `overhang_k`
+  bounds it.
+- **Certify.** `fitsBudgets` re-reads each slot's `event` seconds and
+  `overhang` launches off the class columns, as it reads seconds and nights,
+  with `SLOT_TOL` on the seconds and exactly on the count. A doubled launch in
+  a problem without a window fails it outright.
+
+**Not yet with sleep.** Under a sleep window launches wait for wake-up, so a
+slot's offsets are not prefix sums of its seconds: `window_k` would only be a
+necessary condition, the layout would have to put doubled launches first, and a
+doubled launch that misses the window would have to be demoted to its normal
+twin rather than dropped. None of that exists yet, so `normalizeProblem` throws
+on a problem carrying a positive `W` together with `sleep` or a positive
+`nightsPerSlot` ("event window with sleep is not supported yet") rather than
+returning a plan nothing has verified.

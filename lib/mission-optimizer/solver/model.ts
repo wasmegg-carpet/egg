@@ -1,7 +1,7 @@
 // Preprocessing for the planner: restricted recipe DAG, normalized budgets,
 // filtered and duplicate-merged option groups.
 
-import type { LaunchOption, RecipeDAG } from '../types';
+import type { CapacityVariant, LaunchOption, RecipeDAG } from '../types';
 import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
 import { qOf } from '../objective';
 import { daySchedule, type DaySchedule } from './days';
@@ -20,6 +20,9 @@ export interface Group {
   // Sleep windows each launch flies through; 0 for a daytime launch and for every launch of a problem
   // without a sleep window. See SPEC.md section 9.
   nights: number;
+  // Which capacity it flies at; `normal` for every launch of a problem without an event window. See SPEC.md
+  // section 11.
+  variant: CapacityVariant;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -49,6 +52,9 @@ export interface Model {
   // The day the nights are cut from, when the problem carries `sleep`: what the fit rows and the layout read
   // (SPEC.md section 10). Null is today's problem.
   day: DaySchedule | null;
+  // Seconds of 2x capacity event left, from the plan's start; 0 when the problem has none, which also drops
+  // every doubled option. The `window_k` rows read it (SPEC.md section 11).
+  eventWindowSeconds: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -63,11 +69,15 @@ interface Candidate {
   timeFraction: number;
   timeSeconds: number;
   nights: number;
+  variant: CapacityVariant;
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
   index: number;
 }
+
+// A total order on the variants, for the group key; nothing else reads it.
+const VARIANT_RANK: Readonly<Record<CapacityVariant, number>> = { normal: 0, event: 1, overhang: 2 };
 
 function cmpEntries(a: Entry[], b: Entry[]): number {
   const n = Math.min(a.length, b.length);
@@ -93,6 +103,9 @@ function cmpKey(a: Candidate, b: Candidate): number {
   if (a.timeFraction !== b.timeFraction) return a.timeFraction - b.timeFraction;
   // A daytime launch and its overnight twin may charge the same waking seconds; they spend different budgets.
   if (a.nights !== b.nights) return a.nights - b.nights;
+  // An `event` and an `overhang` copy of one launch are identical in every number above and below: merged, one
+  // of the two rows holding the window would lose its column. Without a window every variant is `normal`.
+  if (a.variant !== b.variant) return VARIANT_RANK[a.variant] - VARIANT_RANK[b.variant];
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
 
@@ -168,9 +181,11 @@ export function maxLaunches(capacity: number, unitCost: number): number {
 // term in either minimum is then that bound or smaller. So does a night: the `night_k` row bounds a group that
 // spends one by `floor(nightsPerSlot / nights)` per slot, whatever its duration. Without that second clause a
 // zero-second overnight launch (a short ship sent at bedtime) would get a private class and could never
-// stand in for anything. See SPEC.md section 9.
+// stand in for anything. See SPEC.md section 9. And so does the overhang row, which holds every `overhang` group
+// to one launch per slot whatever its duration (SPEC.md section 11).
 export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number, nightsPerSlot: number): boolean {
   if (grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT) return true;
+  if (grp.variant === 'overhang') return true;
   return (
     grp.nights > 0 && Number.isFinite(nightsPerSlot) && Math.floor(nightsPerSlot / grp.nights) <= UNBOUNDED_PER_SLOT
   );
@@ -181,6 +196,9 @@ export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number, ni
 // of every target's legendary drops. Compared exactly rather than to a tolerance, which is what keeps the
 // relation transitive. See SPEC.md section 1.
 function dominates(taker: Group, given: Group): boolean {
+  // Only within a variant. A doubled copy costs exactly what its normal twin does and yields twice as much, so
+  // across variants it would prune the twin, though the window rows cap how often it may fly. SPEC.md section 11.
+  if (taker.variant !== given.variant) return false;
   if (taker.timeSeconds > given.timeSeconds) return false;
   // Nights are a budget of their own: without this an overnight variant, which charges fewer waking seconds,
   // would prune its own daytime twin.
@@ -306,6 +324,8 @@ export function buildModel(raw: PlanProblem): Model {
   const timeCap = problem.timeCapacityPerSlot;
   // Absent is 0: a problem with no sleep window has no night to spend (SPEC.md section 9).
   const nightsCap = problem.nightsPerSlot ?? 0;
+  // Absent is 0: no window, so nothing may fly doubled (SPEC.md section 11).
+  const window = problem.eventWindowSeconds ?? 0;
   const slots = problem.slots;
 
   const candidates: Candidate[] = [];
@@ -329,6 +349,13 @@ export function buildModel(raw: PlanProblem): Model {
     // falls out with it rather than reaching a row.
     const nights = opt.nights ?? 0;
     if (!Number.isInteger(nights) || nights < 0 || nights > nightsCap) return;
+    // A doubled option with no window has no row to hold it inside one, so it is dropped rather than flown at 2x
+    // unconstrained; an `event` one longer than the whole window cannot start inside it with anything before it
+    // and its column would be pinned at 0. A malformed variant falls out with them.
+    const variant = opt.variant ?? 'normal';
+    if (!Object.prototype.hasOwnProperty.call(VARIANT_RANK, variant)) return;
+    if (variant !== 'normal' && !(window > 0)) return;
+    if (variant === 'event' && opt.actualTime > window) return;
 
     const yieldEntries: Entry[] = [];
     for (const [item, qty] of opt.yieldVector) {
@@ -356,6 +383,9 @@ export function buildModel(raw: PlanProblem): Model {
       opt.actualTime > 0 ? maxLaunches(slots * timeCap, opt.actualTime) : UNBOUNDED_GROUP,
       // Whole numbers on both sides, so the quotient is exact.
       nights > 0 ? Math.floor((slots * nightsCap) / nights) : UNBOUNDED_GROUP,
+      // The window rows' bounds, restated per group as the time and night bounds are.
+      variant === 'event' && opt.actualTime > 0 ? slots * maxLaunches(window, opt.actualTime) : UNBOUNDED_GROUP,
+      variant === 'overhang' ? slots : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
     if (cap < 1) return;
@@ -365,6 +395,7 @@ export function buildModel(raw: PlanProblem): Model {
       timeFraction,
       timeSeconds: opt.actualTime,
       nights,
+      variant,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -391,6 +422,7 @@ export function buildModel(raw: PlanProblem): Model {
       timeFraction: cand.timeFraction,
       timeSeconds: cand.timeSeconds,
       nights: cand.nights,
+      variant: cand.variant,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,
@@ -418,6 +450,7 @@ export function buildModel(raw: PlanProblem): Model {
     timeCapacitySeconds: timeCap,
     nightsPerSlot: nightsCap,
     day: problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null,
+    eventWindowSeconds: window,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,

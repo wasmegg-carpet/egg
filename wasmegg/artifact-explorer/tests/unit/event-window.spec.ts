@@ -1,0 +1,230 @@
+// The 2x mission capacity window: `PlanProblem.eventWindowSeconds` and `LaunchOption.variant` in the model, the
+// duration classes, the `window_k` and `overhang_k` rows and the certifier. See
+// `lib/mission-optimizer/solver/SPEC.md` section 11.
+
+import { describe, expect, it } from 'vitest';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
+import { buildOaMilp, effectiveQs, layoutOf, scaleLps } from 'lib/mission-optimizer/solver/milp';
+import { DEFAULT_TUNING, solveWith } from 'lib/mission-optimizer/solver/solve';
+import { loadHighs } from 'lib/mission-optimizer/solver/highs';
+import { normalizeProblem, type PlanProblem } from 'lib/mission-optimizer/solver/types';
+import type { CapacityVariant, LaunchOption } from 'lib/mission-optimizer/types';
+import { craftDag, makeOpt } from './spec-helpers';
+
+// A doubled copy of `opt`, the way the app's and the arena's variant generators make one: the same flight,
+// twice the drops.
+function doubled(opt: LaunchOption, variant: CapacityVariant): LaunchOption {
+  const twice = (m: Map<string, number>) => new Map([...m].map(([k, q]) => [k, 2 * q]));
+  return {
+    ...opt,
+    id: `${opt.id}::${variant}`,
+    variant,
+    supplyVector: twice(opt.supplyVector),
+    yieldVector: twice(opt.yieldVector),
+    legendaryYieldVector: twice(opt.legendaryYieldVector),
+  };
+}
+
+// Each option, then its `event` copy (when it fits the window) and its `overhang` copy.
+function withDoubles(options: LaunchOption[], window: number): LaunchOption[] {
+  return options.flatMap(o => [
+    { ...o, variant: 'normal' as const },
+    ...(o.actualTime <= window ? [doubled(o, 'event')] : []),
+    doubled(o, 'overhang'),
+  ]);
+}
+
+function problemOf(options: LaunchOption[], extra: Partial<PlanProblem> = {}): PlanProblem {
+  return {
+    options,
+    dag: craftDag(0.1),
+    targets: ['A'],
+    fuelCapacity: 1000,
+    timeCapacityPerSlot: 1000,
+    slots: 3,
+    ownedStock: new Map<string, number>(),
+    ...extra,
+  };
+}
+
+function milpOf(problem: PlanProblem) {
+  const model = buildModel(problem);
+  const qs = effectiveQs(model);
+  return { model, milp: buildOaMilp(model, qs, [1], DEFAULT_TUNING.sigmaGrid), scale: scaleLps(model, qs)(0) };
+}
+
+describe('the event window in the model', () => {
+  it('keeps a launch and its doubled copies apart, and never merges event into overhang', () => {
+    const model = buildModel(problemOf(withDoubles([makeOpt(1, 100, [['B', 1]])], 500), { eventWindowSeconds: 500 }));
+    expect(model.groups.map(g => g.variant)).toEqual(['normal', 'event', 'overhang']);
+    expect(model.groups.every(g => g.members.length === 1)).toBe(true);
+  });
+
+  it('does not prune a launch by its own doubled copy', () => {
+    // Regression for the dominance hazard: the doubled copies cost exactly what the normal one does and yield
+    // twice as much, so a dominance test blind to the variant drops the normal one, though the window lets the
+    // doubled ones fly only a few times per slot. Here only the normal one can fill the slots.
+    const model = buildModel(problemOf(withDoubles([makeOpt(1, 10, [['B', 1]])], 10), { eventWindowSeconds: 10 }));
+    expect(model.groups.map(g => g.variant).sort()).toEqual(['event', 'normal', 'overhang']);
+  });
+
+  it('still prunes within a variant', () => {
+    // The fast ship's normal copy beats the slow one's, and so do its doubled copies beat theirs.
+    const slow = makeOpt(1, 20, [['B', 1]]);
+    const fast = makeOpt(1, 10, [['B', 1]]);
+    const model = buildModel(problemOf(withDoubles([slow, fast], 100), { eventWindowSeconds: 100 }));
+    expect(model.groups).toHaveLength(3);
+    expect(model.groups.every(g => g.timeSeconds === 10)).toBe(true);
+  });
+
+  it('drops every doubled option when the problem has no window', () => {
+    const options = withDoubles([makeOpt(1, 100, [['B', 1]])], 500);
+    for (const extra of [{}, { eventWindowSeconds: 0 }, { eventWindowSeconds: -5 }, { eventWindowSeconds: NaN }]) {
+      const model = buildModel(problemOf(options, extra));
+      expect(model.eventWindowSeconds).toBe(0);
+      expect(model.groups.map(g => g.members)).toEqual([[0]]);
+    }
+  });
+
+  it('drops an event option longer than the whole window, and a malformed variant', () => {
+    const base = makeOpt(1, 100, [['B', 1]]);
+    const options = [
+      doubled(base, 'event'),
+      { ...doubled(base, 'overhang'), variant: 'triple' as unknown as CapacityVariant },
+      doubled(base, 'overhang'),
+    ];
+    const model = buildModel(problemOf(options, { eventWindowSeconds: 99 }));
+    expect(model.groups.map(g => g.members)).toEqual([[2]]);
+  });
+
+  it('caps a doubled group by the window rows, and keys and bounds classes by variant', () => {
+    const options = withDoubles([makeOpt(1, 30, [['B', 1]])], 100);
+    const model = buildModel(problemOf(options, { eventWindowSeconds: 100 }));
+    const byVariant = Object.fromEntries(model.groups.map(g => [g.variant, g]));
+    expect(byVariant.normal.cap).toBe(100);
+    expect(byVariant.event.cap).toBe(3 * 3);
+    expect(byVariant.overhang.cap).toBe(3);
+    const layout = layoutOf(model, 'oa');
+    expect(layout.classSeconds).toEqual([30, 30, 30]);
+    expect(layout.classVariant).toEqual(['normal', 'event', 'overhang']);
+    expect(layout.classCap).toEqual([33, 3, 1]);
+  });
+
+  it('writes one window row and one overhang row per slot, over the doubled classes only', () => {
+    const options = withDoubles([makeOpt(1, 30, [['B', 1]]), makeOpt(2, 300, [['B', 5]])], 100);
+    const { model, milp } = milpOf(problemOf(options, { eventWindowSeconds: 100 }));
+    const layout = layoutOf(model, 'oa');
+    const rowOf = (name: string) => {
+      const r = milp.rowNames.indexOf(name);
+      expect(r).toBeGreaterThanOrEqual(0);
+      const end = r + 1 < milp.rowCount ? milp.offsets[r + 1] : milp.indices.length;
+      const entries: [number, number][] = [];
+      for (let i = milp.offsets[r]; i < end; i++) entries.push([milp.indices[i], milp.values[i]]);
+      return { entries, upper: milp.rowUpper[r] };
+    };
+    for (let k = 0; k < 3; k++) {
+      const window = rowOf(`window_k${k}`);
+      expect(window.upper).toBe(100);
+      // The 300-second launch has no event copy at a 100-second window; the 30-second one has.
+      expect(window.entries.map(([col, v]) => [layout.classVariant[Math.floor(col / 3)], v])).toEqual([['event', 30]]);
+      const overhang = rowOf(`overhang_k${k}`);
+      expect(overhang.upper).toBe(1);
+      expect(overhang.entries.map(([col, v]) => [layout.classVariant[Math.floor(col / 3)], v])).toEqual([
+        ['overhang', 1],
+        ['overhang', 1],
+      ]);
+    }
+  });
+});
+
+describe('a problem without an event window builds today’s model', () => {
+  const menu = (): LaunchOption[] => [
+    makeOpt(2, 20, [['B', 1]]),
+    makeOpt(1, 30, [['B', 2]]),
+    makeOpt(3, 0, [['B', 4]]),
+    makeOpt(1, 30, [['B', 2]]),
+    makeOpt(5, 300, [['B', 9]]),
+  ];
+
+  it('writes no window rows', () => {
+    const { milp } = milpOf(problemOf(menu()));
+    expect(milp.rowNames.some(name => name.startsWith('window_') || name.startsWith('overhang_'))).toBe(false);
+  });
+
+  it('matches, matrix for matrix, the same menu stated as normal variants under a zero or absent window', () => {
+    const today = milpOf(problemOf(menu()));
+    const variants: [LaunchOption[], Partial<PlanProblem>][] = [
+      [menu().map(o => ({ ...o, variant: 'normal' as const })), {}],
+      [menu(), { eventWindowSeconds: 0 }],
+      [menu().map(o => ({ ...o, variant: 'normal' as const })), { eventWindowSeconds: 0 }],
+      // Doubled copies on the menu, appended, with no window to fly them in: dropped, and nothing else moves.
+      [[...menu(), ...menu().flatMap(o => [doubled(o, 'event'), doubled(o, 'overhang')])], {}],
+      [[...menu(), ...menu().flatMap(o => [doubled(o, 'event'), doubled(o, 'overhang')])], { eventWindowSeconds: 0 }],
+    ];
+    for (const [options, extra] of variants) {
+      const other = milpOf(problemOf(options, extra));
+      expect(other.milp).toEqual(today.milp);
+      expect(other.scale).toEqual(today.scale);
+    }
+  });
+
+  it('returns the same plan for a zero window as for an absent one', async () => {
+    const solve = await loadHighs();
+    const options = [makeOpt(1, 10, [['B', 2]]), makeOpt(2, 20, [['B', 5]])];
+    const absent = solveWith(problemOf(options, { fuelCapacity: 50, timeCapacityPerSlot: 100 }), solve);
+    const zero = solveWith(
+      problemOf(options, { fuelCapacity: 50, timeCapacityPerSlot: 100, eventWindowSeconds: 0 }),
+      solve
+    );
+    expect(zero).toEqual(absent);
+  });
+});
+
+describe('the event window does not yet combine with sleep', () => {
+  it('refuses a problem carrying both, by name', () => {
+    const sleep = { sleepSeconds: 8 * 3600, horizonSeconds: 2 * 86400 };
+    expect(() => normalizeProblem(problemOf([], { eventWindowSeconds: 3600, sleep, nightsPerSlot: 2 }))).toThrow(
+      'event window with sleep is not supported yet'
+    );
+    expect(() => buildModel(problemOf([], { eventWindowSeconds: 3600, nightsPerSlot: 1 }))).toThrow(
+      /event window with sleep/
+    );
+  });
+
+  it('accepts either alone, and a zero window beside sleep', () => {
+    const sleep = { sleepSeconds: 8 * 3600, horizonSeconds: 2 * 86400 };
+    expect(() => normalizeProblem(problemOf([], { eventWindowSeconds: 3600 }))).not.toThrow();
+    expect(() => normalizeProblem(problemOf([], { sleep, nightsPerSlot: 2 }))).not.toThrow();
+    expect(() => normalizeProblem(problemOf([], { sleep, nightsPerSlot: 2, eventWindowSeconds: 0 }))).not.toThrow();
+  });
+});
+
+describe('the event window in the MILP', () => {
+  it('flies the normal launch alongside its doubled copies, up to the window', async () => {
+    // One 10-second launch, a 10-second window and 100-second slots: per slot, one `event` launch, then the
+    // `overhang` at t = 10, then eight more at 1x. Had the doubled copies pruned the normal one, each slot would
+    // hold two launches.
+    const solve = await loadHighs();
+    const options = withDoubles([makeOpt(0, 10, [['B', 1]])], 10);
+    const result = solveWith(
+      problemOf(options, { timeCapacityPerSlot: 100, eventWindowSeconds: 10 }),
+      solve,
+      DEFAULT_TUNING
+    );
+    expect(result.allocation).toEqual([24, 3, 3]);
+  });
+
+  it('a window shorter than every launch doubles exactly one launch per slot', async () => {
+    const solve = await loadHighs();
+    const options = withDoubles([makeOpt(0, 300, [['B', 1]])], 60);
+    expect(options.some(o => o.variant === 'event')).toBe(false);
+    const result = solveWith(problemOf(options, { eventWindowSeconds: 60 }), solve, DEFAULT_TUNING);
+    expect(result.allocation).toEqual([6, 3]);
+  });
+
+  it('normalizes a negative or non-finite window to none rather than unlimited', () => {
+    expect(normalizeProblem(problemOf([], { eventWindowSeconds: -1 })).eventWindowSeconds).toBe(0);
+    expect(normalizeProblem(problemOf([], { eventWindowSeconds: Infinity })).eventWindowSeconds).toBe(0);
+    expect('eventWindowSeconds' in normalizeProblem(problemOf([]))).toBe(false);
+  });
+});

@@ -3,6 +3,16 @@ import { ei, MissionType } from '../index';
 type integer = number;
 export type { integer };
 
+// Which capacity a launch flies at, during a 2x mission capacity event: the event doubles the capacity of any
+// mission that *launches* inside its window, whenever it lands.
+//   normal   1x, and nothing constrains when it goes up.
+//   event    2x, and the solver bounds a slot's total `event` seconds by the window, so each starts inside it.
+//   overhang 2x, at most one per slot: the launch that goes up after the slot's `event` launches, still inside
+//            the window. It spends no window seconds, because nothing doubled follows it.
+// The split between the last two exists only to make "launches inside the window" linear; see `solver/SPEC.md`
+// section 11.
+export type CapacityVariant = 'normal' | 'event' | 'overhang';
+
 export interface LaunchOption {
   id: string;
   ship: MissionType;
@@ -18,6 +28,9 @@ export interface LaunchOption {
   // `PlanProblem.nightsPerSlot` (by `sleepVariants` in `sleep.ts`, and by the arena's own copy), in which
   // case `actualTime` counts waking seconds. The solver budgets it per slot (`solver/SPEC.md` section 9).
   nights?: number;
+  // Absent is `normal`. Set only alongside `PlanProblem.eventWindowSeconds` (by `capacityVariants` in
+  // `capacity.ts`, and by the arena's own copy), in which case the doubled variants carry twice the drops.
+  variant?: CapacityVariant;
   cost: number;
   // everything this launch drops, per single ship — display only
   supplyVector: Map<string, number>;

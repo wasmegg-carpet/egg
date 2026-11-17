@@ -63,7 +63,7 @@ function fuelExceeded(model: Model, counts: readonly number[]): boolean {
 }
 
 // Per slot, `perLaunch` summed over the MILP's own rounded class columns: seconds for the slot rows, nights
-// for the night rows.
+// for the night rows, `event` seconds and `overhang` launches for the window rows.
 function slotLoads(model: Model, layout: Layout, columnValues: Float64Array, perLaunch: readonly number[]): number[] {
   const loads = new Array<number>(model.slots).fill(0);
   for (let c = 0; c < layout.classes; c++) {
@@ -89,6 +89,22 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
   // against a budget of 0. See SPEC.md section 9.
   for (const nights of slotLoads(model, layout, columnValues, layout.classNights)) {
     if (nights > model.nightsPerSlot) return false;
+  }
+  // The window rows, read the same way: seconds against the window with the slot row's tolerance, whole
+  // launches against one exactly. Without a window no class is doubled, so both loads are 0, and a doubled
+  // launch that somehow appeared there anyway fails the first test. See SPEC.md section 11.
+  const window = model.eventWindowSeconds;
+  const eventSeconds = layout.classSeconds.map((s, c) => (layout.classVariant[c] === 'event' ? s : 0));
+  for (const load of slotLoads(model, layout, columnValues, eventSeconds)) {
+    if (load > window + SLOT_TOL) return false;
+  }
+  const doubled = layout.classVariant.map(v => (v === 'normal' ? 0 : 1));
+  const overhangs = layout.classVariant.map(v => (v === 'overhang' ? 1 : 0));
+  const doubledLoads = slotLoads(model, layout, columnValues, doubled);
+  const overhangLoads = slotLoads(model, layout, columnValues, overhangs);
+  for (let k = 0; k < model.slots; k++) {
+    if (overhangLoads[k] > 1) return false;
+    if (!(window > 0) && doubledLoads[k] > 0) return false;
   }
   return true;
 }

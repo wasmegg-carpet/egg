@@ -48,6 +48,12 @@ export interface PlanProblem {
   // no layout, no `calendar` in the result. Present, every plan returned has been laid out on real days
   // and verified.
   readonly sleep?: SleepWindow;
+  // Seconds of a 2x mission capacity event left, as a window starting at the plan's t = 0: a prefix, never an
+  // interval starting later. Absent or 0 means today's problem: no option may fly doubled, so one that carries a
+  // doubled `variant` is dropped, and the matrix and the result are what they were (SPEC.md section 11). The app
+  // sets it from the player's "time left" (`optimizeFull`, via `../capacity.ts`). Not yet combined with a sleep
+  // window: `normalizeProblem` throws on a problem carrying both.
+  readonly eventWindowSeconds?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
   readonly ownedStock: ReadonlyMap<string, number>;
@@ -104,7 +110,20 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
     // Left absent when absent, so a problem without a sleep window normalizes to exactly what it did before.
     ...(problem.nightsPerSlot === undefined ? {} : { nightsPerSlot: wholeCapacityOf(problem.nightsPerSlot) }),
     ...(problem.sleep === undefined ? {} : { sleep: sleepWindowOf(problem.sleep) }),
+    ...(problem.eventWindowSeconds === undefined ? {} : { eventWindowSeconds: eventWindowOf(problem) }),
   };
+}
+
+// The window is a budget and follows the rule above. What it cannot yet do is share a problem with nights: its
+// rows are exact only while a slot's launches go up back to back (SPEC.md section 11), and with a sleep window
+// they wait for wake-up, so the rows would over-promise and the layout has no way to order or demote doubled
+// launches. Refused rather than solved wrong.
+function eventWindowOf(problem: PlanProblem): number {
+  const window = capacityOf(problem.eventWindowSeconds!);
+  if (window > 0 && (problem.sleep !== undefined || wholeCapacityOf(problem.nightsPerSlot ?? 0) > 0)) {
+    throw new Error('event window with sleep is not supported yet');
+  }
+  return window;
 }
 
 // The horizon is a budget and follows the rule above. The sleep window is not one: no reading of a malformed

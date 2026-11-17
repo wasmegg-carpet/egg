@@ -4,6 +4,7 @@
 import { UNBOUNDED_PER_SLOT, boundsFollowFromRows, maxLaunches, type Model } from './model';
 import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
+import type { CapacityVariant } from '../types';
 import { fitCoefficient, fitQs } from './days';
 
 // Uncapped on purpose — deliberately not `objective.gPrime`. See SPEC.md section 4.
@@ -16,14 +17,15 @@ export interface Layout {
   groups: number;
   crafts: number;
   targets: number;
-  // Slot columns are per duration class, not per group: the slot, night and order rows read only a mission's
-  // duration and nights, so groups sharing both share `slots` columns and a `class_c` row ties their totals
-  // to them. See SPEC.md sections 2 and 9. `classCap` is the per-slot column bound; `classSeconds` and
-  // `classNights` the row coefficients.
+  // Slot columns are per duration class, not per group: the slot, night, window and order rows read only a
+  // mission's duration, nights and capacity variant, so groups sharing all three share `slots` columns and a
+  // `class_c` row ties their totals to them. See SPEC.md sections 2, 9 and 11. `classCap` is the per-slot column
+  // bound; `classSeconds`, `classNights` and `classVariant` what the rows read.
   classes: number;
   classOf: number[];
   classSeconds: number[];
   classNights: number[];
+  classVariant: CapacityVariant[];
   classCap: number[];
   groupTotalBase: number;
   craftBase: number;
@@ -37,45 +39,61 @@ export type Variant = 'scale' | 'oa';
 
 // A group shares a class only when its rows alone bound its per-slot count (the same test the dominance
 // pass applies): a group on the `UNBOUNDED_PER_SLOT` stand-in has a per-group per-slot cap no shared column
-// can carry, so it keeps a class of its own with exactly the bound it had before. A class is keyed by the
-// pair (seconds, nights): a daytime launch and an overnight one of equal waking seconds spend different
-// budgets. Without a sleep window every group has 0 nights and the classes are exactly the durations.
+// can carry, so it keeps a class of its own with exactly the bound it had before. A class is keyed by
+// (seconds, nights, variant): a daytime launch and an overnight one of equal waking seconds spend different
+// budgets, and so do a launch and its doubled copies. Without a sleep window or an event window every group
+// has 0 nights and is `normal`, and the classes are exactly the durations.
 function durationClasses(
   model: Model
-): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classCap'> {
+): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classVariant' | 'classCap'> {
   const classOf = new Array<number>(model.groups.length);
   const classSeconds: number[] = [];
   const classNights: number[] = [];
+  const classVariant: CapacityVariant[] = [];
   const classCap: number[] = [];
-  const shared = new Map<number, Map<number, number>>();
+  const shared = new Map<number, Map<number, Map<CapacityVariant, number>>>();
   model.groups.forEach((grp, g) => {
     // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
     // And in whole nights, like the night row (SPEC.md section 9).
     const byNights = grp.nights > 0 ? Math.floor(model.nightsPerSlot / grp.nights) : UNBOUNDED_PER_SLOT;
+    // And by the window rows (SPEC.md section 11).
+    const byWindow =
+      grp.variant === 'overhang'
+        ? 1
+        : grp.variant === 'event' && grp.timeSeconds > 0
+          ? maxLaunches(model.eventWindowSeconds, grp.timeSeconds)
+          : UNBOUNDED_PER_SLOT;
     if (boundsFollowFromRows(grp, model.timeCapacitySeconds, model.nightsPerSlot)) {
       let bySeconds = shared.get(grp.timeSeconds);
       if (bySeconds === undefined) {
         bySeconds = new Map();
         shared.set(grp.timeSeconds, bySeconds);
       }
-      let c = bySeconds.get(grp.nights);
+      let byNightsClass = bySeconds.get(grp.nights);
+      if (byNightsClass === undefined) {
+        byNightsClass = new Map();
+        bySeconds.set(grp.nights, byNightsClass);
+      }
+      let c = byNightsClass.get(grp.variant);
       if (c === undefined) {
         c = classSeconds.length;
-        bySeconds.set(grp.nights, c);
+        byNightsClass.set(grp.variant, c);
         classSeconds.push(grp.timeSeconds);
         classNights.push(grp.nights);
-        classCap.push(Math.min(byTime, byNights));
+        classVariant.push(grp.variant);
+        classCap.push(Math.min(byTime, byNights, byWindow));
       }
       classOf[g] = c;
     } else {
       classOf[g] = classSeconds.length;
       classSeconds.push(grp.timeSeconds);
       classNights.push(grp.nights);
-      classCap.push(Math.max(0, Math.min(grp.cap, byTime, byNights, UNBOUNDED_PER_SLOT)));
+      classVariant.push(grp.variant);
+      classCap.push(Math.max(0, Math.min(grp.cap, byTime, byNights, byWindow, UNBOUNDED_PER_SLOT)));
     }
   });
-  return { classes: classSeconds.length, classOf, classSeconds, classNights, classCap };
+  return { classes: classSeconds.length, classOf, classSeconds, classNights, classVariant, classCap };
 }
 
 export function layoutOf(model: Model, variant: Variant): Layout {
@@ -303,6 +321,26 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.begin(`night_k${k}`);
     for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classNights[c]);
     rows.end(-INF, model.nightsPerSlot);
+  }
+
+  // The 2x capacity event window, two rows per slot: a slot's `event` launches total at most the window, and it
+  // holds at most one `overhang`. Exact together, not a relaxation, while launches go up back to back (SPEC.md
+  // section 11). Raw seconds, for the slot row's reason. Without a window no class is doubled, both rows have no
+  // entries, and `Rows.end` drops them: the model is today's exactly. One window shared by every slot, so slots
+  // stay interchangeable and `order_k` remains a pure symmetry break.
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`window_k${k}`);
+    for (let c = 0; c < layout.classes; c++) {
+      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classSeconds[c]);
+    }
+    rows.end(-INF, model.eventWindowSeconds);
+  }
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`overhang_k${k}`);
+    for (let c = 0; c < layout.classes; c++) {
+      if (layout.classVariant[c] === 'overhang') rows.add(nCol(layout, c, k), 1);
+    }
+    rows.end(-INF, 1);
   }
 
   // Per-day fit rows, only with a sleep window: the slot row pools a slot's waking seconds across its days,
