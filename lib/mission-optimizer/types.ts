@@ -69,6 +69,9 @@ export interface LaunchSolution {
   // Sleep windows each of these launches flies through. Absent on a plan made without a sleep window; on a
   // sleep-aware plan 0 is a launch flown while awake and anything more is launched to fly overnight.
   nights?: number;
+  // The capacity these launches fly at. Absent on a plan made without an event window; on one made with it,
+  // `event` and `overhang` are doubled launches (the same mission can appear once per variant) and `normal` is not.
+  variant?: CapacityVariant;
   target: string;
   targetAfxId: ei.ArtifactSpec.Name;
   // total count of single-ship missions of this type across all three slots
@@ -118,6 +121,10 @@ export interface OptimizerSolution {
   // The sleep window the plan was laid out around, in seconds a day. Absent when it was planned around the
   // clock, which is also what tells the card and the export that `choiceHistory` carries no `nights`.
   sleepSeconds?: number;
+  // The 2x capacity event window the plan was solved against, in seconds from the start of the plan. Absent when
+  // there was none, which is also what tells the card and the export that `choiceHistory` carries no `variant`.
+  // Carried on the solution rather than read back off the settings, which stay editable after a solve.
+  eventWindowSeconds?: number;
   slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];

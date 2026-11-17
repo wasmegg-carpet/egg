@@ -224,6 +224,43 @@ missing. Three things downstream read the plan differently because of it:
 rule (`tests/arena/sleep.ts`); `tests/unit/sleep.spec.ts` holds the two to the
 same answers.
 
+## The 2x capacity event
+
+Egg, Inc. periodically doubles every ship's capacity for 48 hours, and a
+mission is doubled when it _launches_ inside the window, whenever it lands.
+`OptimizeArgs.eventWindowSeconds` is how much of the window is left, starting
+now; the tool never looks it up. Absent or 0, the request, the problem and the
+solution are what they were before the field existed. Nothing in the app sets
+it yet.
+
+**`optimizeFull` owns the translation**, as it does for sleep. It clamps the
+window to `MAX_DOUBLE_CAPACITY_SECONDS` (`capacity.ts`: no more than 48 hours
+can be left of a window that starts now), adds each option's doubled variants
+(`capacityVariants`, applied over the sleep variants so a doubled launch keeps
+its nights and waking seconds), and hands the solver the problem of
+`solver/SPEC.md` section 11. The caller passes the menu as enumerated and never
+enumerates against the window itself, so a menu and a window cannot disagree.
+The variants are made in the worker, like the sleep ones.
+
+**What the solution says.** `eventWindowSeconds` is on it when the plan was
+solved against a window, and each `choiceHistory` entry then carries the
+`variant` it flew: `event` and `overhang` are doubled, and one mission can appear
+once per variant. The calendar the plan was accepted on says per launch whether
+it is doubled and when it goes up; the card does not show it yet.
+
+**Not with sleep, yet.** The solver refuses a problem carrying both a sleep
+window and an event window (SPEC.md section 11), so `optimizeFull` throws on
+that pair rather than return a plan nothing has verified.
+
+What capacity does **not** touch: `enumerateLaunchOptions`
+(`problem-inputs.ts`) divides a target's recorded drops by the mission's
+capacity to decide whether the data is too sparse to quote. That is a statement about the dataset rather than about the plan, and
+doubling it there would change which missions are shown as having enough data.
+
+`capacity.ts` is not shared with the arena, which keeps its own copy of the
+variant rule (`tests/arena/capacity.ts`); `tests/unit/capacity.spec.ts` holds the
+two to the same answers.
+
 ## Module boundaries that are load-bearing
 
 Most of `lib/mission-optimizer` reads as it looks. Two edges do not, and both exist to keep

@@ -23,11 +23,7 @@ export interface TimedLaunch {
 // S`, which covers the flight and the effort floor alike), the last block ends inside the horizon, and a
 // doubled launch goes up inside the event window (`launchAt` at most `eventWindowSeconds`; no window, no doubled
 // launch). A problem without a sleep window is checked as one with `sleepSeconds` 0 and its slot as the horizon.
-export function slotFault(
-  launches: readonly TimedLaunch[],
-  sleep: SleepWindow,
-  eventWindowSeconds = 0
-): string | null {
+export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, eventWindowSeconds = 0): string | null {
   const waking = DAY_SECONDS - sleep.sleepSeconds;
   let free = 0;
   for (let i = 0; i < launches.length; i++) {

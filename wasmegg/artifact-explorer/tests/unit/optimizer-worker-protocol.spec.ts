@@ -100,4 +100,17 @@ describe('optimizer worker protocol', () => {
     expect(choice.ship.shipName).toBe(new MissionType(Spaceship.HENERPRISE, DurationType.EPIC).shipName);
     expect(choice.ship.missionTypeId).toBe(new MissionType(Spaceship.HENERPRISE, DurationType.EPIC).missionTypeId);
   });
+
+  it('carries the event window and each launch’s capacity variant', () => {
+    const solution = makeSolution({
+      eventWindowSeconds: 7200,
+      choiceHistory: [
+        { ...makeChoice(), variant: 'overhang' },
+        { ...makeChoice(), variant: 'normal' },
+      ],
+    });
+    const [got] = solutionsFromWire(structuredClone(solutionsToWire([solution])));
+    expect(got.eventWindowSeconds).toBe(7200);
+    expect(got.choiceHistory.map(c => c.variant)).toEqual(['overhang', 'normal']);
+  });
 });

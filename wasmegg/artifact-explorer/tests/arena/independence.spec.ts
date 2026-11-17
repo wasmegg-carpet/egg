@@ -100,6 +100,7 @@ const HARNESS_FILES = [
 // The planner and everything downstream of it. The harness must not run any of
 // this: it is the thing being measured.
 const IMPLEMENTATION = [
+  'capacity.ts', // the app's 2x capacity variants; the arena states its problems with its own `capacity.ts`
   'objective.ts', // the objective's own g/g'/line search and the craft-count-to-probability step; the judge re-derives all three
   'optimizer-client.ts', // worker-backed entry point to the planner
   'optimizer-core.ts', // the plan pipeline; calls the planner

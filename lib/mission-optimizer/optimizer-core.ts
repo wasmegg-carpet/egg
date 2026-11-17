@@ -4,6 +4,7 @@
 import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
+import { capacityVariants, eventWindowSecondsOf } from './capacity';
 import { sleepCapacity, sleepSecondsOf, sleepVariants } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
@@ -40,6 +41,11 @@ export interface OptimizeArgs {
   // Present, the menu is split into daytime and overnight variants and only a plan laid out on real days is
   // returned (`solver/SPEC.md` sections 9 and 10).
   sleepSeconds?: number;
+  // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is today's problem. Present, the
+  // menu gains the doubled variants (`capacity.ts`), capped at `MAX_DOUBLE_CAPACITY_SECONDS`, and the window
+  // rows hold them inside it (`solver/SPEC.md` section 11). The caller passes the menu as enumerated; it never
+  // enumerates against the window itself. Not yet combinable with `sleepSeconds`: the solver refuses the pair.
+  eventWindowSeconds?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
   // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal
   // way to say "the whole menu" where an infinite capacity would be malformed.
@@ -87,7 +93,13 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // problem field for field: the menu as given, and neither sleep field on it.
   const sleepSeconds = sleepSecondsOf(args.sleepSeconds);
   const capacity = sleepSeconds > 0 ? sleepCapacity(args.timeCapacityPerSlot, sleepSeconds) : undefined;
-  const options = capacity ? sleepVariants(args.options, sleepSeconds) : args.options;
+  // The event window, likewise: doubled variants of whatever the sleep split produced, so a doubled launch keeps
+  // its nights and its waking seconds. Without one the menu passes through untouched.
+  const eventWindowSeconds = eventWindowSecondsOf(args.eventWindowSeconds);
+  const options = capacityVariants(
+    capacity ? sleepVariants(args.options, sleepSeconds) : args.options,
+    eventWindowSeconds
+  );
 
   // The whole boundary: budgets validated and clamped, targets deduplicated, fuel axes materialized.
   // Everything below reads the normalized problem rather than `args`, so no rule is applied twice or
@@ -105,6 +117,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
       nightsPerSlot: capacity.nightsPerSlot,
       sleep: { sleepSeconds, horizonSeconds: args.timeCapacityPerSlot },
     }),
+    ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
     slots: NUM_SLOTS,
     ownedStock,
     craftBudget,
@@ -120,7 +133,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // from reading as free downstream, where a zero capacity means "ignore this axis".
   // An overnight variant is kept at zero seconds: a short ship launched at bedtime takes no waking time and
   // is still a launch, paid for with its night. Dropping it would silently turn that launch into none.
-  const feasibleOptions = options.filter(o => {
+  const feasibleOptions = [...options].filter(o => {
     const nights = o.nights ?? 0;
     return (
       (ZERO_TOL < o.actualTime || nights > 0) &&
@@ -150,7 +163,10 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   }
 
   const slots = slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds);
-  return assembleFullSolution(assembly, alloc, slots, craftSplit, capacity ? sleepSeconds : undefined);
+  return assembleFullSolution(assembly, alloc, slots, craftSplit, {
+    ...(capacity && { sleepSeconds }),
+    ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
+  });
 }
 
 function assembleFullSolution(
@@ -158,7 +174,7 @@ function assembleFullSolution(
   bestAlloc: Map<number, number>,
   bestSlots: SlotSummary[],
   craftSplit: CraftSplitReport | undefined,
-  sleepSeconds: number | undefined
+  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'eventWindowSeconds'>
 ): OptimizerSolution {
   const { recipeDag, ownedStock, targets } = a;
   const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
@@ -204,7 +220,7 @@ function assembleFullSolution(
     fuelByEgg: fuelByEgg,
     timeUnitsUsed: Math.round(makespan),
     runningTimeSeconds: Math.round(running),
-    ...(sleepSeconds !== undefined && { sleepSeconds }),
+    ...windows,
     slots: bestSlots.length > 0 ? bestSlots : undefined,
     choiceHistory: choiceHistory,
     expectedDrops: [], // populated by index.ts
@@ -242,6 +258,7 @@ function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number
       actualFuelByEgg: opt.fuelByEgg,
       actualTime: opt.actualTime,
       ...(opt.nights !== undefined && { nights: opt.nights }),
+      ...(opt.variant !== undefined && { variant: opt.variant }),
       target: opt.target ?? '',
       targetAfxId: opt.targetAfxId,
       numShipsLaunched: k,
