@@ -2,7 +2,7 @@
 // sampled uniformly on purpose: hand-shaped instances only ever catch bugs someone already thought of.
 
 import { ei, fuelTankSizes, newShipsConfig, shipMaxLevel, spaceshipList, type ShipsConfig } from 'lib';
-import { EFFORT_LEVELS, type EffortLevel } from '@/store/schema';
+import { EFFORT_LEVELS, type EffortLevel } from 'lib/mission-optimizer/effort';
 import { candidateTargets, mulberry32, pick, randInt } from '../oracle/generate';
 import { assertSleepSeconds } from './sleep';
 

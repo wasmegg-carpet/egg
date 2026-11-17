@@ -2,7 +2,7 @@
 // Every comparison is a difference of logs, in nats; probability 0 is -Infinity.
 
 import { ei, spaceshipList } from 'lib';
-import { EFFORT_LAUNCH_PERIOD_SECONDS, EFFORT_LEVELS } from '@/store/schema';
+import { EFFORT_LAUNCH_PERIOD_SECONDS, EFFORT_LEVELS } from 'lib/mission-optimizer/effort';
 import type { RecipeDAG } from 'lib/mission-optimizer/types';
 import type { Capabilities, Planner } from './contract';
 import {

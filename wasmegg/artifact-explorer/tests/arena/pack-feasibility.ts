@@ -385,23 +385,3 @@ export function packFeasibleBudgets(
   if (exhausted) return 'undecided';
   return packs ? 'packs' : 'infeasible';
 }
-
-// Two budgets, for a problem with a sleep window: launch class `j` costs `seconds[j]` waking seconds and
-// `nights[j]` sleep windows, against `capacity` and `nightCapacity` per slot.
-export function packFeasibleNights(
-  seconds: readonly number[],
-  nights: readonly number[],
-  counts: readonly number[],
-  capacity: number,
-  nightCapacity: number,
-  slots: number,
-  nodeBudget = DEFAULT_NODE_BUDGET
-): PackVerdict {
-  return packFeasibleBudgets(
-    seconds.map((s, j) => [s, nights[j]]),
-    counts,
-    [capacity, nightCapacity],
-    slots,
-    nodeBudget
-  );
-}

@@ -3,7 +3,7 @@
 // two feasible production plans as C1 failures. It stays.
 
 import { describe, expect, it } from 'vitest';
-import { packFeasible, packFeasibleNights } from './pack-feasibility';
+import { packFeasible, packFeasibleBudgets } from './pack-feasibility';
 
 const SLOTS = 3;
 
@@ -338,37 +338,128 @@ function brutePacksNights(
   return go(0);
 }
 
-describe('packFeasibleNights', () => {
+describe('packFeasibleBudgets with waking seconds and nights', () => {
   it('charges a zero-second overnight launch its night', () => {
     // A short ship launched at bedtime costs no waking time, and still uses up the night.
-    expect(packFeasibleNights([0], [1], [3], 100, 1, SLOTS)).toBe('packs');
-    expect(packFeasibleNights([0], [1], [4], 100, 1, SLOTS)).toBe('infeasible');
-    expect(packFeasibleNights([0], [1], [1], 100, 0, SLOTS)).toBe('infeasible');
+    expect(packFeasibleBudgets([[0, 1]], [3], [100, 1], SLOTS)).toBe('packs');
+    expect(packFeasibleBudgets([[0, 1]], [4], [100, 1], SLOTS)).toBe('infeasible');
+    expect(packFeasibleBudgets([[0, 1]], [1], [100, 0], SLOTS)).toBe('infeasible');
     // Only a launch costing neither resource is free.
-    expect(packFeasibleNights([0, 10], [0, 1], [500, 3], 10, 1, SLOTS)).toBe('packs');
+    expect(
+      packFeasibleBudgets(
+        [
+          [0, 0],
+          [10, 1],
+        ],
+        [500, 3],
+        [10, 1],
+        SLOTS
+      )
+    ).toBe('packs');
   });
 
   it('rejects by either resource alone', () => {
     // Waking seconds fit with room to spare; nights do not.
-    expect(packFeasibleNights([1, 1], [2, 1], [2, 3], 100, 2, SLOTS)).toBe('infeasible');
+    expect(
+      packFeasibleBudgets(
+        [
+          [1, 2],
+          [1, 1],
+        ],
+        [2, 3],
+        [100, 2],
+        SLOTS
+      )
+    ).toBe('infeasible');
     // Nights fit with room to spare; waking seconds do not.
-    expect(packFeasibleNights([60, 40], [0, 1], [3, 1], 100, 5, SLOTS)).toBe('packs');
-    expect(packFeasibleNights([60, 50], [0, 1], [3, 1], 100, 5, SLOTS)).toBe('infeasible');
+    expect(
+      packFeasibleBudgets(
+        [
+          [60, 0],
+          [40, 1],
+        ],
+        [3, 1],
+        [100, 5],
+        SLOTS
+      )
+    ).toBe('packs');
+    expect(
+      packFeasibleBudgets(
+        [
+          [60, 0],
+          [50, 1],
+        ],
+        [3, 1],
+        [100, 5],
+        SLOTS
+      )
+    ).toBe('infeasible');
     // A launch that alone exceeds a slot's nights is fatal, whatever the totals say.
-    expect(packFeasibleNights([0], [3], [1], 100, 2, SLOTS)).toBe('infeasible');
+    expect(packFeasibleBudgets([[0, 3]], [1], [100, 2], SLOTS)).toBe('infeasible');
   });
 
   it('does not let the two resources trade against each other across slots', () => {
     // Three launches of (1s, 2 nights) fill every slot's nights, so each slot has one, leaving 9s per slot:
     // room for one 5s launch each. Either resource alone packs four 5s launches; together they do not.
-    expect(packFeasibleNights([1, 5], [0, 0], [3, 4], 10, 2, SLOTS)).toBe('packs');
-    expect(packFeasibleNights([0, 0], [2, 0], [3, 4], 10, 2, SLOTS)).toBe('packs');
-    expect(packFeasibleNights([1, 5], [2, 0], [3, 4], 10, 2, SLOTS)).toBe('infeasible');
-    expect(packFeasibleNights([1, 5], [2, 0], [3, 3], 10, 2, SLOTS)).toBe('packs');
+    expect(
+      packFeasibleBudgets(
+        [
+          [1, 0],
+          [5, 0],
+        ],
+        [3, 4],
+        [10, 2],
+        SLOTS
+      )
+    ).toBe('packs');
+    expect(
+      packFeasibleBudgets(
+        [
+          [0, 2],
+          [0, 0],
+        ],
+        [3, 4],
+        [10, 2],
+        SLOTS
+      )
+    ).toBe('packs');
+    expect(
+      packFeasibleBudgets(
+        [
+          [1, 2],
+          [5, 0],
+        ],
+        [3, 4],
+        [10, 2],
+        SLOTS
+      )
+    ).toBe('infeasible');
+    expect(
+      packFeasibleBudgets(
+        [
+          [1, 2],
+          [5, 0],
+        ],
+        [3, 3],
+        [10, 2],
+        SLOTS
+      )
+    ).toBe('packs');
   });
 
   it('reports `undecided` rather than guessing when the node budget runs out', () => {
-    expect(packFeasibleNights([1, 5], [2, 0], [3, 4], 10, 2, SLOTS, 1)).toBe('undecided');
+    expect(
+      packFeasibleBudgets(
+        [
+          [1, 2],
+          [5, 0],
+        ],
+        [3, 4],
+        [10, 2],
+        SLOTS,
+        1
+      )
+    ).toBe('undecided');
   });
 
   it('agrees with the one-dimensional rule when nothing spends a night', () => {
@@ -383,12 +474,10 @@ describe('packFeasibleNights', () => {
       }
       const capacity = ri(3, 14);
       const one = packFeasible(durations, counts, capacity, SLOTS, 1_000_000);
-      const two = packFeasibleNights(
-        durations,
-        durations.map(() => 0),
+      const two = packFeasibleBudgets(
+        durations.map(d => [d, 0]),
         counts,
-        capacity,
-        0,
+        [capacity, 0],
         SLOTS,
         1_000_000
       );
@@ -433,7 +522,13 @@ describe('packFeasibleNights', () => {
       if (totalS < 0.75 * SLOTS * capacity && totalN < 0.75 * SLOTS * nightCapacity) continue;
 
       tested++;
-      const got = packFeasibleNights(seconds, nights, counts, capacity, nightCapacity, SLOTS, 1_000_000);
+      const got = packFeasibleBudgets(
+        seconds.map((sec, j) => [sec, nights[j]]),
+        counts,
+        [capacity, nightCapacity],
+        SLOTS,
+        1_000_000
+      );
       if (got === 'undecided') {
         undecided++;
         continue;
