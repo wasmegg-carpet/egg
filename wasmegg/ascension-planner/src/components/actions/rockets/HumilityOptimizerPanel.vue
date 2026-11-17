@@ -366,9 +366,11 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 
 import { fuelTankSizes, iconURL, virtueShipGemCosts } from 'lib';
-import { formatProbabilityForDisplay } from 'lib/mission-optimizer';
+import { finalizeSolutions, formatProbabilityForDisplay, solutionView } from 'lib/mission-optimizer';
+import { createOptimizerClient, type OptimizerClient } from 'lib/mission-optimizer/optimizer-client';
 import { EFFORT_LEVELS, EFFORT_META } from 'lib/mission-optimizer/effort';
 import { gemBudgetFor, PlanSaveError } from 'lib/mission-optimizer/plan/read';
+import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import { NON_HUMILITY_EGG_IDS } from 'lib/mission-optimizer/plan/schema';
 import { scheduleArgsOf } from 'lib/mission-optimizer/schedule-settings';
 import { getSimulationContext } from 'lib/planners/engine/adapter';
@@ -395,14 +397,7 @@ import {
   type GemLimit,
   type OptimizerVisitSettings,
 } from '@/lib/humilityOptimizer';
-import {
-  buildRequest,
-  createOptimizerClient,
-  finalizeSolutions,
-  projectSolvedVisit,
-  solutionView,
-  type OptimizerClient,
-} from '@/lib/humilityOptimizerEngine';
+import { buildRequest } from '@/lib/humilityOptimizerEngine';
 import { VIRTUE_EGG_NAMES, type VirtueEgg } from '@/types';
 
 const DURATION_PRESETS = ['1d', '3d', '7d', '14d'];
@@ -582,7 +577,7 @@ const shown = computed(() => {
 });
 const stale = computed(() => shown.value !== null && shown.value.key !== questionKey.value);
 
-const view = computed(() => (shown.value ? solutionView(shown.value.solution, shown.value.player) : null));
+const view = computed(() => (shown.value ? solutionView(shown.value.solution, shown.value.player.inventory) : null));
 
 // The same projection the explorer writes to its humility missions file, so staging takes the one path.
 const projected = computed(() => {

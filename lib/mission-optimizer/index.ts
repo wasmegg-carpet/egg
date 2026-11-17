@@ -10,6 +10,10 @@ export * from './optimizer-cost';
 
 import type { DAGNode, LaunchSolution, OptimizerSolution, DropRow, RecipeDAG } from './types';
 import { generateRecipeDag } from './problem-inputs';
+import { legendaryDataIsSparse } from './loot';
+import { computeMissionLegendaryRows, type TargetView } from './optimizer-views';
+import { computeCraftChainTree } from './optimizer-tree';
+import { computePlanCraftingCost, type PlanCost } from './optimizer-cost';
 import { ei, getArtifactTierPropsFromId, getCraftingInfoFromLevel, iconURL, Inventory, InventoryItem } from '../index';
 
 // An undefined previousCraftsOverride means "read each target's own crafted
@@ -134,6 +138,35 @@ export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG
     solution.fuelByEgg = computeFuelByEgg(solution);
   }
   return solutions;
+}
+
+export interface SolutionView {
+  targets: TargetView[];
+  planCost: PlanCost;
+}
+
+// What the solution card shows of a solution, one row per target it was solved for: read off `perTarget` rather
+// than the live selection, which can change between a solve and its answer. `inventory` is the one the solve
+// was asked against.
+export function solutionView(solution: OptimizerSolution, inventory: Inventory | null): SolutionView {
+  const targets = solution.perTarget.map(perTarget => {
+    const nodeId = perTarget.nodeId;
+    const props = getArtifactTierPropsFromId(nodeId);
+    const p = perTarget.dropProbability;
+    return {
+      nodeId,
+      name: props.name,
+      iconUrl: iconURL('egginc/' + props.icon_filename, 64),
+      perTarget,
+      pCraft: solution.recipeDag.get(nodeId)?.legendaryCraftProbability ?? 0,
+      // The expected legendary drop count, from P(drop) = 1 - e^(-lambda).
+      lambda: p > 0 && p < 1 ? -Math.log(1 - p) : 0,
+      craftChainTree: computeCraftChainTree(solution, nodeId, inventory),
+      missionLegendarySources: computeMissionLegendaryRows(solution, nodeId),
+      dropDataIsSparse: legendaryDataIsSparse(nodeId),
+    };
+  });
+  return { targets, planCost: computePlanCraftingCost(solution, inventory) };
 }
 
 export type {

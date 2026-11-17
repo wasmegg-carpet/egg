@@ -110,17 +110,11 @@ import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import {
   buildRecipeDag,
   computeOwnedStock,
-  computeCraftChainTree,
   computeInventoryTree,
   computeCraftUnitPrices,
-  computeMissionLegendaryRows,
-  computePlanCraftingCost,
   finalizeSolutions,
-  lambdaFromDropProbability,
-  legendaryCraftProbabilityOf,
-  legendaryDataIsSparse,
+  solutionView,
   type OptimizerSolution,
-  type TargetView,
 } from '@/lib';
 import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 import {
@@ -373,27 +367,12 @@ export default defineComponent({
       }))
     );
 
+    // Against the inventory the solve was asked with, which the live one may have moved on from since.
     const solutionViews = computed(() =>
-      computedResults.value.map(solution => {
-        // Iterate solution.perTarget, never the live artifactIds: the solution
-        // is stale between a selection change and the next completed solve.
-        const targets: TargetView[] = solution.perTarget.map(perTarget => {
-          const nodeId = perTarget.nodeId;
-          const display = artifactDisplay(nodeId);
-          return {
-            nodeId,
-            name: display.name,
-            iconUrl: display.iconUrl,
-            perTarget,
-            pCraft: legendaryCraftProbabilityOf(solution, nodeId),
-            lambda: lambdaFromDropProbability(perTarget.dropProbability),
-            craftChainTree: computeCraftChainTree(solution, nodeId, snapshot.value?.inventory ?? null),
-            missionLegendarySources: computeMissionLegendaryRows(solution, nodeId),
-            dropDataIsSparse: legendaryDataIsSparse(nodeId),
-          };
-        });
-        return { solution, targets, planCost: computePlanCraftingCost(solution, snapshot.value?.inventory ?? null) };
-      })
+      computedResults.value.map(solution => ({
+        solution,
+        ...solutionView(solution, snapshot.value?.inventory ?? null),
+      }))
     );
 
     const dimSolution = computed(() => computing.value && solutionViews.value.length > 0);

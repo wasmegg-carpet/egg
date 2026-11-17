@@ -1,24 +1,10 @@
-// The heavy half of the inline mission optimizer: it states the visit as the optimizer's problem and turns
-// the answer into what the card renders. Importing this module pulls in the loot dataset, so it is only
-// ever reached through the lazily loaded optimizer panel. The questions it asks are the ones the artifact
-// explorer asks for a plan visit, built from the same shared functions.
+// The heavy half of the inline mission optimizer: it states the visit as the optimizer's problem. Importing
+// this module pulls in the loot dataset, so it is only ever reached through the lazily loaded optimizer panel.
+// The questions it asks are the ones the artifact explorer asks for a plan visit, built from the same shared
+// functions.
 
-import { fuelTankSizes, getArtifactTierPropsFromId, getCraftingLevelFromXp, iconURL, type ShipsConfig } from 'lib';
-import {
-  buildRecipeDag,
-  computeCraftChainTree,
-  computeCraftUnitPrices,
-  computeMissionLegendaryRows,
-  computeOwnedStock,
-  computePlanCraftingCost,
-  finalizeSolutions,
-  lambdaFromDropProbability,
-  legendaryCraftProbabilityOf,
-  legendaryDataIsSparse,
-  type OptimizerSolution,
-  type PlanCost,
-  type TargetView,
-} from 'lib/mission-optimizer';
+import { fuelTankSizes, getCraftingLevelFromXp, type ShipsConfig } from 'lib';
+import { buildRecipeDag, computeCraftUnitPrices, computeOwnedStock } from 'lib/mission-optimizer';
 import { EFFORT_LAUNCH_PERIOD_SECONDS } from 'lib/mission-optimizer/effort';
 import type { OptimizerRequestInput } from 'lib/mission-optimizer/optimizer-client';
 import { gemBudgetFor, type HumilityVisit } from 'lib/mission-optimizer/plan/read';
@@ -27,10 +13,6 @@ import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 import { scheduleArgsOf } from 'lib/mission-optimizer/schedule-settings';
 
 import { durationSeconds, type OptimizerVisitSettings } from './humilityOptimizer';
-
-export { createOptimizerClient, type OptimizerClient } from 'lib/mission-optimizer/optimizer-client';
-export { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
-export { finalizeSolutions };
 
 export interface OptimizerRequest {
   input: OptimizerRequestInput;
@@ -80,28 +62,4 @@ export function buildRequest(
         : undefined,
     },
   };
-}
-
-export interface SolutionView {
-  targets: TargetView[];
-  planCost: PlanCost;
-}
-
-/** What the explorer's solution card needs, one row per target the solution was solved for. */
-export function solutionView(solution: OptimizerSolution, player: PlayerData): SolutionView {
-  const targets: TargetView[] = solution.perTarget.map(perTarget => {
-    const props = getArtifactTierPropsFromId(perTarget.nodeId);
-    return {
-      nodeId: perTarget.nodeId,
-      name: props.name,
-      iconUrl: iconURL('egginc/' + props.icon_filename, 64),
-      perTarget,
-      pCraft: legendaryCraftProbabilityOf(solution, perTarget.nodeId),
-      lambda: lambdaFromDropProbability(perTarget.dropProbability),
-      craftChainTree: computeCraftChainTree(solution, perTarget.nodeId, player.inventory),
-      missionLegendarySources: computeMissionLegendaryRows(solution, perTarget.nodeId),
-      dropDataIsSparse: legendaryDataIsSparse(perTarget.nodeId),
-    };
-  });
-  return { targets, planCost: computePlanCraftingCost(solution, player.inventory) };
 }

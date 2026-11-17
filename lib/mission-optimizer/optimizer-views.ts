@@ -39,11 +39,6 @@ export interface TargetView {
   dropDataIsSparse: boolean;
 }
 
-// Invert P(drop) = 1 - e^(-lambda); 0 outside (0, 1).
-export function lambdaFromDropProbability(p: number): number {
-  return p > 0 && p < 1 ? -Math.log(1 - p) : 0;
-}
-
 // Whether a `choiceHistory` entry flies at 2x capacity. `event` and `overhang` exist only to make "launched
 // inside the window" linear for the solver (`types.ts`); the player flies both the same way, so every view
 // folds them into one.
@@ -124,10 +119,6 @@ export function computeMissionLegendaryRows(solution: OptimizerSolution, rootId:
     }
   }
   return [...rows.values()].filter(row => row.legendaryDrops > 0.0001);
-}
-
-export function legendaryCraftProbabilityOf(solution: OptimizerSolution, rootId: string): number {
-  return solution.recipeDag.get(rootId)?.legendaryCraftProbability ?? 0;
 }
 
 // ---------------------------------------------------------------------------

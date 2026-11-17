@@ -10,6 +10,7 @@ import {
   isDoubled,
   launchTotals,
   planTimeline,
+  solutionView,
   type TimelineLaunchRow,
   type TimelineRow,
 } from 'lib/mission-optimizer';
@@ -339,6 +340,18 @@ describe('the timeline of a solved plan', () => {
     expect(slotLaunches).toBe(totalLaunches);
     for (const s of solution.slots!) expect(s.launches.length).toBe(s.missionCount);
   };
+
+  it('gives the card one row per target it was solved for', async () => {
+    const solution = await solve({}, 2 * DAY);
+    const { targets, planCost } = solutionView(solution, null);
+    expect(targets.map(t => [t.nodeId, t.name])).toEqual([[lt2, 'Lunar totem']]);
+    const [target] = targets;
+    expect(target.perTarget).toBe(solution.perTarget[0]);
+    expect(target.pCraft).toBe(0.05);
+    expect(1 - Math.exp(-target.lambda)).toBeCloseTo(target.perTarget.dropProbability, 12);
+    expect(target.missionLegendarySources).toEqual(computeMissionLegendaryRows(solution, lt2));
+    expect(planCost.total).toBeGreaterThanOrEqual(0);
+  });
 
   it('counts what the totals count, around the clock', async () => {
     const solution = await solve({}, 2 * DAY);
