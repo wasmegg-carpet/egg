@@ -4,7 +4,7 @@
 import type { CapacityVariant, LaunchOption, RecipeDAG } from '../types';
 import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
 import { qOf } from '../objective';
-import { daySchedule, type DaySchedule } from './days';
+import { daySchedule, lastWakingInstant, type DaySchedule } from './days';
 
 // Stand-ins for a bound no budget gives; see SPEC.md section 2. `UNBOUNDED_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
@@ -27,6 +27,11 @@ export interface Group {
   legendaryByTarget: number[];
   cap: number;
   members: number[]; // original option indices, ascending; output lands on members[0]
+  // For a doubled group, the `normal` group a launch of it is flown as when the layout cannot start it inside the
+  // window: its own normal twin (the same flight at 1x), or, when dominance pruned the twin, a surviving normal
+  // group that dominates the twin. -1 for a normal group, and for a doubled one whose twin is not on the menu at
+  // all, which the layout then trims rather than demotes. See SPEC.md section 13.
+  twin: number;
 }
 
 export interface Model {
@@ -53,8 +58,12 @@ export interface Model {
   // (SPEC.md section 10). Null is today's problem.
   day: DaySchedule | null;
   // Seconds of 2x capacity event left, from the plan's start; 0 when the problem has none, which also drops
-  // every doubled option. The `window_k` rows read it (SPEC.md section 11).
+  // every doubled option. The verifier reads it (SPEC.md section 11).
   eventWindowSeconds: number;
+  // What the `window_k` rows hold a slot's `event` launches to, in wall-clock seconds: the window itself without a
+  // sleep window, and with one the last waking instant at or before its end, since no launch goes up asleep
+  // (SPEC.md section 13).
+  eventWindowBudget: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -166,6 +175,12 @@ function craftUpperBounds(
   return caps;
 }
 
+// The wall-clock seconds one launch holds its slot for: its waking seconds and the nights it flies through. What
+// the `window_k` rows charge an `event` launch (SPEC.md section 13); without a sleep window, its seconds.
+export function blockSeconds(seconds: number, nights: number, day: DaySchedule | null): number {
+  return day === null ? seconds : seconds + nights * day.sleepSeconds;
+}
+
 // Largest whole number of launches that fits: the count `n` with `n * unitCost <= capacity`. Computed
 // from the two quantities rather than from their ratio's reciprocal, which `Math.floor` then drops a
 // launch off — a 1-second mission in a 93-second slot gives `1/(1/93) = 93.00000000000001` one way and
@@ -232,6 +247,44 @@ function pruneDominated(groups: readonly Group[], timeCapacitySeconds: number, n
           taker !== given && boundsFollowFromRows(taker, timeCapacitySeconds, nightsPerSlot) && dominates(taker, given)
       )
   );
+}
+
+// Whether `normal` is the same flight as the doubled group `doubled` at 1x: the same fuel, seconds and nights, and
+// exactly half of every drop. Doubling is exact in floating point, so this is an equality test, as the group key is.
+function isTwin(normal: Group, doubled: Group): boolean {
+  const same = (a: readonly number[], b: readonly number[], factor: number) =>
+    a.length === b.length && a.every((x, i) => x * factor === b[i]);
+  return (
+    normal.variant === 'normal' &&
+    normal.timeSeconds === doubled.timeSeconds &&
+    normal.nights === doubled.nights &&
+    same(normal.fuelFractions, doubled.fuelFractions, 1) &&
+    same(normal.yieldByItem, doubled.yieldByItem, 2) &&
+    same(normal.legendaryByTarget, doubled.legendaryByTarget, 2)
+  );
+}
+
+// Sets `twin` on every kept doubled group, as an index into `kept`. The twin is looked for among every group,
+// pruned ones included: when dominance dropped it, the first kept group (in group order) that dominates it
+// stands in, which flies in the same launch slot in no more seconds, nights or fuel and yields at least as much,
+// and one always survives, since the relation is a strict partial order (SPEC.md section 1). Only within the
+// normal variant, as dominance itself is.
+function linkTwins(all: readonly Group[], kept: Group[], timeCapacitySeconds: number, nightsPerSlot: number): void {
+  const index = new Map(kept.map((grp, g) => [grp, g]));
+  for (const grp of kept) {
+    if (grp.variant === 'normal') continue;
+    const twin = all.find(other => isTwin(other, grp));
+    if (twin === undefined) continue;
+    const standIn =
+      index.get(twin) ??
+      kept.findIndex(
+        taker =>
+          taker.variant === 'normal' &&
+          boundsFollowFromRows(taker, timeCapacitySeconds, nightsPerSlot) &&
+          dominates(taker, twin)
+      );
+    grp.twin = standIn ?? -1;
+  }
 }
 
 export function buildModel(raw: PlanProblem): Model {
@@ -327,6 +380,10 @@ export function buildModel(raw: PlanProblem): Model {
   // Absent is 0: no window, so nothing may fly doubled (SPEC.md section 11).
   const window = problem.eventWindowSeconds ?? 0;
   const slots = problem.slots;
+  const day = problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null;
+  // Without a sleep window, the window itself (SPEC.md section 11); with one, its last waking instant
+  // (section 13).
+  const windowBudget = day === null ? window : lastWakingInstant(window, day.wakingSeconds);
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {
@@ -350,12 +407,14 @@ export function buildModel(raw: PlanProblem): Model {
     const nights = opt.nights ?? 0;
     if (!Number.isInteger(nights) || nights < 0 || nights > nightsCap) return;
     // A doubled option with no window has no row to hold it inside one, so it is dropped rather than flown at 2x
-    // unconstrained; an `event` one longer than the whole window cannot start inside it with anything before it
-    // and its column would be pinned at 0. A malformed variant falls out with them.
+    // unconstrained; an `event` one holding its slot longer than the whole window cannot start inside it with
+    // anything before it and its column would be pinned at 0. A malformed variant falls out with them. Held in
+    // wall-clock seconds, nights included, which without a sleep window are its seconds (SPEC.md section 13).
     const variant = opt.variant ?? 'normal';
     if (!Object.prototype.hasOwnProperty.call(VARIANT_RANK, variant)) return;
     if (variant !== 'normal' && !(window > 0)) return;
-    if (variant === 'event' && opt.actualTime > window) return;
+    const block = blockSeconds(opt.actualTime, nights, day);
+    if (variant === 'event' && block > windowBudget) return;
 
     const yieldEntries: Entry[] = [];
     for (const [item, qty] of opt.yieldVector) {
@@ -384,7 +443,7 @@ export function buildModel(raw: PlanProblem): Model {
       // Whole numbers on both sides, so the quotient is exact.
       nights > 0 ? Math.floor((slots * nightsCap) / nights) : UNBOUNDED_GROUP,
       // The window rows' bounds, restated per group as the time and night bounds are.
-      variant === 'event' && opt.actualTime > 0 ? slots * maxLaunches(window, opt.actualTime) : UNBOUNDED_GROUP,
+      variant === 'event' && block > 0 ? slots * maxLaunches(windowBudget, block) : UNBOUNDED_GROUP,
       variant === 'overhang' ? slots : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
@@ -427,6 +486,7 @@ export function buildModel(raw: PlanProblem): Model {
       legendaryByTarget,
       cap: cand.cap,
       members: [cand.index],
+      twin: -1,
     });
   }
   for (const grp of groups) grp.members.sort((a, b) => a - b);
@@ -434,6 +494,7 @@ export function buildModel(raw: PlanProblem): Model {
   // Dropped before `craftUpperBounds`, which counts every group at its cap: fewer groups only tightens a
   // bound that stays an over-statement of what the remaining ones can supply.
   const kept = pruneDominated(groups, timeCap, nightsCap);
+  linkTwins(groups, kept, timeCap, nightsCap);
 
   return {
     sortedTargets: targets,
@@ -449,8 +510,9 @@ export function buildModel(raw: PlanProblem): Model {
     fuelAxes: axes,
     timeCapacitySeconds: timeCap,
     nightsPerSlot: nightsCap,
-    day: problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null,
+    day,
     eventWindowSeconds: window,
+    eventWindowBudget: windowBudget,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,

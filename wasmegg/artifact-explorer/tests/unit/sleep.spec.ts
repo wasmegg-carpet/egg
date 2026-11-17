@@ -87,7 +87,10 @@ describe('sleepVariants', () => {
     // Regression: a zero-length night used to give every option a `~night<m>` twin charging its whole duration
     // and a night it does not spend, where the arena's copy (and `capacityVariants` for a zero window) returns
     // the menu as given.
-    const menu = [{ id: 'a', actualTime: HOUR }, { id: 'b', actualTime: 2 * DAY }];
+    const menu = [
+      { id: 'a', actualTime: HOUR },
+      { id: 'b', actualTime: 2 * DAY },
+    ];
     expect(sleepVariants(menu, 0)).toBe(menu);
     expect(sleepVariants(menu, -1)).toBe(menu);
     expect(sleepVariants(menu, NaN)).toBe(menu);

@@ -11,7 +11,7 @@ import type {
   PlanResult,
 } from './types';
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } from './evaluator';
-import { buildModel, type Model } from './model';
+import { blockSeconds, buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
 import { layOutPlan, timelineOf } from './layout';
 import { slotFault } from './verify';
@@ -90,13 +90,15 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
   for (const nights of slotLoads(model, layout, columnValues, layout.classNights)) {
     if (nights > model.nightsPerSlot) return false;
   }
-  // The window rows, read the same way: seconds against the window with the slot row's tolerance, whole
-  // launches against one exactly. Without a window no class is doubled, so both loads are 0, and a doubled
+  // The window rows, read the same way: `event` wall-clock seconds against the window's budget with the slot row's
+  // tolerance (SPEC.md sections 11 and 13), whole launches against one exactly. Without a window no class is doubled, so both loads are 0, and a doubled
   // launch that somehow appeared there anyway fails the first test. See SPEC.md section 11.
   const window = model.eventWindowSeconds;
-  const eventSeconds = layout.classSeconds.map((s, c) => (layout.classVariant[c] === 'event' ? s : 0));
+  const eventSeconds = layout.classSeconds.map((s, c) =>
+    layout.classVariant[c] === 'event' ? blockSeconds(s, layout.classNights[c], model.day) : 0
+  );
   for (const load of slotLoads(model, layout, columnValues, eventSeconds)) {
-    if (load > window + SLOT_TOL) return false;
+    if (load > model.eventWindowBudget + SLOT_TOL) return false;
   }
   const doubled = layout.classVariant.map(v => (v === 'normal' ? 0 : 1));
   const overhangs = layout.classVariant.map(v => (v === 'overhang' ? 1 : 0));
@@ -130,7 +132,10 @@ const NO_LAYOUT: LayoutStats = {
 
 // The plan with nothing in it, which every problem admits.
 function emptyLaid(model: Model): Laid {
-  return { calendar: Array.from({ length: model.slots }, () => []), layoutStats: { ...NO_LAYOUT } };
+  return {
+    calendar: Array.from({ length: model.slots }, () => []),
+    layoutStats: { ...NO_LAYOUT, ...(model.day !== null && model.eventWindowSeconds > 0 && { launchesDemoted: 0 }) },
+  };
 }
 
 // The last gate before a plan leaves the solver, and the one that makes "only verified plans are reported" a
@@ -278,13 +283,14 @@ export function solveWith(
 
   // Every plan is laid out into the calendar it is returned with. Without a sleep window that is exact and trims
   // nothing (SPEC.md section 12). With one the MILP's plan is a relaxation of real days (SPEC.md section 9): what
-  // does not fit is trimmed, and only then judged again, the way the plan above was, against the empty one.
-  // Everything reported from here describes the trimmed plan.
+  // does not fit is trimmed, and a doubled launch it cannot start inside the 2x window is flown at 1x (SPEC.md
+  // section 13), and only then judged again, the way the plan above was, against the empty one. Everything
+  // reported from here describes the plan as laid out.
   const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
   const laid = layOutPlan(model, layout, solution.columnValues, counts, problem.options, solve, judge);
   let keepLaid: boolean;
   try {
-    keepLaid = laid.stats.launchesTrimmed === 0 || judge(laid.counts) > judge(empty);
+    keepLaid = (laid.stats.launchesTrimmed === 0 && !laid.stats.launchesDemoted) || judge(laid.counts) > judge(empty);
   } catch {
     keepLaid = false;
   }

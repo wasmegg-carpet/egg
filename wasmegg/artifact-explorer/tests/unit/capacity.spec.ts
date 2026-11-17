@@ -213,9 +213,27 @@ describe('optimizeFull with an event window', () => {
     expect(sol.eventWindowSeconds).toBe(48 * HOUR);
   });
 
-  it('refuses a window together with a sleep window, for now', async () => {
-    await expect(
-      optimizeFull({ ...args(), timeCapacityPerSlot: 3 * 86400, sleepSeconds: 8 * HOUR, eventWindowSeconds: HOUR })
-    ).rejects.toThrow('event window with sleep is not supported yet');
-  });
+  it('plans a window together with a sleep window, doubling only what launches inside it', async () => {
+    // Two- and six-hour ships on a three-day horizon with eight hours of sleep and a three-hour window: the menu
+    // is split by sleep, then by capacity. Three hours hold one two-hour `event` launch a slot and the overhang.
+    const sol = await optimizeFull({
+      ...args(),
+      options: [makeOpt(1, 2 * HOUR, [['B', 1]]), makeOpt(1, 6 * HOUR, [['B', 4]])],
+      fuelCapacity: 30,
+      timeCapacityPerSlot: 3 * 86400,
+      sleepSeconds: 8 * HOUR,
+      eventWindowSeconds: 3 * HOUR,
+    });
+    expect(sol.sleepSeconds).toBe(8 * HOUR);
+    expect(sol.eventWindowSeconds).toBe(3 * HOUR);
+    const launched = (pick: (v: string | undefined) => boolean) =>
+      sol.choiceHistory.filter(c => pick(c.variant)).reduce((a, c) => a + c.numShipsLaunched, 0);
+    const events = launched(v => v === 'event');
+    const overhangs = launched(v => v === 'overhang');
+    expect(events + overhangs).toBeGreaterThan(0);
+    expect(events).toBeLessThanOrEqual(3);
+    expect(overhangs).toBeLessThanOrEqual(3);
+    expect(launched(v => v === 'normal')).toBeGreaterThan(0);
+    expect(sol.choiceHistory.every(c => c.actualTime <= 6 * HOUR)).toBe(true);
+  }, 60_000);
 });

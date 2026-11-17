@@ -181,25 +181,6 @@ describe('a problem without an event window builds today’s model', () => {
   });
 });
 
-describe('the event window does not yet combine with sleep', () => {
-  it('refuses a problem carrying both, by name', () => {
-    const sleep = { sleepSeconds: 8 * 3600, horizonSeconds: 2 * 86400 };
-    expect(() => normalizeProblem(problemOf([], { eventWindowSeconds: 3600, sleep, nightsPerSlot: 2 }))).toThrow(
-      'event window with sleep is not supported yet'
-    );
-    expect(() => buildModel(problemOf([], { eventWindowSeconds: 3600, nightsPerSlot: 1 }))).toThrow(
-      /event window with sleep/
-    );
-  });
-
-  it('accepts either alone, and a zero window beside sleep', () => {
-    const sleep = { sleepSeconds: 8 * 3600, horizonSeconds: 2 * 86400 };
-    expect(() => normalizeProblem(problemOf([], { eventWindowSeconds: 3600 }))).not.toThrow();
-    expect(() => normalizeProblem(problemOf([], { sleep, nightsPerSlot: 2 }))).not.toThrow();
-    expect(() => normalizeProblem(problemOf([], { sleep, nightsPerSlot: 2, eventWindowSeconds: 0 }))).not.toThrow();
-  });
-});
-
 describe('the event window in the MILP', () => {
   it('flies the normal launch alongside its doubled copies, up to the window', async () => {
     // One 10-second launch, a 10-second window and 100-second slots: per slot, one `event` launch, then the

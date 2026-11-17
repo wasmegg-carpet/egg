@@ -52,6 +52,9 @@ interface Connector {
 interface SlotContext {
   classSeconds: readonly number[];
   classNights: readonly number[];
+  // Whether a class flies doubled (`event` or `overhang`), which the layout puts first so it starts inside the 2x
+  // window (SPEC.md section 13). All false without a window, and then nothing below orders by it.
+  doubled: readonly boolean[];
   day: DaySchedule;
   solve: MilpSolve;
   // Drops one launch of one of `candidates` from the plan, chosen by the judge, and returns its class.
@@ -64,13 +67,27 @@ interface ClassLaunch {
   launchAt: number;
 }
 
-// Each overnight launch, then null connectors until the nights sum to the slot's. Ordered by flex,
-// alternately largest and smallest so a long landing is followed by a short take-off, with the smallest last
-// so nothing lands past the final wake-up into a short tail. A heuristic: another order may place more,
-// which makes what this layout places a lower bound on what fits, never an over-statement.
+// Ordered by flex, alternately largest and smallest so a long landing is followed by a short take-off, and, when
+// `smallestLast`, with the smallest held back to the end so nothing lands past the final wake-up into a short tail.
+function alternating(conns: Connector[], smallestLast: boolean): Connector[] {
+  const sorted = conns.sort((a, b) => a.flex - b.flex || a.cls - b.cls);
+  const last = smallestLast ? sorted.shift() : undefined;
+  const out: Connector[] = [];
+  for (let lo = 0, hi = sorted.length - 1, big = true; lo <= hi; big = !big)
+    out.push(big ? sorted[hi--] : sorted[lo++]);
+  if (last) out.push(last);
+  return out;
+}
+
+// Each overnight launch, then null connectors until the nights sum to the slot's, in `alternating` order. With
+// `doubledFirst`, the doubled overnight ships go first, alternating among themselves from the largest flex (the
+// one that can take off earliest in its day), and everything else follows in the usual order, so the ships that
+// must start inside the 2x window take the first nights (SPEC.md section 13). A heuristic either way: another
+// order may place more, which makes what this layout places a lower bound on what fits, never an over-statement.
 export function connectorsOf(
   counts: readonly number[],
-  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>
+  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'> & Partial<Pick<SlotContext, 'doubled'>>,
+  doubledFirst = false
 ): Connector[] {
   const all: Connector[] = [];
   let nights = 0;
@@ -83,13 +100,13 @@ export function connectorsOf(
     }
   }
   for (; nights < ctx.day.nights; nights++) all.push({ cls: NULL_CONNECTOR, nights: 1, flex: 0 });
-  const sorted = all.sort((a, b) => a.flex - b.flex || a.cls - b.cls);
-  const last = sorted.shift();
-  const out: Connector[] = [];
-  for (let lo = 0, hi = sorted.length - 1, big = true; lo <= hi; big = !big)
-    out.push(big ? sorted[hi--] : sorted[lo++]);
-  if (last) out.push(last);
-  return out;
+  const isDoubled = (conn: Connector) =>
+    doubledFirst && conn.cls !== NULL_CONNECTOR && ctx.doubled?.[conn.cls] === true;
+  const doubled = all.filter(isDoubled);
+  if (doubled.length === 0) return alternating(all, true);
+  const rest = all.filter(conn => !isDoubled(conn));
+  if (rest.length === 0) return alternating(doubled, true);
+  return [...alternating(doubled, false), ...alternating(rest, true)];
 }
 
 // Segment `j` is the waking time between connector `j - 1` landing and connector `j` leaving; the last one is
@@ -346,29 +363,48 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext): { launches: Cl
   // The overnight ships first: they must each have a sleep window, and they must stand on their own before
   // any daytime launch is placed around them. The night rows make the first loop idle unless the problem's
   // nights and horizon disagree; the second fires where two long landings and take-offs meet in one day.
+  // Doubled ships first when that order stands, the usual order when only it does (SPEC.md section 13); with no
+  // doubled ship the two are one order, tried once.
+  const zeros = new Array<number>(day.nights + 2).fill(0);
+  const standing = (): Connector[] | null => {
+    const first = connectorsOf(counts, ctx, true);
+    if (chainHeads(first, zeros, day).fail < 0) return first;
+    if (!counts.some((n, c) => n > 0 && ctx.classNights[c] > 0 && ctx.doubled[c])) return null;
+    const usual = connectorsOf(counts, ctx);
+    return chainHeads(usual, zeros, day).fail < 0 ? usual : null;
+  };
   while (nightsOf() > day.nights) dropOvernight(overnight());
   for (;;) {
-    const zeros = new Array<number>(day.nights + 2).fill(0);
-    if (chainHeads(connectorsOf(counts, ctx), zeros, day).fail < 0) break;
+    if (standing() !== null) break;
     const candidates = overnight();
     if (candidates.length === 0) throw new Error('layout: a slot with no overnight launch has no room for its nights');
     // Prefer a drop that stands the chain up by itself; failing that, the judge's choice among them all.
     const fixes = candidates.filter(c => {
       counts[c]--;
-      const ok = chainHeads(connectorsOf(counts, ctx), zeros, day).fail < 0;
+      const ok = standing() !== null;
       counts[c]++;
       return ok;
     });
     dropOvernight(fixes.length > 0 ? fixes : candidates);
   }
-  const conns = connectorsOf(counts, ctx);
+  const conns = standing()!;
   const segments = conns.length + 1;
 
-  const daytime = counts
+  // Longest first, the greedy's packing order; with doubled classes on the slot, doubled ones first, so they take
+  // the earliest segments, unless the usual order alone places more (SPEC.md section 13).
+  const byLength = counts
     .flatMap((n, c) => (n > 0 && ctx.classNights[c] === 0 && ctx.classSeconds[c] > 0 ? [c] : []))
     .sort((a, b) => ctx.classSeconds[b] - ctx.classSeconds[a] || a - b);
+  const daytime = byLength.some(c => ctx.doubled[c])
+    ? [...byLength.filter(c => ctx.doubled[c]), ...byLength.filter(c => !ctx.doubled[c])]
+    : byLength;
   let placed = greedyFill(conns, daytime, counts, ctx);
   const complete = (p: Placement) => daytime.every((c, d) => p[d].reduce((a, n) => a + n, 0) === counts[c]);
+  if (!complete(placed) && daytime !== byLength) {
+    const usual = greedyFill(conns, byLength, counts, ctx);
+    const reindexed = daytime.map(c => usual[byLength.indexOf(c)]);
+    if (placedSeconds(reindexed, daytime, ctx) > placedSeconds(placed, daytime, ctx)) placed = reindexed;
+  }
   if (!complete(placed)) {
     let solved = solveLayout(conns, daytime, counts, ctx, 0);
     if (solved && !standsExactly(solved, conns, daytime, ctx)) {
@@ -394,17 +430,24 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext): { launches: Cl
     if (ctx.classNights[c] === 0 && !(ctx.classSeconds[c] > 0))
       for (let i = 0; i < n; i++) launches.push({ cls: c, launchAt: 0 });
   });
+  // Within a segment, doubled launches go up first and shortest first, which starts as many of them as early as
+  // any order can; the rest in the greedy's order. Only the totals reach the chain, so the order is free.
+  const doubledByShortest = daytime
+    .filter(c => ctx.doubled[c])
+    .sort((a, b) => ctx.classSeconds[a] - ctx.classSeconds[b] || a - b);
+  const launchOrder = [...doubledByShortest, ...daytime.filter(c => !ctx.doubled[c])].map(c => daytime.indexOf(c));
   let startDay = 0;
   let after = 0;
   for (let j = 0; j < segments; j++) {
     const dayStart = startDay * DAY_SECONDS;
     let offset = after;
-    daytime.forEach((c, d) => {
+    for (const d of launchOrder) {
+      const c = daytime[d];
       for (let i = 0; i < placed[d][j]; i++) {
         launches.push({ cls: c, launchAt: dayStart + offset });
         offset += ctx.classSeconds[c];
       }
-    });
+    }
     if (j < conns.length) {
       const conn = conns[j];
       if (conn.cls !== NULL_CONNECTOR) launches.push({ cls: conn.cls, launchAt: dayStart + W - heads[j] });
@@ -482,6 +525,7 @@ export function layOutPlan(
     layoutSolves: 0,
     marginResolves: 0,
     verifierRetries: 0,
+    ...(day !== null && window > 0 && { launchesDemoted: 0 }),
   };
   const groupsOf: number[][] = Array.from({ length: layout.classes }, () => []);
   for (let g = 0; g < layout.groups; g++) groupsOf[layout.classOf[g]].push(g);
@@ -511,6 +555,84 @@ export function layOutPlan(
     current[bestGroup]--;
     stats.launchesTrimmed++;
     return layout.classOf[bestGroup];
+  };
+
+  // Flies one launch of one of the doubled `candidates` classes at 1x instead: the group, within them, whose
+  // launch moves onto its `twin` at the least cost to the judge. A group with no twin can only be dropped, which
+  // competes on the same terms and counts as a trim. Returns the class given up and the class taken on, null for a
+  // drop. See SPEC.md section 13.
+  const demote = (candidates: readonly number[]): { from: number; to: number | null } => {
+    let best = -Infinity;
+    let bestGroup = -1;
+    for (const c of candidates) {
+      for (const g of groupsOf[c]) {
+        if (current[g] <= 0) continue;
+        const twin = model.groups[g].twin;
+        current[g]--;
+        if (twin >= 0) current[twin]++;
+        let value: number;
+        try {
+          value = judge(current);
+        } catch {
+          value = -Infinity;
+        }
+        if (twin >= 0) current[twin]--;
+        current[g]++;
+        if (bestGroup < 0 || value > best) {
+          best = value;
+          bestGroup = g;
+        }
+      }
+    }
+    if (bestGroup < 0)
+      throw new Error(`layout: no doubled launch left to demote in class(es) ${candidates.join(', ')}`);
+    const twin = model.groups[bestGroup].twin;
+    current[bestGroup]--;
+    if (twin >= 0) {
+      current[twin]++;
+      stats.launchesDemoted = (stats.launchesDemoted ?? 0) + 1;
+    } else {
+      stats.launchesTrimmed++;
+    }
+    return { from: layout.classOf[bestGroup], to: twin >= 0 ? layout.classOf[twin] : null };
+  };
+
+  // A laid-out slot against the 2x window. Launches of equal seconds and nights hold the slot identically, so
+  // among them the doubled ones take the earliest launch times, which changes no time on the timeline; any still
+  // launching past the window are flown at 1x, through `demote`, in place. The timeline is the one laid out, less
+  // at most the launches dropped for want of a twin, so it stands exactly as it did. Without a window, the slot.
+  const settle = (launches: readonly ClassLaunch[]): ClassLaunch[] => {
+    if (!(window > 0)) return launches.slice();
+    const isDoubled = (c: number) => layout.classVariant[c] !== 'normal';
+    const byKey = new Map<string, number[]>();
+    launches.forEach((l, i) => {
+      const key = `${layout.classSeconds[l.cls]}/${layout.classNights[l.cls]}`;
+      const at = byKey.get(key);
+      if (at) at.push(i);
+      else byKey.set(key, [i]);
+    });
+    const out: (ClassLaunch | null)[] = launches.slice();
+    for (const positions of byKey.values()) {
+      const classes = positions.map(i => launches[i].cls);
+      const doubled = classes
+        .filter(isDoubled)
+        .sort((a, b) => LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] || a - b);
+      if (doubled.length === 0) continue;
+      // Launch order, so the doubled ones that still miss the window are the last of the first `doubled.length`.
+      const late = positions.slice(0, doubled.length).filter(i => launches[i].launchAt > window + LAYOUT_TOL).length;
+      const demoted: (number | null)[] = [];
+      for (let n = 0; n < late; n++) {
+        const { from, to } = demote([...new Set(doubled)]);
+        doubled.splice(doubled.indexOf(from), 1);
+        demoted.push(to);
+      }
+      const assigned = [...doubled, ...demoted, ...classes.filter(c => !isDoubled(c))];
+      positions.forEach((i, n) => {
+        const cls = assigned[n];
+        out[i] = cls === null ? null : { cls, launchAt: launches[i].launchAt };
+      });
+    }
+    return out.filter((l): l is ClassLaunch => l !== null);
   };
 
   // The slot columns and the group totals are tied by the class rows, so after rounding they agree; were they
@@ -550,6 +672,7 @@ export function layOutPlan(
   const ctx: SlotContext | null = day && {
     classSeconds: layout.classSeconds,
     classNights: layout.classNights,
+    doubled: layout.classVariant.map(v => v !== 'normal'),
     day,
     solve,
     drop,
@@ -558,15 +681,17 @@ export function layOutPlan(
   for (let k = 0; k < model.slots && ctx !== null; k++) {
     let want = demand[k];
     for (;;) {
-      const { launches, placed } = layOutSlot(want, ctx);
+      const launches = settle(layOutSlot(want, ctx).launches);
       if (verify(timedOf(launches), sleep, window) === null) {
         bySlot.push(launches);
         break;
       }
       stats.verifierRetries++;
+      const placed = new Array<number>(layout.classes).fill(0);
+      for (const l of launches) placed[l.cls]++;
       const present = placed.flatMap((n, c) => (n > 0 ? [c] : []));
       if (present.length === 0) throw new Error(`layout: slot ${k} fails verification with nothing left in it`);
-      want = placed.slice();
+      want = placed;
       want[drop(present)]--;
     }
   }

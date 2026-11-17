@@ -51,8 +51,9 @@ export interface PlanProblem {
   // Seconds of a 2x mission capacity event left, as a window starting at the plan's t = 0: a prefix, never an
   // interval starting later. Absent or 0 means today's problem: no option may fly doubled, so one that carries a
   // doubled `variant` is dropped, and the matrix and the result are what they were (SPEC.md section 11). The app
-  // sets it from the player's "time left" (`optimizeFull`, via `../capacity.ts`). Not yet combined with a sleep
-  // window: `normalizeProblem` throws on a problem carrying both.
+  // sets it from the player's "time left" (`optimizeFull`, via `../capacity.ts`). With a sleep window as well, the
+  // window is wall-clock seconds from wake-up on day 0, nights included, and a doubled launch that the layout
+  // cannot start inside it is flown at 1x instead (SPEC.md section 13).
   readonly eventWindowSeconds?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
@@ -110,20 +111,10 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
     // Left absent when absent, so a problem without a sleep window normalizes to exactly what it did before.
     ...(problem.nightsPerSlot === undefined ? {} : { nightsPerSlot: wholeCapacityOf(problem.nightsPerSlot) }),
     ...(problem.sleep === undefined ? {} : { sleep: sleepWindowOf(problem.sleep) }),
-    ...(problem.eventWindowSeconds === undefined ? {} : { eventWindowSeconds: eventWindowOf(problem) }),
+    // The window is a budget like any other. With a sleep window as well its rows are a relaxation and the
+    // layout makes every plan true (SPEC.md section 13).
+    ...(problem.eventWindowSeconds === undefined ? {} : { eventWindowSeconds: capacityOf(problem.eventWindowSeconds) }),
   };
-}
-
-// The window is a budget and follows the rule above. What it cannot yet do is share a problem with nights: its
-// rows are exact only while a slot's launches go up back to back (SPEC.md section 11), and with a sleep window
-// they wait for wake-up, so the rows would over-promise and the layout has no way to order or demote doubled
-// launches. Refused rather than solved wrong.
-function eventWindowOf(problem: PlanProblem): number {
-  const window = capacityOf(problem.eventWindowSeconds!);
-  if (window > 0 && (problem.sleep !== undefined || wholeCapacityOf(problem.nightsPerSlot ?? 0) > 0)) {
-    throw new Error('event window with sleep is not supported yet');
-  }
-  return window;
 }
 
 // The horizon is a budget and follows the rule above. The sleep window is not one: no reading of a malformed
@@ -178,6 +169,10 @@ export interface LayoutStats {
   marginResolves: number;
   // Slot layouts the verifier rejected, each followed by a drop and a re-lay.
   verifierRetries: number;
+  // Doubled launches the layout could not start inside the 2x window, flown at 1x as their normal twin instead
+  // (SPEC.md section 13); not counted in `launchesTrimmed`, since they still fly. Present only when the problem
+  // also carries an event window, so a sleep-only result is the one it always was.
+  launchesDemoted?: number;
 }
 
 export interface PlanResult {

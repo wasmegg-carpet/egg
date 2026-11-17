@@ -71,3 +71,11 @@ export function fitCoefficient(seconds: number, nights: number, wakingSeconds: n
   const y = (q + 1) * x;
   return Math.abs(y - Math.round(y)) <= FIT_INTEGER_TOL ? x : Math.floor(y) / q;
 }
+
+// The latest moment at or before `t` (seconds from wake-up on day 0) at which the player is awake: `t` itself
+// when it falls in a waking window, the bedtime before it when it falls in a night. Every launch happens while
+// awake, so a launch at or before `t` is at or before this. See SPEC.md section 13.
+export function lastWakingInstant(t: number, wakingSeconds: number): number {
+  const day = Math.floor(t / DAY_SECONDS);
+  return day * DAY_SECONDS + Math.min(t - day * DAY_SECONDS, wakingSeconds);
+}

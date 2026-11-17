@@ -1,7 +1,7 @@
 // The mixed-integer program handed to HiGHS: the continuous per-target scale
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
-import { UNBOUNDED_PER_SLOT, boundsFollowFromRows, maxLaunches, type Model } from './model';
+import { UNBOUNDED_PER_SLOT, blockSeconds, boundsFollowFromRows, maxLaunches, type Model } from './model';
 import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
 import type { CapacityVariant } from '../types';
@@ -57,12 +57,13 @@ function durationClasses(
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
     // And in whole nights, like the night row (SPEC.md section 9).
     const byNights = grp.nights > 0 ? Math.floor(model.nightsPerSlot / grp.nights) : UNBOUNDED_PER_SLOT;
-    // And by the window rows (SPEC.md section 11).
+    // And by the window rows, in the wall-clock seconds they charge (SPEC.md sections 11 and 13).
+    const block = blockSeconds(grp.timeSeconds, grp.nights, model.day);
     const byWindow =
       grp.variant === 'overhang'
         ? 1
-        : grp.variant === 'event' && grp.timeSeconds > 0
-          ? maxLaunches(model.eventWindowSeconds, grp.timeSeconds)
+        : grp.variant === 'event' && block > 0
+          ? maxLaunches(model.eventWindowBudget, block)
           : UNBOUNDED_PER_SLOT;
     if (boundsFollowFromRows(grp, model.timeCapacitySeconds, model.nightsPerSlot)) {
       let bySeconds = shared.get(grp.timeSeconds);
@@ -323,17 +324,21 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.end(-INF, model.nightsPerSlot);
   }
 
-  // The 2x capacity event window, two rows per slot: a slot's `event` launches total at most the window, and it
-  // holds at most one `overhang`. Exact together, not a relaxation, while launches go up back to back (SPEC.md
-  // section 11). Raw seconds, for the slot row's reason. Without a window no class is doubled, both rows have no
-  // entries, and `Rows.end` drops them: the model is today's exactly. One window shared by every slot, so slots
-  // stay interchangeable and `order_k` remains a pure symmetry break.
+  // The 2x capacity event window, two rows per slot: a slot's `event` launches hold it for at most the window, and
+  // it holds at most one `overhang`. Exact together, not a relaxation, while launches go up back to back (SPEC.md
+  // section 11). With a sleep window an `event` launch is charged its wall-clock block, nights included, against
+  // the window's last waking instant: a valid inequality, and a relaxation the layout makes true (section 13).
+  // Raw seconds, for the slot row's reason. Without a window no class is doubled, both rows have no entries, and
+  // `Rows.end` drops them: the model is today's exactly. One window shared by every slot, so slots stay
+  // interchangeable and `order_k` remains a pure symmetry break.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`window_k${k}`);
     for (let c = 0; c < layout.classes; c++) {
-      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classSeconds[c]);
+      if (layout.classVariant[c] === 'event') {
+        rows.add(nCol(layout, c, k), blockSeconds(layout.classSeconds[c], layout.classNights[c], model.day));
+      }
     }
-    rows.end(-INF, model.eventWindowSeconds);
+    rows.end(-INF, model.eventWindowBudget);
   }
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`overhang_k${k}`);
