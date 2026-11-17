@@ -216,7 +216,7 @@ missing. Four things downstream read the plan differently because of it:
   after a ship has landed.
 - _The timeline._ Each `SlotSummary` carries its calendar's launches, naming
   their `choiceHistory` entry by index (`finalizeSolutions` follows the entries
-  when it sorts them), with `launchAt` and `doubled`. `planTimeline`
+  when it sorts them), and when each goes up. `planTimeline`
   (`optimizer-views.ts`) is the per-slot timeline every plan card shows, with day
   headings on a sleep-aware plan and a repeating routine of days shown once.
 - _The launch list._ A choice carries `nights`, and the card's totals

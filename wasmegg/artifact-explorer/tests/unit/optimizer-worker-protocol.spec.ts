@@ -114,15 +114,15 @@ describe('optimizer worker protocol', () => {
     expect(got.choiceHistory.map(c => c.variant)).toEqual(['overhang', 'normal']);
   });
 
-  // The timeline names its entries by index, so the wire carries three numbers a launch and no second ship.
+  // The timeline names its entries by index, so the wire carries two numbers a launch and no second ship.
   it('carries each slot’s launches as indices into choiceHistory', () => {
     const launches = [
-      { choice: 1, launchAt: 0, doubled: true },
-      { choice: 0, launchAt: 5678, doubled: false },
+      { choice: 1, launchAt: 0 },
+      { choice: 0, launchAt: 5678 },
     ];
     const solution = makeSolution({
       choiceHistory: [makeChoice(), makeChoice()],
-      slots: [{ loadSeconds: 11356, rawLoadSeconds: 11356, missionCount: 2, launches }],
+      slots: [{ loadSeconds: 11356, rawLoadSeconds: 11356, launches }],
     });
     const [got] = solutionsFromWire(structuredClone(solutionsToWire([solution])));
     expect(got.slots?.[0].launches).toEqual(launches);

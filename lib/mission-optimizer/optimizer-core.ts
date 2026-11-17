@@ -68,8 +68,8 @@ interface Assembly {
 // was accepted on: the MILP's own slot columns, laid out (`solver/SPEC.md` section 12). A slot's load is where
 // its last block ends — with a sleep window, the moment its last ship is back and the player is awake to collect
 // it; without one, the sum of its launches.
-// Each launch keeps its place and its doubling, and names the `choiceHistory` entry it flies by index: `choiceOf`
-// maps an option index to that entry.
+// Each launch keeps its place and names the `choiceHistory` entry it flies by index: `choiceOf` maps an option
+// index to that entry.
 export function slotSummariesOfCalendar(
   options: LaunchOption[],
   calendar: CalendarLaunch[][],
@@ -82,13 +82,12 @@ export function slotSummariesOfCalendar(
     return {
       loadSeconds: last ? last.launchAt + last.wakingSeconds + last.nights * sleepSeconds : 0,
       rawLoadSeconds: launches.reduce((total, launch) => total + options[launch.option].rawTime, 0),
-      missionCount: launches.length,
       launches: launches.map(launch => {
         const choice = choiceOf.get(launch.option);
         // The verifier holds the calendar to the allocation count for count, so this is a broken seam.
         if (choice === undefined)
           throw new Error(`optimizer: the calendar flies option ${launch.option}, never chosen`);
-        return { choice, launchAt: launch.launchAt, doubled: launch.doubled };
+        return { choice, launchAt: launch.launchAt };
       }),
     };
   });

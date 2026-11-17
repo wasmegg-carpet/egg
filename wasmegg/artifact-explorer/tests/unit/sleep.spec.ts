@@ -205,7 +205,7 @@ describe('optimizeFull with a sleep window', () => {
     // Each slot's calendar ends when the player wakes on the last morning, which is the horizon.
     expect(plan.slots).toHaveLength(3);
     for (const slot of plan.slots!) {
-      expect(slot.missionCount).toBe(3 * 17);
+      expect(slot.launches).toHaveLength(3 * 17);
       expect(slot.loadSeconds).toBe(3 * DAY);
       expect(slot.rawLoadSeconds).toBe(3 * 17 * HOUR);
     }

@@ -237,8 +237,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
       divided = true;
     }
     const choice = solution.choiceHistory[launch.choice];
-    const key = `${choice.ship.shipType}|${choice.ship.durationType}|${choice.targetAfxId}|${choice.nights ?? 0}|${launch.doubled}`;
-    tokens.push({ kind: 'launch', ...launch, key });
+    tokens.push({ kind: 'launch', ...launch, key: lineKey(choice, true), doubled: isDoubled(choice) });
   }
   if (!divided) tokens.push({ kind: 'window-end' });
 

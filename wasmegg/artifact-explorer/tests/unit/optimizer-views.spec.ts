@@ -44,11 +44,11 @@ function choice(
   };
 }
 
-// One slot's launches as `[choice, launchAt, doubled]`.
-const slot = (...launches: [number, number, boolean?][]) => {
-  const list: SlotLaunch[] = launches.map(([c, launchAt, doubled]) => ({ choice: c, launchAt, doubled: !!doubled }));
+// One slot's launches as `[choice, launchAt]`.
+const slot = (...launches: [number, number][]) => {
+  const list: SlotLaunch[] = launches.map(([c, launchAt]) => ({ choice: c, launchAt }));
   const last = list[list.length - 1];
-  return { loadSeconds: last ? last.launchAt + H : 0, rawLoadSeconds: 0, missionCount: list.length, launches: list };
+  return { loadSeconds: last ? last.launchAt + H : 0, rawLoadSeconds: 0, launches: list };
 };
 
 const launchRows = (rows: TimelineRow[]) => rows.filter((r): r is TimelineLaunchRow => r.kind === 'launch');
@@ -173,7 +173,7 @@ describe('planTimeline', () => {
         choice(Ship.CHICKEN_ONE, 3, { variant: 'event' }),
         choice(Ship.CHICKEN_ONE, 2, { variant: 'normal' }),
       ],
-      slots: [slot([0, 0, true], [0, H, true], [0, 2 * H, true], [1, 3 * H], [1, 4 * H]), slot()],
+      slots: [slot([0, 0], [0, H], [0, 2 * H], [1, 3 * H], [1, 4 * H]), slot()],
     });
     const timeline = planTimeline(solution);
     expect(timeline.eventWindowSeconds).toBe(2 * H);
@@ -184,7 +184,7 @@ describe('planTimeline', () => {
     const inside = makeSolution({
       eventWindowSeconds: 10 * H,
       choiceHistory: [choice(Ship.CHICKEN_ONE, 2, { variant: 'event' })],
-      slots: [slot([0, 0, true], [0, H, true])],
+      slots: [slot([0, 0], [0, H])],
     });
     expect(shape(planTimeline(inside).slots[0].rows)).toEqual(['2x@0 2x', `ends ${10 * H}`]);
   });
@@ -198,18 +198,20 @@ describe('planTimeline', () => {
         choice(Ship.CHICKEN_ONE, 1, { variant: 'overhang' }),
         choice(Ship.CHICKEN_ONE, 1, { variant: 'normal' }),
       ],
-      slots: [slot([0, 0, true], [0, H, true], [1, 2 * H, true], [2, 9 * H])],
+      slots: [slot([0, 0], [0, H], [1, 2 * H], [2, 9 * H])],
     });
     expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['3x@0 2x', `ends ${5 * H}`, `1x@${9 * H}`]);
     expectCountsAgree(solution);
   });
 
-  it('splits a doubled run from a 1x run of the same entry', () => {
-    // The calendar says per launch whether it flew doubled; a run never mixes the two.
+  it('splits a doubled run from a 1x run of the same mission', () => {
     const solution = makeSolution({
       eventWindowSeconds: 5 * H,
-      choiceHistory: [choice(Ship.CHICKEN_ONE, 3, { variant: 'event' })],
-      slots: [slot([0, 0, true], [0, H, true], [0, 2 * H, false])],
+      choiceHistory: [
+        choice(Ship.CHICKEN_ONE, 2, { variant: 'event' }),
+        choice(Ship.CHICKEN_ONE, 1, { variant: 'normal' }),
+      ],
+      slots: [slot([0, 0], [0, H], [1, 2 * H])],
     });
     expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['2x@0 2x', `1x@${2 * H}`, `ends ${5 * H}`]);
   });
@@ -276,7 +278,7 @@ describe('planTimeline', () => {
         choice(Ship.CHICKEN_ONE, 2, { nights: 0, variant: 'event' }),
         choice(Ship.CHICKEN_ONE, 2, { nights: 0 }),
       ],
-      slots: [slot([0, 0, true], [0, H, true], [1, DAY], [1, DAY + H])],
+      slots: [slot([0, 0], [0, H], [1, DAY], [1, DAY + H])],
     });
     expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
       'day 0-0',
@@ -338,7 +340,6 @@ describe('the timeline of a solved plan', () => {
     const totalLaunches = launchTotals(solution).reduce((n, line) => n + line.numShipsLaunched, 0);
     const slotLaunches = solution.slots!.reduce((n, s) => n + s.launches.length, 0);
     expect(slotLaunches).toBe(totalLaunches);
-    for (const s of solution.slots!) expect(s.launches.length).toBe(s.missionCount);
   };
 
   it('gives the card one row per target it was solved for', async () => {
@@ -370,11 +371,9 @@ describe('the timeline of a solved plan', () => {
     const solution = await solve({ eventWindowSeconds: W }, DAY);
     consistent(solution);
     const launches = solution.slots!.flatMap(s => s.launches);
-    expect(launches.some(l => l.doubled)).toBe(true);
-    for (const l of launches) {
-      if (l.doubled) expect(l.launchAt).toBeLessThanOrEqual(W);
-      expect(l.doubled).toBe(isDoubled(solution.choiceHistory[l.choice]));
-    }
+    const doubled = launches.filter(l => isDoubled(solution.choiceHistory[l.choice]));
+    expect(doubled.length).toBeGreaterThan(0);
+    for (const l of doubled) expect(l.launchAt).toBeLessThanOrEqual(W);
     for (const s of planTimeline(solution).slots) expect(s.rows.filter(r => r.kind === 'window-end')).toHaveLength(1);
   });
 });

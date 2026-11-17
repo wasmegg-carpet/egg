@@ -81,16 +81,14 @@ export interface LaunchSolution {
 }
 
 // One launch on a slot's timeline, as the solver's verified calendar placed it. It names its `choiceHistory` entry
-// by index rather than carrying the ship, so the timeline costs the worker boundary three numbers a launch and
-// cannot disagree with the totals about what was flown.
+// by index rather than carrying the ship, so the timeline costs the worker boundary two numbers a launch and
+// cannot disagree with the totals about what was flown, its capacity included: the solver's verifier holds a
+// doubled launch to a doubled variant and a 1x launch to a `normal` one.
 export interface SlotLaunch {
   // Index into `OptimizerSolution.choiceHistory`.
   choice: integer;
   // Seconds from the start of the plan (wake-up on day 0, with a sleep window).
   launchAt: number;
-  // Whether it flies at 2x capacity: launched inside the event window as one of the doubled variants. Always
-  // false on a plan made without a window.
-  doubled: boolean;
 }
 
 // The three slots run concurrently, so the plan's wall-clock is the busiest
@@ -99,8 +97,7 @@ export interface SlotLaunch {
 export interface SlotSummary {
   loadSeconds: number;
   rawLoadSeconds: number;
-  missionCount: integer;
-  // The slot's launches in launch order; `missionCount` of them.
+  // The slot's launches in launch order.
   launches: SlotLaunch[];
 }
 
