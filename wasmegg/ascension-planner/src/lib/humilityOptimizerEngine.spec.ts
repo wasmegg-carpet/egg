@@ -72,7 +72,10 @@ describe("the panel's stored settings", () => {
   });
 
   it('loads a visit saved before the schedule settings existed with them off', () => {
-    const { sleepHours: _s, doubleCapacityEnabled: _e, doubleCapacityRemaining: _r, ...older } = asked({});
+    const older: Partial<OptimizerVisitSettings> = asked({});
+    delete older.sleepHours;
+    delete older.doubleCapacityEnabled;
+    delete older.doubleCapacityRemaining;
     storage[STORED] = JSON.stringify({ version: 1, template: older, visits: { [visit.visitId]: older } });
     const settings = useHumilityOptimizerStore().settingsFor(visit);
     expect(settings).toMatchObject({ sleepHours: 0, doubleCapacityEnabled: false, doubleCapacityRemaining: '48h' });

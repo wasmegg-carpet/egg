@@ -61,12 +61,23 @@ const shape = (rows: TimelineRow[]) =>
     return `ends ${r.at}`;
   });
 
-// For each entry, what the timeline counts of it, against the entry's own count.
-function timelineCounts(solution: OptimizerSolution): number[] {
-  const counts = solution.choiceHistory.map(() => 0);
+// What the timeline counts of each line of the totals (mission, target, nights, capacity), next to what the
+// totals count: the card shows both, and they must agree.
+const lineOf = (c: { ship: MissionType; targetAfxId: number; nights?: number }, doubled: boolean) =>
+  `${c.ship.shipType}|${c.ship.durationType}|${c.targetAfxId}|${c.nights ?? 0}|${doubled}`;
+function counts(solution: OptimizerSolution) {
+  const timeline = new Map<string, number>();
   for (const s of planTimeline(solution).slots)
-    for (const row of launchRows(s.rows)) counts[solution.choiceHistory.indexOf(row.choice)] += row.count * row.repeat;
-  return counts;
+    for (const row of launchRows(s.rows)) {
+      const key = lineOf(row.choice, row.doubled);
+      timeline.set(key, (timeline.get(key) ?? 0) + row.count * row.repeat);
+    }
+  const totals = new Map(launchTotals(solution).map(line => [lineOf(line, line.doubled), line.numShipsLaunched]));
+  return { timeline, totals };
+}
+function expectCountsAgree(solution: OptimizerSolution) {
+  const { timeline, totals } = counts(solution);
+  expect(timeline).toEqual(totals);
 }
 
 describe('launchTotals', () => {
@@ -162,6 +173,21 @@ describe('planTimeline', () => {
     expect(shape(planTimeline(inside).slots[0].rows)).toEqual(['2x@0 2x', `ends ${10 * H}`]);
   });
 
+  // `event` and `overhang` exist for the solver; the player flies the last doubled launch like any other.
+  it("runs a doubled launch's event and overhang variants together, as the totals do", () => {
+    const solution = makeSolution({
+      eventWindowSeconds: 5 * H,
+      choiceHistory: [
+        choice(Ship.CHICKEN_ONE, 2, { variant: 'event' }),
+        choice(Ship.CHICKEN_ONE, 1, { variant: 'overhang' }),
+        choice(Ship.CHICKEN_ONE, 1, { variant: 'normal' }),
+      ],
+      slots: [slot([0, 0, true], [0, H, true], [1, 2 * H, true], [2, 9 * H])],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['3x@0 2x', `ends ${5 * H}`, `1x@${9 * H}`]);
+    expectCountsAgree(solution);
+  });
+
   it('splits a doubled run from a 1x run of the same entry', () => {
     // The calendar says per launch whether it flew doubled; a run never mixes the two.
     const solution = makeSolution({
@@ -198,7 +224,7 @@ describe('planTimeline', () => {
       `2x@${5 * DAY}`,
       `1x@${5 * DAY + 15 * H} night`,
     ]);
-    expect(timelineCounts(solution)).toEqual([9, 4]);
+    expectCountsAgree(solution);
   });
 
   // A ship that takes more than a day to come round gives a plan a rhythm of several days rather than one.
@@ -223,7 +249,7 @@ describe('planTimeline', () => {
       'day 12-12',
       `1x@${12 * DAY}`,
     ]);
-    expect(timelineCounts(solution)).toEqual([9, 4]);
+    expectCountsAgree(solution);
   });
 
   it('puts a divider that falls overnight between the two days, and folds no day across it', () => {
@@ -292,7 +318,7 @@ describe('the timeline of a solved plan', () => {
 
   const consistent = (solution: OptimizerSolution) => {
     expect(solution.slots?.length).toBe(3);
-    expect(timelineCounts(solution)).toEqual(solution.choiceHistory.map(c => c.numShipsLaunched));
+    expectCountsAgree(solution);
     const totalLaunches = launchTotals(solution).reduce((n, line) => n + line.numShipsLaunched, 0);
     const slotLaunches = solution.slots!.reduce((n, s) => n + s.launches.length, 0);
     expect(slotLaunches).toBe(totalLaunches);

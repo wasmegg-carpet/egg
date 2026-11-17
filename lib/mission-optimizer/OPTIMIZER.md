@@ -182,8 +182,12 @@ large it is.
 
 ## Sleep
 
-The sidebar's Sleep setting (`missionFilters.sleepHours`, 0 by default) is the
-hours a day the player cannot launch. Ships still fly and land through the
+The Sleep setting (`sleepHours`, 0 by default) is the hours a day the player
+cannot launch. Both apps edit it, and the event's two fields below, through one
+control (`ui/components/mission-optimizer/OptimizerScheduleSettings.vue`), and
+`schedule-settings.ts` holds every rule about what a stored or typed value means
+and turns the three into `OptimizeArgs`, with its bounds read from `sleep.ts` and
+`capacity.ts` rather than restated. Ships still fly and land through the
 night; one that lands while the player is asleep waits. The plan starts at
 wake-up, every day is the same, and all three slots share the schedule. At 0
 the request, the problem and the plan are what they were before the setting
@@ -202,7 +206,7 @@ overnight alike.
 **Only a laid-out plan reaches the card.** The solver returns a calendar with
 every plan, sleep window or not, and refuses to return one that fails its own
 verifier (`solver/SPEC.md` section 12); `optimizeFull` throws if the calendar is
-missing. Three things downstream read the plan differently because of it:
+missing. Four things downstream read the plan differently because of it:
 
 - _Slots._ `slots`, `timeUnitsUsed` and `runningTimeSeconds` are read off the
   calendar, the arrangement the plan was accepted on, for every plan; nothing
@@ -210,9 +214,14 @@ missing. Three things downstream read the plan differently because of it:
   where the last-finishing slot's calendar ends, nights included. The card's idle figure is still the horizon minus the
   busiest slot's real flight time, so it now also counts the rest of a night
   after a ship has landed.
-- _The launch list._ A choice carries `nights`, and the card shows the launches
-  flown while awake and the ones flown overnight as two lists. The same mission
-  can appear in both.
+- _The timeline._ Each `SlotSummary` carries its calendar's launches, naming
+  their `choiceHistory` entry by index (`finalizeSolutions` follows the entries
+  when it sorts them), with `launchAt` and `doubled`. `planTimeline`
+  (`optimizer-views.ts`) is the per-slot timeline every plan card shows, with day
+  headings on a sleep-aware plan and a repeating routine of days shown once.
+- _The launch list._ A choice carries `nights`, and the card's totals
+  (`launchTotals`) show the launches flown while awake and the ones flown
+  overnight as two lists. The same mission can appear in both.
 - _The export._ The humility missions file folds a mission's daytime and
   overnight launches into one line, as it folds any two entries of one mission.
   `makespanSeconds` is the wall-clock makespan above, `effort` is the cadence
@@ -230,8 +239,10 @@ Egg, Inc. periodically doubles every ship's capacity for 48 hours, and a
 mission is doubled when it _launches_ inside the window, whenever it lands.
 `OptimizeArgs.eventWindowSeconds` is how much of the window is left, starting
 now; the tool never looks it up. Absent or 0, the request, the problem and the
-solution are what they were before the field existed. Nothing in the app sets
-it yet.
+solution are what they were before the field existed. Both apps set it from the
+player's "time left" (`doubleCapacityEnabled` / `doubleCapacityRemaining`,
+`schedule-settings.ts`); with sleep on, the plan's start is taken to be the
+start of a waking day as well.
 
 **`optimizeFull` owns the translation**, as it does for sleep. It clamps the
 window to `MAX_DOUBLE_CAPACITY_SECONDS` (`capacity.ts`: no more than 48 hours
@@ -246,7 +257,13 @@ The variants are made in the worker, like the sleep ones.
 solved against a window, and each `choiceHistory` entry then carries the
 `variant` it flew: `event` and `overhang` are doubled, and one mission can appear
 once per variant. The calendar the plan was accepted on says per launch whether
-it is doubled and when it goes up; the card does not show it yet.
+it is doubled and when it goes up, and the timeline shows both, with a divider
+where the window closes. Every view folds `event` and `overhang`, which the
+player flies alike, and keeps a doubled launch apart from the same mission at
+1x: the totals and the legendary sources badge it, and the humility missions
+file writes it on its own line marked `doubled: true` (absent otherwise, so a
+file without an event is unchanged). The ascension planner carries the marker
+onto the staged launch's entry; it does not model what a mission brings home.
 
 **With sleep.** Both may be set at once. The window is then wall-clock time
 from now, nights included, and the player is taken to be at the start of a

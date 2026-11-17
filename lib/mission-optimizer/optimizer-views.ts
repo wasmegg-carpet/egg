@@ -132,7 +132,8 @@ export function legendaryCraftProbabilityOf(solution: OptimizerSolution, rootId:
 // The per-slot timeline
 // ---------------------------------------------------------------------------
 
-// A run of identical launches flown back to back: `count` of `choice`, the first going up at `launchAt`, in
+// A run of launches the player cannot tell apart, flown back to back: `count` of `choice`'s mission (the first
+// entry of the run, where two entries fly the same one), the first going up at `launchAt`, in
 // seconds from the start of the plan. Inside a block of identical days, or a routine of several days flown over
 // and over (`repeat` > 1), the run is flown `repeat` times in all, and `launchAt` is the first time's.
 export interface TimelineLaunchRow {
@@ -192,10 +193,15 @@ export interface PlanTimeline {
   eventWindowSeconds: number;
 }
 
-type Token = { kind: 'launch'; choice: number; launchAt: number; doubled: boolean } | { kind: 'window-end' };
+// `key` is what the player can tell apart: the mission, its target, its nights and its capacity. Two entries of
+// `choiceHistory` can share one, as a doubled launch's `event` and `overhang` variants do.
+type Token =
+  | { kind: 'launch'; choice: number; key: string; launchAt: number; doubled: boolean }
+  | { kind: 'window-end' };
 
 interface Run {
   choice: number;
+  key: string;
   doubled: boolean;
   count: number;
   launchAt: number;
@@ -214,8 +220,8 @@ interface DayGroup {
 // identical consecutive launches, day headings on a sleep-aware plan, and a divider where the 2x capacity event
 // ends. Days flown exactly like the ones before them fold away: a run of identical days into one "days n to m"
 // block, and a rhythm of several days into one routine shown once, which is what keeps a month-long plan to a
-// handful of lines. Every launch is counted exactly once: for each `choiceHistory` entry, its rows'
-// `count * repeat` sum to its `numShipsLaunched`.
+// handful of lines. Every launch is counted exactly once: for each line of `launchTotals`, the rows flying its
+// mission, nights and capacity have `count * repeat` summing to its `numShipsLaunched`.
 export function planTimeline(solution: OptimizerSolution): PlanTimeline {
   const byDay = (solution.sleepSeconds ?? 0) > 0;
   const window = solution.eventWindowSeconds ?? 0;
@@ -237,7 +243,9 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
       tokens.push({ kind: 'window-end' });
       divided = true;
     }
-    tokens.push({ kind: 'launch', ...launch });
+    const choice = solution.choiceHistory[launch.choice];
+    const key = `${missionKey(choice.ship, choice.targetAfxId)}|${choice.nights ?? 0}|${launch.doubled}`;
+    tokens.push({ kind: 'launch', ...launch, key });
   }
   if (!divided) tokens.push({ kind: 'window-end' });
 
@@ -338,7 +346,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
   return { rows, launchCount: launches.length, endsAt: slot.loadSeconds };
 }
 
-// Consecutive launches of one entry at one capacity, as one run; the window's end breaks a run.
+// Consecutive launches the player cannot tell apart, as one run; the window's end breaks a run.
 function runsOf(tokens: Token[]): Segment[] {
   const runs: Segment[] = [];
   for (const token of tokens) {
@@ -347,12 +355,13 @@ function runsOf(tokens: Token[]): Segment[] {
       continue;
     }
     const last = runs[runs.length - 1];
-    if (last && last !== 'window-end' && last.choice === token.choice && last.doubled === token.doubled) last.count++;
-    else runs.push({ choice: token.choice, doubled: token.doubled, count: 1, launchAt: token.launchAt });
+    if (last && last !== 'window-end' && last.key === token.key) last.count++;
+    else
+      runs.push({ choice: token.choice, key: token.key, doubled: token.doubled, count: 1, launchAt: token.launchAt });
   }
   return runs;
 }
 
 // What a day flies, without when: two days with the same signature are the same routine.
 const signatureOf = (runs: Segment[]) =>
-  runs.map(run => (run === 'window-end' ? '|' : `${run.choice}:${run.doubled}:${run.count}`)).join(',');
+  runs.map(run => (run === 'window-end' ? '|' : `${run.key}:${run.count}`)).join(',');
