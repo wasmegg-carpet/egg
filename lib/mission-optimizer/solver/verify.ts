@@ -1,6 +1,7 @@
-// The calendar verifier: checks one slot's timeline against the sleep rule directly. It reads launch times and
-// block lengths and nothing else, and knows nothing of how the layout chose them, so a layout bug cannot agree
-// with itself here. The arena keeps its own copy (`tests/arena/calendar.ts`). See SPEC.md section 10.
+// The calendar verifier: checks one slot's timeline against the sleep rule and the event window directly. It
+// reads launch times, block lengths and whether a launch is doubled, and nothing else, and knows nothing of how
+// the layout chose them, so a layout bug cannot agree with itself here. The arena keeps its own copy
+// (`tests/arena/calendar.ts`). See SPEC.md sections 10 and 12.
 
 import { DAY_SECONDS, type SleepWindow } from './types';
 
@@ -13,12 +14,20 @@ export interface TimedLaunch {
   launchAt: number;
   wakingSeconds: number;
   nights: number;
+  // Absent is false.
+  doubled?: boolean;
 }
 
 // The first rule the slot breaks, or null. The rule: every launch happens while the player is awake (its time
 // of day at most `W`), each launch waits for the one before it to finish its block (`wakingSeconds + nights *
-// S`, which covers the flight and the effort floor alike), and the last block ends inside the horizon.
-export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow): string | null {
+// S`, which covers the flight and the effort floor alike), the last block ends inside the horizon, and a
+// doubled launch goes up inside the event window (`launchAt` at most `eventWindowSeconds`; no window, no doubled
+// launch). A problem without a sleep window is checked as one with `sleepSeconds` 0 and its slot as the horizon.
+export function slotFault(
+  launches: readonly TimedLaunch[],
+  sleep: SleepWindow,
+  eventWindowSeconds = 0
+): string | null {
   const waking = DAY_SECONDS - sleep.sleepSeconds;
   let free = 0;
   for (let i = 0; i < launches.length; i++) {
@@ -36,6 +45,12 @@ export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow):
     const timeOfDay = launchAt - day * DAY_SECONDS;
     if (timeOfDay > waking + VERIFY_TOL_SECONDS) {
       return `launch ${i} at ${launchAt}s is ${timeOfDay}s into day ${day}, after bedtime at ${waking}s`;
+    }
+    if (launches[i].doubled) {
+      if (!(eventWindowSeconds > 0)) return `launch ${i} at ${launchAt}s is doubled with no 2x window`;
+      if (launchAt > eventWindowSeconds + VERIFY_TOL_SECONDS) {
+        return `launch ${i} at ${launchAt}s is doubled, but the 2x window closes at ${eventWindowSeconds}s`;
+      }
     }
     free = launchAt + wakingSeconds + nights * sleep.sleepSeconds;
   }

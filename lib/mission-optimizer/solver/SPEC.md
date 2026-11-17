@@ -471,8 +471,8 @@ reported as a plan. A problem that also carries `sleep` (`types.ts`:
 `sleepSeconds` `S` and `horizonSeconds` `H`, the horizon `timeCapacityPerSlot`
 was before it came to count waking seconds) gets three more things, and every
 plan it returns has been laid out on real days and verified. **Absent means
-today's problem**: no fit rows, no layout, no `calendar`, and the matrix and the
-result are the ones section 9 produced. `normalizeProblem` leaves the field
+today's problem**: no fit rows and no trim, the calendar is section 12's back to
+back one, and the matrix and the result are the ones section 9 produced. `normalizeProblem` leaves the field
 absent when absent, normalizes `H` like any other budget, and throws on an
 `S` outside `[0, 86400)`, since neither "no sleep" nor "no waking" is a safe
 reading of a malformed window.
@@ -576,8 +576,8 @@ from the trimmed counts. **Trimming is not monotone**: a relaxed problem can
 come back with a plan that trims worse than a tighter one's, and the arena's
 monotonicity checks see that.
 
-**The hard rule.** `emit` refuses to return a sleep-aware plan without a
-calendar, and `assertVerified` checks the calendar it does return: each launch
+**The hard rule.** `emit` refuses to return a plan without a calendar — any
+plan, since section 12 — and `assertVerified` checks the calendar it does return: each launch
 against the option it names (its `actualTime` and `nights`, not what the layout
 wrote down), each slot against `verify.ts`, and the launches per option against
 the allocation, exactly. A failure throws, as the solver's other internal
@@ -588,7 +588,7 @@ option index and id, `launchAt` (seconds from wake-up on day 0), waking seconds
 and nights. A group's launches are flown as its first member, as `emit`
 allocates them. `PlanResult.layoutStats`: launches trimmed (overnight ones
 counted apart), layout MILPs solved, margin re-solves, verifier retries.
-Diagnostics only.
+Diagnostics only, and present only with a sleep window.
 
 ## 11. The 2x capacity window
 
@@ -664,3 +664,36 @@ twin rather than dropped. None of that exists yet, so `normalizeProblem` throws
 on a problem carrying a positive `W` together with `sleep` or a positive
 `nightsPerSlot` ("event window with sleep is not supported yet") rather than
 returning a plan nothing has verified.
+
+## 12. One timeline for every plan
+
+Every plan `solveWith` returns carries `PlanResult.calendar`, sleep window or
+not, and `emit` runs `assertVerified` on every one. Without a sleep window the
+layout is exact and needs no search: the MILP's per-slot class columns are
+already an assignment the slot rows certified (section 6), so `layOutPlan` lays
+each slot's launches back to back from `t = 0` — `event` launches first, then
+the slot's one `overhang`, then the `normal` ones, class order within each —
+and `launchAt` is the prefix sum of the seconds before it. That order is section
+11's exactness argument written out, so a plan the window rows admit lays out
+with every doubled launch inside the window by construction. Nothing is trimmed,
+no layout MILP is built, and `layoutStats` is not reported.
+
+The verifier is the same one (`verify.ts`), handed `sleepSeconds` 0 and the slot
+as the horizon, under which its rules reduce to "back to back inside the slot".
+It gains one rule for the window: a launch marked `doubled` goes up at or
+before `W` (within `VERIFY_TOL_SECONDS`), and with no window there is no doubled
+launch. That one predicate is the whole window rule; the `event` / `overhang`
+split exists only to state it linearly in the MILP. `assertVerified` checks each
+launch's `doubled` against its option's variant, as it checks seconds and nights.
+A no-sleep slot the verifier rejects is a bug and throws, rather than being
+trimmed as a sleep-aware one is.
+
+A problem that states nights without a sleep window (section 9's relaxation
+alone, which the app never sends) gets the same back-to-back calendar in waking
+seconds: with no day, nothing times its nights, which ride along as data.
+
+This replaced a second packer. The calendar is the arrangement the plan was
+accepted on, so `optimizeFull` reads every plan's slot summaries off it; it used
+to repack a sleep-free plan's totals with its own exact packer (`packing.ts`,
+now gone), which could report a different arrangement from the one the MILP
+certified, and knew neither nights nor the window.

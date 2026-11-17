@@ -5,9 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildModel } from 'lib/mission-optimizer/solver/model';
 import { buildOaMilp, effectiveQs, layoutOf, scaleLps } from 'lib/mission-optimizer/solver/milp';
-import { DEFAULT_TUNING, solveWith } from 'lib/mission-optimizer/solver/solve';
+import { DEFAULT_TUNING, assertVerified, solveWith } from 'lib/mission-optimizer/solver/solve';
 import { loadHighs } from 'lib/mission-optimizer/solver/highs';
-import { normalizeProblem, type PlanProblem } from 'lib/mission-optimizer/solver/types';
+import { normalizeProblem, type PlanProblem, type PlanResult } from 'lib/mission-optimizer/solver/types';
+import { slotFault } from 'lib/mission-optimizer/solver/verify';
 import type { CapacityVariant, LaunchOption } from 'lib/mission-optimizer/types';
 import { craftDag, makeOpt } from './spec-helpers';
 
@@ -226,5 +227,120 @@ describe('the event window in the MILP', () => {
     expect(normalizeProblem(problemOf([], { eventWindowSeconds: -1 })).eventWindowSeconds).toBe(0);
     expect(normalizeProblem(problemOf([], { eventWindowSeconds: Infinity })).eventWindowSeconds).toBe(0);
     expect('eventWindowSeconds' in normalizeProblem(problemOf([]))).toBe(false);
+  });
+});
+
+// Per option, how often the calendar flies it.
+function flown(result: PlanResult): number[] {
+  const out = new Array<number>(result.allocation.length).fill(0);
+  for (const slot of result.calendar!) for (const l of slot) out[l.option]++;
+  return out;
+}
+
+describe('every plan comes with its calendar', () => {
+  it('without a sleep window: each slot back to back from t = 0, accounting for the allocation', async () => {
+    const solve = await loadHighs();
+    const problem = problemOf([makeOpt(1, 30, [['B', 1]]), makeOpt(2, 70, [['B', 3]])], { timeCapacityPerSlot: 100 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING);
+    expect(result.calendar).toHaveLength(3);
+    expect(result.layoutStats).toBeUndefined();
+    expect(flown(result)).toEqual(result.allocation);
+    expect(result.allocation.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    for (const slot of result.calendar!) {
+      let at = 0;
+      for (const l of slot) {
+        expect(l).toMatchObject({ launchAt: at, nights: 0, doubled: false });
+        expect(l.optionId).toBe(problem.options[l.option].id);
+        at += l.wakingSeconds;
+      }
+      expect(at).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('the empty plan has an empty calendar, one slot per slot', async () => {
+    const solve = await loadHighs();
+    const result = solveWith(problemOf([makeOpt(1, 30, [['B', 1]])], { targets: [] }), solve, DEFAULT_TUNING);
+    expect(result.allocation).toEqual([0]);
+    expect(result.calendar).toEqual([[], [], []]);
+  });
+});
+
+describe('planning through a 2x capacity window', () => {
+  it('flies doubled launches first and inside the window, at most one overhang a slot', async () => {
+    const solve = await loadHighs();
+    const window = 100;
+    const options = withDoubles(
+      [makeOpt(1, 30, [['B', 1]]), makeOpt(1, 45, [['B', 2]]), makeOpt(1, 400, [['B', 9]])],
+      window
+    );
+    const problem = problemOf(options, { eventWindowSeconds: window });
+    const result = solveWith(problem, solve, DEFAULT_TUNING);
+    expect(flown(result)).toEqual(result.allocation);
+    let doubledTotal = 0;
+    for (const slot of result.calendar!) {
+      const variants = slot.map(l => options[l.option].variant);
+      // Event, then overhang, then normal: the window closes at one cut in the list.
+      const rank = { event: 0, overhang: 1, normal: 2 } as const;
+      expect(variants.map(v => rank[v!])).toEqual(variants.map(v => rank[v!]).sort((a, b) => a - b));
+      expect(variants.filter(v => v === 'overhang').length).toBeLessThanOrEqual(1);
+      for (const l of slot) {
+        expect(l.doubled).toBe(options[l.option].variant !== 'normal');
+        if (l.doubled) expect(l.launchAt).toBeLessThanOrEqual(window);
+      }
+      expect(slotFault(slot, { sleepSeconds: 0, horizonSeconds: 1000 }, window)).toBeNull();
+      doubledTotal += slot.filter(l => l.doubled).length;
+    }
+    // Doubling costs nothing, so every slot fills its window.
+    expect(doubledTotal).toBeGreaterThanOrEqual(3);
+  });
+
+  it('is never worse off for a longer window', async () => {
+    const solve = await loadHighs();
+    const menu = [makeOpt(1, 30, [['B', 1]]), makeOpt(3, 200, [['B', 8]])];
+    let previous = -1;
+    for (const window of [0, 20, 30, 100, 400, 2000]) {
+      const result = solveWith(
+        problemOf(withDoubles(menu, window), { eventWindowSeconds: window, fuelCapacity: 40 }),
+        solve,
+        DEFAULT_TUNING,
+        { report: true }
+      );
+      const joint = result.reported!.jointProbability;
+      expect(joint).toBeGreaterThanOrEqual(previous);
+      previous = joint;
+    }
+  });
+});
+
+describe('the verifier holds doubled launches to the window', () => {
+  const day = { sleepSeconds: 0, horizonSeconds: 1000 };
+  const launch = (launchAt: number, doubled: boolean) => ({ launchAt, wakingSeconds: 50, nights: 0, doubled });
+
+  it('admits a doubled launch at or before the window, and at its very edge', () => {
+    expect(slotFault([launch(0, true), launch(50, true), launch(100, false)], day, 50)).toBeNull();
+  });
+
+  it('rejects a doubled launch past the window, and any doubled launch without one', () => {
+    expect(slotFault([launch(0, false), launch(50, true)], day, 49)).toMatch(/doubled, but the 2x window closes/);
+    expect(slotFault([launch(0, true)], day)).toMatch(/doubled with no 2x window/);
+    expect(slotFault([launch(0, true)], day, 0)).toMatch(/doubled with no 2x window/);
+  });
+
+  it('the solver refuses a window plan whose calendar breaks it, whoever produced it', async () => {
+    const solve = await loadHighs();
+    const options = withDoubles([makeOpt(1, 30, [['B', 1]])], 60);
+    const problem = problemOf(options, { eventWindowSeconds: 60, timeCapacityPerSlot: 300 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING);
+    const model = buildModel(problem);
+    expect(() => assertVerified(problem, model, result.allocation, result.calendar!)).not.toThrow();
+    // The same launches, the normal ones first: every doubled launch now goes up after the window.
+    const late = result.calendar!.map(slot => {
+      const reordered = [...slot.filter(l => !l.doubled), ...slot.filter(l => l.doubled)];
+      let at = 0;
+      return reordered.map(l => ({ ...l, launchAt: (at += l.wakingSeconds) - l.wakingSeconds }));
+    });
+    expect(() => assertVerified(problem, model, result.allocation, late)).toThrow(/2x window closes/);
+    const relabelled = result.calendar!.map(slot => slot.map(l => ({ ...l, doubled: false })));
+    expect(() => assertVerified(problem, model, result.allocation, relabelled)).toThrow(/as doubled=false/);
   });
 });

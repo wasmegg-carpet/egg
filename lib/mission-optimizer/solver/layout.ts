@@ -1,8 +1,10 @@
-// Laying a sleep-aware plan out on real days: per slot, which waking window each daytime launch is flown in
-// and when each overnight ship goes, as launch times the verifier then checks. What does not fit is trimmed,
-// one launch at a time, by the solver's own judge. See SPEC.md section 10.
+// Laying a plan out as each slot's timeline, the calendar every plan is returned with. With a sleep window that
+// is real work: per slot, which waking window each daytime launch is flown in and when each overnight ship goes,
+// as launch times the verifier then checks, and what does not fit is trimmed, one launch at a time, by the
+// solver's own judge (SPEC.md section 10). Without one it is exact and trivial: a slot's launches back to back,
+// doubled ones first (SPEC.md section 12).
 
-import type { LaunchOption } from '../types';
+import type { CapacityVariant, LaunchOption } from '../types';
 import type { DaySchedule } from './days';
 import { nCol, type Layout } from './milp';
 import type { Model } from './model';
@@ -413,6 +415,35 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext): { launches: Cl
   return { launches, placed: counts };
 }
 
+// What one slot's timeline is verified against. Without a sleep window: no sleep, and the slot itself as the
+// horizon, so the verifier's rules reduce to launches going up back to back inside the slot (SPEC.md section 12).
+export function timelineOf(model: Model): SleepWindow {
+  return model.day
+    ? { sleepSeconds: model.day.sleepSeconds, horizonSeconds: model.day.horizonSeconds }
+    : { sleepSeconds: 0, horizonSeconds: model.timeCapacitySeconds };
+}
+
+// Doubled launches first, `event` before the one `overhang`, so the window rows' exactness argument is the
+// launch order itself (SPEC.md section 11); class order within each.
+const LAUNCH_ORDER: Readonly<Record<CapacityVariant, number>> = { event: 0, overhang: 1, normal: 2 };
+
+// One slot without a sleep window: every launch back to back from t = 0. Exact, so nothing is trimmed and no
+// MILP is built; nights, on a problem stating them without a day, ride along untimed.
+function backToBack(demand: readonly number[], layout: Layout): ClassLaunch[] {
+  const order = demand
+    .flatMap((n, c) => (n > 0 ? [c] : []))
+    .sort((a, b) => LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] || a - b);
+  const launches: ClassLaunch[] = [];
+  let at = 0;
+  for (const c of order) {
+    for (let i = 0; i < demand[c]; i++) {
+      launches.push({ cls: c, launchAt: at });
+      at += layout.classSeconds[c];
+    }
+  }
+  return launches;
+}
+
 export interface PlanLayout {
   // Per group, the plan that was laid out: the solve's counts less every launch trimmed.
   counts: number[];
@@ -420,12 +451,17 @@ export interface PlanLayout {
   stats: LayoutStats;
 }
 
-export type SlotVerifier = (launches: readonly TimedLaunch[], sleep: SleepWindow) => string | null;
+export type SlotVerifier = (
+  launches: readonly TimedLaunch[],
+  sleep: SleepWindow,
+  eventWindowSeconds?: number
+) => string | null;
 
 // Lays the whole plan out slot by slot, from the MILP's own per-slot class columns, which are the packing it
 // certified. `judge` scores a vector of group counts (higher is better); every trim decrements the group,
-// within the classes allowed, whose loss it misses least. A slot the verifier rejects loses one more launch,
-// by the same rule, and is laid out again; an empty slot always verifies, so this ends.
+// within the classes allowed, whose loss it misses least. With a sleep window a slot the verifier rejects loses
+// one more launch, by the same rule, and is laid out again; an empty slot always verifies, so this ends. Without
+// one the layout is exact, and a slot it fails to verify is a bug, thrown rather than trimmed.
 export function layOutPlan(
   model: Model,
   layout: Layout,
@@ -437,8 +473,8 @@ export function layOutPlan(
   verify: SlotVerifier = slotFault
 ): PlanLayout {
   const day = model.day;
-  if (day === null) throw new Error('layout: the problem has no sleep window to lay out against');
-  const sleep: SleepWindow = { sleepSeconds: day.sleepSeconds, horizonSeconds: day.horizonSeconds };
+  const sleep = timelineOf(model);
+  const window = model.eventWindowSeconds;
   const current = counts.slice();
   const stats: LayoutStats = {
     launchesTrimmed: 0,
@@ -497,7 +533,21 @@ export function layOutPlan(
     for (let i = slotTotal; i < groupTotal; i++) drop([c]);
   }
 
-  const ctx: SlotContext = {
+  const timedOf = (launches: readonly ClassLaunch[]): TimedLaunch[] =>
+    launches.map(l => ({
+      launchAt: l.launchAt,
+      wakingSeconds: layout.classSeconds[l.cls],
+      nights: layout.classNights[l.cls],
+      doubled: layout.classVariant[l.cls] !== 'normal',
+    }));
+  const bySlot: ClassLaunch[][] = [];
+  for (let k = 0; k < model.slots && day === null; k++) {
+    const launches = backToBack(demand[k], layout);
+    const fault = verify(timedOf(launches), sleep, window);
+    if (fault !== null) throw new Error(`layout: slot ${k} laid back to back fails verification: ${fault}`);
+    bySlot.push(launches);
+  }
+  const ctx: SlotContext | null = day && {
     classSeconds: layout.classSeconds,
     classNights: layout.classNights,
     day,
@@ -505,17 +555,11 @@ export function layOutPlan(
     drop,
     stats,
   };
-  const bySlot: ClassLaunch[][] = [];
-  for (let k = 0; k < model.slots; k++) {
+  for (let k = 0; k < model.slots && ctx !== null; k++) {
     let want = demand[k];
     for (;;) {
       const { launches, placed } = layOutSlot(want, ctx);
-      const timed = launches.map(l => ({
-        launchAt: l.launchAt,
-        wakingSeconds: layout.classSeconds[l.cls],
-        nights: layout.classNights[l.cls],
-      }));
-      if (verify(timed, sleep) === null) {
+      if (verify(timedOf(launches), sleep, window) === null) {
         bySlot.push(launches);
         break;
       }
@@ -545,6 +589,7 @@ export function layOutPlan(
         launchAt: l.launchAt,
         wakingSeconds: layout.classSeconds[l.cls],
         nights: layout.classNights[l.cls],
+        doubled: layout.classVariant[l.cls] !== 'normal',
       };
     })
   );

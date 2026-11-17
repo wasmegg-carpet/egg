@@ -4,7 +4,6 @@
 import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, RecipeDAG, SlotSummary } from './types';
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
-import { NUM_SLOTS, packWitness } from './packing';
 import { sleepCapacity, sleepSecondsOf, sleepVariants } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
@@ -18,6 +17,9 @@ import {
 
 // Below this, a mission's duration counts as zero — the only quantity it's compared against.
 const ZERO_TOL = 1e-9;
+
+// Three mission slots, as the game gives. Exported because it is a property of the game rather than of the solver.
+export const NUM_SLOTS = 3;
 
 // The budgets below obey `solver/types.ts`'s one rule: absent means no limit, a present one is a
 // finite non-negative number, and `normalizeProblem` holds every caller to it.
@@ -55,52 +57,10 @@ interface Assembly {
   ownedStock: Map<string, number>;
 }
 
-// Per-slot occupancy of a chosen allocation. Repacked here because the seam the MILP returns through carries
-// only totals; if the exact packer cannot place the plan, the makespan shown is a best-fit estimate, not a claim.
-function slotSummariesOf(options: LaunchOption[], alloc: Map<number, number>, capacity: number): SlotSummary[] {
-  const idx = [...alloc.keys()].filter(i => (alloc.get(i) ?? 0) > 0);
-  if (idx.length === 0) return [];
-
-  const durations = idx.map(i => options[i].actualTime);
-  const counts = idx.map(i => alloc.get(i) ?? 0);
-  const witness = packWitness(durations, counts, capacity);
-
-  const load = new Array<number>(NUM_SLOTS).fill(0);
-  const rawLoad = new Array<number>(NUM_SLOTS).fill(0);
-  const count = new Array<number>(NUM_SLOTS).fill(0);
-
-  const place = (j: number, slot: number) => {
-    load[slot] += durations[j];
-    rawLoad[slot] += options[idx[j]].rawTime;
-    count[slot] += 1;
-  };
-
-  if (witness) {
-    for (let j = 0; j < idx.length; j++) for (const slot of witness[j]) place(j, slot);
-  } else {
-    // No witness (provably unpackable, or the node budget ran out). Longest first into the emptiest slot, so
-    // the summary still describes a real arrangement of these missions even where it overfills.
-    const order = idx.map((_, j) => j).sort((a, b) => durations[b] - durations[a]);
-    for (const j of order) {
-      for (let k = 0; k < counts[j]; k++) {
-        let slot = 0;
-        for (let b = 1; b < NUM_SLOTS; b++) if (load[b] < load[slot]) slot = b;
-        place(j, slot);
-      }
-    }
-  }
-
-  return load.map((seconds, b) => ({
-    loadSeconds: seconds,
-    rawLoadSeconds: rawLoad[b],
-    missionCount: count[b],
-  }));
-}
-
-// Per-slot occupancy of a sleep-aware plan, read off the calendar the solver verified rather than repacked:
-// two budgets and a time of day are more than `packWitness` knows about, and the calendar is already the
-// arrangement the plan was accepted on. A slot's load is where its last block ends, which is the moment its
-// last ship is back and the player is awake to collect it.
+// Per-slot occupancy of a plan, read off the calendar the solver verified, which is the arrangement the plan
+// was accepted on: the MILP's own slot columns, laid out (`solver/SPEC.md` section 12). A slot's load is where
+// its last block ends — with a sleep window, the moment its last ship is back and the player is awake to collect
+// it; without one, the sum of its launches.
 function slotSummariesOfCalendar(
   options: LaunchOption[],
   calendar: CalendarLaunch[][],
@@ -180,18 +140,16 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // card prints are the ones the plan was selected on rather than a second solver's answer to the same
   // question. See `solver/SPEC.md` section 5.
   const { allocation, craftSplit, calendar } = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
-  // The solver returns a calendar with every sleep-aware plan and refuses to return one that fails its own
-  // verifier, so a missing one is a broken seam rather than a plan to fall back from.
-  if (capacity && !calendar) throw new Error('optimizer: a sleep-aware plan came back without a calendar');
+  // The solver returns a calendar with every plan and refuses to return one that fails its own verifier, so a
+  // missing one is a broken seam rather than a plan to fall back from.
+  if (!calendar) throw new Error('optimizer: a plan came back without a calendar');
 
   const alloc = new Map<number, number>();
   for (let i = 0; i < allocation.length; i++) {
     if (allocation[i] > 0) alloc.set(i, allocation[i]);
   }
 
-  const slots = calendar
-    ? slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds)
-    : slotSummariesOf(feasibleOptions, alloc, S);
+  const slots = slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds);
   return assembleFullSolution(assembly, alloc, slots, craftSplit, capacity ? sleepSeconds : undefined);
 }
 

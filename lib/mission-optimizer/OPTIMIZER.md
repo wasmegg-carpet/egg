@@ -200,14 +200,14 @@ the split, so it is the minimum spacing between launches while awake and
 overnight alike.
 
 **Only a laid-out plan reaches the card.** The solver returns a calendar with
-every sleep-aware plan and refuses to return one that fails its own verifier;
-`optimizeFull` throws if the calendar is missing. Three things downstream read
-the plan differently because of it:
+every plan, sleep window or not, and refuses to return one that fails its own
+verifier (`solver/SPEC.md` section 12); `optimizeFull` throws if the calendar is
+missing. Three things downstream read the plan differently because of it:
 
 - _Slots._ `slots`, `timeUnitsUsed` and `runningTimeSeconds` are read off the
-  calendar, not repacked by `packing.ts`, which knows one budget and no time of
-  day. The makespan is wall-clock: where the last-finishing slot's calendar
-  ends, nights included. The card's idle figure is still the horizon minus the
+  calendar, the arrangement the plan was accepted on, for every plan; nothing
+  repacks a plan's totals. With a sleep window the makespan is wall-clock:
+  where the last-finishing slot's calendar ends, nights included. The card's idle figure is still the horizon minus the
   busiest slot's real flight time, so it now also counts the rest of a night
   after a ship has landed.
 - _The launch list._ A choice carries `nights`, and the card shows the launches
@@ -229,9 +229,10 @@ same answers.
 Most of `lib/mission-optimizer` reads as it looks. Two edges do not, and both exist to keep
 something from becoming circular or from landing in the wrong bundle:
 
-- `packing.ts` imports nothing, and in particular nothing from `tests/`,
-  because the arena re-checks every plan against its own independent packer
-  (invariant C1). Sharing one implementation would make that check circular.
+- Nothing here imports from `tests/`, and the arena re-checks every plan with its
+  own packer and its own calendar verifier (invariant C1), never `solver/verify.ts`.
+  Sharing either would make that check circular. Production has no packer at
+  all: the MILP's per-slot columns are the assignment, laid out as the calendar.
 - `index.ts` (the barrel every component imports) has no path to
   `optimizer-core`, so the solver stays out of the main chunk;
   `tests/unit/spec-helpers.ts` holds the in-process `optimize()` for the same

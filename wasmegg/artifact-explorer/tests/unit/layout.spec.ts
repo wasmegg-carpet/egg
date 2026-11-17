@@ -398,14 +398,25 @@ describe('only verified plans leave the solver', () => {
   });
 });
 
-describe('without a sleep window nothing changes', () => {
-  it('returns no calendar and no layout statistics', async () => {
+describe('without a sleep window nothing is laid out on days', () => {
+  it('returns each slot back to back and no layout statistics', async () => {
+    // Nights without a day: the night budget alone (SPEC.md section 9), which nothing times. The calendar every
+    // plan carries lays each slot's launches end to end in waking seconds (SPEC.md section 12).
     const solve = await loadHighs();
     const problem: PlanProblem = { ...sleepProblem([opt(5.88), opt(0, 1)], 4 * DAY_SECONDS), sleep: undefined };
     const result = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
-    expect(result.calendar).toBeUndefined();
     expect(result.layoutStats).toBeUndefined();
-    expect(Object.keys(result).sort()).toEqual(['allocation', 'craftSplit', 'reported']);
+    expect(Object.keys(result).sort()).toEqual(['allocation', 'calendar', 'craftSplit', 'reported']);
+    expect(flownPerOption(result)).toEqual(result.allocation);
+    for (const slot of result.calendar!) {
+      let at = 0;
+      for (const l of slot) {
+        expect(l.launchAt).toBe(at);
+        expect(l.doubled).toBe(false);
+        at += l.wakingSeconds;
+      }
+      expect(at).toBeLessThanOrEqual(problem.timeCapacityPerSlot);
+    }
   });
 
   it('rejects a malformed sleep window rather than guessing', () => {

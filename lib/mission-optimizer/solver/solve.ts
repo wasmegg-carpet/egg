@@ -13,7 +13,7 @@ import type {
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } from './evaluator';
 import { buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
-import { layOutPlan } from './layout';
+import { layOutPlan, timelineOf } from './layout';
 import { slotFault } from './verify';
 
 export interface Tuning {
@@ -113,8 +113,8 @@ export interface SolveOptions {
   report?: boolean;
 }
 
-// What a sleep-aware result carries besides its allocation. Absent for today's problem, so its result is
-// exactly what it was.
+// What every result carries besides its allocation: the calendar, and what laying it out took, which is
+// reported only with a sleep window (SPEC.md section 12).
 interface Laid {
   calendar: CalendarLaunch[][];
   layoutStats: LayoutStats;
@@ -128,25 +128,22 @@ const NO_LAYOUT: LayoutStats = {
   verifierRetries: 0,
 };
 
-// The plan with nothing in it, which every sleep window admits.
-function emptyLaid(model: Model): Laid | undefined {
-  return model.day
-    ? { calendar: Array.from({ length: model.slots }, () => []), layoutStats: { ...NO_LAYOUT } }
-    : undefined;
+// The plan with nothing in it, which every problem admits.
+function emptyLaid(model: Model): Laid {
+  return { calendar: Array.from({ length: model.slots }, () => []), layoutStats: { ...NO_LAYOUT } };
 }
 
-// The last gate before a sleep-aware plan leaves the solver, and the one that makes "only verified plans are
-// reported" a property of the code rather than of the layout being right: every launch is checked against the
-// option it names (not the figures the layout wrote down), every slot against the sleep rule, and the
-// calendar's launches against the allocation, count for count. A plan that fails is not returned at all.
+// The last gate before a plan leaves the solver, and the one that makes "only verified plans are reported" a
+// property of the code rather than of the layout being right: every launch is checked against the option it
+// names (not the figures the layout wrote down), every slot against the sleep rule and the event window, and
+// the calendar's launches against the allocation, count for count. A plan that fails is not returned at all.
 export function assertVerified(
   problem: PlanProblem,
   model: Model,
   allocation: readonly number[],
   calendar: CalendarLaunch[][]
 ): void {
-  const day = model.day!;
-  const sleep = { sleepSeconds: day.sleepSeconds, horizonSeconds: day.horizonSeconds };
+  const sleep = timelineOf(model);
   const fail = (detail: string): never => {
     throw new Error(`solver: refusing to return a plan whose calendar fails verification: ${detail}`);
   };
@@ -160,9 +157,12 @@ export function assertVerified(
       if (opt.actualTime !== l.wakingSeconds || (opt.nights ?? 0) !== l.nights) {
         fail(`slot ${k} times option ${l.option} as ${l.wakingSeconds}s and ${l.nights} night(s)`);
       }
+      if (l.doubled !== ((opt.variant ?? 'normal') !== 'normal')) {
+        fail(`slot ${k} flies option ${l.option} (${opt.variant ?? 'normal'}) as doubled=${l.doubled}`);
+      }
       flown[l.option]++;
     }
-    const fault = slotFault(launches, sleep);
+    const fault = slotFault(launches, sleep, model.eventWindowSeconds);
     if (fault !== null) fail(`slot ${k}: ${fault}`);
   });
   for (let i = 0; i < allocation.length; i++) {
@@ -170,16 +170,13 @@ export function assertVerified(
   }
 }
 
-function emit(problem: PlanProblem, model: Model, counts: readonly number[], report: boolean, laid?: Laid): PlanResult {
+function emit(problem: PlanProblem, model: Model, counts: readonly number[], report: boolean, laid: Laid): PlanResult {
   const allocation = new Array<number>(problem.options.length).fill(0);
   for (let g = 0; g < model.groups.length; g++) {
     if (counts[g] > 0) allocation[model.groups[g].members[0]] += counts[g];
   }
-  if (model.day) {
-    if (!laid) throw new Error('solver: a sleep-aware plan reached emit without a calendar');
-    assertVerified(problem, model, allocation, laid.calendar);
-  }
-  const extra = laid ? { calendar: laid.calendar, layoutStats: laid.layoutStats } : {};
+  assertVerified(problem, model, allocation, laid.calendar);
+  const extra = { calendar: laid.calendar, ...(model.day && { layoutStats: laid.layoutStats }) };
   if (!report) return { allocation, ...extra };
 
   // Inside the guard the rest of the pass works under: `evaluateCounts` runs a simplex that throws on
@@ -277,9 +274,10 @@ export function solveWith(
   } catch {
     keep = false;
   }
-  if (!keep || !model.day) return emit(problem, model, keep ? counts : empty, report, none);
+  if (!keep) return emit(problem, model, empty, report, none);
 
-  // With a sleep window the MILP's plan is a relaxation of real days (SPEC.md section 9): it is laid out, what
+  // Every plan is laid out into the calendar it is returned with. Without a sleep window that is exact and trims
+  // nothing (SPEC.md section 12). With one the MILP's plan is a relaxation of real days (SPEC.md section 9): what
   // does not fit is trimmed, and only then judged again, the way the plan above was, against the empty one.
   // Everything reported from here describes the trimmed plan.
   const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
@@ -290,6 +288,6 @@ export function solveWith(
   } catch {
     keepLaid = false;
   }
-  if (!keepLaid) return emit(problem, model, empty, report, { ...none!, layoutStats: laid.stats });
+  if (!keepLaid) return emit(problem, model, empty, report, { ...none, layoutStats: laid.stats });
   return emit(problem, model, laid.counts, report, { calendar: laid.calendar, layoutStats: laid.stats });
 }

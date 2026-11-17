@@ -151,8 +151,9 @@ export interface CraftSplitReport {
   byTarget: Map<string, number>;
 }
 
-// One launch on a slot's timeline. `launchAt` is seconds from the plan's start (wake-up on day 0); the launch
-// occupies its slot for `wakingSeconds + nights * sleepSeconds`, after which the next launch may go.
+// One launch on a slot's timeline. `launchAt` is seconds from the plan's start (wake-up on day 0, with a sleep
+// window); the launch occupies its slot for `wakingSeconds + nights * sleepSeconds` (just `wakingSeconds`
+// without one), after which the next launch may go.
 export interface CalendarLaunch {
   // Index into `problem.options`, and that option's id, so a reader can check one against the other.
   option: number;
@@ -160,6 +161,9 @@ export interface CalendarLaunch {
   launchAt: number;
   wakingSeconds: number;
   nights: number;
+  // Whether it flies at 2x capacity: its option is an `event` or `overhang` variant, and it launches inside the
+  // event window (SPEC.md section 11). Always false for a problem without one.
+  doubled: boolean;
 }
 
 // What it took to lay a plan out; diagnostics only, nothing reads them to decide anything.
@@ -183,9 +187,12 @@ export interface PlanResult {
   reported?: PlanReport;
   // Alongside `reported`, and absent for the same reason: the judge could not re-derive the plan.
   craftSplit?: CraftSplitReport;
-  // Present exactly when the problem carries `sleep`: per slot, its launches in launch order, already passed
-  // by the verifier, and accounting for every launch in `allocation` (SPEC.md section 10).
+  // Per slot, its launches in launch order, already passed by the verifier, and accounting for every launch in
+  // `allocation` (SPEC.md sections 10 and 12). `solveWith` returns one with every plan; optional because the
+  // arena's contract lets a candidate return an allocation alone for a problem with neither a sleep window nor
+  // an event window.
   calendar?: CalendarLaunch[][];
+  // Present exactly when the problem carries `sleep`, the one case with anything to lay out or trim.
   layoutStats?: LayoutStats;
 }
 
