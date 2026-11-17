@@ -183,30 +183,6 @@ export interface PlanTimeline {
   slots: SlotTimeline[];
   // Whether rows are grouped by day: the plan was laid out around a sleep window.
   byDay: boolean;
-  eventWindowSeconds: number;
-}
-
-// `key` is what the player can tell apart: the mission, its target, its nights and its capacity. Two entries of
-// `choiceHistory` can share one, as a doubled launch's `event` and `overhang` variants do.
-type Token =
-  | { kind: 'launch'; choice: number; key: string; launchAt: number; doubled: boolean }
-  | { kind: 'window-end' };
-
-interface Run {
-  choice: number;
-  key: string;
-  doubled: boolean;
-  count: number;
-  launchAt: number;
-}
-
-type Segment = Run | 'window-end';
-
-interface DayGroup {
-  day: number;
-  tokens: Token[];
-  // The window closes between the previous group and this one, so the divider goes above this group's heading.
-  windowEndsBefore: boolean;
 }
 
 // The plan's slots as the player flies them, read off the calendar the solver verified: one row per run of
@@ -218,60 +194,53 @@ interface DayGroup {
 export function planTimeline(solution: OptimizerSolution): PlanTimeline {
   const byDay = (solution.sleepSeconds ?? 0) > 0;
   const window = solution.eventWindowSeconds ?? 0;
-  return {
-    slots: (solution.slots ?? []).map(slot => slotTimeline(solution, slot, byDay, window)),
-    byDay,
-    eventWindowSeconds: window,
-  };
+  return { slots: (solution.slots ?? []).map(slot => slotTimeline(solution, slot, byDay, window)), byDay };
 }
 
+// A run of consecutive launches the player cannot tell apart (one `lineKey`), or the event window's end.
+type Segment = { choice: number; key: string; count: number; launchAt: number } | 'window-end';
+
+// One day of a slot, or the whole slot on a plan made around the clock.
+interface Day {
+  day: number;
+  segments: Segment[];
+  // The window closed between the previous day's last launch and this day's first, while the player was away
+  // from the game, so the divider goes above this day's heading rather than inside either day.
+  windowEndsBefore: boolean;
+}
+
+// What a day flies, without when: two days with the same signature are flown alike.
+const signatureOf = (day: Day) =>
+  day.segments.map(segment => (segment === 'window-end' ? '|' : `${segment.key}:${segment.count}`)).join(',');
+
 function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boolean, window: number): SlotTimeline {
-  const launches = slot.launches;
-  // The window opens with the plan, so a slot with anything in it starts inside it. The divider goes before the
-  // first launch that leaves after it closes, or under the last launch when none does.
-  const tokens: Token[] = [];
-  let divided = !(window > 0) || launches.length === 0;
-  for (const launch of launches) {
-    if (!divided && launch.launchAt > window) {
-      tokens.push({ kind: 'window-end' });
-      divided = true;
-    }
-    const choice = solution.choiceHistory[launch.choice];
-    tokens.push({ kind: 'launch', ...launch, key: lineKey(choice, true), doubled: isDoubled(choice) });
-  }
-  if (!divided) tokens.push({ kind: 'window-end' });
-
-  // Split into days. A divider between the last launch of one day and the first of the next goes between the two
-  // days rather than inside either: the window closed while the player was away from the game.
-  const groups: DayGroup[] = [];
-  let pendingEnd = false;
-  for (const token of tokens) {
-    if (token.kind === 'window-end') {
-      pendingEnd = true;
-      continue;
-    }
-    const day = byDay ? Math.floor(token.launchAt / DAY_SECONDS) : 0;
-    const current = groups[groups.length - 1];
-    if (current && current.day === day) {
-      if (pendingEnd) current.tokens.push({ kind: 'window-end' });
-      current.tokens.push(token);
-    } else {
-      groups.push({ day, tokens: [token], windowEndsBefore: pendingEnd });
-    }
-    pendingEnd = false;
+  // The window opens with the plan, so a slot starts inside it. The divider goes before the first launch that
+  // leaves after it closes, or under the slot's last launch when none does.
+  const days: Day[] = [];
+  let windowOpen = window > 0;
+  for (const launch of slot.launches) {
+    const closes = windowOpen && launch.launchAt > window;
+    if (closes) windowOpen = false;
+    const dayIndex = byDay ? Math.floor(launch.launchAt / DAY_SECONDS) : 0;
+    let day = days[days.length - 1];
+    if (day?.day !== dayIndex) {
+      day = { day: dayIndex, segments: [], windowEndsBefore: closes };
+      days.push(day);
+    } else if (closes) day.segments.push('window-end');
+    const key = lineKey(solution.choiceHistory[launch.choice], true);
+    const last = day.segments[day.segments.length - 1];
+    if (last !== undefined && last !== 'window-end' && last.key === key) last.count++;
+    else day.segments.push({ choice: launch.choice, key, count: 1, launchAt: launch.launchAt });
   }
 
-  const rows: TimelineRow[] = [];
-  const windowEnd: TimelineWindowEndRow = { kind: 'window-end', at: window };
-  const segments = groups.map(group => runsOf(group.tokens));
-  const signatures = segments.map(signatureOf);
-  const groupOnDay = new Map(groups.map((group, i) => [group.day, i]));
-  // What day `day` flies, '' for a day with no launch; undefined when it may not take part in a fold at all,
+  const signatures = days.map(signatureOf);
+  const dayAt = new Map(days.map((day, i) => [day.day, i]));
+  // What day `d` flies, '' for a day with no launch; undefined when it may not take part in a fold at all,
   // because the window ends in it or just before it.
-  const daySignature = (day: number, first: boolean): string | undefined => {
-    const i = groupOnDay.get(day);
+  const daySignature = (d: number, first: boolean): string | undefined => {
+    const i = dayAt.get(d);
     if (i === undefined) return '';
-    if (segments[i].includes('window-end') || (!first && groups[i].windowEndsBefore)) return undefined;
+    if (days[i].segments.includes('window-end') || (!first && days[i].windowEndsBefore)) return undefined;
     return signatures[i];
   };
   // How many times over the `period` days from `start` are flown, counting the first.
@@ -282,9 +251,12 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
     while (pattern.every((sig, i) => daySignature(start + times * period + i, false) === sig)) times++;
     return times;
   };
-  const emitDay = (g: number, repeat: number, day: TimelineDayRow | null) => {
-    if (day) rows.push(day);
-    for (const segment of segments[g]) {
+
+  const rows: TimelineRow[] = [];
+  const windowEnd: TimelineWindowEndRow = { kind: 'window-end', at: window };
+  const emit = (day: Day, repeat: number, heading: TimelineDayRow | null) => {
+    if (heading) rows.push(heading);
+    for (const segment of day.segments) {
       if (segment === 'window-end') {
         rows.push(windowEnd);
         continue;
@@ -296,16 +268,16 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
         count: segment.count,
         repeat,
         launchAt: segment.launchAt,
-        doubled: segment.doubled,
+        doubled: isDoubled(choice),
         nights: choice.nights ?? 0,
       });
     }
   };
 
-  for (let g = 0; g < groups.length; ) {
-    const start = groups[g].day;
-    if (groups[g].windowEndsBefore) rows.push(windowEnd);
-    // The fold that covers the most days, the shortest routine on a tie. Without sleep there is one group and
+  for (let i = 0; i < days.length; ) {
+    const start = days[i].day;
+    if (days[i].windowEndsBefore) rows.push(windowEnd);
+    // The fold that covers the most days, the shortest routine on a tie. Without sleep there is one day and
     // nothing to fold.
     let period = 1;
     let times = 1;
@@ -315,45 +287,24 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
         if (t >= 2 && p * t > period * times) [period, times] = [p, t];
       }
     }
-    const end = start + period * times;
-    let next = g;
-    while (next < groups.length && groups[next].day < end) next++;
-    const lastDay = groups[next - 1].day;
-    if (!byDay) emitDay(g, 1, null);
-    else if (period === 1) emitDay(g, times, { kind: 'day', firstDay: start, lastDay });
+    let next = i;
+    while (next < days.length && days[next].day < start + period * times) next++;
+    const lastDay = days[next - 1].day;
+    if (!byDay) emit(days[i], 1, null);
+    else if (period === 1) emit(days[i], times, { kind: 'day', firstDay: start, lastDay });
     else {
       rows.push({ kind: 'routine', firstDay: start, lastDay, period, times });
-      for (let i = g; i < next && groups[i].day < start + period; i++)
-        emitDay(i, times, {
+      for (let j = i; j < next && days[j].day < start + period; j++)
+        emit(days[j], times, {
           kind: 'day',
-          firstDay: groups[i].day,
-          lastDay: groups[i].day,
-          routineDay: { day: groups[i].day - start + 1, of: period },
+          firstDay: days[j].day,
+          lastDay: days[j].day,
+          routineDay: { day: days[j].day - start + 1, of: period },
         });
     }
-    g = next;
+    i = next;
   }
-  if (pendingEnd) rows.push(windowEnd);
+  if (windowOpen && slot.launches.length > 0) rows.push(windowEnd);
 
-  return { rows, launchCount: launches.length, endsAt: slot.loadSeconds };
+  return { rows, launchCount: slot.launches.length, endsAt: slot.loadSeconds };
 }
-
-// Consecutive launches the player cannot tell apart, as one run; the window's end breaks a run.
-function runsOf(tokens: Token[]): Segment[] {
-  const runs: Segment[] = [];
-  for (const token of tokens) {
-    if (token.kind === 'window-end') {
-      runs.push('window-end');
-      continue;
-    }
-    const last = runs[runs.length - 1];
-    if (last && last !== 'window-end' && last.key === token.key) last.count++;
-    else
-      runs.push({ choice: token.choice, key: token.key, doubled: token.doubled, count: 1, launchAt: token.launchAt });
-  }
-  return runs;
-}
-
-// What a day flies, without when: two days with the same signature are the same routine.
-const signatureOf = (runs: Segment[]) =>
-  runs.map(run => (run === 'window-end' ? '|' : `${run.key}:${run.count}`)).join(',');

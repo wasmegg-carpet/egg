@@ -176,7 +176,6 @@ describe('planTimeline', () => {
       slots: [slot([0, 0], [0, H], [0, 2 * H], [1, 3 * H], [1, 4 * H]), slot()],
     });
     const timeline = planTimeline(solution);
-    expect(timeline.eventWindowSeconds).toBe(2 * H);
     // A launch exactly at the window's end is still inside it.
     expect(shape(timeline.slots[0].rows)).toEqual([`3x@0 2x`, `ends ${2 * H}`, `2x@${3 * H}`]);
     expect(timeline.slots[1].rows).toEqual([]);
