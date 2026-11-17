@@ -239,13 +239,20 @@ describe('laying a plan out', () => {
     }
   });
 
-  it('a 10.8-hour daytime launch fits once per waking window', async () => {
+  it('a 10.8-hour daytime launch fits once per waking window, and once more into the night when re-timed', async () => {
+    // The segments hold one a waking window, ten a slot, and leave four of the fourteen unplaced. Re-timed, the
+    // second of each day goes up at 10:48, while the player is awake, and lands in the night; the slot is free at
+    // 07:00 days earlier, and the four go on the end (SPEC.md section 14).
     const solve = await loadHighs();
     const problem = sleepProblem([opt(10.8)], 10 * DAY_SECONDS);
     const { model, layout, values, counts } = columnsFor(problem, [14]);
     const laid = layOutPlan(model, layout, values, counts, problem.options, solve, judgeOf(model));
-    expect(laid.counts).toEqual([30]);
-    for (const slot of laid.calendar) expect(hoursOf(slot)).toEqual(Array.from({ length: 10 }, (_, d) => d * 24));
+    expect(laid.counts).toEqual([42]);
+    expect(laid.stats.launchesTrimmed).toBe(0);
+    for (const slot of laid.calendar) {
+      expect(hoursOf(slot)).toEqual(Array.from({ length: 14 }, (_, i) => Math.floor(i / 2) * 24 + (i % 2) * 10.8));
+      expect(slotFault(slot, problem.sleep!)).toBeNull();
+    }
   });
 
   it('zero-second overnight variants go at bedtime, one a night', async () => {
@@ -284,15 +291,16 @@ describe('laying a plan out', () => {
 describe('trimming', () => {
   it('drops the launch the judge misses least, and reports the trimmed plan', async () => {
     const solve = await loadHighs();
-    // Two 10.8-hour launches in one class, neither dominating: one yields twice as much for twice the fuel.
+    // Two 10.8-hour launches in one class, neither dominating: one yields twice as much for twice the fuel. Ten
+    // days hold twenty a slot, two a day (the second into the night), so 24 a slot is 12 too many.
     const problem = sleepProblem([opt(10.8, 0, 2, 2), opt(10.8, 0, 1, 1)], 10 * DAY_SECONDS);
     const model = buildModel(problem);
     const layout = layoutOf(model, 'oa');
     expect(layout.classes).toBe(1);
     const values = new Float64Array(layout.columnCount);
-    for (let k = 0; k < 3; k++) values[nCol(layout, 0, k)] = 14;
+    for (let k = 0; k < 3; k++) values[nCol(layout, 0, k)] = 24;
     const strong = model.groups.findIndex(g => g.members[0] === 0);
-    const counts = new Array<number>(model.groups.length).fill(21);
+    const counts = new Array<number>(model.groups.length).fill(36);
     const laid = layOutPlan(
       model,
       layout,
@@ -303,8 +311,8 @@ describe('trimming', () => {
       c => evaluateCounts(model, c, STEERING_PRECISION).logJoint
     );
     expect(laid.stats.launchesTrimmed).toBe(12);
-    expect(laid.counts[strong]).toBe(21);
-    expect(laid.counts[1 - strong]).toBe(9);
+    expect(laid.counts[strong]).toBe(36);
+    expect(laid.counts[1 - strong]).toBe(24);
   });
 
   it('what the solver reports is the plan that survived the layout', async () => {

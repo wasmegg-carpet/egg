@@ -559,13 +559,63 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
     }
   }
 
-  // Whatever is not placed leaves the plan, one launch at a time, each the one the judge misses least.
+  // The segments time every overnight ship as flying through the nights its class counts, so one that takes off
+  // early enough to land before a bedtime holds its slot, on paper, until a wake-up its block ended before. When the
+  // segments leave launches unplaced, the slot is re-timed in the same order, each launch at the first waking instant
+  // its predecessor's block leaves it, so the waking time after such a landing is used and the slot is free again
+  // sooner; what the segments could not place then goes on the end, longest first, while it still ends by the
+  // horizon (SPEC.md section 14). The re-timed slot is kept when that places a launch more; otherwise the segments'
+  // timeline stands, as it is. What does not fit even there leaves the plan, one launch at a time, each the one the
+  // judge misses least.
+  const left = daytime.map((c, d) => counts[c] - placed[d].reduce((a, n) => a + n, 0));
+  let launches = laid;
+  if (left.some(n => n > 0)) {
+    const retimed = compact(laid, ctx);
+    let free = retimed.reduce((end, l) => Math.max(end, l.launchAt + blockOf(l.cls, ctx)), 0);
+    let appended = 0;
+    daytime.forEach((c, d) => {
+      for (; left[d] > 0; left[d]--, appended++) {
+        const at = wakingFrom(free, day);
+        if (at + ctx.classSeconds[c] > day.horizonSeconds + LAYOUT_TOL) break;
+        retimed.push({ cls: c, launchAt: at });
+        free = at + ctx.classSeconds[c];
+      }
+    });
+    if (appended > 0) launches = retimed;
+    else daytime.forEach((c, d) => (left[d] = counts[c] - placed[d].reduce((a, n) => a + n, 0)));
+  }
   daytime.forEach((c, d) => {
-    const left = counts[c] - placed[d].reduce((a, n) => a + n, 0);
-    for (let i = 0; i < left; i++) counts[ctx.drop([c])]--;
+    for (let i = 0; i < left[d]; i++) counts[ctx.drop([c])]--;
   });
 
-  return { launches: laid, placed: counts, conns, heads };
+  return { launches, placed: counts, conns, heads };
+}
+
+// The wall-clock seconds a launch of class `cls` holds its slot for, as the verifier times it.
+function blockOf(cls: number, ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>): number {
+  return ctx.classSeconds[cls] + ctx.classNights[cls] * ctx.day.sleepSeconds;
+}
+
+// The first instant at or after `t` the player is awake: `t` itself, or the next wake-up when `t` is in a night.
+function wakingFrom(t: number, day: DaySchedule): number {
+  const d = Math.floor((t + LAYOUT_TOL) / DAY_SECONDS);
+  return t - d * DAY_SECONDS <= day.wakingSeconds + LAYOUT_TOL ? t : (d + 1) * DAY_SECONDS;
+}
+
+// `launches` in the order given, each re-timed to the first waking instant at or after the end of the block before
+// it. Never later than it was, for a timeline that verified: by induction each block ends no later than it did, so
+// the instant a launch waits for is no later either. Earliest start is optimal for a fixed order, since a block
+// that ends earlier never makes the next one start later.
+function compact(
+  launches: readonly ClassLaunch[],
+  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>
+): ClassLaunch[] {
+  let free = 0;
+  return launches.map(l => {
+    const launchAt = wakingFrom(free, ctx.day);
+    free = launchAt + blockOf(l.cls, ctx);
+    return { cls: l.cls, launchAt };
+  });
 }
 
 // What one slot's timeline is verified against. Without a sleep window: no sleep, and the slot itself as the
