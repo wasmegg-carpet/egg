@@ -412,6 +412,40 @@ describe('laying a window out on real days', () => {
   });
 });
 
+describe('the layouts the judge chooses among', () => {
+  it('a doubled ship that took off a night early lands in a waking window, and the rest of that day is used', async () => {
+    // An 18-hour ship over two nights (34 wall-clock hours, a flex of two) has to go at 00:00 to make a 1-hour
+    // window, and lands at 10:00 on day 1, a night before its class says. Four 5-hour launches at 1x as well: the
+    // day the ship lands holds one of them, and none is trimmed.
+    const options = [...doubles([opt(18, 2, 9)], H), ...doubles([opt(5)], H)];
+    const problem = problemOf(options, 3 * DAY_SECONDS, H);
+    const perSlot = new Array<number>(options.length).fill(0);
+    perSlot[options.findIndex(o => o.nights === 2 && o.variant === 'overhang')] = 1;
+    perSlot[options.findIndex(o => o.nights === 0 && o.variant === 'normal')] = 4;
+    const { laid } = await laidOut(problem, perSlot);
+    expect(laid.stats).toMatchObject({ launchesTrimmed: 0, launchesDemoted: 0 });
+    for (const slot of shape(laid.calendar)) {
+      expect(slot[0]).toEqual([0, true]);
+      expect(slot.filter(([at]) => (at as number) >= 34 && (at as number) < 40)).not.toEqual([]);
+    }
+  });
+
+  it('keeps doubled launches inside the window when the 1x order would pack more seconds', async () => {
+    // One waking day. Doubled first, ten 1-hour launches and a 5-hour ship fill fifteen hours; the three 5-hour
+    // ships first would fill sixteen and push nine doubled launches out. Section 13 kept whichever placed more
+    // seconds; the judge keeps the doubled ones, worth two each against a 5-hour ship's three.
+    const options = doubles([opt(1, 0, 1), opt(5, 0, 3)], 10 * H);
+    const problem = problemOf(options, DAY_SECONDS, 10 * H);
+    const perSlot = new Array<number>(options.length).fill(0);
+    perSlot[options.findIndex(o => o.actualTime === H && o.variant === 'event')] = 9;
+    perSlot[options.findIndex(o => o.actualTime === H && o.variant === 'overhang')] = 1;
+    perSlot[options.findIndex(o => o.actualTime === 5 * H && o.variant === 'normal')] = 3;
+    const { laid } = await laidOut(problem, perSlot);
+    expect(laid.stats.launchesDemoted).toBe(0);
+    for (const slot of laid.calendar) expect(slot.filter(l => l.doubled).length).toBe(10);
+  });
+});
+
 describe('solving a window with sleep', () => {
   it('reports the plan the calendar flies, and promises only the doubled launches the days start', async () => {
     const solve = await loadHighs();
