@@ -190,8 +190,8 @@ and turns the three into `OptimizeArgs`, with its bounds read from `sleep.ts` an
 `capacity.ts` rather than restated. Ships still fly and land through the
 night; one that lands while the player is asleep waits. The plan starts at
 wake-up, every day is the same, and all three slots share the schedule. At 0
-the request, the problem and the plan are what they were before the setting
-existed.
+neither the request nor the problem carries a sleep field, and the plan is
+made around the clock.
 
 **`optimizeFull` owns the translation.** Its `timeCapacityPerSlot` stays the
 wall-clock horizon whether or not the player sleeps. Given `sleepSeconds`, it
@@ -212,8 +212,8 @@ missing. Four things downstream read the plan differently because of it:
   calendar, the arrangement the plan was accepted on, for every plan; nothing
   repacks a plan's totals. With a sleep window the makespan is wall-clock:
   where the last-finishing slot's calendar ends, nights included. The card's idle figure is still the horizon minus the
-  busiest slot's real flight time, so it now also counts the rest of a night
-  after a ship has landed.
+  busiest slot's real flight time, so with sleep it also counts the rest of a
+  night after a ship has landed.
 - _The timeline._ Each `SlotSummary` carries its calendar's launches, naming
   their `choiceHistory` entry by index (`finalizeSolutions` follows the entries
   when it sorts them), and when each goes up. `planTimeline`
@@ -238,8 +238,8 @@ same answers.
 Egg, Inc. periodically doubles every ship's capacity for 48 hours, and a
 mission is doubled when it _launches_ inside the window, whenever it lands.
 `OptimizeArgs.eventWindowSeconds` is how much of the window is left, starting
-now; the tool never looks it up. Absent or 0, the request, the problem and the
-solution are what they were before the field existed. Both apps set it from the
+now; the tool never looks it up. Absent or 0, neither the request, the problem
+nor the solution carries an event field. Both apps set it from the
 player's "time left" (`doubleCapacityEnabled` / `doubleCapacityRemaining`,
 `schedule-settings.ts`); with sleep on, the plan's start is taken to be the
 start of a waking day as well.

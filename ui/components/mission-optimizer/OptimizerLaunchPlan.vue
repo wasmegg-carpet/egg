@@ -48,7 +48,7 @@ export default defineComponent({
   },
   setup(props) {
     const totals = computed(() => launchTotals(props.solution));
-    // Absent on a plan made around the clock, whose totals are then shown undivided, as they always were.
+    // Absent on a plan made around the clock, whose totals are one undivided list.
     const sleepHours = computed(() => Number(((props.solution.sleepSeconds ?? 0) / 3600).toFixed(2)));
     const daytime = computed(() => totals.value.filter(line => !line.nights));
     const overnight = computed(() => totals.value.filter(line => (line.nights ?? 0) > 0));

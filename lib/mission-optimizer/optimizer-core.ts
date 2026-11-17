@@ -37,11 +37,11 @@ export interface OptimizeArgs {
   // `optimizeFull` that splits it into waking seconds and nights, so every caller keeps saying how long the
   // plan may run rather than how much of that is launchable.
   timeCapacityPerSlot: number;
-  // Seconds a day the player cannot launch. Absent or 0 is today's problem, planned around the clock.
+  // Seconds a day the player cannot launch. Absent or 0 plans around the clock.
   // Present, the menu is split into daytime and overnight variants and only a plan laid out on real days is
   // returned (`solver/SPEC.md` sections 9 and 10).
   sleepSeconds?: number;
-  // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is today's problem. Present, the
+  // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is no event. Present, the
   // menu gains the doubled variants (`capacity.ts`), capped at `MAX_DOUBLE_CAPACITY_SECONDS`, and the window
   // rows hold them inside it (`solver/SPEC.md` section 11). The caller passes the menu as enumerated; it never
   // enumerates against the window itself. Combines with `sleepSeconds`, the window then counting nights too

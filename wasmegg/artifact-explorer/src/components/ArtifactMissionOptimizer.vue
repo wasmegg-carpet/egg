@@ -264,7 +264,7 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
-        // Each absent rather than 0 when off, so a request without sleep or an event is the one it always was.
+        // Each absent rather than 0 when off, so a request without sleep or an event carries neither field.
         ...effectiveScheduleArgs.value,
         ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
