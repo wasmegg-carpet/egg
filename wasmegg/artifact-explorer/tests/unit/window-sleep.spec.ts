@@ -196,8 +196,9 @@ describe('laying a window out on real days', () => {
   });
 
   it('window ends during sleep: the bedtime launch is the overhang', async () => {
-    // Closing at 20:00, after bedtime at 16:00. Three 5-hour event launches, then a short ship sent at bedtime as
-    // the overhang; day 1 flies the same at 1x.
+    // Closing at 20:00, after bedtime at 16:00. Three 5-hour event launches, then a short overnight ship as the
+    // overhang, the last launch before bed: a doubled ship takes off as soon as its day allows, here at 15:00, and
+    // the 1x one waits for bedtime. Day 1 flies the same at 1x.
     const options = [...doubles([opt(5)], 20 * H), ...doubles([opt(0, 1)], 20 * H)];
     const problem = problemOf(options, 2 * DAY_SECONDS, 20 * H);
     const index = (hours: number, variant: string) =>
@@ -213,7 +214,7 @@ describe('laying a window out on real days', () => {
         [0, true],
         [5, true],
         [10, true],
-        [16, true],
+        [15, true],
         [24, false],
         [29, false],
         [34, false],
@@ -243,18 +244,36 @@ describe('laying a window out on real days', () => {
     }
   });
 
+  it('a 1x daytime launch waits until after the doubled ships rather than push one past the window', async () => {
+    // A doubled 48-hour ship (32 waking hours over two nights) and one 5-hour ship at 1x, a 3-hour window and three
+    // days. Flown first, the 5-hour ship would put the doubled one's take-off at 5:00; it goes on day 2 instead.
+    const options = [...doubles([opt(32, 2, 9)], 3 * H), ...doubles([opt(5)], 3 * H)];
+    const problem = problemOf(options, 3 * DAY_SECONDS, 3 * H);
+    const perSlot = new Array<number>(options.length).fill(0);
+    perSlot[options.findIndex(o => o.nights === 2 && o.variant === 'overhang')] = 1;
+    perSlot[options.findIndex(o => o.nights === 0 && o.variant === 'normal')] = 1;
+    const { laid } = await laidOut(problem, perSlot);
+    for (const slot of shape(laid.calendar))
+      expect(slot).toEqual([
+        [0, true],
+        [48, false],
+      ]);
+    expect(laid.stats.launchesDemoted).toBe(0);
+  });
+
   it('window spanning two nights: overnight doubled ships take the first nights', async () => {
-    // A 20-hour ship over one night (12 waking hours: it takes off at 4:00 at the earliest), every night of four
-    // days. A 54-hour window takes the first three; the fourth, at 76:00, flies 1x.
+    // A 20-hour ship over one night (12 waking hours), every night of four days. A doubled one takes off at wake-up,
+    // landing before the next; a 1x one at 4:00, the latest it can and still land at wake-up. A 54-hour window takes
+    // the first three, at 0:00, 24:00 and 48:00; the fourth, at 76:00, flies 1x.
     const options = doubles([opt(12, 1)], 54 * H);
     const problem = problemOf(options, 4 * DAY_SECONDS, 54 * H);
     const perSlot = options.map(o => (o.variant === 'event' ? 2 : 1));
     const { laid } = await laidOut(problem, perSlot);
     for (const slot of laid.calendar) {
       expect(shape([slot])[0]).toEqual([
-        [4, true],
-        [28, true],
-        [52, true],
+        [0, true],
+        [24, true],
+        [48, true],
         [76, false],
       ]);
       expect(slot.map(l => variantOf(problem, l.option))).toEqual(['event', 'event', 'overhang', 'normal']);

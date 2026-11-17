@@ -47,6 +47,10 @@ interface Connector {
   cls: number;
   nights: number;
   flex: number;
+  // A doubled ship placed first for the 2x window, which may take off as early as its day allows: before
+  // bedtime by more than its flex, landing at the next wake-up with waking time of its last day left unused.
+  // Valid, since its block, `waking seconds + nights * S`, then ends before that wake-up (SPEC.md section 13).
+  early?: boolean;
 }
 
 interface SlotContext {
@@ -55,6 +59,8 @@ interface SlotContext {
   // Whether a class flies doubled (`event` or `overhang`), which the layout puts first so it starts inside the 2x
   // window (SPEC.md section 13). All false without a window, and then nothing below orders by it.
   doubled: readonly boolean[];
+  // Of those, the `overhang` classes, which go after the `event` ones, as the window rows' argument has them.
+  overhang: readonly boolean[];
   day: DaySchedule;
   solve: MilpSolve;
   // Drops one launch of one of `candidates` from the plan, chosen by the judge, and returns its class.
@@ -80,13 +86,14 @@ function alternating(conns: Connector[], smallestLast: boolean): Connector[] {
 }
 
 // Each overnight launch, then null connectors until the nights sum to the slot's, in `alternating` order. With
-// `doubledFirst`, the doubled overnight ships go first, alternating among themselves from the largest flex (the
-// one that can take off earliest in its day), and everything else follows in the usual order, so the ships that
-// must start inside the 2x window take the first nights (SPEC.md section 13). A heuristic either way: another
-// order may place more, which makes what this layout places a lower bound on what fits, never an over-statement.
+// `doubledFirst`, the doubled overnight ships go first — the `event` ones, then the `overhang`, the order the window
+// rows' argument flies them in, each alternating among themselves from the largest flex (the one that can take off
+// earliest in its day) — and everything else follows in the usual order, so the ships that must start inside the
+// 2x window take the first nights (SPEC.md section 13). A heuristic either way: another order may place more,
+// which makes what this layout places a lower bound on what fits, never an over-statement.
 export function connectorsOf(
   counts: readonly number[],
-  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'> & Partial<Pick<SlotContext, 'doubled'>>,
+  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'> & Partial<Pick<SlotContext, 'doubled' | 'overhang'>>,
   doubledFirst = false
 ): Connector[] {
   const all: Connector[] = [];
@@ -102,11 +109,16 @@ export function connectorsOf(
   for (; nights < ctx.day.nights; nights++) all.push({ cls: NULL_CONNECTOR, nights: 1, flex: 0 });
   const isDoubled = (conn: Connector) =>
     doubledFirst && conn.cls !== NULL_CONNECTOR && ctx.doubled?.[conn.cls] === true;
-  const doubled = all.filter(isDoubled);
-  if (doubled.length === 0) return alternating(all, true);
-  const rest = all.filter(conn => !isDoubled(conn));
-  if (rest.length === 0) return alternating(doubled, true);
-  return [...alternating(doubled, false), ...alternating(rest, true)];
+  const isOverhang = (conn: Connector) => isDoubled(conn) && ctx.overhang?.[conn.cls] === true;
+  const runs = [
+    all.filter(conn => isDoubled(conn) && !isOverhang(conn)),
+    all.filter(isOverhang),
+    all.filter(conn => !isDoubled(conn)),
+  ].filter(run => run.length > 0);
+  // Only the last run holds its smallest back for the tail; without a doubled ship that is the one usual order.
+  // In either order a doubled ship takes off as early as its day allows.
+  for (const conn of all) if (conn.cls !== NULL_CONNECTOR && ctx.doubled?.[conn.cls] === true) conn.early = true;
+  return runs.flatMap((run, r) => alternating(run, r === runs.length - 1));
 }
 
 // Segment `j` is the waking time between connector `j - 1` landing and connector `j` leaving; the last one is
@@ -130,11 +142,11 @@ function chainHeads(
     const conn = conns[j];
     const afterCap = j === conns.length - 1 ? day.tailSeconds : W;
     const lo = Math.max(0, conn.flex - afterCap);
-    const h = Math.min(conn.flex, W, W - after - used[j]);
+    const h = Math.min(conn.early ? W : conn.flex, W, W - after - used[j]);
     if (h < lo - LAYOUT_TOL) return { heads, fail: j };
     const head = Math.max(h, lo);
     heads.push(head);
-    after = conn.flex - head;
+    after = Math.max(0, conn.flex - head);
   }
   if (after + used[conns.length] > day.tailSeconds + LAYOUT_TOL) return { heads, fail: conns.length };
   return { heads, fail: -1 };
@@ -161,19 +173,28 @@ function placedSeconds(placed: Placement, daytime: readonly number[], ctx: SlotC
 
 // Largest first, each into the earliest segment that takes it with the overnight chain still standing. Exact
 // in seconds, and when it places everything it is optimal and no MILP is needed.
+// With `aroundWindow`, a normal class tries the segments after the last doubled ship first, and only then the ones
+// before it, so 1x launches do not push a doubled ship's take-off back (SPEC.md section 13); doubled classes, and
+// every class without a doubled ship on the slot, take the segments in order.
 function greedyFill(
   conns: readonly Connector[],
   daytime: readonly number[],
   counts: readonly number[],
-  ctx: SlotContext
+  ctx: SlotContext,
+  aroundWindow = false
 ): Placement {
   const segments = conns.length + 1;
   const used = new Array<number>(segments).fill(0);
+  const inOrder = Array.from({ length: segments }, (_, j) => j);
+  let lastDoubled = -1;
+  if (aroundWindow) conns.forEach((conn, j) => conn.early && (lastDoubled = j));
+  const afterWindow = [...inOrder.slice(lastDoubled + 1), ...inOrder.slice(0, lastDoubled + 1)];
   return daytime.map(c => {
     const s = ctx.classSeconds[c];
     const row = new Array<number>(segments).fill(0);
     let remaining = counts[c];
-    for (let j = 0; j < segments && remaining > 0; j++) {
+    for (const j of ctx.doubled[c] ? inOrder : afterWindow) {
+      if (remaining <= 0) break;
       const base = used[j];
       let lo = 0;
       let hi = Math.min(remaining, Math.max(0, Math.floor((capacityOf(j, conns, ctx.day) - base) / s + 1e-9)));
@@ -390,15 +411,19 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext): { launches: Cl
   const conns = standing()!;
   const segments = conns.length + 1;
 
-  // Longest first, the greedy's packing order; with doubled classes on the slot, doubled ones first, so they take
-  // the earliest segments, unless the usual order alone places more (SPEC.md section 13).
+  // Longest first, the greedy's packing order; with doubled classes on the slot, doubled ones first (`event`, then
+  // `overhang`), so they take the earliest segments, unless the usual order alone places more (SPEC.md section 13).
   const byLength = counts
     .flatMap((n, c) => (n > 0 && ctx.classNights[c] === 0 && ctx.classSeconds[c] > 0 ? [c] : []))
     .sort((a, b) => ctx.classSeconds[b] - ctx.classSeconds[a] || a - b);
   const daytime = byLength.some(c => ctx.doubled[c])
-    ? [...byLength.filter(c => ctx.doubled[c]), ...byLength.filter(c => !ctx.doubled[c])]
+    ? [
+        ...byLength.filter(c => ctx.doubled[c] && !ctx.overhang[c]),
+        ...byLength.filter(c => ctx.overhang[c]),
+        ...byLength.filter(c => !ctx.doubled[c]),
+      ]
     : byLength;
-  let placed = greedyFill(conns, daytime, counts, ctx);
+  let placed = greedyFill(conns, daytime, counts, ctx, daytime !== byLength || conns.some(conn => conn.early));
   const complete = (p: Placement) => daytime.every((c, d) => p[d].reduce((a, n) => a + n, 0) === counts[c]);
   if (!complete(placed) && daytime !== byLength) {
     const usual = greedyFill(conns, byLength, counts, ctx);
@@ -451,7 +476,7 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext): { launches: Cl
     if (j < conns.length) {
       const conn = conns[j];
       if (conn.cls !== NULL_CONNECTOR) launches.push({ cls: conn.cls, launchAt: dayStart + W - heads[j] });
-      after = conn.flex - heads[j];
+      after = Math.max(0, conn.flex - heads[j]);
       startDay += conn.nights;
     }
   }
@@ -673,6 +698,7 @@ export function layOutPlan(
     classSeconds: layout.classSeconds,
     classNights: layout.classNights,
     doubled: layout.classVariant.map(v => v !== 'normal'),
+    overhang: layout.classVariant.map(v => v === 'overhang'),
     day,
     solve,
     drop,
