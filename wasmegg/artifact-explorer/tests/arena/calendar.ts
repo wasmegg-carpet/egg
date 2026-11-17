@@ -1,6 +1,6 @@
 // The arena's calendar verifier: C1 for a problem with a sleep window. A sleep-aware candidate returns, per
 // slot, the launches it would fly and when; this checks them against the sleep rule and against the plan's own
-// allocation. Owned by the harness and never shared with `src/lib`, for the reason the packer and the sleep
+// allocation. Owned by the harness and never shared with `lib/mission-optimizer`, for the reason the packer and the sleep
 // model are not: a verifier the planner also ran would agree with it whatever either computed. Imports
 // nothing. See ARENA.md, "Sleep".
 

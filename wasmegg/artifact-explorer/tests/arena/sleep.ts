@@ -1,6 +1,6 @@
 // The arena's sleep model: a day is a waking window `W` followed by a sleep window `S`, the plan starts at
 // wake-up, and sleep forbids launching and nothing else. Owned by the harness and never shared with
-// `src/lib`, for the same reason the packer is not: a variant rule used by both the planner and its judge
+// `lib/mission-optimizer`, for the same reason the packer is not: a variant rule used by both the planner and its judge
 // would agree with itself no matter what it computed. Imports nothing. See ARENA.md, "Sleep".
 
 export const DAY_SECONDS = 86400;

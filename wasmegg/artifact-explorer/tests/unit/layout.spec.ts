@@ -1,17 +1,23 @@
 // Step three of the sleep model: the per-day fit rows, the layout of each slot on real days, the trim of what
-// does not fit, and the verifier every sleep-aware plan has to pass. See `src/lib/solver/SPEC.md` section 10.
+// does not fit, and the verifier every sleep-aware plan has to pass. See `lib/mission-optimizer/solver/SPEC.md` section 10.
 
 import { describe, expect, it } from 'vitest';
-import { FIT_Q_CAP, daySchedule, fitCoefficient, fitQs } from '@/lib/solver/days';
-import { STEERING_PRECISION, EXACT_PRECISION, evaluateCounts } from '@/lib/solver/evaluator';
-import { loadHighs } from '@/lib/solver/highs';
-import { layOutPlan } from '@/lib/solver/layout';
-import { buildModel } from '@/lib/solver/model';
-import { buildOaMilp, effectiveQs, layoutOf, nCol } from '@/lib/solver/milp';
-import { DEFAULT_TUNING, assertVerified, solveWith } from '@/lib/solver/solve';
-import { DAY_SECONDS, type MilpModel, type MilpSolve, type PlanProblem, type PlanResult } from '@/lib/solver/types';
-import { slotFault } from '@/lib/solver/verify';
-import type { LaunchOption } from '@/lib/types';
+import { FIT_Q_CAP, daySchedule, fitCoefficient, fitQs } from 'lib/mission-optimizer/solver/days';
+import { STEERING_PRECISION, EXACT_PRECISION, evaluateCounts } from 'lib/mission-optimizer/solver/evaluator';
+import { loadHighs } from 'lib/mission-optimizer/solver/highs';
+import { layOutPlan } from 'lib/mission-optimizer/solver/layout';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
+import { buildOaMilp, effectiveQs, layoutOf, nCol } from 'lib/mission-optimizer/solver/milp';
+import { DEFAULT_TUNING, assertVerified, solveWith } from 'lib/mission-optimizer/solver/solve';
+import {
+  DAY_SECONDS,
+  type MilpModel,
+  type MilpSolve,
+  type PlanProblem,
+  type PlanResult,
+} from 'lib/mission-optimizer/solver/types';
+import { slotFault } from 'lib/mission-optimizer/solver/verify';
+import type { LaunchOption } from 'lib/mission-optimizer/types';
 import { craftDag, makeOpt } from './spec-helpers';
 
 const H = 3600;

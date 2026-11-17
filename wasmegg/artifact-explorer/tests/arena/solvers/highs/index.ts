@@ -13,7 +13,7 @@ export const highs: ArenaSolver = {
   id: 'highs',
   description: 'MILP over slots and crafts, outer-approximated objective, solved by HiGHS (WebAssembly)',
   plan: (problem: PlanProblem): PlanResult => solveWith(problem, solve, DEFAULT_TUNING, { report: true }),
-  // The solver budgets `nightsPerSlot` per slot (`src/lib/solver/SPEC.md` section 9), so sleep-on instances
+  // The solver budgets `nightsPerSlot` per slot (`lib/mission-optimizer/solver/SPEC.md` section 9), so sleep-on instances
   // and A10-sleep are solved for it.
   sleepAware: true,
 };

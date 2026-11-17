@@ -1,14 +1,14 @@
 // The night budget: `PlanProblem.nightsPerSlot` and `LaunchOption.nights` in the model, the duration classes,
-// the `night_k` rows and the certifier. See `src/lib/solver/SPEC.md` section 9.
+// the `night_k` rows and the certifier. See `lib/mission-optimizer/solver/SPEC.md` section 9.
 
 import { describe, expect, it } from 'vitest';
-import { buildModel } from '@/lib/solver/model';
-import { buildOaMilp, effectiveQs, layoutOf } from '@/lib/solver/milp';
-import { DEFAULT_TUNING, solveWith } from '@/lib/solver/solve';
-import { loadHighs } from '@/lib/solver/highs';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
+import { buildOaMilp, effectiveQs, layoutOf } from 'lib/mission-optimizer/solver/milp';
+import { DEFAULT_TUNING, solveWith } from 'lib/mission-optimizer/solver/solve';
+import { loadHighs } from 'lib/mission-optimizer/solver/highs';
 import { craftDag, makeOpt } from './spec-helpers';
-import type { PlanProblem } from '@/lib/solver/types';
-import type { LaunchOption } from '@/lib/types';
+import type { PlanProblem } from 'lib/mission-optimizer/solver/types';
+import type { LaunchOption } from 'lib/mission-optimizer/types';
 
 function withNights(opt: LaunchOption, nights: number): LaunchOption {
   return { ...opt, nights };

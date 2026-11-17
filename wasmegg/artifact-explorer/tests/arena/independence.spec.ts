@@ -274,7 +274,7 @@ describe('arena independence', () => {
   });
 
   it('the calendar verifier stands alone', () => {
-    // C1 for a sleep-aware problem. Sharing anything with the planner's own verifier (`src/lib/solver/verify.ts`)
+    // C1 for a sleep-aware problem. Sharing anything with the planner's own verifier (`lib/mission-optimizer/solver/verify.ts`)
     // or its layout would let a wrong rule pass on both sides at once.
     expect(importsOf(readSource('calendar.ts'))).toEqual([]);
     const code = stripComments(readSource('calendar.ts'));

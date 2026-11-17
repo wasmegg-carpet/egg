@@ -77,8 +77,8 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
 
 export const DEFAULT_WAIT_TIME_DAYS = '30';
 
-// The longest sleep window the sidebar offers, in hours a day. `MAX_SLEEP_SECONDS` in `lib/sleep.ts` is the
-// same bound on the solver's side of the worker.
+// The longest sleep window the sidebar offers, in hours a day. `MAX_SLEEP_SECONDS` in `lib/mission-optimizer/sleep.ts`
+// is the same bound on the solver's side of the worker.
 export const MAX_SLEEP_HOURS = 16;
 
 // A stored or typed sleep setting as hours the planner can use: 0 (around the clock) for anything that is

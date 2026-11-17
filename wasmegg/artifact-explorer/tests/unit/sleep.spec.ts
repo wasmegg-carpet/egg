@@ -1,4 +1,4 @@
-// The app's sleep model (`src/lib/sleep.ts`) and what `optimizeFull` does with it. The solver's side of a
+// The app's sleep model (`lib/mission-optimizer/sleep.ts`) and what `optimizeFull` does with it. The solver's side of a
 // sleep-aware problem is the arena's subject; what is tested here is the part the arena never sees, because
 // the arena builds its own variants: that the app's menu is the same rule, and that the plan it hands the
 // card is the one the solver laid out.
@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest';
 
 import { ei, MissionType } from 'lib';
-import { optimizeFull } from '@/lib/optimizer-core';
-import { computeMissionLegendaryRows } from '@/lib/optimizer-views';
-import { MAX_SLEEP_SECONDS, sleepCapacity, sleepSecondsOf, sleepVariants } from '@/lib/sleep';
+import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
+import { computeMissionLegendaryRows } from 'lib/mission-optimizer/optimizer-views';
+import { MAX_SLEEP_SECONDS, sleepCapacity, sleepSecondsOf, sleepVariants } from 'lib/mission-optimizer/sleep';
 import {
   clampSleepHours,
   isMissionFilters,
