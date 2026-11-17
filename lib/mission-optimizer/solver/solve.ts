@@ -271,11 +271,12 @@ export function solveWith(
   // other failure here degrades to the empty plan, so a numerically unjudgeable incumbent does
   // too rather than taking the whole call down with it.
   let keep: boolean;
+  let planned: number | undefined;
   try {
+    planned = evaluateCounts(model, counts, STEERING_PRECISION).logJoint;
     keep =
       fitsBudgets(model, layout, solution.columnValues, counts) &&
-      evaluateCounts(model, counts, STEERING_PRECISION).logJoint >
-        evaluateCounts(model, empty, STEERING_PRECISION).logJoint;
+      planned > evaluateCounts(model, empty, STEERING_PRECISION).logJoint;
   } catch {
     keep = false;
   }
@@ -288,6 +289,7 @@ export function solveWith(
   // reported from here describes the plan as laid out.
   const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
   const laid = layOutPlan(model, layout, solution.columnValues, counts, problem.options, solve, judge);
+  laid.stats.plannedLogJoint = planned;
   let keepLaid: boolean;
   try {
     keepLaid = (laid.stats.launchesTrimmed === 0 && !laid.stats.launchesDemoted) || judge(laid.counts) > judge(empty);

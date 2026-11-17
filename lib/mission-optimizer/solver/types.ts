@@ -173,6 +173,11 @@ export interface LayoutStats {
   // (SPEC.md section 13); not counted in `launchesTrimmed`, since they still fly. Present only when the problem
   // also carries an event window, so a sleep-only result is the one it always was.
   launchesDemoted?: number;
+  // What the plan promised: the solver's own judge (`STEERING_PRECISION`) on the MILP's counts before any of them
+  // was laid out, trimmed or demoted, as a natural log of the joint. Beside the delivered plan's judged joint it
+  // is the gap the relaxed rows leave for the layout to close (SPEC.md section 14). Absent when no plan came
+  // out of the MILP.
+  plannedLogJoint?: number;
 }
 
 export interface PlanResult {
