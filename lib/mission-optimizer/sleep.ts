@@ -44,7 +44,8 @@ export interface SleepVariantSource {
 }
 
 // Every way each option can sit against the sleep windows. With charge `d`, waking window `W` and day `D`:
-// - a daytime variant, flown inside one waking window: `d` waking seconds and no night, when `d <= W`;
+// - a daytime variant: `d` waking seconds and no night, when `d <= W` (usually flown inside one waking window, but
+//   one that goes up before bedtime may land in the night: its block is still `d`);
 // - an overnight variant for each number of nights `m` it can span, `max(1, ceil((d - W) / D))` to
 //   `floor(d / D) + 1`: `max(d - m * sleep, (m - 1) * W)` waking seconds and `m` nights.
 // A zero-second overnight variant is ordinary (a short ship launched at bedtime) and still costs its night.

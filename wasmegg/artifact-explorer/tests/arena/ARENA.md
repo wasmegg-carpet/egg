@@ -317,7 +317,12 @@ for candidates that return an allocation alone.
 Alongside the tiers there is `tuning-bench.spec.ts`, opt-in via `BENCH` and
 excluded from `pnpm test` the same way. It is not a tier and not a test: it
 asserts nothing, and prints solve latency and judged log10(joint) per instance
-per `maxNodes`, honouring `ARENA_WINDOW` and `ARENA_SLEEP`. `BENCH_BASES`
+per `maxNodes`, honouring `ARENA_WINDOW` and `ARENA_SLEEP`; with a sleep
+window each cell also carries the promise and the launches trimmed and demoted
+(`(planned t<trimmed> d<demoted>)`), and each base ends with a line of means.
+With one base it is the cheap way to measure plan quality over many seeds
+without the invariants: `BENCH_BASES=1200 BENCH_INSTANCES=40` is the forty-seed
+list `SPEC.md` section 14 records, about two minutes a regime on a quiet machine. `BENCH_BASES`
 (default half, once and twice `DEFAULT_TUNING.maxNodes`), `BENCH_INSTANCES` (8)
 and `BENCH_SEED_BASE` (2000) shape it. It measures neither invariant severity nor
 monotonicity, so it can rule a budget out on cost but cannot on its own justify
@@ -332,7 +337,9 @@ producing a scorecard and starts producing a stack trace.
 
 **Cost.** Minutes per instance, almost all of it solver runtime: `invariants.spec.ts`
 puts the four-instance smoke tier at about 12 minutes, and the forty-instance sweep
-scales from there. The deep tier adds substantially more. Over the default seed base
+scales from there. Measured since, on a machine shared with other work, the smoke
+tier took about 2 minutes with neither window, 4 to 6 with one, and 4 to 19 with a
+sleep window and a 2x window together. The deep tier adds substantially more. Over the default seed base
 (2000-2039) instances carry 63 to 289 options and 1 to 4 targets.
 
 ## The roster
@@ -343,7 +350,14 @@ and trims what does not fit (section 10), so A10-sleep runs for it on every
 instance, `ARENA_SLEEP` or not, and its sleep-on plans are checked by their
 calendar. It also reports `layoutStats`, which the scorecard sums over fresh
 solves into one `layout` line for sleep-on runs, demoted launches included;
-that line is the candidate's own account and nothing gates on it. Window-aware:
+that line is the candidate's own account and nothing gates on it. Under it, per
+unperturbed instance, the scorecard sets what the plan promised before layout
+(`layoutStats.plannedLogJoint`, the candidate's own judge on the MILP's counts,
+in log10) beside the joint the harness judged for the plan delivered, with the
+launches trimmed and demoted on the way, and the mean gap. That gap is how far
+the solver's rows over-promise what real days fly
+(`lib/mission-optimizer/solver/SPEC.md` section 14); it is a diagnostic, and the
+harness's figure is the only one scored. Window-aware:
 the window rows of section 11 and a back-to-back calendar with every plan
 (section 12), and with a sleep window as well the wall-clock rows, doubled-first
 layout and demotion of section 13, so it declares `windowWithSleepAware` and

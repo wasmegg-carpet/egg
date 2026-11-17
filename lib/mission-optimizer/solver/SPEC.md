@@ -550,6 +550,11 @@ is what is relied on; the rows only leave it less to trim.
   without an incumbent, leaves the greedy's placement, which always stands. The
   better of greedy and MILP by waking time placed is kept.
 - **K = 0** (a horizon under a day): the greedy lays launches end to end.
+- **Re-timed, only when something is left over** (section 14). When the
+  segments leave daytime launches unplaced, the slot is re-timed in the same
+  order, each launch at the first waking instant its predecessor's block leaves
+  it, and what was left over goes on the end while it still ends by `H`. Kept
+  only when that places a launch more.
 
 Launch times follow: zero-second daytime launches at the start, each segment's
 daytime launches end to end from the previous landing, each connector at `W -
@@ -563,8 +568,9 @@ the effort floor); the last block ends by `H`. Tolerance 1e-6 s
 drift of summing a few hundred durations on a horizon of millions of seconds.
 The layout's own arithmetic works to 1e-7 s so it never reaches that edge.
 
-**Trim.** Every launch the layout drops (an unplaced daytime launch, an
-overnight ship that cannot stand) decrements, among the groups of the allowed
+**Trim.** Every launch the layout drops (a daytime launch neither the segments
+nor the re-timed slot's end has room for, an overnight ship that cannot stand)
+decrements, among the groups of the allowed
 classes, the one whose loss leaves the highest `evaluateCounts(model, counts,
 STEERING_PRECISION).logJoint`, one launch at a time; an unjudgeable candidate
 scores `-Infinity`. A slot the verifier rejects loses one more launch, chosen
@@ -755,6 +761,10 @@ with a sleep window the rows over-promise, as section 9's night budget does,
 and are exact only without one. Nothing in the model proves a doubled launch
 starts inside the window; the layout and the verifier do.
 
+Section 14 has since replaced `window_k` with stronger rows that also count
+the window's nights and its days one by one; the argument above is the one
+section 14's builds on.
+
 **Twins.** Each doubled group carries `twin`, the normal group its launches are
 flown as when they miss the window (`model.ts`, `linkTwins`): the group holding
 the same flight at 1x — equal fuel, seconds and nights, and exactly half of every
@@ -798,7 +808,8 @@ ordering on top, applied only when a slot holds doubled launches:
   segment totals reach the exact chain, so the order costs nothing there.
 
 All of these act only on a slot holding doubled launches, so a slot without one
-is laid out exactly as section 10 lays it out.
+is laid out exactly as section 10 lays it out. They are one of the layouts the
+judge now chooses among for such a slot (section 14), no longer the only one.
 
 **Settle and demote.** Each slot, once laid out, is settled against the window
 (`layout.ts`, `settle`). Launches of equal seconds and nights hold the slot
@@ -852,10 +863,199 @@ in window order and taking off early (above) were added after the first combined
 run: they cut the drawn run's demotions from 77 launches to 18 and its
 violations from 10 to 6, with mean log10(joint) unchanged at -6.845.
 
-What still demotes is mostly section 10's own day model: a variant's nights are
-fixed, so an overnight ship launched early still holds every night it was cut
-for, and a ship that physically lands mid-day leaves that day's waking time
-unused. A daytime 1x launch the greedy has nowhere else to put can then sit
-before a doubled ship in the only segment there is. Both are layout limits, not
-row errors, and both are where to look first to make the combined case more
-monotone.
+What still demoted was put down here to section 10's own day model: a
+variant's nights are fixed, so an overnight ship launched early still holds
+every night it was cut for, and a daytime 1x launch the greedy has nowhere else
+to put can sit before a doubled ship. Measured (section 14), that was the
+smaller part. Most demotions came from the rows, which charged an event launch
+nothing for waiting for wake-up, and from the layout, which fell back to
+section 10's order whenever that placed more seconds, however many doubled
+launches it pushed out of the window.
+
+## 14. Promise and delivery under sleep
+
+A plan with a sleep window is a promise first and a timeline second. The MILP's
+plan is judged before layout and recorded as `layoutStats.plannedLogJoint`. What
+the layout delivers is judged again after trims and demotions. The arena prints
+the two side by side for every unperturbed instance (`tests/arena/ARENA.md`,
+"Running it"). Under sleep and a 2x window together the gap was large: over seeds
+2000-2039 the delivered joint sat 0.07 to 0.16 log10 under the promise, and the
+plans flew hundreds of doubled launches at 1x. This section is what closed most
+of that gap. It is in three parts: rows that promise less of what cannot fly,
+a layout the judge chooses, and a timeline that uses the waking time a section 10
+connector leaves idle.
+
+**What was wrong, measured.** Arena seed 2006, 8 hours of sleep, a 48-hour
+window. The section 13 `window_k` row let one slot plan 48 one-hour event
+launches, and the window has 32 waking hours. Another slot planned an overhang
+over three nights, cut to 32 waking hours, beside a 12.96-hour daytime ship
+(seed 2001, a 1-hour window). That pair fits the slot and night rows. But the
+overhang has to go up within the first hour, and from there its block holds 40
+waking hours, not 32, so the daytime ship has no room before or after it. In
+the layout, section 13's fall-back to section 10's order whenever that placed
+more seconds once pushed 47 doubled launches of one slot out of the window to fit
+1x ones. The layout MILP, which maximizes seconds placed, could do the same. The
+overnight-ship model of section 10 (a ship holds every night its class counts)
+did cost waking time, but only a doubled ship ever takes off early enough to land
+a night early, and that was the smallest of the three.
+
+**Canonical labels.** The validity arguments below take a real schedule (an
+option and a launch time per launch, each launch going up awake after the one
+before it in its slot has landed) and label each launch with the variant for
+the nights it physically flies through, `m*`. That variant is on the menu, since
+`m*` lies between `sleepVariants`' fewest and most. Its block, `waking + m* S`,
+ends no later than the first waking instant after the landing. So the labelled
+calendar verifies, and flies the same options at the same times with the same
+yields and doubling. A launch's **reach** is the interval from its launch to the
+first waking instant at or after its landing. Under this labelling a launch
+charges at most the waking seconds of its reach and exactly the nights inside
+it, and reaches in one slot do not overlap. Section 9's and 10's rows are valid
+for schedules read this way. The rows below need only the event launches read
+this way, and an event launch is never a slot's last.
+
+**Rows.** Write `lambda` for the window's last waking instant (section 13),
+`N_E = floor(lambda / D)` for the nights wholly before it, `A = lambda - N_E S`
+for the waking seconds before it, and `P = lambda - N_E D` for the part of the
+waking window it falls in (`days.ts`, `windowShape`; a whole window when the
+window closes in a night). Per slot:
+
+```
+window_k        sum over event classes  seconds * n[c][k]  <=  A
+windownight_k   sum over event classes  nights  * n[c][k]  <=  N_E
+windowfit_k_q   sum over event daytime classes  u^(q)(seconds / W) * n[c][k]
+                  + sum over event overnight classes  (nights - 1) * n[c][k]
+                  <=  N_E + min(1, floor((q + 1) P / W) / q)
+```
+
+with one `windowfit` row per `q` among the event daytime classes, as section
+10's fit rows. A doubled class is also charged more in `slot_k`: the fewest
+waking seconds its block holds when it starts awake at or before `lambda`
+(`leastWakingIn`), when that is more than its seconds. The charge is rounded
+down a microsecond so float error never takes it past that least.
+`Layout.classCharge` carries the coefficient. `fitsBudgets` re-reads every one
+of these rows except the fit rows, as it always has. An event option charging
+more than `A` or `N_E` is dropped, and an event class's per-slot bound is
+`min(floor(A / seconds), floor(N_E / nights))`.
+
+_Validity._ In a slot of a canonically labelled schedule the doubled launches
+are a prefix `1..j`. Label `1..j-1` `event` and `j` the `overhang` (section 13).
+The event launches' reaches are disjoint and end by `launchAt_j <= lambda`. They
+hold no more waking seconds than `[0, lambda]` does, which is `A`, and no more
+nights than lie wholly before `lambda`, which is `N_E`. An event daytime launch
+(`m* = 0`) goes up and lands inside one waking window, and that window lies
+before `lambda`: one of the `N_E` whole ones, or the part `P`. Under `u^(q)`,
+launches inside one whole window sum to at most 1 (section 10), and launches
+summing to at most `P / W` sum to at most `floor((q + 1) P / W) / q`, since
+`u^(q)(x) <= floor((q + 1) x) / q` for every `x`. An event launch over `m*`
+nights flies straight through `m* - 1` whole windows before `lambda`, which no
+daytime launch can use. So the fit row holds. For the slot charge, a doubled
+launch goes up at some `t <= lambda`, awake. Its reach contains `[t, t + block]`,
+whose waking seconds are at least the least over every such `t`. The reaches are
+disjoint, so the slot row holds with the larger charge. Without a sleep window
+`A` is the window, `N_E` is 0 and the night row has no entries, there is no fit
+row, and every charge is the seconds: section 11's matrix exactly. With sleep and
+no window nothing is doubled: section 10's matrix exactly.
+
+_Still relaxed._ The rows pool the window's waking seconds, and the fit rows see
+one length at a time. The overhang's charge does not know that the event
+launches before it push its start later, and so push more waking time into its
+block. The layout still demotes, much less often.
+
+**Layout, chosen by the judge.** A slot holding a doubled launch is laid out
+several ways (`layout.ts`, `ATTEMPTS`): section 13's order; the same with no 1x
+daytime launch before the last doubled ship (`strict`), its layout MILP pinned
+to the greedy's doubled placement so seconds cannot buy a 1x launch with a
+doubled one; and section 10's order alone. Each of the three is also tried with
+folds (below) where it had a ship to fold. Each attempt runs to the end:
+layout, settle, demotions, trims, verifier retries. The judge then scores the
+plan's counts. The best is kept, and ties go to the earlier attempt. The
+attempts start from the same counts, and the kept one's counts and plan
+statistics are restored, so later slots see only what was kept. Layout MILP and
+margin counts include every attempt's. A slot without a doubled launch has one
+layout, section 10's, as before.
+
+**Folds.** A doubled ship that takes off before bedtime by more than its flex
+and a night (`head >= flex + S`) lands in a waking window a night before its
+class says. Folded, it is a connector over `nights - 1` nights with flex
+`flex + D`, which forces exactly that early a take-off. A null connector follows
+it, so the slot's nights still sum to its own and the rest of the landing day is
+a segment. The block, `waking + nights * S`, ends exactly at the landing, so the
+timeline verifies as it is. A fold with one night is a connector over none,
+splitting one day in two. The calendar keeps the class's own option, and so its
+nights. A fold changes when the next launch may go, never what the slot's rows
+counted.
+
+**Re-timing, the night model for every slot.** Section 10's segments time each
+overnight ship as flying through every night its class counts. They also keep
+each daytime launch inside one waking window, though sleep forbids launching and
+nothing else. When the segments leave daytime launches unplaced, the slot is
+re-timed in the same order (`compact`): each launch goes at the first waking
+instant the block before it leaves. By induction no launch goes up later than it
+did, so the timeline still verifies, and earliest start is optimal for a fixed
+order. A ship that lands mid-day now frees the rest of that day. A daytime launch
+can go up before bedtime and land in the night: two 10.8-hour launches a day
+where the segments fit one. What the segments could not place goes on the end,
+longest first, while it still ends by `H`, and only the rest is trimmed. The
+re-timed slot is kept only when it places a launch more, so a slot that lost
+nothing keeps section 10's timeline launch for launch. A calendar can now show a
+launch at its class's nights that lands earlier than they say, or a daytime
+launch landing in the night. The verifier, which reads blocks and not physics,
+accepts both, and so does the arena's.
+
+**Measured.** Seeds 2000-2039 (`tuning-bench.spec.ts`, `BENCH_BASES=1200`,
+one solve per seed, judged by the harness), before this section's rows and layout
+and after them. The table gives mean delivered log10(joint), mean promise minus
+delivery, and launches trimmed / demoted, over the 39 seeds that score (2036
+scores 0 in every regime, before and after: its targets have no ceiling).
+
+| regime                 | delivered before | after   | gap before | after  | trimmed / demoted before | after     |
+| ---------------------- | ---------------- | ------- | ---------- | ------ | ------------------------ | --------- |
+| 8 h sleep, inside      | -6.3066          | -6.2447 | 0.0744     | 0.0116 | 183 / 508                | 270 / 100 |
+| 8 h sleep, sliver      | -6.4647          | -6.3190 | 0.1572     | 0.0092 | 161 / 58                 | 179 / 2   |
+| 12 h, straddle-under   | -6.1445          | -6.0966 | 0.0714     | 0.0196 | 152 / 1210               | 250 / 180 |
+| sleep and window drawn | -6.3987          | -6.3489 |            |        | 153 / 272                | 238 / 133 |
+
+Per seed, 22, 20, 23 and 13 seeds improved, and 3, 1, 4 and 2 got worse, by at
+most 0.072 log10. Plans that trade demotions for trims are what the judge
+preferred. Sleep drawn per seed improved one seed and left the rest as they
+were. Neither window, the 48-hour window alone, and 8 or 12 hours of sleep alone
+gave hash-identical plans, allocation, reported joint and calendar, on all forty
+seeds. Pulled apart: the rows alone, under section 13's layout, were worse
+with 8 hours and the 48-hour window (-6.3406). The layouts chosen by the judge
+did most of the rest, and folds and re-timing added up to 0.002 log10 each,
+never making a seed worse. Arena smoke tier (2000-2003), before and after: no C0
+or C1 failure in any regime. Soft violations went from 21 to 2 with 8 hours and a
+1-hour window, 15 to 7 with 12 hours straddling, and 6 to 4 drawn. They went from
+11 to 13 with 8 hours and the 48-hour window, and from 1 to 2 with the 48-hour
+window alone (both A10-sleep steps, which carry sleep). Mean log10(joint) went
+from -6.868 to -6.674, -6.576 to -6.556 and -6.845 to -6.845. With 8 hours and the
+48-hour window it went from -6.551 to -6.554, the one smoke regime that fell: seed
+2001, whose new plan wants a doubled ship to land in a night the layout cannot
+yet give it (a ship flying through one night more than its class says, the
+mirror of a fold). Over forty seeds the same regime gained 0.062. Every other
+smoke regime's quality was unchanged.
+
+## 15. A saturated target's grid
+
+`optimizeFull` with 10-second and 40-second ships on a 3-day horizon returned
+the empty plan, at probability 0, with or without sleep or a 2x window. Thousands
+of launches fit a slot, and each is worth a score of 0.1, so the target's ceiling
+`theta` was about 8193. Section 5's grid puts its floor at sigma `1e-2`, a score
+of 82, where `log(1 - e^-s)` is 0 to every bit of a double. Every tangent cut
+there is flat, the slopes under `FLAT_CUT_SLOPE` dropped outright (section 3).
+The deepest cut, which section 4 relies on to price abandoning a target, priced
+it at nothing. So the MILP's optimum was the empty plan, the judge rejected it
+against the empty plan, and the empty plan was returned. This is not a
+search-budget effect: it is the optimum of the MILP as written.
+
+`extendedGrid` (`milp.ts`) continues such a target's grid below its floor, at
+the grid's own spacing, until a point lies at a score of `DEEPEST_CUT_SCORE`
+(`1e-2`). There, abandoning the target costs about 5.6 nats. The extension
+applies only when the floor lies past a score of `FLAT_FLOOR_SCORE` (4), where
+the deepest cut prices abandoning at under a tenth of a nat. Every target whose
+ceiling is under `4 / 1e-2 = 400` keeps its grid exactly. The 600- and
+2400-second ships of the same horizon (`theta` near 136) are one such target,
+and their plan is the one they always got. `tests/unit/saturated-target.spec.ts`
+holds the reported case to a plan near certainty under each setting. The added
+cuts are ordinary tangents, so the envelope still over-estimates `g` (section 3),
+and the judge still decides (section 5).
