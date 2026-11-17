@@ -133,8 +133,8 @@ export function legendaryCraftProbabilityOf(solution: OptimizerSolution, rootId:
 // ---------------------------------------------------------------------------
 
 // A run of identical launches flown back to back: `count` of `choice`, the first going up at `launchAt`, in
-// seconds from the start of the plan. Inside a block of identical days (`repeat` > 1) the run is flown again
-// every day of the block, and `launchAt` is its first day's.
+// seconds from the start of the plan. Inside a block of identical days, or a routine of several days flown over
+// and over (`repeat` > 1), the run is flown `repeat` times in all, and `launchAt` is the first time's.
 export interface TimelineLaunchRow {
   kind: 'launch';
   choice: LaunchSolution;
@@ -146,11 +146,24 @@ export interface TimelineLaunchRow {
   nights: number;
 }
 
-// The start of a day on a sleep-aware plan, or of a block of days flown identically. Days count from 0.
+// The start of a day on a sleep-aware plan, or of a block of days flown identically. Days count from 0. Inside a
+// routine it is day `routineDay.day` (from 1) of the routine's `routineDay.of`, and `firstDay` is the day it falls
+// on the first time round.
 export interface TimelineDayRow {
   kind: 'day';
   firstDay: number;
   lastDay: number;
+  routineDay?: { day: number; of: number };
+}
+
+// The start of a routine: the `period` days that follow, flown `times` over, from `firstDay` to `lastDay`. A
+// sleep-aware plan settles into one whenever its ships take more than a day to come round, as long ones do.
+export interface TimelineRoutineRow {
+  kind: 'routine';
+  firstDay: number;
+  lastDay: number;
+  period: number;
+  times: number;
 }
 
 // Where the 2x capacity event ends: everything above it goes up inside the window, nothing below it does.
@@ -159,7 +172,11 @@ export interface TimelineWindowEndRow {
   at: number;
 }
 
-export type TimelineRow = TimelineLaunchRow | TimelineDayRow | TimelineWindowEndRow;
+export type TimelineRow = TimelineLaunchRow | TimelineDayRow | TimelineRoutineRow | TimelineWindowEndRow;
+
+// The longest routine the timeline looks for. A week covers every ship's round trip at any sleep the controls
+// offer; a longer one would fold too little to be worth reading as one.
+const MAX_ROUTINE_DAYS = 7;
 
 export interface SlotTimeline {
   rows: TimelineRow[];
@@ -195,9 +212,10 @@ interface DayGroup {
 
 // The plan's slots as the player flies them, read off the calendar the solver verified: one row per run of
 // identical consecutive launches, day headings on a sleep-aware plan, and a divider where the 2x capacity event
-// ends. A day flown exactly like the one before it folds into a "days n to m" block, which is what keeps a
-// month-long routine to a handful of lines. Every launch is counted exactly once: for each `choiceHistory` entry,
-// its rows' `count * repeat` sum to its `numShipsLaunched`.
+// ends. Days flown exactly like the ones before them fold away: a run of identical days into one "days n to m"
+// block, and a rhythm of several days into one routine shown once, which is what keeps a month-long plan to a
+// handful of lines. Every launch is counted exactly once: for each `choiceHistory` entry, its rows'
+// `count * repeat` sum to its `numShipsLaunched`.
 export function planTimeline(solution: OptimizerSolution): PlanTimeline {
   const byDay = (solution.sleepSeconds ?? 0) > 0;
   const window = solution.eventWindowSeconds ?? 0;
@@ -247,21 +265,25 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
   const windowEnd: TimelineWindowEndRow = { kind: 'window-end', at: window };
   const segments = groups.map(group => runsOf(group.tokens));
   const signatures = segments.map(signatureOf);
-  // A day can stand for the ones after it only if nothing in it or between them is the window's end.
-  const foldable = (i: number) => byDay && !segments[i].includes('window-end');
-  for (let g = 0; g < groups.length; ) {
-    let last = g;
-    while (
-      foldable(g) &&
-      last + 1 < groups.length &&
-      groups[last + 1].day === groups[last].day + 1 &&
-      !groups[last + 1].windowEndsBefore &&
-      foldable(last + 1) &&
-      signatures[last + 1] === signatures[g]
-    )
-      last++;
-    if (groups[g].windowEndsBefore) rows.push(windowEnd);
-    if (byDay) rows.push({ kind: 'day', firstDay: groups[g].day, lastDay: groups[last].day });
+  const groupOnDay = new Map(groups.map((group, i) => [group.day, i]));
+  // What day `day` flies, '' for a day with no launch; undefined when it may not take part in a fold at all,
+  // because the window ends in it or just before it.
+  const daySignature = (day: number, first: boolean): string | undefined => {
+    const i = groupOnDay.get(day);
+    if (i === undefined) return '';
+    if (segments[i].includes('window-end') || (!first && groups[i].windowEndsBefore)) return undefined;
+    return signatures[i];
+  };
+  // How many times over the `period` days from `start` are flown, counting the first.
+  const repeatsOf = (start: number, period: number): number => {
+    const pattern = Array.from({ length: period }, (_, i) => daySignature(start + i, i === 0));
+    if (pattern.includes(undefined)) return 1;
+    let times = 1;
+    while (pattern.every((sig, i) => daySignature(start + times * period + i, false) === sig)) times++;
+    return times;
+  };
+  const emitDay = (g: number, repeat: number, day: TimelineDayRow | null) => {
+    if (day) rows.push(day);
     for (const segment of segments[g]) {
       if (segment === 'window-end') {
         rows.push(windowEnd);
@@ -272,13 +294,44 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
         kind: 'launch',
         choice,
         count: segment.count,
-        repeat: last - g + 1,
+        repeat,
         launchAt: segment.launchAt,
         doubled: segment.doubled,
         nights: choice.nights ?? 0,
       });
     }
-    g = last + 1;
+  };
+
+  for (let g = 0; g < groups.length; ) {
+    const start = groups[g].day;
+    if (groups[g].windowEndsBefore) rows.push(windowEnd);
+    // The fold that covers the most days, the shortest routine on a tie. Without sleep there is one group and
+    // nothing to fold.
+    let period = 1;
+    let times = 1;
+    if (byDay) {
+      for (let p = 1; p <= MAX_ROUTINE_DAYS; p++) {
+        const t = repeatsOf(start, p);
+        if (t >= 2 && p * t > period * times) [period, times] = [p, t];
+      }
+    }
+    const end = start + period * times;
+    let next = g;
+    while (next < groups.length && groups[next].day < end) next++;
+    const lastDay = groups[next - 1].day;
+    if (!byDay) emitDay(g, 1, null);
+    else if (period === 1) emitDay(g, times, { kind: 'day', firstDay: start, lastDay });
+    else {
+      rows.push({ kind: 'routine', firstDay: start, lastDay, period, times });
+      for (let i = g; i < next && groups[i].day < start + period; i++)
+        emitDay(i, times, {
+          kind: 'day',
+          firstDay: groups[i].day,
+          lastDay: groups[i].day,
+          routineDay: { day: groups[i].day - start + 1, of: period },
+        });
+    }
+    g = next;
   }
   if (pendingEnd) rows.push(windowEnd);
 

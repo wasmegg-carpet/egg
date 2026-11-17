@@ -15,8 +15,23 @@
         <p v-if="slot.rows.length === 0" class="mt-1 text-sm text-gray-400 italic">Unused</p>
         <ul v-else class="mt-1 space-y-0.5">
           <template v-for="(row, j) of slot.rows" :key="j">
-            <li v-if="row.kind === 'day'" class="pt-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-              <template v-if="row.firstDay === row.lastDay">Day {{ row.firstDay + 1 }}</template>
+            <li
+              v-if="row.kind === 'routine'"
+              class="mt-1 border-t border-gray-200 pt-1 text-[11px] font-medium uppercase tracking-wide text-gray-600"
+            >
+              Days {{ row.firstDay + 1 }}–{{ row.lastDay + 1 }}
+              <span class="normal-case font-normal text-gray-400"
+                >· the same {{ row.period }} days, {{ row.times }} times over</span
+              >
+            </li>
+
+            <li
+              v-else-if="row.kind === 'day'"
+              class="pt-1 text-[11px] font-medium uppercase tracking-wide text-gray-500"
+              :class="row.routineDay ? 'pl-2' : ''"
+            >
+              <template v-if="row.routineDay">Day {{ row.routineDay.day }} of {{ row.routineDay.of }}</template>
+              <template v-else-if="row.firstDay === row.lastDay">Day {{ row.firstDay + 1 }}</template>
               <template v-else>
                 Days {{ row.firstDay + 1 }}–{{ row.lastDay + 1 }}
                 <span class="normal-case font-normal text-gray-400">· the same each day</span>
@@ -31,25 +46,27 @@
               <span class="h-px flex-1 bg-fuchsia-300"></span>
             </li>
 
-            <li v-else class="flex items-start gap-1.5 text-gray-800">
+            <li v-else class="flex items-center gap-1.5 text-gray-800">
               <span
-                class="mt-2 w-2 h-2 rounded-full flex-shrink-0"
+                class="w-2 h-2 rounded-full flex-shrink-0"
                 :class="row.nights > 0 ? 'bg-indigo-500' : 'bg-green-500'"
               ></span>
-              <span class="min-w-0 flex-1">
-                <span class="tabular-nums">{{ row.count }}×</span>
+              <!-- The name is the one part that gives way at phone width: it wraps inside itself, and the count,
+                   the badge and the night stay on its line. -->
+              <span class="min-w-0 flex-1 flex items-center gap-1">
+                <span class="flex-shrink-0 tabular-nums">{{ row.count }}×</span>
                 <mission-name
+                  class="min-w-0"
                   :mission="row.choice.ship"
                   :target="row.choice.targetAfxId"
                   :no-link="true"
-                  class="inline-block"
                 />
-                <double-capacity-badge v-if="row.doubled" class="ml-1 align-middle" />
-                <span v-if="row.nights > 0" class="ml-1 text-xs text-indigo-600 whitespace-nowrap">
+                <double-capacity-badge v-if="row.doubled" />
+                <span v-if="row.nights > 0" class="flex-shrink-0 text-xs text-indigo-600">
                   {{ row.nights === 1 ? 'overnight' : `${row.nights} nights` }}
                 </span>
               </span>
-              <span class="mt-0.5 flex-shrink-0 text-xs text-gray-400 tabular-nums">{{ clock(row.launchAt) }}</span>
+              <span class="flex-shrink-0 text-xs text-gray-400 tabular-nums">{{ clock(row.launchAt) }}</span>
             </li>
           </template>
         </ul>
@@ -58,7 +75,7 @@
 
     <p v-if="timeline.slots.length > 0" class="mt-1 text-xs text-gray-400">
       Each slot's launches in order, back to back. T+ is when the first of a line goes up, counted from the start of the
-      plan<template v-if="timeline.byDay">, on the first day of a block</template>.
+      plan<template v-if="timeline.byDay">, the first time round where days repeat</template>.
     </p>
   </div>
 </template>

@@ -52,13 +52,14 @@ const slot = (...launches: [number, number, boolean?][]) => {
 
 const launchRows = (rows: TimelineRow[]) => rows.filter((r): r is TimelineLaunchRow => r.kind === 'launch');
 const shape = (rows: TimelineRow[]) =>
-  rows.map(r =>
-    r.kind === 'launch'
-      ? `${r.count}x${r.repeat > 1 ? `*${r.repeat}` : ''}@${r.launchAt}${r.doubled ? ' 2x' : ''}${r.nights ? ' night' : ''}`
-      : r.kind === 'day'
-        ? `day ${r.firstDay}-${r.lastDay}`
-        : `ends ${r.at}`
-  );
+  rows.map(r => {
+    if (r.kind === 'launch')
+      return `${r.count}x${r.repeat > 1 ? `*${r.repeat}` : ''}@${r.launchAt}${r.doubled ? ' 2x' : ''}${r.nights ? ' night' : ''}`;
+    if (r.kind === 'day')
+      return `day ${r.firstDay}-${r.lastDay}${r.routineDay ? ` (${r.routineDay.day}/${r.routineDay.of})` : ''}`;
+    if (r.kind === 'routine') return `routine ${r.firstDay}-${r.lastDay} every ${r.period} x${r.times}`;
+    return `ends ${r.at}`;
+  });
 
 // For each entry, what the timeline counts of it, against the entry's own count.
 function timelineCounts(solution: OptimizerSolution): number[] {
@@ -196,6 +197,31 @@ describe('planTimeline', () => {
       'day 5-5',
       `2x@${5 * DAY}`,
       `1x@${5 * DAY + 15 * H} night`,
+    ]);
+    expect(timelineCounts(solution)).toEqual([9, 4]);
+  });
+
+  // A ship that takes more than a day to come round gives a plan a rhythm of several days rather than one.
+  it('folds a routine of several days, flown over and over, into one showing of it', () => {
+    // A three-day routine: two launches, a quiet day, one overnight launch; four times over, then a different day.
+    const routine = (d: number): [number, number][] => [
+      [0, d * DAY],
+      [0, d * DAY + 2 * H],
+      [1, (d + 2) * DAY + 15 * H],
+    ];
+    const solution = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 9, { nights: 0 }), choice(Ship.CHICKEN_NINE, 4, { nights: 1 })],
+      slots: [slot(...routine(0), ...routine(3), ...routine(6), ...routine(9), [0, 12 * DAY])],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
+      'routine 0-11 every 3 x4',
+      'day 0-0 (1/3)',
+      '2x*4@0',
+      'day 2-2 (3/3)',
+      `1x*4@${2 * DAY + 15 * H} night`,
+      'day 12-12',
+      `1x@${12 * DAY}`,
     ]);
     expect(timelineCounts(solution)).toEqual([9, 4]);
   });
