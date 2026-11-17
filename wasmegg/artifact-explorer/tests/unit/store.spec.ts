@@ -17,3 +17,23 @@ describe('MissionFilters', () => {
     expect(isMissionFilters({ ...newMissionFilters(), maxGoldenEggCost: 0 })).toBe(true);
   });
 });
+
+// The schedule fields' rules are `schedule-settings.ts`'s (`schedule-settings.spec.ts`); these check the store
+// uses them.
+describe('MissionFilters schedule fields', () => {
+  it('loads a record saved before the 2x capacity event existed', () => {
+    const legacy: Record<string, unknown> = { ...newMissionFilters() };
+    delete legacy.doubleCapacityEnabled;
+    delete legacy.doubleCapacityRemaining;
+    expect(isMissionFilters(legacy)).toBe(true);
+  });
+
+  it('starts with the event off and a full 48h ready', () => {
+    expect(newMissionFilters()).toMatchObject({ doubleCapacityEnabled: false, doubleCapacityRemaining: '48h' });
+  });
+
+  it('rejects mistyped event fields', () => {
+    expect(isMissionFilters({ ...newMissionFilters(), doubleCapacityRemaining: 48 })).toBe(false);
+    expect(isMissionFilters({ ...newMissionFilters(), doubleCapacityEnabled: 'yes' })).toBe(false);
+  });
+});

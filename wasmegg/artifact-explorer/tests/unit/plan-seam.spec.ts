@@ -540,6 +540,58 @@ describe('writing a humility missions file', () => {
     expect('sleepSeconds' in solved).toBe(false);
   });
 
+  // A doubled launch brings home twice as much, so it is not the same line as the mission at 1x. Its `event` and
+  // `overhang` variants are flown alike, so those are one line.
+  it('marks doubled launches on a line of their own, and writes nothing new for a plan without an event', () => {
+    const [visit] = sliceHumilityVisits(planSave());
+    const base = launch(Spaceship.HENERPRISE, DurationType.SHORT, SHIP_IN_A_BOTTLE, 0);
+    const solved = projectSolvedVisit({
+      visit,
+      effort: 'medium',
+      gemBudget: 0,
+      solution: solutionOf(
+        [
+          { ...base, numShipsLaunched: 5, variant: 'normal' },
+          { ...base, numShipsLaunched: 3, variant: 'event' },
+          { ...base, numShipsLaunched: 1, variant: 'overhang' },
+        ],
+        { eventWindowSeconds: 172800 }
+      ),
+    });
+    expect(solved.launches.map(l => [l.count, l.doubled])).toEqual([
+      [5, undefined],
+      [4, true],
+    ]);
+    expect('doubled' in solved.launches[0]).toBe(false);
+    expect(solved.eventWindowSeconds).toBe(172800);
+
+    const plain = projectSolvedVisit({
+      visit,
+      effort: 'medium',
+      gemBudget: 0,
+      solution: solutionOf([{ ...base, numShipsLaunched: 2 }]),
+    });
+    expect(plain.launches.some(l => 'doubled' in l)).toBe(false);
+    expect('eventWindowSeconds' in plain).toBe(false);
+  });
+
+  it('round-trips a doubled marker through JSON', () => {
+    const [visit] = sliceHumilityVisits(planSave());
+    const base = launch(Spaceship.HENERPRISE, DurationType.SHORT, SHIP_IN_A_BOTTLE, 2);
+    const file = buildHumilityMissionsFile('plan', [
+      projectSolvedVisit({
+        visit,
+        effort: 'medium',
+        gemBudget: 0,
+        solution: solutionOf([{ ...base, variant: 'event' }], { eventWindowSeconds: 3600 }),
+      }),
+    ]);
+    const read = JSON.parse(JSON.stringify(file)) as HumilityMissionsFile;
+    expect(read.visits[0].launches).toEqual([
+      { ship: 'HENERPRISE', duration: 'SHORT', targetAfxId: 25, count: 2, doubled: true },
+    ]);
+  });
+
   it('separates the same ship aimed at two targets, which a {ship, duration, count} triple cannot', () => {
     const [visit] = sliceHumilityVisits(planSave());
     const solved = projectSolvedVisit({
