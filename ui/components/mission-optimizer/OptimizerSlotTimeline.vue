@@ -51,22 +51,26 @@
                 class="w-2 h-2 rounded-full flex-shrink-0"
                 :class="row.nights > 0 ? 'bg-indigo-500' : 'bg-green-500'"
               ></span>
-              <!-- The name is the one part that gives way at phone width: it wraps inside itself, and the count,
-                   the badge and the night stay on its line. -->
-              <span class="min-w-0 flex-1 flex items-center gap-1">
-                <span class="flex-shrink-0 tabular-nums">{{ row.count }}×</span>
+              <span class="flex-shrink-0 tabular-nums">{{ row.count }}×</span>
+              <!-- What gives way at phone width: the name wraps inside itself, and the badge and the night go under it
+                   rather than push the time, which keeps the right edge. -->
+              <span class="min-w-0 flex-1 flex flex-wrap items-center gap-x-1">
                 <mission-name
                   class="min-w-0"
                   :mission="row.choice.ship"
                   :target="row.choice.targetAfxId"
                   :no-link="true"
                 />
-                <double-capacity-badge v-if="row.doubled" />
-                <span v-if="row.nights > 0" class="flex-shrink-0 text-xs text-indigo-600">
-                  {{ row.nights === 1 ? 'overnight' : `${row.nights} nights` }}
+                <span v-if="row.doubled || row.nights > 0" class="flex items-center gap-1">
+                  <double-capacity-badge v-if="row.doubled" />
+                  <span v-if="row.nights > 0" class="text-xs text-indigo-600 whitespace-nowrap">
+                    {{ row.nights === 1 ? 'overnight' : `${row.nights} nights` }}
+                  </span>
                 </span>
               </span>
-              <span class="flex-shrink-0 text-xs text-gray-400 tabular-nums">{{ clock(row.launchAt) }}</span>
+              <span class="flex-shrink-0 text-xs text-gray-400 tabular-nums whitespace-nowrap">{{
+                clock(row.launchAt)
+              }}</span>
             </li>
           </template>
         </ul>

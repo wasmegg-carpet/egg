@@ -6,12 +6,16 @@
         :class="overnight ? 'bg-indigo-500' : 'bg-green-500'"
       ></span>
       <span class="flex-shrink-0 tabular-nums">{{ line.numShipsLaunched }}×</span>
-      <mission-name class="min-w-0" :mission="line.ship" :target="line.targetAfxId" :no-link="true" />
-      <double-capacity-badge v-if="line.doubled" />
-      <!-- One night is what "overnight" already says; only a longer flight needs spelling out. -->
-      <span v-if="overnight && (line.nights ?? 0) > 1" class="flex-shrink-0 text-xs text-gray-500"
-        >· {{ line.nights }} nights each</span
-      >
+      <!-- At phone width the name wraps inside itself, and the badge and the nights go under it. -->
+      <span class="min-w-0 flex-1 flex flex-wrap items-center gap-x-1">
+        <mission-name class="min-w-0" :mission="line.ship" :target="line.targetAfxId" :no-link="true" />
+        <span v-if="line.doubled || longFlight(line)" class="flex items-center gap-1">
+          <double-capacity-badge v-if="line.doubled" />
+          <span v-if="longFlight(line)" class="text-xs text-gray-500 whitespace-nowrap"
+            >· {{ line.nights }} nights each</span
+          >
+        </span>
+      </span>
     </li>
   </ul>
 </template>
@@ -29,6 +33,11 @@ export default defineComponent({
     lines: { type: Array as PropType<LaunchLine[]>, required: true },
     // The list of launches that fly through the night on a sleep-aware plan.
     overnight: { type: Boolean, default: false },
+  },
+  setup(props) {
+    // One night is what "overnight" already says; only a longer flight needs spelling out.
+    const longFlight = (line: LaunchLine) => props.overnight && (line.nights ?? 0) > 1;
+    return { longFlight };
   },
 });
 </script>
