@@ -218,6 +218,10 @@ export interface LayoutTally {
   layoutSolves: number;
   marginResolves: number;
   verifierRetries: number;
+  // Doubled launches the candidate flew at 1x because its layout could not start them inside the 2x window, and
+  // the plans with any; 0 for a candidate that reports none.
+  plansDemoted: number;
+  launchesDemoted: number;
 }
 
 const layoutTallies = new WeakMap<Planner, LayoutTally>();
@@ -231,6 +235,8 @@ function emptyTally(): LayoutTally {
     layoutSolves: 0,
     marginResolves: 0,
     verifierRetries: 0,
+    plansDemoted: 0,
+    launchesDemoted: 0,
   };
 }
 
@@ -253,6 +259,8 @@ function tallyLayout(planner: Planner, result: PlanResult): void {
   t.layoutSolves += n(stats.layoutSolves);
   t.marginResolves += n(stats.marginResolves);
   t.verifierRetries += n(stats.verifierRetries);
+  if (n(stats.launchesDemoted) > 0) t.plansDemoted++;
+  t.launchesDemoted += n(stats.launchesDemoted);
   layoutTallies.set(planner, t);
 }
 

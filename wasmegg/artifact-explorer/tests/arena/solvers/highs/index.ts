@@ -16,7 +16,8 @@ export const highs: ArenaSolver = {
   // The solver budgets `nightsPerSlot` per slot (`lib/mission-optimizer/solver/SPEC.md` section 9), so sleep-on instances
   // and A10-sleep are solved for it.
   sleepAware: true,
-  // The window rows and the back-to-back calendar (section 11 and 12); not yet together with sleep, which the
-  // solver refuses.
+  // The window rows and the back-to-back calendar (sections 11 and 12), and with a sleep window the wall-clock
+  // rows, doubled-first layout and demotion of section 13.
   windowAware: true,
+  windowWithSleepAware: true,
 };

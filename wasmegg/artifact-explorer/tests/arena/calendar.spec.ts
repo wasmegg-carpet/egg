@@ -90,3 +90,35 @@ describe('calendarFaults', () => {
     expect(calendarFaults([[]], menu, [0, 0, 0], day)).toEqual(['calendar has 1 slot(s), the problem has 2']);
   });
 });
+
+// A sleep window and a 2x window together: the window is wall-clock time from wake-up on day 0, nights included,
+// and the rule is still only a doubled launch's start time against it.
+describe('calendarFaults with a sleep window and a 2x window', () => {
+  const doubledMenu = [
+    { id: 'long', actualTime: 10 * H, nights: 0, variant: 'normal' },
+    { id: 'long::event', actualTime: 10 * H, nights: 0, variant: 'event' },
+    { id: 'night::overhang', actualTime: 0, nights: 1, variant: 'overhang' },
+  ];
+  const both: CalendarDay = { sleepSeconds: S, horizonSeconds: 2 * D, slots: 1, eventWindowSeconds: 30 * H };
+  const at = (option: number, launchAt: number) => ({ option, optionId: doubledMenu[option].id, launchAt });
+
+  it('accepts doubled launches on day 1 that start inside the window, and normal ones after it', () => {
+    // Doubled at 0:00, at bedtime, and at 6:00 on day 1 (30 hours in, the window's very edge).
+    const cal = [[at(1, 0), at(2, W), at(1, D + 6 * H)]];
+    expect(calendarFaults(cal, doubledMenu, [0, 2, 1], both)).toEqual([]);
+    expect(calendarFaults([[at(1, 0), at(0, D + 6 * H + 1)]], doubledMenu, [1, 1, 0], both)).toEqual([]);
+  });
+
+  it('rejects a doubled launch past the window, however few waking hours lie before it', () => {
+    const cal = [[at(1, 0), at(1, D + 6 * H + 1)]];
+    expect(calendarFaults(cal, doubledMenu, [0, 2, 0], both).join('\n')).toMatch(/past the 2x window/);
+  });
+
+  it('a window closing in the night leaves bedtime as the last doubled launch', () => {
+    const closingAsleep = { ...both, eventWindowSeconds: 20 * H };
+    expect(calendarFaults([[at(1, 0), at(2, W)]], doubledMenu, [0, 1, 1], closingAsleep)).toEqual([]);
+    expect(calendarFaults([[at(2, W), at(1, D)]], doubledMenu, [0, 1, 1], closingAsleep).join('\n')).toMatch(
+      /past the 2x window/
+    );
+  });
+});
