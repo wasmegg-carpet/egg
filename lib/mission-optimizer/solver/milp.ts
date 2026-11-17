@@ -463,6 +463,30 @@ function finisher(core: Core): (objective: Float64Array) => MilpModel {
 // judge's own resolution (`EXACT_PRECISION.gapTol`): no decision it can see turns on less.
 const FLAT_CUT_SLOPE = 1e-12;
 
+// A target whose ceiling `theta` is so large that even the grid's floor lies far up the curve, at a score past
+// `FLAT_FLOOR_SCORE`, has every cut where `log(1 - e^-s)` is all but flat, and abandoning it costs the envelope
+// almost nothing (the deepest cut at 4 prices it at 0.09 nats, at 82 at nothing at all), when the true cost is
+// every plan's joint. Such a target's grid is continued below its floor, at the grid's own spacing, down to
+// `DEEPEST_CUT_SCORE`, where abandoning it costs about 5.6 nats. See SPEC.md section 15.
+export const FLAT_FLOOR_SCORE = 4;
+export const DEEPEST_CUT_SCORE = 1e-2;
+
+// `sigmaGrid` itself when its floor is at most `FLAT_FLOOR_SCORE` in score, which is every target whose ceiling is
+// under `FLAT_FLOOR_SCORE / floor`; otherwise continued below its floor as above. SPEC.md section 15.
+export function extendedGrid(sigmaGrid: readonly number[], theta: number): readonly number[] {
+  const sorted = [...sigmaGrid].filter(x => x > 0).sort((a, b) => a - b);
+  if (sorted.length < 2 || !(theta * sorted[0] > FLAT_FLOOR_SCORE)) return sigmaGrid;
+  const step = sorted[0] / sorted[1];
+  if (!(step > 0 && step < 1)) return sigmaGrid;
+  const extra: number[] = [];
+  let point = sorted[0];
+  do {
+    point *= step;
+    extra.push(point);
+  } while (theta * point > DEEPEST_CUT_SCORE);
+  return [...sigmaGrid, ...extra];
+}
+
 // Not 1: at raw-score magnitudes every reduced cost is inside HiGHS's dual
 // feasibility tolerance and it reports optimal at zero. See SPEC.md section 4.
 const SCALE_LP_OBJECTIVE = 1e9;
@@ -491,8 +515,9 @@ export function buildOaMilp(
   const { layout, rows } = core;
 
   for (let t = 0; t < layout.targets; t++) {
-    for (let j = 0; j < sigmaGrid.length; j++) {
-      const gridPoint = sigmaGrid[j];
+    const grid = extendedGrid(sigmaGrid, theta[t]);
+    for (let j = 0; j < grid.length; j++) {
+      const gridPoint = grid[j];
       const s = theta[t] * gridPoint;
       if (!(s > 0) || !Number.isFinite(s)) continue;
       const slope = theta[t] * slopeAt(s);
