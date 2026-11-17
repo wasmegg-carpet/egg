@@ -89,7 +89,6 @@ import {
   effectiveCraftingLevel,
   effectiveScheduleArgs,
   effectiveWaitTimeSeconds,
-  EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
   playerGoldenEggs,
   playerInventory,
@@ -105,6 +104,7 @@ import {
   setVisitWaitTime,
   waitTimeInputFor,
 } from '@/store/plan';
+import { EFFORT_LAUNCH_PERIOD_SECONDS } from 'lib/mission-optimizer/effort';
 import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
 import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import {

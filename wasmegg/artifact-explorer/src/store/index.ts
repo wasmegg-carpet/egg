@@ -22,9 +22,7 @@ import Spaceship = ei.MissionInfo.Spaceship;
 import {
   DEFAULT_MAX_GOLDEN_EGG_COST,
   DEFAULT_WAIT_TIME_DAYS,
-  EffortLevel,
   ExtrasConfig,
-  isEffortLevel,
   isExtrasConfig,
   isMissionFilters,
   isOverrideFlags,
@@ -43,6 +41,7 @@ import {
   type GemCostMode,
 } from './plan';
 import { formatBudgetValue, parseBudgetInput } from '@/store/budget-input';
+import { isEffortLevel, type EffortLevel } from 'lib/mission-optimizer/effort';
 import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
 import { readPlayerData } from 'lib/mission-optimizer/player-data';
 import {
@@ -51,8 +50,7 @@ import {
   type ScheduleArgs,
   type ScheduleSettings,
 } from 'lib/mission-optimizer/schedule-settings';
-export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
-export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
+export type { ExtrasConfig, MissionFilters, OverrideFlags } from './schema';
 
 export const CONFIG_LOCALSTORAGE_KEY = 'config';
 export const OVERRIDES_LOCALSTORAGE_KEY = 'overrides';

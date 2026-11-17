@@ -393,7 +393,6 @@ import {
   setCraftingCostInput,
   effectiveConfig,
   effectiveFuelByEggCapacity,
-  EFFORT_LEVELS,
   extras,
   missionFilters,
   openPlayerOverridesModal,
@@ -431,7 +430,7 @@ import {
   setVisitFuelBudget,
   solvedVisitCount,
 } from '@/store/plan';
-import { EFFORT_META } from 'lib/mission-optimizer/effort';
+import { EFFORT_LEVELS, EFFORT_META } from 'lib/mission-optimizer/effort';
 import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from 'lib/mission-optimizer/plan/read';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { normalizeBudgetInput } from '@/store/budget-input';

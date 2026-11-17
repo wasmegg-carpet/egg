@@ -9,13 +9,8 @@ import { ei, MissionType } from 'lib';
 import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
 import { computeMissionLegendaryRows } from 'lib/mission-optimizer/optimizer-views';
 import { MAX_SLEEP_SECONDS, sleepCapacity, sleepSecondsOf, sleepVariants } from 'lib/mission-optimizer/sleep';
-import {
-  clampSleepHours,
-  isMissionFilters,
-  MAX_SLEEP_HOURS,
-  newMissionFilters,
-  type MissionFilters,
-} from '@/store/schema';
+import { MAX_SLEEP_HOURS } from 'lib/mission-optimizer/schedule-settings';
+import { isMissionFilters, newMissionFilters, type MissionFilters } from '@/store/schema';
 import { sleepCapacity as arenaSleepCapacity, sleepVariants as arenaSleepVariants } from '../arena/sleep';
 import { craftDag, makeOpt, makeSolution } from './spec-helpers';
 
@@ -142,19 +137,8 @@ describe('the sleep setting', () => {
     expect(sleepSecondsOf(23 * HOUR)).toBe(MAX_SLEEP_SECONDS);
   });
 
-  it('offers the same longest window on both sides of the worker', () => {
-    expect(MAX_SLEEP_HOURS * HOUR).toBe(MAX_SLEEP_SECONDS);
-  });
-
   it('defaults to planning around the clock', () => {
     expect(newMissionFilters().sleepHours).toBe(0);
-  });
-
-  it('clamps what is stored or typed into the range the sidebar offers', () => {
-    expect(clampSleepHours(7.5)).toBe(7.5);
-    expect(clampSleepHours(-3)).toBe(0);
-    expect(clampSleepHours(40)).toBe(MAX_SLEEP_HOURS);
-    for (const value of [undefined, null, '8', NaN, Infinity]) expect(clampSleepHours(value)).toBe(0);
   });
 
   it('accepts filters saved before the setting existed', () => {

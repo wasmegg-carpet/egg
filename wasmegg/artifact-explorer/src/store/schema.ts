@@ -9,12 +9,8 @@ import {
   type ScheduleSettings,
 } from 'lib/mission-optimizer/schedule-settings';
 
-export {
-  EFFORT_LEVELS,
-  EFFORT_LAUNCH_PERIOD_SECONDS,
-  isEffortLevel,
-  type EffortLevel,
-} from 'lib/mission-optimizer/effort';
+// The arena still reads the effort levels from here.
+export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from 'lib/mission-optimizer/effort';
 
 type Spaceship = ei.MissionInfo.Spaceship;
 
@@ -81,14 +77,6 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
 }
 
 export const DEFAULT_WAIT_TIME_DAYS = '30';
-
-// The sleep and 2x capacity event settings are the ascension planner's too, so their rules live with the
-// optimizer; re-exported for the store and its specs.
-export {
-  clampSleepHours,
-  DEFAULT_DOUBLE_CAPACITY_REMAINING,
-  MAX_SLEEP_HOURS,
-} from 'lib/mission-optimizer/schedule-settings';
 
 // Golden egg budget used when no save has been loaded to seed one from. Only
 // ever seen by a player planning without player data, since `setPlayerData`
