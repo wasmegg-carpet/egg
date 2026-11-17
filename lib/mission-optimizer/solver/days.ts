@@ -40,7 +40,7 @@ export const FIT_Q_CAP = 96;
 
 // Within this of a whole number, `(q + 1) * x` is read as one: `x` is a float quotient, and a launch exactly
 // `W / (q + 1)` long must take the branch that is exact there rather than the step just below it.
-const FIT_INTEGER_TOL = 1e-9;
+export const FIT_INTEGER_TOL = 1e-9;
 
 // The `q` values the fit rows are written for: one per distinct `floor(W / seconds)` among daytime classes
 // with a duration, capped at `FIT_Q_CAP`, ascending. A class that does not fit a window at all gives 0 and
@@ -79,3 +79,60 @@ export function lastWakingInstant(t: number, wakingSeconds: number): number {
   const day = Math.floor(t / DAY_SECONDS);
   return day * DAY_SECONDS + Math.min(t - day * DAY_SECONDS, wakingSeconds);
 }
+
+// The waking seconds in `[0, t]`: each whole day's waking window, and as much of the last one as `t` reaches.
+export function wakingSecondsBefore(t: number, wakingSeconds: number): number {
+  const day = Math.floor(t / DAY_SECONDS);
+  return day * wakingSeconds + Math.min(t - day * DAY_SECONDS, wakingSeconds);
+}
+
+// The 2x window as the window rows read it under a sleep window (SPEC.md section 14): `latest`, the last waking
+// instant at or before its end; the `nights` that fall wholly before that instant; the waking seconds before it,
+// `waking`, which is `latest - nights * S`; and `partial`, the part of the waking window `latest` falls in that
+// lies before it (a whole waking window when the window closes in a night).
+export interface WindowShape {
+  latest: number;
+  nights: number;
+  waking: number;
+  partial: number;
+}
+
+export function windowShape(eventWindowSeconds: number, wakingSeconds: number): WindowShape {
+  const latest = lastWakingInstant(eventWindowSeconds, wakingSeconds);
+  const nights = Math.floor(latest / DAY_SECONDS);
+  return {
+    latest,
+    nights,
+    waking: wakingSecondsBefore(latest, wakingSeconds),
+    partial: latest - nights * DAY_SECONDS,
+  };
+}
+
+// The fewest waking seconds a block of `block` seconds can hold when it starts awake at or before `latest`: what a
+// doubled launch, which must go up inside the window, takes out of its slot's waking seconds at the least (SPEC.md
+// section 14). The waking seconds of `[t, t + block]` are piecewise linear in `t`, so the least is at a start the
+// window allows that is also a wake-up, a bedtime, `latest`, 0, or a start that puts the block's end on a wake-up
+// or a bedtime.
+export function leastWakingIn(block: number, latest: number, wakingSeconds: number): number {
+  const D = DAY_SECONDS;
+  const held = (t: number) => wakingSecondsBefore(t + block, wakingSeconds) - wakingSecondsBefore(t, wakingSeconds);
+  const starts = [0, latest];
+  for (let day = 0; day * D <= latest; day++) starts.push(day * D, day * D + wakingSeconds);
+  for (let day = Math.max(0, Math.floor(block / D) - 1); day * D <= latest + block; day++) {
+    starts.push(day * D - block, day * D + wakingSeconds - block);
+  }
+  let least = Infinity;
+  for (const raw of starts) {
+    // Read to a microsecond, so a start float arithmetic puts a hair outside the window or past bedtime still
+    // counts; held there, it differs from the exact start's by as little.
+    if (!(raw >= -WINDOW_TOL && raw <= latest + WINDOW_TOL)) continue;
+    const t = Math.min(Math.max(raw, 0), latest);
+    if (t - Math.floor(t / D) * D > wakingSeconds + WINDOW_TOL) continue;
+    least = Math.min(least, held(t));
+  }
+  return least;
+}
+
+// Slack on `leastWakingIn`'s starts, and what a doubled launch's charge is rounded down by so that it never
+// exceeds the least exactly (SPEC.md section 14): a microsecond, the verifier's own tolerance.
+export const WINDOW_TOL = 1e-6;

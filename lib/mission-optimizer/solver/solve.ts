@@ -11,7 +11,7 @@ import type {
   PlanResult,
 } from './types';
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } from './evaluator';
-import { blockSeconds, buildModel, type Model } from './model';
+import { buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
 import { layOutPlan, timelineOf } from './layout';
 import { slotFault } from './verify';
@@ -81,8 +81,10 @@ function slotLoads(model: Model, layout: Layout, columnValues: Float64Array, per
 // `craftLpOf`). See `tests/arena/ARENA.md`, "Feasibility".
 function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, counts: readonly number[]): boolean {
   if (fuelExceeded(model, counts)) return false;
+  // What `slot_k` charges, which is a launch's seconds except for a doubled launch under a sleep window (SPEC.md
+  // section 14).
   const capacity = model.timeCapacitySeconds;
-  for (const load of slotLoads(model, layout, columnValues, layout.classSeconds)) {
+  for (const load of slotLoads(model, layout, columnValues, layout.classCharge)) {
     if (load > capacity + SLOT_TOL) return false;
   }
   // Whole nights summed from whole counts: exact, so no tolerance. Without a sleep window every load is 0
@@ -90,15 +92,19 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
   for (const nights of slotLoads(model, layout, columnValues, layout.classNights)) {
     if (nights > model.nightsPerSlot) return false;
   }
-  // The window rows, read the same way: `event` wall-clock seconds against the window's budget with the slot row's
-  // tolerance (SPEC.md sections 11 and 13), whole launches against one exactly. Without a window no class is doubled, so both loads are 0, and a doubled
-  // launch that somehow appeared there anyway fails the first test. See SPEC.md section 11.
+  // The window rows, read the same way: `event` seconds against the window's waking seconds with the slot row's
+  // tolerance, `event` nights against its whole nights and `overhang` launches against one exactly (SPEC.md
+  // sections 11 and 14). Without a window no class is doubled, so every load is 0, and a doubled launch that
+  // somehow appeared there anyway fails the last test. See SPEC.md section 11.
   const window = model.eventWindowSeconds;
-  const eventSeconds = layout.classSeconds.map((s, c) =>
-    layout.classVariant[c] === 'event' ? blockSeconds(s, layout.classNights[c], model.day) : 0
-  );
+  const isEvent = (c: number) => layout.classVariant[c] === 'event';
+  const eventSeconds = layout.classSeconds.map((s, c) => (isEvent(c) ? s : 0));
   for (const load of slotLoads(model, layout, columnValues, eventSeconds)) {
     if (load > model.eventWindowBudget + SLOT_TOL) return false;
+  }
+  const eventNights = layout.classNights.map((n, c) => (isEvent(c) ? n : 0));
+  for (const nights of slotLoads(model, layout, columnValues, eventNights)) {
+    if (nights > model.eventWindowNights) return false;
   }
   const doubled = layout.classVariant.map(v => (v === 'normal' ? 0 : 1));
   const overhangs = layout.classVariant.map(v => (v === 'overhang' ? 1 : 0));

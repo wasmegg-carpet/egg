@@ -1,11 +1,18 @@
 // The mixed-integer program handed to HiGHS: the continuous per-target scale
 // LPs, and the integer outer-approximation MILP. See SPEC.md sections 2-4.
 
-import { UNBOUNDED_PER_SLOT, blockSeconds, boundsFollowFromRows, maxLaunches, type Model } from './model';
+import {
+  UNBOUNDED_PER_SLOT,
+  blockSeconds,
+  boundsFollowFromRows,
+  eventLaunches,
+  maxLaunches,
+  type Model,
+} from './model';
 import { finiteQ, logHit } from '../objective';
 import { INF, type MilpModel } from './types';
 import type { CapacityVariant } from '../types';
-import { fitCoefficient, fitQs } from './days';
+import { FIT_INTEGER_TOL, WINDOW_TOL, fitCoefficient, fitQs, leastWakingIn } from './days';
 
 // Uncapped on purpose — deliberately not `objective.gPrime`. See SPEC.md section 4.
 function slopeAt(s: number): number {
@@ -20,13 +27,16 @@ export interface Layout {
   // Slot columns are per duration class, not per group: the slot, night, window and order rows read only a
   // mission's duration, nights and capacity variant, so groups sharing all three share `slots` columns and a
   // `class_c` row ties their totals to them. See SPEC.md sections 2, 9 and 11. `classCap` is the per-slot column
-  // bound; `classSeconds`, `classNights` and `classVariant` what the rows read.
+  // bound; `classSeconds`, `classNights` and `classVariant` what the rows read. `classCharge` is what `slot_k`
+  // charges a launch: its seconds, except a doubled launch under a sleep window, which must go up inside the 2x
+  // window and is charged the fewest waking seconds its block can hold when it does (SPEC.md section 14).
   classes: number;
   classOf: number[];
   classSeconds: number[];
   classNights: number[];
   classVariant: CapacityVariant[];
   classCap: number[];
+  classCharge: number[];
   groupTotalBase: number;
   craftBase: number;
   // Score in units of theta: sigma in the 'oa' variant, and the raw score in 'scale', where theta is 1.
@@ -45,25 +55,28 @@ export type Variant = 'scale' | 'oa';
 // has 0 nights and is `normal`, and the classes are exactly the durations.
 function durationClasses(
   model: Model
-): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classVariant' | 'classCap'> {
+): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classVariant' | 'classCap' | 'classCharge'> {
   const classOf = new Array<number>(model.groups.length);
   const classSeconds: number[] = [];
   const classNights: number[] = [];
   const classVariant: CapacityVariant[] = [];
   const classCap: number[] = [];
+  const classCharge: number[] = [];
   const shared = new Map<number, Map<number, Map<CapacityVariant, number>>>();
   model.groups.forEach((grp, g) => {
     // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
     // And in whole nights, like the night row (SPEC.md section 9).
     const byNights = grp.nights > 0 ? Math.floor(model.nightsPerSlot / grp.nights) : UNBOUNDED_PER_SLOT;
-    // And by the window rows, in the wall-clock seconds they charge (SPEC.md sections 11 and 13).
-    const block = blockSeconds(grp.timeSeconds, grp.nights, model.day);
+    // And by the window rows, in the waking seconds and nights they charge (SPEC.md sections 11 and 14).
     const byWindow =
       grp.variant === 'overhang'
         ? 1
-        : grp.variant === 'event' && block > 0
-          ? maxLaunches(model.eventWindowBudget, block)
+        : grp.variant === 'event'
+          ? eventLaunches(grp.timeSeconds, grp.nights, {
+              waking: model.eventWindowBudget,
+              nights: model.eventWindowNights,
+            })
           : UNBOUNDED_PER_SLOT;
     if (boundsFollowFromRows(grp, model.timeCapacitySeconds, model.nightsPerSlot)) {
       let bySeconds = shared.get(grp.timeSeconds);
@@ -84,6 +97,7 @@ function durationClasses(
         classNights.push(grp.nights);
         classVariant.push(grp.variant);
         classCap.push(Math.min(byTime, byNights, byWindow));
+        classCharge.push(slotCharge(model, grp));
       }
       classOf[g] = c;
     } else {
@@ -92,9 +106,23 @@ function durationClasses(
       classNights.push(grp.nights);
       classVariant.push(grp.variant);
       classCap.push(Math.max(0, Math.min(grp.cap, byTime, byNights, byWindow, UNBOUNDED_PER_SLOT)));
+      classCharge.push(slotCharge(model, grp));
     }
   });
-  return { classes: classSeconds.length, classOf, classSeconds, classNights, classVariant, classCap };
+  return { classes: classSeconds.length, classOf, classSeconds, classNights, classVariant, classCap, classCharge };
+}
+
+// What `slot_k` charges one launch of `grp`. Its waking seconds, the least its block holds wherever it goes up;
+// but a doubled launch must go up inside the 2x window, and under a sleep window the least its block holds when it
+// starts no later than the window's last waking instant can be more (SPEC.md section 14). Rounded down by
+// `WINDOW_TOL` so float error never makes it more than that least, and never below the seconds themselves: without
+// a sleep window, or for a launch the window does not constrain, it is the seconds exactly.
+function slotCharge(model: Model, grp: Pick<Model['groups'][number], 'timeSeconds' | 'nights' | 'variant'>): number {
+  const day = model.day;
+  if (day === null || grp.variant === 'normal') return grp.timeSeconds;
+  const block = blockSeconds(grp.timeSeconds, grp.nights, day);
+  const least = leastWakingIn(block, model.eventWindowLatest, day.wakingSeconds) - WINDOW_TOL;
+  return least > grp.timeSeconds ? least : grp.timeSeconds;
 }
 
 export function layoutOf(model: Model, variant: Variant): Layout {
@@ -308,10 +336,11 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.end(-INF, model.craftBudgetCapacity);
   }
 
-  // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3.
+  // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3. A doubled launch under a sleep window
+  // may be charged more than its seconds (SPEC.md section 14); every other launch is charged its seconds.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`slot_k${k}`);
-    for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classSeconds[c]);
+    for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classCharge[c]);
     rows.end(-INF, model.timeCapacitySeconds);
   }
 
@@ -326,19 +355,26 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
 
   // The 2x capacity event window, two rows per slot: a slot's `event` launches hold it for at most the window, and
   // it holds at most one `overhang`. Exact together, not a relaxation, while launches go up back to back (SPEC.md
-  // section 11). With a sleep window an `event` launch is charged its wall-clock block, nights included, against
-  // the window's last waking instant: a valid inequality, and a relaxation the layout makes true (section 13).
-  // Raw seconds, for the slot row's reason. Without a window no class is doubled, both rows have no entries, and
-  // `Rows.end` drops them: the model is today's exactly. One window shared by every slot, so slots stay
-  // interchangeable and `order_k` remains a pure symmetry break.
+  // section 11). With a sleep window `window_k` holds an `event` launch's waking seconds to the waking seconds
+  // before the window's last waking instant, and `windownight_k` its nights to the whole nights before it: valid
+  // inequalities, and a relaxation the layout makes true (sections 13 and 14). Raw seconds, for the slot row's
+  // reason; whole nights against whole nights. Without a window no class is doubled, the rows have no entries, and
+  // `Rows.end` drops them: the model is today's exactly; without a sleep window no class spends a night, and
+  // `windownight_k` is dropped the same way. One window shared by every slot, so slots stay interchangeable and
+  // `order_k` remains a pure symmetry break.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`window_k${k}`);
     for (let c = 0; c < layout.classes; c++) {
-      if (layout.classVariant[c] === 'event') {
-        rows.add(nCol(layout, c, k), blockSeconds(layout.classSeconds[c], layout.classNights[c], model.day));
-      }
+      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classSeconds[c]);
     }
     rows.end(-INF, model.eventWindowBudget);
+  }
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`windownight_k${k}`);
+    for (let c = 0; c < layout.classes; c++) {
+      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classNights[c]);
+    }
+    rows.end(-INF, model.eventWindowNights);
   }
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`overhang_k${k}`);
@@ -365,6 +401,32 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
           );
         }
         rows.end(-INF, day.windows);
+      }
+    }
+
+    // The same per-day fit, for the `event` launches against the waking windows before the 2x window's last
+    // waking instant: its whole ones, and the part of the one that instant falls in, which holds launches summing
+    // to at most `eventWindowPartial` and so, under `u^(q)`, at most `floor((q + 1) * partial / W) / q`, and never
+    // more than one window. Only with a window and a sleep window. SPEC.md section 14.
+    const isEvent = (c: number) => layout.classVariant[c] === 'event';
+    const eventQ = fitQs(
+      layout.classSeconds.map((sec, c) => (isEvent(c) ? sec : 0)),
+      layout.classNights,
+      day.wakingSeconds
+    );
+    for (let k = 0; k < layout.slots; k++) {
+      for (const q of eventQ) {
+        rows.begin(`windowfit_k${k}_q${q}`);
+        for (let c = 0; c < layout.classes; c++) {
+          if (isEvent(c)) {
+            rows.add(
+              nCol(layout, c, k),
+              fitCoefficient(layout.classSeconds[c], layout.classNights[c], day.wakingSeconds, q)
+            );
+          }
+        }
+        const partial = Math.floor(((q + 1) * model.eventWindowPartial) / day.wakingSeconds + FIT_INTEGER_TOL) / q;
+        rows.end(-INF, model.eventWindowNights + Math.min(1, partial));
       }
     }
   }

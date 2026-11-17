@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { capacityVariants } from 'lib/mission-optimizer/capacity';
-import { lastWakingInstant } from 'lib/mission-optimizer/solver/days';
+import { lastWakingInstant, leastWakingIn, windowShape } from 'lib/mission-optimizer/solver/days';
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts } from 'lib/mission-optimizer/solver/evaluator';
 import { loadHighs } from 'lib/mission-optimizer/solver/highs';
 import { layOutPlan } from 'lib/mission-optimizer/solver/layout';
@@ -93,9 +93,10 @@ describe('the window rows under sleep', () => {
     expect(lastWakingInstant(46 * H, W)).toBe(40 * H);
   });
 
-  it('charges an event launch its wall-clock block against that instant, and drops one that cannot fit', () => {
+  it('charges an event launch its waking seconds against those before that instant, and drops one that cannot fit', () => {
     // A 5-hour daytime ship and a 20-hour one over a night (12 waking hours and 8 asleep), with a window closing
-    // in the night of day 0: 16 hours of budget. The overnight ship's block is 20 hours, so it has no event column.
+    // in the night of day 0: 16 waking hours and no night before it. The overnight ship spends a night, so it has no
+    // event column (section 14; by its 20-hour block, section 13 dropped it too).
     const options = doubles([opt(5), opt(12, 1, 3)], 20 * H);
     const problem = problemOf(options, 2 * DAY_SECONDS, 20 * H);
     const model = buildModel(problem);
@@ -134,6 +135,87 @@ describe('the window rows under sleep', () => {
     const event = model.groups.findIndex(g => g.variant === 'event');
     // By waking seconds alone it would be floor(54 / 12) = 4.
     expect(layout.classCap[layout.classOf[event]]).toBe(2);
+  });
+});
+
+// The rows of SPEC.md section 14: what the window holds once its nights and its days are counted.
+function rowOf(milp: ReturnType<typeof buildOaMilp>, layout: ReturnType<typeof layoutOf>, name: string) {
+  const r = milp.rowNames.indexOf(name);
+  expect(r).toBeGreaterThanOrEqual(0);
+  const end = r + 1 < milp.rowCount ? milp.offsets[r + 1] : milp.indices.length;
+  const entries: [string, number, number, number][] = [];
+  for (let i = milp.offsets[r]; i < end; i++) {
+    const c = Math.floor(milp.indices[i] / 3);
+    entries.push([layout.classVariant[c], layout.classSeconds[c] / H, layout.classNights[c], milp.values[i]]);
+  }
+  return { entries: entries.sort(), upper: milp.rowUpper[r] };
+}
+
+describe('what a window holds under sleep, day by day', () => {
+  it('splits the window at its last waking instant into whole nights, waking seconds and a partial day', () => {
+    // Closing at wake-up on day 2: two nights and two waking windows before it, nothing of day 2.
+    expect(windowShape(48 * H, W)).toEqual({ latest: 48 * H, nights: 2, waking: 32 * H, partial: 0 });
+    // Closing in the night of day 0: bedtime, no night, one whole waking window.
+    expect(windowShape(20 * H, W)).toEqual({ latest: 16 * H, nights: 0, waking: 16 * H, partial: 16 * H });
+    // Closing at 06:00 on day 1: one night, a whole window and six hours.
+    expect(windowShape(30 * H, W)).toEqual({ latest: 30 * H, nights: 1, waking: 22 * H, partial: 6 * H });
+  });
+
+  it('holds event waking seconds, nights and day-by-day fit to what lies before that instant', () => {
+    // A 48-hour window over 8 hours of sleep has 32 waking hours: by its block alone, 48 one-hour event launches
+    // fitted it, and the days start 32, sixteen a waking window, and one more each bedtime as a short ship's night.
+    const options = doubles([opt(1), opt(0, 1)], 48 * H);
+    const problem = problemOf(options, 4 * DAY_SECONDS, 48 * H);
+    const model = buildModel(problem);
+    expect([model.eventWindowBudget, model.eventWindowNights, model.eventWindowPartial]).toEqual([32 * H, 2, 0]);
+    const layout = layoutOf(model, 'oa');
+    const milp = buildOaMilp(model, effectiveQs(model), [1], DEFAULT_TUNING.sigmaGrid);
+    expect(rowOf(milp, layout, 'window_k0')).toEqual({ entries: [['event', 1, 0, H]], upper: 32 * H });
+    expect(rowOf(milp, layout, 'windownight_k0')).toEqual({ entries: [['event', 0, 1, 1]], upper: 2 });
+    // u^(16)(1/16) is 1/16: sixteen a whole waking window, two windows; the night variant flies through none.
+    expect(rowOf(milp, layout, 'windowfit_k0_q16')).toEqual({ entries: [['event', 1, 0, 1 / 16]], upper: 2 });
+    const event = model.groups.findIndex(g => g.variant === 'event' && g.nights === 0);
+    expect(layout.classCap[layout.classOf[event]]).toBe(32);
+  });
+
+  it('a partial day holds what fits its own hours, and never more than a whole window', () => {
+    // Closing at 06:00 on day 1: 10-hour event launches fit one whole window and none of the six hours after it.
+    const options = doubles([opt(10)], 30 * H);
+    const model = buildModel(problemOf(options, 3 * DAY_SECONDS, 30 * H));
+    const layout = layoutOf(model, 'oa');
+    const milp = buildOaMilp(model, effectiveQs(model), [1], DEFAULT_TUNING.sigmaGrid);
+    expect(rowOf(milp, layout, 'windowfit_k0_q1')).toEqual({ entries: [['event', 10, 0, 1]], upper: 1 });
+  });
+
+  it('charges a doubled launch the fewest waking seconds its block holds when it goes up inside the window', () => {
+    // A ship over three nights cut to 32 waking hours holds 56 wall-clock hours: launched at bedtime it holds
+    // 32 waking ones, launched at wake-up 40. Inside a 1-hour window only the second can happen.
+    expect(leastWakingIn(56 * H, H, W)).toBe(40 * H);
+    expect(leastWakingIn(56 * H, 48 * H, W)).toBe(32 * H);
+    // A daytime launch holds its own seconds wherever it goes.
+    expect(leastWakingIn(5 * H, H, W)).toBe(5 * H);
+    const options = doubles([opt(32, 3, 9)], H);
+    const model = buildModel(problemOf(options, 3 * DAY_SECONDS, H));
+    const layout = layoutOf(model, 'oa');
+    const charge = (variant: string) => layout.classCharge[layout.classVariant.indexOf(variant as never)] / H;
+    expect(charge('normal')).toBe(32);
+    expect(charge('overhang')).toBeCloseTo(40, 6);
+    expect(charge('overhang')).toBeLessThanOrEqual(40);
+  });
+
+  it('adds nothing to a sleep problem without doubled launches, nor to a window without sleep', () => {
+    const sleepOnly = layoutOf(buildModel(problemOf([opt(32, 3, 9), opt(5)], 3 * DAY_SECONDS)), 'oa');
+    expect(sleepOnly.classCharge).toEqual(sleepOnly.classSeconds);
+    const windowOnly = buildModel({
+      ...problemOf(doubles([opt(5)], 30 * H), 3 * DAY_SECONDS, 30 * H),
+      sleep: undefined,
+      nightsPerSlot: undefined,
+    });
+    expect(windowOnly.eventWindowBudget).toBe(30 * H);
+    const layout = layoutOf(windowOnly, 'oa');
+    expect(layout.classCharge).toEqual(layout.classSeconds);
+    const milp = buildOaMilp(windowOnly, effectiveQs(windowOnly), [1], DEFAULT_TUNING.sigmaGrid);
+    expect(milp.rowNames.some(n => n.startsWith('windownight_') || n.startsWith('windowfit_'))).toBe(false);
   });
 });
 
@@ -331,17 +413,19 @@ describe('laying a window out on real days', () => {
 });
 
 describe('solving a window with sleep', () => {
-  it('reports the plan the calendar flies, demoted launches at 1x', async () => {
+  it('reports the plan the calendar flies, and promises only the doubled launches the days start', async () => {
     const solve = await loadHighs();
     const options = doubles([opt(10)], 30 * H);
     const problem = problemOf(options, 3 * DAY_SECONDS, 30 * H);
     const result = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
-    // Three a slot, one a waking window, as the fit rows say; the rows let all three be doubled, the days two.
+    // Three a slot, one a waking window, as the fit rows say. The window's own fit row holds the event launches to
+    // its one whole waking window before 30:00 (section 14), so the plan doubles two a slot, as the days do, and
+    // nothing is demoted: what the MILP promised is what flies.
     const byVariant = (v: string) =>
       result.allocation.reduce((a, n, i) => a + (variantOf(problem, i) === v ? n : 0), 0);
     expect(byVariant('normal')).toBe(3);
     expect(byVariant('event') + byVariant('overhang')).toBe(6);
-    expect(result.layoutStats).toMatchObject({ launchesTrimmed: 0, launchesDemoted: 3 });
+    expect(result.layoutStats).toMatchObject({ launchesTrimmed: 0, launchesDemoted: 0 });
     for (const slot of result.calendar!) {
       expect(slotFault(slot, problem.sleep!, problem.eventWindowSeconds)).toBeNull();
       for (const l of slot) if (l.doubled) expect(l.launchAt).toBeLessThanOrEqual(30 * H);
@@ -350,6 +434,7 @@ describe('solving a window with sleep', () => {
     const counts = model.groups.map(g => result.allocation[g.members[0]]);
     const exact = evaluateCounts(model, counts, EXACT_PRECISION).scores.map(s => -Math.expm1(-s));
     expect(result.reported!.jointProbability).toBe(exact[0]);
+    expect(result.layoutStats!.plannedLogJoint).toBe(evaluateCounts(model, counts, STEERING_PRECISION).logJoint);
   });
 
   it('normalizes a problem carrying both, and keeps a malformed window at none', () => {

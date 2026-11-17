@@ -4,7 +4,7 @@
 import type { CapacityVariant, LaunchOption, RecipeDAG } from '../types';
 import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
 import { qOf } from '../objective';
-import { daySchedule, lastWakingInstant, type DaySchedule } from './days';
+import { daySchedule, windowShape, type DaySchedule } from './days';
 
 // Stand-ins for a bound no budget gives; see SPEC.md section 2. `UNBOUNDED_PER_SLOT` is `milp.ts`'s column
 // bound and lives here so `boundsFollowFromRows` below can read the same number.
@@ -60,10 +60,15 @@ export interface Model {
   // Seconds of 2x capacity event left, from the plan's start; 0 when the problem has none, which also drops
   // every doubled option. The verifier reads it (SPEC.md section 11).
   eventWindowSeconds: number;
-  // What the `window_k` rows hold a slot's `event` launches to, in wall-clock seconds: the window itself without a
-  // sleep window, and with one the last waking instant at or before its end, since no launch goes up asleep
-  // (SPEC.md section 13).
+  // What the window rows hold a slot's `event` launches to: `eventWindowBudget` waking seconds and
+  // `eventWindowNights` nights. Without a sleep window the window itself and no night; with one, the waking seconds
+  // and the whole nights before the last waking instant at or before its end, `eventWindowLatest`, since no launch
+  // goes up asleep (SPEC.md sections 13 and 14). `eventWindowPartial` is the part of that instant's waking window
+  // before it, which the window's per-day fit rows read.
   eventWindowBudget: number;
+  eventWindowNights: number;
+  eventWindowLatest: number;
+  eventWindowPartial: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -175,10 +180,19 @@ function craftUpperBounds(
   return caps;
 }
 
-// The wall-clock seconds one launch holds its slot for: its waking seconds and the nights it flies through. What
-// the `window_k` rows charge an `event` launch (SPEC.md section 13); without a sleep window, its seconds.
+// The wall-clock seconds one launch holds its slot for: its waking seconds and the nights it flies through; without
+// a sleep window, its seconds.
 export function blockSeconds(seconds: number, nights: number, day: DaySchedule | null): number {
   return day === null ? seconds : seconds + nights * day.sleepSeconds;
+}
+
+// The most `event` launches of `seconds` waking seconds and `nights` nights one slot's window rows admit: by the
+// window's waking seconds and by its nights (SPEC.md section 14); `UNBOUNDED_PER_SLOT` when it charges neither.
+export function eventLaunches(seconds: number, nights: number, window: { waking: number; nights: number }): number {
+  return Math.min(
+    seconds > 0 ? maxLaunches(window.waking, seconds) : UNBOUNDED_PER_SLOT,
+    nights > 0 ? Math.floor(window.nights / nights) : UNBOUNDED_PER_SLOT
+  );
 }
 
 // Largest whole number of launches that fits: the count `n` with `n * unitCost <= capacity`. Computed
@@ -381,9 +395,12 @@ export function buildModel(raw: PlanProblem): Model {
   const window = problem.eventWindowSeconds ?? 0;
   const slots = problem.slots;
   const day = problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null;
-  // Without a sleep window, the window itself (SPEC.md section 11); with one, its last waking instant
-  // (section 13).
-  const windowBudget = day === null ? window : lastWakingInstant(window, day.wakingSeconds);
+  // Without a sleep window, the window itself and no night (SPEC.md section 11); with one, what lies before its last
+  // waking instant (sections 13 and 14).
+  const shape =
+    day === null
+      ? { latest: window, nights: 0, waking: window, partial: window }
+      : windowShape(window, day.wakingSeconds);
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {
@@ -407,14 +424,14 @@ export function buildModel(raw: PlanProblem): Model {
     const nights = opt.nights ?? 0;
     if (!Number.isInteger(nights) || nights < 0 || nights > nightsCap) return;
     // A doubled option with no window has no row to hold it inside one, so it is dropped rather than flown at 2x
-    // unconstrained; an `event` one holding its slot longer than the whole window cannot start inside it with
-    // anything before it and its column would be pinned at 0. A malformed variant falls out with them. Held in
-    // wall-clock seconds, nights included, which without a sleep window are its seconds (SPEC.md section 13).
+    // unconstrained; an `event` one charging more waking seconds or nights than the window has before its last
+    // waking instant cannot go up and land inside it with anything after it, and its column would be pinned at 0.
+    // A malformed variant falls out with them. Without a sleep window that is its seconds against the window
+    // (SPEC.md sections 11 and 14).
     const variant = opt.variant ?? 'normal';
     if (!Object.prototype.hasOwnProperty.call(VARIANT_RANK, variant)) return;
     if (variant !== 'normal' && !(window > 0)) return;
-    const block = blockSeconds(opt.actualTime, nights, day);
-    if (variant === 'event' && block > windowBudget) return;
+    if (variant === 'event' && (opt.actualTime > shape.waking || nights > shape.nights)) return;
 
     const yieldEntries: Entry[] = [];
     for (const [item, qty] of opt.yieldVector) {
@@ -443,7 +460,9 @@ export function buildModel(raw: PlanProblem): Model {
       // Whole numbers on both sides, so the quotient is exact.
       nights > 0 ? Math.floor((slots * nightsCap) / nights) : UNBOUNDED_GROUP,
       // The window rows' bounds, restated per group as the time and night bounds are.
-      variant === 'event' && block > 0 ? slots * maxLaunches(windowBudget, block) : UNBOUNDED_GROUP,
+      variant === 'event' && (opt.actualTime > 0 || nights > 0)
+        ? slots * eventLaunches(opt.actualTime, nights, shape)
+        : UNBOUNDED_GROUP,
       variant === 'overhang' ? slots : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
@@ -512,7 +531,10 @@ export function buildModel(raw: PlanProblem): Model {
     nightsPerSlot: nightsCap,
     day,
     eventWindowSeconds: window,
-    eventWindowBudget: windowBudget,
+    eventWindowBudget: shape.waking,
+    eventWindowNights: shape.nights,
+    eventWindowLatest: shape.latest,
+    eventWindowPartial: shape.partial,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,
