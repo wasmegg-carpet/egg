@@ -87,12 +87,13 @@ import {
   gemCostMode,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
-  effectiveSleepSeconds,
+  effectiveScheduleArgs,
   effectiveWaitTimeSeconds,
   EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
   playerGoldenEggs,
   playerInventory,
+  scheduleInvalid,
   setPlayerData,
   setWaitTimeDays,
 } from '@/store';
@@ -182,7 +183,7 @@ export default defineComponent({
     const computing = ref(false);
     const computeError = ref('');
     const computedResults = ref<OptimizerSolution[]>([]);
-    const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value);
+    const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value && !scheduleInvalid.value);
     // Names the field that's blocking a solve, and — for a plan visit whose time budget is empty
     // because the plan hasn't scheduled its missions yet — says why, rather than pointing at "the
     // budget" in general.
@@ -195,6 +196,7 @@ export default defineComponent({
       }
       if (gemCostInvalid.value) return 'Enter a valid maximum purchase cost in the sidebar (e.g. 10S).';
       if (craftingCostInvalid.value) return 'Enter a valid maximum crafting cost in the sidebar (e.g. 25M).';
+      if (scheduleInvalid.value) return 'Enter the time left in the 2× capacity event in the sidebar (e.g. 48h).';
       return 'Correct the invalid budget in the sidebar.';
     });
     const inventoryRevision = ref(0);
@@ -224,7 +226,7 @@ export default defineComponent({
         price: effectiveMaxGemCost.value,
         craftBudget: effectiveCraftingBudget.value,
         effort: missionFilters.value.effort,
-        sleep: effectiveSleepSeconds.value,
+        schedule: effectiveScheduleArgs.value,
         valid: inputsValid.value,
       })
     );
@@ -268,8 +270,8 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
-        // Absent rather than 0 when the player plans around the clock, so that request is the one it always was.
-        ...(effectiveSleepSeconds.value > 0 && { sleepSeconds: effectiveSleepSeconds.value }),
+        // Each absent rather than 0 when off, so a request without sleep or an event is the one it always was.
+        ...effectiveScheduleArgs.value,
         ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
         craftBudget,

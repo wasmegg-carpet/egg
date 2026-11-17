@@ -20,7 +20,6 @@ import {
 import Spaceship = ei.MissionInfo.Spaceship;
 
 import {
-  clampSleepHours,
   DEFAULT_MAX_GOLDEN_EGG_COST,
   DEFAULT_WAIT_TIME_DAYS,
   EffortLevel,
@@ -46,8 +45,14 @@ import {
 import { formatBudgetValue, parseBudgetInput } from '@/store/budget-input';
 import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
 import { readPlayerData } from 'lib/mission-optimizer/player-data';
+import {
+  normalizeScheduleSettings,
+  scheduleArgsOf,
+  type ScheduleArgs,
+  type ScheduleSettings,
+} from 'lib/mission-optimizer/schedule-settings';
 export type { ExtrasConfig, MissionFilters, OverrideFlags, EffortLevel } from './schema';
-export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS, MAX_SLEEP_HOURS } from './schema';
+export { EFFORT_LEVELS, EFFORT_LAUNCH_PERIOD_SECONDS } from './schema';
 
 export const CONFIG_LOCALSTORAGE_KEY = 'config';
 export const OVERRIDES_LOCALSTORAGE_KEY = 'overrides';
@@ -510,15 +515,14 @@ export function setWaitTimeDays(v: string): void {
   missionFilters.value.waitTimeDays = v;
 }
 
-export function setSleepHours(hours: number): void {
-  missionFilters.value.sleepHours = clampSleepHours(hours);
+export function setScheduleSettings(settings: ScheduleSettings): void {
+  missionFilters.value = { ...missionFilters.value, ...normalizeScheduleSettings(settings) };
 }
 
-// Seconds a day the planner must leave launch-free; 0 means it plans around the clock. One setting for
-// every plan visit: it describes the player, not the visit.
-export const effectiveSleepSeconds = computed<number>(() =>
-  Math.round(clampSleepHours(missionFilters.value.sleepHours) * 3600)
-);
+// Sleep and the 2x capacity event as the solve is asked them, or null while the event's "time left" is not a
+// duration. One setting for every plan visit: it describes the player, not the visit.
+export const effectiveScheduleArgs = computed<ScheduleArgs | null>(() => scheduleArgsOf(missionFilters.value));
+export const scheduleInvalid = computed(() => effectiveScheduleArgs.value === null);
 
 export function loadMissionFilters(): MissionFilters {
   const str = getLocalStorage(MISSION_FILTERS_LOCALSTORAGE_KEY);
@@ -535,7 +539,7 @@ export function loadMissionFilters(): MissionFilters {
         maxGoldenEggCost: parsed.maxGoldenEggCost ?? DEFAULT_MAX_GOLDEN_EGG_COST,
         waitTimeDays: parsed.waitTimeDays ?? DEFAULT_WAIT_TIME_DAYS,
         fuelFromTankContents: parsed.fuelFromTankContents ?? false,
-        sleepHours: clampSleepHours(parsed.sleepHours),
+        ...normalizeScheduleSettings(parsed),
       };
     }
   } catch (err) {

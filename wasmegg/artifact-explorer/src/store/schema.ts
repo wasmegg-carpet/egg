@@ -3,6 +3,11 @@
 
 import { virtueShipGemCosts, ei } from 'lib';
 import { isEffortLevel, type EffortLevel } from 'lib/mission-optimizer/effort';
+import {
+  newScheduleSettings,
+  scheduleSettingsFieldsValid,
+  type ScheduleSettings,
+} from 'lib/mission-optimizer/schedule-settings';
 
 export {
   EFFORT_LEVELS,
@@ -77,23 +82,22 @@ export function isExtrasConfig(x: unknown): x is ExtrasConfig {
 
 export const DEFAULT_WAIT_TIME_DAYS = '30';
 
-// The longest sleep window the sidebar offers, in hours a day. `MAX_SLEEP_SECONDS` in `lib/mission-optimizer/sleep.ts`
-// is the same bound on the solver's side of the worker.
-export const MAX_SLEEP_HOURS = 16;
-
-// A stored or typed sleep setting as hours the planner can use: 0 (around the clock) for anything that is
-// not a number, and otherwise held to the range the sidebar offers.
-export function clampSleepHours(hours: unknown): number {
-  if (typeof hours !== 'number' || !Number.isFinite(hours)) return 0;
-  return Math.min(MAX_SLEEP_HOURS, Math.max(0, hours));
-}
+// The sleep and 2x capacity event settings are the ascension planner's too, so their rules live with the
+// optimizer; re-exported for the store and its specs.
+export {
+  clampSleepHours,
+  DEFAULT_DOUBLE_CAPACITY_REMAINING,
+  MAX_SLEEP_HOURS,
+} from 'lib/mission-optimizer/schedule-settings';
 
 // Golden egg budget used when no save has been loaded to seed one from. Only
 // ever seen by a player planning without player data, since `setPlayerData`
 // overwrites it with the real balance while the cap is off.
 export const DEFAULT_MAX_GOLDEN_EGG_COST = 1e7;
 
-export interface MissionFilters {
+// Sleep and the 2x capacity event (`ScheduleSettings`) describe the player rather than a visit, so they are one
+// setting for every plan visit.
+export interface MissionFilters extends ScheduleSettings {
   effort: EffortLevel;
   // Maximum gem cost of a mission's ship on the Egg of Humility.
   maxGemCostEnabled: boolean;
@@ -109,9 +113,6 @@ export interface MissionFilters {
   // `effectiveFuelByEggCapacity` ignores it when there is none. Leaving it on across
   // a reload without player data degrades to the tank-capacity budget by itself.
   fuelFromTankContents: boolean;
-  // Hours a day the player sleeps and cannot launch; ships still fly and land. 0 plans around the clock,
-  // which is what the planner did before it knew about sleep, so it is the default.
-  sleepHours: number;
 }
 
 export function newMissionFilters(): MissionFilters {
@@ -123,7 +124,7 @@ export function newMissionFilters(): MissionFilters {
     maxGoldenEggCost: DEFAULT_MAX_GOLDEN_EGG_COST,
     waitTimeDays: DEFAULT_WAIT_TIME_DAYS,
     fuelFromTankContents: false,
-    sleepHours: 0,
+    ...newScheduleSettings(),
   };
 }
 
@@ -140,6 +141,6 @@ export function isMissionFilters(x: unknown): x is MissionFilters {
     (m.maxGoldenEggCost === undefined || (Number.isFinite(m.maxGoldenEggCost) && m.maxGoldenEggCost >= 0)) &&
     (m.waitTimeDays === undefined || typeof m.waitTimeDays === 'string') &&
     (m.fuelFromTankContents === undefined || typeof m.fuelFromTankContents === 'boolean') &&
-    (m.sleepHours === undefined || typeof m.sleepHours === 'number')
+    scheduleSettingsFieldsValid(m)
   );
 }
