@@ -80,13 +80,28 @@ export interface LaunchSolution {
   legendarySupplyVector: Map<string, number>;
 }
 
+// One launch on a slot's timeline, as the solver's verified calendar placed it. It names its `choiceHistory` entry
+// by index rather than carrying the ship, so the timeline costs the worker boundary three numbers a launch and
+// cannot disagree with the totals about what was flown.
+export interface SlotLaunch {
+  // Index into `OptimizerSolution.choiceHistory`.
+  choice: integer;
+  // Seconds from the start of the plan (wake-up on day 0, with a sleep window).
+  launchAt: number;
+  // Whether it flies at 2x capacity: launched inside the event window as one of the doubled variants. Always
+  // false on a plan made without a window.
+  doubled: boolean;
+}
+
 // The three slots run concurrently, so the plan's wall-clock is the busiest
-// slot's load. On a sleep-aware plan `loadSeconds` is read off the verified calendar: the moment the slot's
-// last launch is back and the player is awake to collect it, nights and idle hours included.
+// slot's load. `loadSeconds` is read off the verified calendar: the moment the slot's last launch is back and,
+// on a sleep-aware plan, the player is awake to collect it, nights and idle hours included.
 export interface SlotSummary {
   loadSeconds: number;
   rawLoadSeconds: number;
   missionCount: integer;
+  // The slot's launches in launch order; `missionCount` of them.
+  launches: SlotLaunch[];
 }
 
 export interface DropRow {

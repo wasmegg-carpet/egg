@@ -70,13 +70,17 @@ export interface HumilityMissionsTarget {
   expectedCrafts: number;
 }
 
-// One launch line. Aggregated on (ship, duration, targetAfxId): targeting is a first-class axis
+// One launch line. Aggregated on (ship, duration, targetAfxId, doubled): targeting is a first-class axis
 // of the optimizer's model, so a `{ship, duration, count}` triple cannot express its answer.
 export interface HumilityMissionsLaunch {
   ship: string; // ei.MissionInfo.Spaceship name
   duration: string; // ei.MissionInfo.DurationType name
   targetAfxId: ei.ArtifactSpec.Name;
   count: number;
+  // Launched inside a 2x mission capacity event, so each brings home twice the loot. Absent on a 1x line, and so
+  // on every line of a file written before the field existed, which still reads as it did: the same mission flown
+  // at both capacities is two lines, one with the marker and one without.
+  doubled?: true;
 }
 
 export interface HumilityMissionsVisit {
@@ -109,6 +113,9 @@ export interface HumilityMissionsVisit {
   // exported without a sleep window is exactly what it was before the field existed. AP does not read it;
   // `launches` already folds daytime and overnight launches of a mission into one line.
   sleepSeconds?: number;
+  // The 2x capacity event window the plan was solved against, in seconds from its start. Absent on a plan made
+  // without one, as `sleepSeconds` is. AP does not read it; the launches it doubled carry `doubled`.
+  eventWindowSeconds?: number;
 }
 
 export interface HumilityMissionsFile {

@@ -220,10 +220,13 @@
                 </li>
               </ul>
 
-              <div>
-                <h5 class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Launch plan</h5>
-                <OptimizerChoiceList :choices="shown.solution.choiceHistory" />
-              </div>
+              <!-- The same timeline and totals the explorer's card shows, here rather than under the breakdown,
+                   since what to launch is what staging puts in the plan. -->
+              <OptimizerLaunchPlan
+                class="text-sm"
+                :solution="shown.solution"
+                heading-class="text-[10px] font-bold uppercase tracking-widest text-gray-400"
+              />
 
               <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                 <div class="rounded bg-gray-50 px-2 py-1.5">
@@ -337,6 +340,7 @@
                     :targets="view.targets"
                     :plan-cost="view.planCost"
                     :over-provisioned="current.visit.visitIndex > 0"
+                    :show-launch-plan="false"
                   />
                 </div>
               </details>
@@ -364,7 +368,7 @@ import { NON_HUMILITY_EGG_IDS } from 'lib/mission-optimizer/plan/schema';
 import { getSimulationContext } from 'lib/planners/engine/adapter';
 import { fuelForLaunches } from 'lib/planners/rockets/launches';
 import InlineSpinner from 'ui/components/planners/InlineSpinner.vue';
-import OptimizerChoiceList from 'ui/components/mission-optimizer/OptimizerChoiceList.vue';
+import OptimizerLaunchPlan from 'ui/components/mission-optimizer/OptimizerLaunchPlan.vue';
 import OptimizerSolutionCard from 'ui/components/mission-optimizer/OptimizerSolutionCard.vue';
 import TargetSelector from 'ui/components/mission-optimizer/TargetSelector.vue';
 

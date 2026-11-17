@@ -403,7 +403,7 @@ function launch(
 }
 
 function solutionOf(runs: LaunchSolution[], overrides: Partial<OptimizerSolution> = {}): OptimizerSolution {
-  const slots: SlotSummary[] = [{ loadSeconds: 0, rawLoadSeconds: 0, missionCount: 0 }];
+  const slots: SlotSummary[] = [{ loadSeconds: 0, rawLoadSeconds: 0, missionCount: 0, launches: [] }];
   return {
     bestProbability: 0,
     craftProbability: 0,

@@ -121,7 +121,15 @@ function computeFuelByEgg(solution: OptimizerSolution): Map<ei.Egg, number> {
 // identical solutions.
 export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG): OptimizerSolution[] {
   for (const solution of solutions) {
-    solution.choiceHistory.sort((a: LaunchSolution, b: LaunchSolution) => a.ship.shipType - b.ship.shipType);
+    // The slots' launches name their entry by index, so they follow it to its sorted place.
+    const order = solution.choiceHistory
+      .map((choice: LaunchSolution, index) => ({ choice, index }))
+      .sort((a, b) => a.choice.ship.shipType - b.choice.ship.shipType);
+    const moved = new Map(order.map(({ index }, to) => [index, to]));
+    solution.choiceHistory = order.map(({ choice }) => choice);
+    for (const slot of solution.slots ?? []) {
+      slot.launches = slot.launches.map(launch => ({ ...launch, choice: moved.get(launch.choice)! }));
+    }
     solution.expectedDrops = computeExpectedDrops(solution, dag);
     solution.fuelByEgg = computeFuelByEgg(solution);
   }
@@ -129,6 +137,7 @@ export function finalizeSolutions(solutions: OptimizerSolution[], dag: RecipeDAG
 }
 
 export type {
+  CapacityVariant,
   CraftBudget,
   OptimizerConfig,
   OptimizerSolution,
@@ -138,4 +147,6 @@ export type {
   DAGNode,
   DAGChildRef,
   RecipeDAG,
+  SlotLaunch,
+  SlotSummary,
 } from './types';

@@ -3,6 +3,7 @@
 
 import { ei, getArtifactTierPropsFromId } from '../../index';
 
+import { isDoubled } from '../optimizer-views';
 import type { OptimizerSolution } from '../types';
 
 import type { HumilityVisit } from './read';
@@ -21,27 +22,32 @@ import {
 
 const EGG_NAME_BY_ID = new Map<ei.Egg, VirtueEgg>(NON_HUMILITY_EGG_IDS.map(([name, id]) => [id, name]));
 
-// Launches of the same ship, duration and target are one row: AP flies them identically, and the
-// solver may reach the same option from more than one slot. Sorted on the same tuple so the file
-// is a function of the plan rather than of the order the solver happened to emit its choices in.
+// Launches of the same ship, duration, target and capacity are one row: AP flies them identically, and the
+// solver may reach the same option from more than one slot, by day and overnight, or as both of a doubled launch's
+// variants. A doubled launch stays its own row, marked, because it brings home twice as much. Sorted on the same
+// tuple, 1x before 2x, so the file is a function of the plan rather than of the order the solver happened to emit
+// its choices in.
 function aggregateLaunches(solution: OptimizerSolution): { launches: HumilityMissionsLaunch[]; gemCost: number } {
-  const byKey = new Map<string, { sort: [number, number, number]; launch: HumilityMissionsLaunch }>();
+  const byKey = new Map<string, { sort: [number, number, number, number]; launch: HumilityMissionsLaunch }>();
   let gemCost = 0;
 
   for (const run of solution.choiceHistory) {
     if (!(run.numShipsLaunched > 0)) continue;
-    const key = `${run.ship.shipType}|${run.ship.durationType}|${run.targetAfxId}`;
+    const doubled = isDoubled(run);
+    const key = `${run.ship.shipType}|${run.ship.durationType}|${run.targetAfxId}|${doubled}`;
     const seen = byKey.get(key);
     if (seen) {
       seen.launch.count += run.numShipsLaunched;
     } else {
       byKey.set(key, {
-        sort: [run.ship.shipType, run.ship.durationType, run.targetAfxId],
+        sort: [run.ship.shipType, run.ship.durationType, run.targetAfxId, Number(doubled)],
         launch: {
           ship: spaceshipEnumName(run.ship.shipType),
           duration: durationEnumName(run.ship.durationType),
           targetAfxId: run.targetAfxId,
           count: run.numShipsLaunched,
+          // Absent rather than false on a 1x launch, so a plan without an event writes the file it always did.
+          ...(doubled && { doubled: true as const }),
         },
       });
     }
@@ -49,7 +55,7 @@ function aggregateLaunches(solution: OptimizerSolution): { launches: HumilityMis
   }
 
   const launches = [...byKey.values()]
-    .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2])
+    .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2] || a.sort[3] - b.sort[3])
     .map(e => e.launch);
   return { launches, gemCost };
 }
@@ -101,6 +107,7 @@ export function projectSolvedVisit(args: {
     gemBudget,
     effort,
     ...(solution.sleepSeconds !== undefined && { sleepSeconds: solution.sleepSeconds }),
+    ...(solution.eventWindowSeconds !== undefined && { eventWindowSeconds: solution.eventWindowSeconds }),
   };
 }
 

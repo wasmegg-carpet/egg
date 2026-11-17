@@ -83,6 +83,7 @@
         <span class="text-gray-700 flex-1">
           {{ contrib.numShipsLaunched }}×
           <mission-name :mission="contrib.ship" :target="contrib.targetAfxId" :no-link="true" class="inline-block" />
+          <double-capacity-badge v-if="contrib.doubled" class="ml-1 align-middle" />
         </span>
         <span class="font-mono text-blue-700">+{{ formatExpectedCount(contrib.legendaryDrops) }}</span>
       </div>
@@ -96,12 +97,13 @@ import { computed, defineComponent, PropType } from 'vue';
 import { formatExpectedCount } from 'lib';
 import type { CraftChainMetrics, MissionLegendaryRow, RecipeTreeNode } from 'lib/mission-optimizer';
 import { formatProbabilityForDisplay, craftChainCost as computeCraftChainCost } from 'lib/mission-optimizer';
+import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
 import MissionName from './MissionName.vue';
 import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
 import ScaledValue from './ScaledValue.vue';
 
 export default defineComponent({
-  components: { MissionName, OptimizerRecipeTreeRow, ScaledValue },
+  components: { DoubleCapacityBadge, MissionName, OptimizerRecipeTreeRow, ScaledValue },
   props: {
     heading: { type: String, default: '' },
     bestProbability: { type: Number, required: true },
