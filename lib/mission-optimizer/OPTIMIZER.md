@@ -248,9 +248,13 @@ solved against a window, and each `choiceHistory` entry then carries the
 once per variant. The calendar the plan was accepted on says per launch whether
 it is doubled and when it goes up; the card does not show it yet.
 
-**Not with sleep, yet.** The solver refuses a problem carrying both a sleep
-window and an event window (SPEC.md section 11), so `optimizeFull` throws on
-that pair rather than return a plan nothing has verified.
+**With sleep.** Both may be set at once. The window is then wall-clock time
+from now, nights included, and the player is taken to be at the start of a
+waking day now, the assumption sleep already makes; there is no further input.
+The solver's window rows become a relaxation there, and a doubled launch the
+day-by-day layout cannot start inside the window is flown at 1x instead, so the
+plan and every figure on the card describe what the calendar actually flies
+(`solver/SPEC.md` section 13). `layoutStats.launchesDemoted` counts those.
 
 What capacity does **not** touch: `enumerateLaunchOptions`
 (`problem-inputs.ts`) divides a target's recorded drops by the mission's

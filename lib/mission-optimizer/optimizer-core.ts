@@ -44,7 +44,8 @@ export interface OptimizeArgs {
   // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is today's problem. Present, the
   // menu gains the doubled variants (`capacity.ts`), capped at `MAX_DOUBLE_CAPACITY_SECONDS`, and the window
   // rows hold them inside it (`solver/SPEC.md` section 11). The caller passes the menu as enumerated; it never
-  // enumerates against the window itself. Not yet combinable with `sleepSeconds`: the solver refuses the pair.
+  // enumerates against the window itself. Combines with `sleepSeconds`, the window then counting nights too
+  // (`solver/SPEC.md` section 13).
   eventWindowSeconds?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
   // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal

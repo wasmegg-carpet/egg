@@ -172,6 +172,16 @@ when launches go up back to back (`lib/mission-optimizer/solver/SPEC.md` section
 With `w = 0` the menu and the problem are exactly today's: no variant, no
 `variant` field and no `eventWindowSeconds` key.
 
+With a sleep window as well, the window is wall-clock time from wake-up on day
+0, nights included, and the calendar rule is the same one: a doubled launch's
+start against `w`. The packer still reads the labels as budgets (`event`
+`actualTime` against `w`, one `overhang`), which every calendar labelled event
+launches first and the overhang last meets: the `event` launches finish before
+the last doubled one starts, inside `w`, and their waking seconds are no more
+than their wall-clock blocks.
+Combined regimes run with `ARENA_SLEEP` and `ARENA_WINDOW` set together, e.g.
+`ARENA_SLEEP=draw ARENA_WINDOW=draw`.
+
 **Instances.** `generateInstance` draws a regime **after** the sleep window, so
 every field it drew before, sleep included, keeps its value for every seed.
 `ARENA_WINDOW` decides whether it is used: unset (or `none`), no instance has a
@@ -332,11 +342,12 @@ budgets nights per slot (that file's section 9), lays each plan out on real days
 and trims what does not fit (section 10), so A10-sleep runs for it on every
 instance, `ARENA_SLEEP` or not, and its sleep-on plans are checked by their
 calendar. It also reports `layoutStats`, which the scorecard sums over fresh
-solves into one `layout` line for sleep-on runs; that line is the candidate's
-own account and nothing gates on it. Window-aware without sleep: the window rows
-of section 11 and a back-to-back calendar with every plan (section 12), so
-A11-window runs for it on every sleep-free instance; a window together with a
-sleep window it refuses, so it does not declare `windowWithSleepAware`.
+solves into one `layout` line for sleep-on runs, demoted launches included;
+that line is the candidate's own account and nothing gates on it. Window-aware:
+the window rows of section 11 and a back-to-back calendar with every plan
+(section 12), and with a sleep window as well the wall-clock rows, doubled-first
+layout and demotion of section 13, so it declares `windowWithSleepAware` and
+A10-sleep and A11-window run for it on every instance, combined ones included.
 
 The arena is not a bake-off between methodologies. It is the bar a change to the
 shipped planner has to clear before it lands. A proposed change may be registered
