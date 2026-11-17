@@ -14,6 +14,7 @@ import { DEFAULT_TUNING, solveWith } from 'lib/mission-optimizer/solver/solve';
 import type { PlanProblem } from 'lib/mission-optimizer/solver/types';
 import type { LaunchOption } from 'lib/mission-optimizer/types';
 import { craftDag, makeOpt } from './spec-helpers';
+import { capacityVariants as arenaCapacityVariants } from '../arena/capacity';
 
 const HOUR = 3600;
 const TARGET = 'tachyon-deflector-4';
@@ -101,6 +102,24 @@ describe('capacityVariants', () => {
         ];
       })
     );
+  });
+});
+
+describe('the app and the arena state the same rule', () => {
+  it('give the same variants, entry for entry, at every window', () => {
+    const menu = enumerateLaunchOptions(henerpriseOnly(), dagOf());
+    const shape = (o: LaunchOption) => ({
+      id: o.id,
+      variant: o.variant,
+      actualTime: o.actualTime,
+      nights: o.nights,
+      yieldVector: o.yieldVector,
+      supplyVector: o.supplyVector,
+      legendaryYieldVector: o.legendaryYieldVector,
+    });
+    for (const window of [0, HOUR, 24 * HOUR, 48 * HOUR, 96 * HOUR, 30 * 86400]) {
+      expect(arenaCapacityVariants(menu, window).map(shape)).toEqual(capacityVariants(menu, window).map(shape));
+    }
   });
 });
 

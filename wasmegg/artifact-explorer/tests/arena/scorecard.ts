@@ -3,7 +3,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { ArenaSolver } from './contract';
+import { unsupported, type ArenaSolver } from './contract';
 import { run, takeLayoutTally, type LayoutTally } from './harness';
 import { generateInstance } from './instances';
 import { runChecks, type Check, type InvariantId, type Violation, type ViolationId } from './invariants';
@@ -18,8 +18,8 @@ export interface InstanceResult {
   solveMs: number;
   checkMs: number;
   violations: Violation[];
-  // Set when the instance was not solved at all: it has a sleep window and the candidate does not declare
-  // sleep support. Such an instance has no joint, no latency and no violations, and counts as neither clean
+  // Set when the instance was not solved at all: it has a sleep window or a 2x window the candidate does not
+  // declare support for (`contract.ts`, `unsupported`). Such an instance has no joint, no latency and no violations, and counts as neither clean
   // nor failing.
   skipped?: string;
   // Checks that did not run on this instance, for the same reason.
@@ -46,7 +46,8 @@ export function sweep(
   takeLayoutTally(solver.plan);
   for (const seed of seeds) {
     const inst = generateInstance(seed);
-    if (inst.sleepSeconds > 0 && !solver.sleepAware) {
+    const skip = unsupported(solver, inst);
+    if (skip !== undefined) {
       const r: InstanceResult = {
         seed,
         label: inst.label,
@@ -56,7 +57,7 @@ export function sweep(
         solveMs: 0,
         checkMs: 0,
         violations: [],
-        skipped: 'sleep window on, candidate not sleep-aware',
+        skipped: skip,
         skippedChecks: [],
       };
       instances.push(r);
@@ -87,7 +88,7 @@ export function sweep(
       continue;
     }
     const t0 = Date.now();
-    const { violations, skipped } = runChecks(solver.plan, inst, checks, solver.sleepAware ?? false);
+    const { violations, skipped } = runChecks(solver.plan, inst, checks, solver);
     const r: InstanceResult = {
       seed,
       label: inst.label,
@@ -181,7 +182,7 @@ export function formatScorecard(r: SweepResult): string {
   const skippedChecks = new Map<string, number>();
   for (const i of ran) for (const id of i.skippedChecks) skippedChecks.set(id, (skippedChecks.get(id) ?? 0) + 1);
   for (const [id, n] of skippedChecks) {
-    lines.push(`    skipped ${id} on ${n} instance(s): candidate not sleep-aware`);
+    lines.push(`    skipped ${id} on ${n} instance(s): candidate does not support what it needs`);
   }
 
   const t = tally(r);

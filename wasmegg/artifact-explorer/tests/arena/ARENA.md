@@ -23,16 +23,18 @@ probability of getting a legendary of **every** target artifact.
 | `timeCapacityPerSlot` | seconds available **per slot**. Waking seconds only, when the problem has a sleep window.                                                                  |
 | `nightsPerSlot`       | optional; whole sleep windows available per slot. **Absent means no sleep window** and is every problem unless sleep is switched on (see **Sleep**).       |
 | `sleep`               | optional; `{ sleepSeconds, horizonSeconds }`, the day the night budget is cut from. Present exactly when `nightsPerSlot` is (see **Sleep**).               |
+| `eventWindowSeconds`  | optional; seconds of a 2x capacity event left, as a window from the plan's start. **Absent means no event** (see **The 2x capacity window**).              |
 | `slots`               | how many missions can be in flight at once. Always 3.                                                                                                      |
 | `ownedStock`          | copies of each node the player already owns.                                                                                                               |
 | `craftBudget`         | optional golden-egg cap on the plan's crafts, with a unit price per node. Absent on every generated instance; only **A9** supplies one.                    |
 
 Each option's `actualTime` is the seconds it charges its slot; with a sleep
 window, an option may also carry `nights`, the sleep windows it flies through
-(absent or 0 is a daytime launch).
+(absent or 0 is a daytime launch); with an event window, a capacity `variant`.
 
 You return an `allocation` parallel to `problem.options`, plus an optional
-`reported` (see below).
+`reported` (see below), and a `calendar` when the problem has a sleep window or
+an event window (optional otherwise).
 
 The objective is the **product** over targets of `1 - exp(-s_T)`, not the sum and
 not the max. ALL-of rather than ANY-of deliberately: maximising ANY collapses
@@ -56,6 +58,9 @@ reporting a plan whose craft accounting you did not work out yourself.
   and `nights` 1 (a short ship launched at bedtime) is not free: it uses a night.
   Only a launch costing neither is free.
 
+- **The window**, when `eventWindowSeconds` is present: a doubled launch goes
+  up at or before it. Stated by the calendar, below.
+
 - **Real days**, when `sleep` is present. A sleep-aware candidate returns
   `calendar` beside its allocation: per slot, its launches in launch order, each
   `{ option, optionId, launchAt }` (`launchAt` in seconds from wake-up on day 0;
@@ -68,16 +73,33 @@ reporting a plan whose craft accounting you did not work out yourself.
   calendar's launches per option must equal the allocation exactly. Tolerance
   one microsecond. A sleep-on plan with no calendar fails.
 
+- **A calendar for any problem.** Without a sleep window the same verifier runs
+  on a calendar with `sleepSeconds` 0 and the slot as the horizon — launches back
+  to back inside the slot — plus the window rule: a launch of an option the menu
+  marks `event` or `overhang` must start at or before `eventWindowSeconds`, and
+  none may fly without a window. The rule reads the launch time and the menu's
+  variant, never a flag the candidate wrote, and has no notion of which doubled
+  launch is a slot's last. A window-on plan with no calendar fails. A calendar
+  returned for a problem with neither window is verified all the same.
+
 The harness decides this with its own packer (`pack-feasibility.ts`:
-`packFeasible`, and `packFeasibleNights` once any launch in the plan spends a
-night; a plan of daytime launches is judged by the one-dimensional rule exactly
-as before), which imports nothing and which no candidate may import. With a
-sleep window both the packer and the calendar verifier run, and C1 needs both:
-the packer checks the budgets the problem states, the calendar that the plan
-fits real days. The checks that build plans of their own (M3's union, D1/D2's
-neighbours) still accept one by the packer alone, since the harness has no
-layout of its own; an "improvement" they find may be one no real day holds,
-which is a soft finding, not a gate. Returning an infeasible plan
+`packFeasible`, and `packFeasibleBudgets` once any launch in the plan spends a
+night or flies doubled; a plan of daytime, undoubled launches is judged by the
+one-dimensional rule exactly as before), which imports nothing and which no
+candidate may import. With a sleep window both the packer and the calendar
+verifier run, and C1 needs both: the packer checks the budgets the problem
+states, the calendar that the plan fits real days. Without one a calendar that
+verifies is itself an arrangement of the plan, and a stricter one than the
+packer's since it times every launch, so C1 runs the packer only for a plan
+returned without a calendar. The checks that build plans of their own (M3's
+union, D1/D2's neighbours) still accept one by the packer alone, since the
+harness has no layout of its own; an "improvement" they find may be one no real
+day holds, which is a soft finding, not a gate. For the window the packer uses
+the variant labels as budgets — `event` seconds at most the window, one
+`overhang` per slot — which is sound (any plan passing them flies `event`
+launches first, then the `overhang`, all inside the window) and stricter than the
+calendar's rule: it refuses two `overhang` launches in a slot that would both go
+up in time. A missed improvement is the safe direction for a move filter. Returning an infeasible plan
 is a hard failure, not a low score.
 
 **The golden egg budget is not part of this.** Missions cost no golden eggs, so
@@ -127,6 +149,45 @@ it always was. `ARENA_SLEEP` decides whether it is used: unset, every instance
 sleeps 0 and the arena is unchanged; a number of hours (`ARENA_SLEEP=8`) puts
 that window on every instance; `draw` uses each seed's drawn window.
 
+## The 2x capacity window
+
+Egg, Inc. periodically doubles every ship's capacity for 48 hours; a mission
+launched inside the window brings home twice its drops, whenever it lands.
+`eventWindowSeconds` `w` is the seconds left, as a window from the plan's start.
+
+`capacity.ts` (imports nothing; harness-owned like the sleep model) turns the
+menu into the menu an event offers, after the sleep split:
+
+- a **normal** variant: the option as given, `variant: 'normal'`, same `id`;
+- an **event** variant when `actualTime <= w`: every drop vector (`supplyVector`,
+  `yieldVector`, `legendaryYieldVector`) doubled, id suffixed `::event`;
+- an **overhang** variant, always: doubled the same way, id suffixed
+  `::overhang`.
+
+Fuel, seconds, nights and cost are the option's own. The two doubled variants
+are the solver-facing way to say "launches inside the window": a slot's `event`
+launches total at most `w` and it holds one `overhang`, which together are exact
+when launches go up back to back (`lib/mission-optimizer/solver/SPEC.md` section
+11). C1 does not read them that way; it reads the calendar (Feasibility, above).
+With `w = 0` the menu and the problem are exactly today's: no variant, no
+`variant` field and no `eventWindowSeconds` key.
+
+**Instances.** `generateInstance` draws a regime **after** the sleep window, so
+every field it drew before, sleep included, keeps its value for every seed.
+`ARENA_WINDOW` decides whether it is used: unset (or `none`), no instance has a
+window and the arena is unchanged; a regime name puts that regime on every
+instance; `draw` uses each seed's drawn regime. The regimes, against the horizon
+`H`: `none`; `inside`, 48 hours; `sliver`, one hour, shorter than nearly every
+mission, so doubled launches come through the overhang; `straddle-under`,
+`max(1h, 0.75 H)`; `straddle-over`, `1.25 H`, where the window binds on nothing.
+
+**Candidates declare window support** with `windowAware: true`, and support for
+a window together with a sleep window with `windowWithSleepAware: true`
+(`contract.ts`). An instance a candidate does not support is skipped as for
+sleep, and so are **A11-window** (without `windowAware`, or on a sleep-on
+instance without `windowWithSleepAware`) and **A10-sleep** (on a window-on
+instance without `windowWithSleepAware`).
+
 **Candidates declare sleep support** with `sleepAware: true` on their
 `ArenaSolver` entry (`contract.ts`). A candidate without it is never handed a
 problem with a sleep window: an instance with one is reported as skipped (not
@@ -137,8 +198,8 @@ scorecard prints both.
 ## Rules
 
 - **Do not import the harness.** Not `evaluate.ts`, `pack-feasibility.ts`,
-  `invariants.ts`, `harness.ts`, `instances.ts`, `scorecard.ts`, `sleep.ts` or
-  `calendar.ts`.
+  `invariants.ts`, `harness.ts`, `instances.ts`, `scorecard.ts`, `sleep.ts`,
+  `capacity.ts` or `calendar.ts`.
   `independence.spec.ts` enforces this. Deriving your own copy of the objective
   or of a packing routine is fine and expected — sharing the harness's is not,
   because then the grader and the candidate are the same code.
@@ -180,15 +241,15 @@ factors must multiply to your `jointProbability`).
 **Correctness**, as invariant violations. Every invariant is a property that
 holds without knowing the optimum, so none needs a reference answer:
 
-| group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **C1** feasibility         | the plan fits the fuel tank and packs into the slots (waking seconds and nights both, with a sleep window); with a sleep window, also that the returned calendar verifies                                                                                                                                                                                                                                                                                                                                                                  |
-| **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                                                                                                                                              |
-| **A1-A10** monotonicity    | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely), a shorter sleep window (**A10-sleep**: 12, 10, 8, 6, 4 hours, then none; sleep-aware candidates only, skipped otherwise): each is solved alongside the original, and the relaxed solve must not score below it |
-| **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                                                                                                                                                      |
-| **M1-M3** cross-path       | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3; options are matched on ship, target, nights and charge, so sleep variants stay apart)                                                                                                                                                                   |
-| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every _pair_ — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass.                                                                                                                                                                             |
+| group                      | asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C0** contract            | the returned allocation has one entry per option, and every entry is a non-negative whole number                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **C1** feasibility         | the plan fits the fuel tank and packs into the slots (waking seconds and nights both, with a sleep window); with a sleep window, also that the returned calendar verifies; with a 2x window, or whenever a calendar is returned without a sleep window, that the calendar verifies, every doubled launch inside the window — in that case instead of the packer                                                                                                                                                                                                                                                                                                     |
+| **C2/C3** honesty          | the probability you report is the one the judge computes for the allocation you returned, and your per-target factors multiply to it (opt-in)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **A1-A10** monotonicity    | relaxing the problem cannot make your answer worse. More fuel, more time, more ships on the menu, more inventory, more zero-g research (so more capacity per mission), a higher crafting level, a shorter launch-period floor, one fewer target, a larger golden egg budget (**A9**, ending with the cap removed entirely), a shorter sleep window (**A10-sleep**: 12, 10, 8, 6, 4 hours, then none; sleep-aware candidates only, skipped otherwise), a longer 2x window (**A11-window**: none, 1 hour, 48 hours, 0.75 and 1.25 of the horizon; window-aware candidates only): each is solved alongside the original, and the relaxed solve must not score below it |
+| **B1-B6** invariance       | restating the same problem must not move the answer at all. Shuffling the menu, reversing the target list, multiplying every fuel cost and the tank by the same constant, appending a duplicate of an option already on the menu, or simply solving twice. There is no B4 and never was; the ids are the arena's public vocabulary, so the slot stays vacant rather than renumbering.                                                                                                                                                                                                                                                                               |
+| **M1-M3** cross-path       | the joint answer must not beat the product of the per-target optima (M1); a solo solve of one target must reach at least what the joint plan already reaches on that target (M2); and the joint answer must not lose to the union of per-target plans solved on split budgets (M3; options are matched on ship, target, nights, charge and variant, so sleep and capacity variants stay apart)                                                                                                                                                                                                                                                                      |
+| **D1/D2** local optimality | your plan cannot be improved by a small edit to itself. D1 tries every _pair_ — remove up to 2 launches of one option, add up to 2 of another — and D2 tries two such pairs at once. Deep tier only. Each also reports a `-inconclusive` variant when the search spends its evaluation budget without finding an improving move: no answer rather than a pass.                                                                                                                                                                                                                                                                                                      |
 
 **Quality**, as the judged joint probability on the unperturbed instance,
 reported in log10 and compared head-to-head. This is the only relative measure.
@@ -210,18 +271,20 @@ ARENA=sweep pnpm arena                      # 40 instances, cheap checks
 ARENA=deep pnpm arena                       # + D1/D2 local optimality
 SOLVER=my-solver ARENA=sweep pnpm arena     # one entry
 ARENA_SLEEP=8 ARENA=sweep pnpm arena        # an 8-hour sleep window on every instance
+ARENA_WINDOW=inside ARENA=sweep pnpm arena  # a 48-hour 2x window on every instance
 ARENA_INSTANCES=80 ARENA_SEED_BASE=9000 ARENA=sweep pnpm arena
 pnpm arena:check                            # independence guard only
 ```
 
-| variable          | default                | meaning                                                |
-| ----------------- | ---------------------- | ------------------------------------------------------ |
-| `ARENA`           | `smoke`                | tier; also the switch that makes the suite run at all  |
-| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count                                         |
-| `ARENA_SEED_BASE` | 2000                   | first seed                                             |
-| `SOLVER`          | whole roster           | run one entry                                          |
-| `ARENA_SLEEP`     | unset (no sleep)       | hours of sleep on every instance, or `draw`; see Sleep |
-| `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure       |
+| variable          | default                | meaning                                                           |
+| ----------------- | ---------------------- | ----------------------------------------------------------------- |
+| `ARENA`           | `smoke`                | tier; also the switch that makes the suite run at all             |
+| `ARENA_INSTANCES` | 4 smoke / 40 otherwise | instance count                                                    |
+| `ARENA_SEED_BASE` | 2000                   | first seed                                                        |
+| `SOLVER`          | whole roster           | run one entry                                                     |
+| `ARENA_SLEEP`     | unset (no sleep)       | hours of sleep on every instance, or `draw`; see Sleep            |
+| `ARENA_WINDOW`    | unset (no window)      | a regime on every instance, or `draw`; see The 2x capacity window |
+| `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure                  |
 
 The sweep is opt-in and `pnpm test` does not run it: every tier here is minutes
 at best. `vitest.config.ts` drops `invariants.spec.ts` from the selection when
@@ -236,7 +299,23 @@ plan that is not a plan is broken outright, and that is not a matter of degree.
 `C1-inconclusive` is the harness's own packer exhausting its node budget rather
 than a verdict on the plan — it gates all the same, because that budget is sized
 so it does not happen, but it is counted separately so the scorecard never reads
-a judge timeout as an infeasible plan. Every other invariant is reported rather
+a judge timeout as an infeasible plan. Since C1 asks the packer only about a plan
+with no calendar, or with a sleep window, it can no longer arise for a candidate
+that returns a calendar on a sleep-free problem, as the shipped one does; it stays
+for candidates that return an allocation alone.
+
+Alongside the tiers there is `tuning-bench.spec.ts`, opt-in via `BENCH` and
+excluded from `pnpm test` the same way. It is not a tier and not a test: it
+asserts nothing, and prints solve latency and judged log10(joint) per instance
+per `maxNodes`, honouring `ARENA_WINDOW` and `ARENA_SLEEP`. `BENCH_BASES`
+(default half, once and twice `DEFAULT_TUNING.maxNodes`), `BENCH_INSTANCES` (8)
+and `BENCH_SEED_BASE` (2000) shape it. It measures neither invariant severity nor
+monotonicity, so it can rule a budget out on cost but cannot on its own justify
+moving one.
+
+````
+BENCH=1 ARENA_WINDOW=inside BENCH_BASES=1200,3600 pnpm exec vitest run tests/arena/tuning-bench.spec.ts
+``` Every other invariant is reported rather
 than thrown, because what the arena measures is how far a candidate is from
 holding them — a suite that aborts on the first monotonicity wobble stops
 producing a scorecard and starts producing a stack trace.
@@ -254,7 +333,10 @@ and trims what does not fit (section 10), so A10-sleep runs for it on every
 instance, `ARENA_SLEEP` or not, and its sleep-on plans are checked by their
 calendar. It also reports `layoutStats`, which the scorecard sums over fresh
 solves into one `layout` line for sleep-on runs; that line is the candidate's
-own account and nothing gates on it.
+own account and nothing gates on it. Window-aware without sleep: the window rows
+of section 11 and a back-to-back calendar with every plan (section 12), so
+A11-window runs for it on every sleep-free instance; a window together with a
+sleep window it refuses, so it does not declare `windowWithSleepAware`.
 
 The arena is not a bake-off between methodologies. It is the bar a change to the
 shipped planner has to clear before it lands. A proposed change may be registered
@@ -265,3 +347,4 @@ bespoke script. Such an entry ships or it is deleted; the roster is not where
 alternatives accumulate. It is one row for that reason and not because nothing
 has been tried: the shipped single-pass tuning was chosen over five registered
 arms, and all five were deleted once it was.
+````

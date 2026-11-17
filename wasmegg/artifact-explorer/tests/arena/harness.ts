@@ -10,7 +10,8 @@ import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluatio
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
 import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
-import { packFeasible, packFeasibleNights, type PackVerdict } from './pack-feasibility';
+import { capacityVariants, isDoubled } from './capacity';
+import { packFeasible, packFeasibleBudgets, type PackVerdict } from './pack-feasibility';
 import { sleepCapacity, sleepVariants } from './sleep';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
@@ -52,6 +53,8 @@ export interface SolveOverrides {
   // Seconds of sleep a day, replacing the instance's own window. `timeCapacityPerSlot` stays the horizon
   // either way; `buildProblem` turns the pair into waking seconds and nights.
   sleepSeconds?: number;
+  // Seconds of 2x capacity window left, replacing the instance's own. Reaches the menu and the problem together.
+  eventWindowSeconds?: number;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -61,12 +64,18 @@ export interface SolveOverrides {
   fresh?: boolean;
 }
 
-// The sleep window and horizon an instance is stated with, after overrides: what C1 verifies a calendar
-// against, kept by the harness rather than read back off the problem a candidate was handed.
-function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay | null {
+// The sleep window, horizon and event window an instance is stated with, after overrides: what C1 verifies a
+// calendar against, kept by the harness rather than read back off the problem a candidate was handed. Without
+// sleep the day is all waking time, and the horizon is the slot.
+function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay {
   const sleepSeconds = over.sleepSeconds ?? inst.sleepSeconds;
-  if (!(sleepSeconds > 0)) return null;
-  return { sleepSeconds, horizonSeconds: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot, slots: NUM_SLOTS };
+  const eventWindowSeconds = over.eventWindowSeconds ?? inst.eventWindowSeconds;
+  return {
+    sleepSeconds: sleepSeconds > 0 ? sleepSeconds : 0,
+    horizonSeconds: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
+    slots: NUM_SLOTS,
+    eventWindowSeconds: eventWindowSeconds > 0 ? eventWindowSeconds : 0,
+  };
 }
 
 function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProblem {
@@ -81,10 +90,13 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     over.previousCrafts ?? inst.previousCrafts
   );
   // Variants are split off the enumerated menu before any menu perturbation, so a shuffle shuffles the
-  // variants too and a duplicate duplicates one variant. With no sleep this is the menu itself.
+  // variants too and a duplicate duplicates one variant. Capacity over sleep, so a doubled launch keeps its
+  // nights. With neither this is the menu itself.
   const sleep = over.sleepSeconds ?? inst.sleepSeconds;
   const horizon = over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot;
-  let options = [...sleepVariants(enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]), sleep)];
+  const window = over.eventWindowSeconds ?? inst.eventWindowSeconds;
+  const menu = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  let options = [...capacityVariants(sleepVariants(menu, sleep), window)];
   if (over.transformOptions) options = over.transformOptions(options);
   // With sleep, the slot budget becomes waking seconds plus whole nights. Without, `nightsPerSlot` is absent
   // rather than undefined, so a sleep-free instance states today's problem exactly.
@@ -101,6 +113,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     ...(capacity ? { nightsPerSlot: capacity.nightsPerSlot } : {}),
     // The day itself, which the candidate needs to lay its plan out on real days and return a calendar.
     ...(capacity ? { sleep: { sleepSeconds: sleep, horizonSeconds: horizon } } : {}),
+    // Absent rather than 0 without one, so a window-free instance states today's problem exactly.
+    ...(window > 0 ? { eventWindowSeconds: window } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -144,7 +158,9 @@ function problemKey(problem: PlanProblem): string {
     .map(
       (o: LaunchOption) =>
         `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}` +
-        (o.nights === undefined ? '' : `|n${o.nights}`)
+        (o.nights === undefined ? '' : `|n${o.nights}`) +
+        // An `event` and an `overhang` copy of one launch are identical in every number above.
+        (o.variant === undefined ? '' : `|v${o.variant}`)
     )
     .join(';');
   const dag = [...problem.dag.keys()]
@@ -166,6 +182,9 @@ function problemKey(problem: PlanProblem): string {
     problem.timeCapacityPerSlot,
     ...(problem.nightsPerSlot === undefined ? [] : [`nights${problem.nightsPerSlot}`]),
     ...(problem.sleep === undefined ? [] : [`sleep${problem.sleep.sleepSeconds}/${problem.sleep.horizonSeconds}`]),
+    // Left out, the cache serves a plan solved for one window to a problem with another, and A11-window compares a
+    // plan against itself and passes.
+    ...(problem.eventWindowSeconds === undefined ? [] : [`window${problem.eventWindowSeconds}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),
@@ -320,33 +339,51 @@ export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budge
   let fuel = 0;
   let totalTime = 0;
   let totalNights = 0;
+  let doubled = 0;
   const durations: number[] = [];
   const nights: number[] = [];
+  const variants: (string | undefined)[] = [];
   const counts: number[] = [];
   for (let i = 0; i < alloc.length; i++) {
     const n = alloc[i];
     if (!(n > 0)) continue;
-    fuel += n * problem.options[i].actualFuel;
-    totalTime += n * problem.options[i].actualTime;
-    totalNights += n * (problem.options[i].nights ?? 0);
-    durations.push(problem.options[i].actualTime);
-    nights.push(problem.options[i].nights ?? 0);
+    const o = problem.options[i];
+    fuel += n * o.actualFuel;
+    totalTime += n * o.actualTime;
+    totalNights += n * (o.nights ?? 0);
+    if (isDoubled(o)) doubled += n;
+    durations.push(o.actualTime);
+    nights.push(o.nights ?? 0);
+    variants.push(o.variant);
     counts.push(n);
   }
-  // Two resources only once a launch actually spends a night. A plan of daytime launches packs exactly as
-  // it always has, so the one-dimensional rule stays the one every sleep-free result was measured against.
-  const pack =
-    problem.nightsPerSlot === undefined || totalNights === 0
-      ? packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots)
-      : packFeasibleNights(
-          durations,
-          nights,
-          counts,
-          problem.timeCapacityPerSlot,
-          problem.nightsPerSlot,
-          problem.slots
-        );
-  return { fuel, totalTime, totalNights, pack };
+  // Each further budget only once the plan actually spends it. A plan of daytime, undoubled launches packs exactly
+  // as it always has, so the one-dimensional rule stays the one every earlier result was measured against.
+  const withNights = problem.nightsPerSlot !== undefined && totalNights > 0;
+  if (!withNights && doubled === 0) {
+    return {
+      fuel,
+      totalTime,
+      totalNights,
+      pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots),
+    };
+  }
+  // Per launch: waking seconds; then nights; then, with a doubled launch, the window's two budgets as the
+  // labels state them — `event` seconds against the window, `overhang` launches against one a slot. Sound, since
+  // `event` launches first and the one `overhang` after them all go up inside the window; label-bound, since
+  // two `overhang` launches that would both fit are refused (ARENA.md, "The 2x capacity window").
+  const window = problem.eventWindowSeconds ?? 0;
+  const costs = durations.map((d, j) => [
+    d,
+    ...(withNights ? [nights[j]] : []),
+    ...(doubled > 0 ? [variants[j] === 'event' ? d : 0, variants[j] === 'overhang' ? 1 : 0] : []),
+  ]);
+  const capacities = [
+    problem.timeCapacityPerSlot,
+    ...(withNights ? [problem.nightsPerSlot!] : []),
+    ...(doubled > 0 ? [window, window > 0 ? 1 : 0] : []),
+  ];
+  return { fuel, totalTime, totalNights, pack: packFeasibleBudgets(costs, counts, capacities, problem.slots) };
 }
 
 // The golden egg budget is deliberately absent: missions cost no golden eggs, so no allocation can breach
@@ -366,8 +403,9 @@ export interface Solved {
   judged: OracleJointEvaluation;
   joint: number;
   elapsedMs: number;
-  // The day the problem was stated with; null without a sleep window.
-  day: CalendarDay | null;
+  // The day and the event window the problem was stated with: sleep 0 and the slot as the horizon without a
+  // sleep window, window 0 without an event.
+  day: CalendarDay;
 }
 
 export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides = {}): Solved {

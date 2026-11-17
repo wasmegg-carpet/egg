@@ -1,4 +1,4 @@
-// Exact 3-slot packing feasibility, owned by the harness and never shared with `lib/mission-optimizer/packing.ts`.
+// Exact 3-slot packing feasibility, owned by the harness and never shared with production, which has no packer.
 // `counts[j]` missions of length `durations[j]` are feasible iff they partition into `slots` groups summing to at most `capacity` each.
 
 const EPS = 1e-9;
@@ -193,54 +193,50 @@ export function packFeasible(
   return packs ? 'packs' : 'infeasible';
 }
 
-// Two-resource packing, for a problem with a sleep window: launch class `j` costs `seconds[j]` waking seconds
-// and `nights[j]` sleep windows, and each slot holds at most `capacity` of the first and `nightCapacity` of
-// the second. A launch costing no seconds but a night (a short ship launched at bedtime) still consumes that
-// night; only launches costing neither are free. `packFeasible` above stays the one-dimensional rule.
-export function packFeasibleNights(
-  seconds: readonly number[],
-  nights: readonly number[],
+// Several budgets per slot at once: launch class `j` costs `costs[j][r]` of budget `r`, and each slot holds at most
+// `capacities[r]` of each. The harness states a sleep window as two budgets (waking seconds, nights) and a 2x
+// capacity window as two more (`event` seconds against the window, `overhang` launches against one), and asks
+// this whether one arrangement satisfies them all; they interact, so they are decided in one search. A launch
+// costing nothing of any budget is free; one costing anything is not (a short ship launched at bedtime costs no
+// waking time and still a night; a zero-second `overhang` still takes the slot's one). `packFeasible` above
+// stays the one-dimensional rule.
+export function packFeasibleBudgets(
+  costs: readonly (readonly number[])[],
   counts: readonly number[],
-  capacity: number,
-  nightCapacity: number,
+  capacities: readonly number[],
   slots: number,
   nodeBudget = DEFAULT_NODE_BUDGET
 ): PackVerdict {
-  const cap = capacity > 0 ? capacity : 0;
-  const nightCap = nightCapacity > 0 ? nightCapacity : 0;
+  const R = capacities.length;
+  const caps = capacities.map(c => (c > 0 ? c : 0));
 
-  // Merge equal (seconds, nights) classes, so the search's branching does not depend on how the caller split them.
-  const byClass = new Map<string, { s: number; n: number; c: number }>();
-  let totalS = 0;
-  let totalN = 0;
-  for (let j = 0; j < seconds.length; j++) {
+  // Merge equal cost vectors, so the search's branching does not depend on how the caller split them.
+  const byClass = new Map<string, { cost: number[]; c: number }>();
+  const totals = new Array<number>(R).fill(0);
+  for (let j = 0; j < costs.length; j++) {
     const c = counts[j];
     if (!(c > 0)) continue;
-    const s = seconds[j] > 0 ? seconds[j] : 0;
-    const n = nights[j] > 0 ? nights[j] : 0;
-    if (s === 0 && n === 0) continue;
-    if (s > cap + EPS || n > nightCap + EPS) return 'infeasible';
-    totalS += c * s;
-    totalN += c * n;
-    const key = `${s}|${n}`;
+    const cost = caps.map((_, r) => (costs[j][r] > 0 ? costs[j][r] : 0));
+    if (cost.every(v => v === 0)) continue;
+    if (cost.some((v, r) => v > caps[r] + EPS)) return 'infeasible';
+    cost.forEach((v, r) => (totals[r] += c * v));
+    const key = cost.join('|');
     const known = byClass.get(key);
     if (known) known.c += c;
-    else byClass.set(key, { s, n, c });
+    else byClass.set(key, { cost, c });
   }
   const cls = [...byClass.values()];
   if (cls.length === 0) return 'packs';
-  if (totalS > slots * cap + EPS || totalN > slots * nightCap + EPS) return 'infeasible';
-  let oversizedS = 0;
-  let oversizedN = 0;
-  for (const k of cls) {
-    if (k.s > cap / 2 + EPS) oversizedS += k.c;
-    if (k.n > nightCap / 2 + EPS) oversizedN += k.c;
+  if (totals.some((t, r) => t > slots * caps[r] + EPS)) return 'infeasible';
+  for (let r = 0; r < R; r++) {
+    let oversized = 0;
+    for (const k of cls) if (k.cost[r] > caps[r] / 2 + EPS) oversized += k.c;
+    if (oversized > slots) return 'infeasible';
   }
-  if (oversizedS > slots || oversizedN > slots) return 'infeasible';
 
-  // Each resource as a share of a slot, so the greedy orders and fits can weigh the two against each other.
-  const shareS = (s: number) => (cap > 0 ? s / cap : 0);
-  const shareN = (n: number) => (nightCap > 0 ? n / nightCap : 0);
+  // Each budget as a share of a slot, so the greedy orders and fits can weigh them against each other.
+  const share = (r: number, v: number) => (caps[r] > 0 ? v / caps[r] : 0);
+  const shareOf = (k: number) => cls[k].cost.reduce((a, v, r) => a + share(r, v), 0);
 
   let nodes = 0;
   let exhausted = false;
@@ -256,38 +252,45 @@ export function packFeasibleNights(
   const items: number[] = [];
   for (let k = 0; k < cls.length; k++) for (let i = 0; i < cls[k].c; i++) items.push(k);
 
-  const fitsIn = (k: number, ls: number, ln: number) => ls + cls[k].s <= cap + EPS && ln + cls[k].n <= nightCap + EPS;
+  const fitsIn = (k: number, load: readonly number[]) => cls[k].cost.every((v, r) => load[r] + v <= caps[r] + EPS);
 
   const greedyPack = (order: readonly number[], fit: 'first' | 'best'): boolean => {
-    const ls = new Array<number>(slots).fill(0);
-    const ln = new Array<number>(slots).fill(0);
+    const loads = Array.from({ length: slots }, () => new Array<number>(R).fill(0));
     for (const k of order) {
       if (!chargeNode()) return false;
       let choice = -1;
       let choiceRoom = Infinity;
       for (let s = 0; s < slots; s++) {
-        if (!fitsIn(k, ls[s], ln[s])) continue;
+        if (!fitsIn(k, loads[s])) continue;
         if (fit === 'first') {
           choice = s;
           break;
         }
-        const room = shareS(cap - ls[s]) + shareN(nightCap - ln[s]);
+        const room = loads[s].reduce((a, l, r) => a + share(r, caps[r] - l), 0);
         if (room < choiceRoom) {
           choiceRoom = room;
           choice = s;
         }
       }
       if (choice < 0) return false;
-      ls[choice] += cls[k].s;
-      ln[choice] += cls[k].n;
+      cls[k].cost.forEach((v, r) => (loads[choice][r] += v));
     }
     return true;
   };
 
+  // Largest combined share first; then, per budget, largest on that budget first, the others breaking ties in
+  // budget order. With two budgets these are the combined, seconds-first and nights-first orders.
+  const byBudget = (first: number) => (a: number, b: number) => {
+    const d = cls[b].cost[first] - cls[a].cost[first];
+    if (d !== 0) return d;
+    for (let r = 0; r < R; r++) {
+      if (r !== first && cls[b].cost[r] !== cls[a].cost[r]) return cls[b].cost[r] - cls[a].cost[r];
+    }
+    return a - b;
+  };
   const orders: ((a: number, b: number) => number)[] = [
-    (a, b) => shareS(cls[b].s) + shareN(cls[b].n) - (shareS(cls[a].s) + shareN(cls[a].n)) || a - b,
-    (a, b) => cls[b].s - cls[a].s || cls[b].n - cls[a].n || a - b,
-    (a, b) => cls[b].n - cls[a].n || cls[b].s - cls[a].s || a - b,
+    (a, b) => shareOf(b) - shareOf(a) || a - b,
+    ...caps.map((_, r) => byBudget(r)),
   ];
   for (const cmp of orders) {
     const order = items.slice().sort(cmp);
@@ -306,57 +309,58 @@ export function packFeasibleNights(
   }
   active.sort((a, b) => (a === last ? 1 : b === last ? -1 : orders[0](a, b)));
 
-  const remS = new Array<number>(active.length + 1).fill(0);
-  const remN = new Array<number>(active.length + 1).fill(0);
+  const remaining = Array.from({ length: active.length + 1 }, () => new Array<number>(R).fill(0));
   for (let t = active.length - 1; t >= 0; t--) {
-    remS[t] = remS[t + 1] + cls[active[t]].c * cls[active[t]].s;
-    remN[t] = remN[t + 1] + cls[active[t]].c * cls[active[t]].n;
+    const k = active[t];
+    for (let r = 0; r < R; r++) remaining[t][r] = remaining[t + 1][r] + cls[k].c * cls[k].cost[r];
   }
 
-  // How many more of class `k` fit in a slot already holding (ls, ln).
-  const room = (k: number, ls: number, ln: number): number => {
-    const { s, n } = cls[k];
-    const bySeconds = s > 0 ? Math.floor((cap - ls + EPS) / s) : Infinity;
-    const byNights = n > 0 ? Math.floor((nightCap - ln + EPS) / n) : Infinity;
-    return Math.max(0, Math.min(bySeconds, byNights));
+  // How many more of class `k` fit in a slot already holding `load`.
+  const room = (k: number, load: readonly number[]): number => {
+    let n = Infinity;
+    cls[k].cost.forEach((v, r) => {
+      if (v > 0) n = Math.min(n, Math.floor((caps[r] - load[r] + EPS) / v));
+    });
+    return Math.max(0, n);
+  };
+
+  const lexicographic = (a: readonly number[], b: readonly number[]) => {
+    for (let r = 0; r < R; r++) if (a[r] !== b[r]) return a[r] - b[r];
+    return 0;
   };
 
   const seenInfeasible = new Set<string>();
 
-  // `loads` is a list of [seconds, nights] pairs kept in lexicographic order: the slot-permutation symmetry
-  // break, and what makes the memo key canonical.
-  const place = (t: number, loads: [number, number][]): boolean => {
+  // `loads` is a list of per-slot budget vectors kept in lexicographic order: the slot-permutation symmetry break,
+  // and what makes the memo key canonical.
+  const place = (t: number, loads: number[][]): boolean => {
     if (t === active.length) return true;
     if (!chargeNode()) return false;
 
     const k = active[t];
-    let roomS = 0;
-    let roomN = 0;
-    for (const [ls, ln] of loads) {
-      roomS += cap - ls;
-      roomN += nightCap - ln;
+    for (let r = 0; r < R; r++) {
+      let free = 0;
+      for (const load of loads) free += caps[r] - load[r];
+      if (remaining[t][r] > free + EPS) return false;
     }
-    if (remS[t] > roomS + EPS || remN[t] > roomN + EPS) return false;
 
     if (t === active.length - 1) {
       let fits = 0;
-      for (const [ls, ln] of loads) fits += room(k, ls, ln);
+      for (const load of loads) fits += room(k, load);
       return fits >= cls[k].c;
     }
 
-    const key = `${t}|${loads.map(l => `${l[0]}:${l[1]}`).join(',')}`;
+    const key = `${t}|${loads.map(l => l.join(':')).join(',')}`;
     if (seenInfeasible.has(key)) return false;
 
     const perSlot = new Array<number>(loads.length).fill(0);
     const fill = (s: number, left: number): boolean => {
       if (!chargeNode()) return false;
-      const limit = room(k, loads[s][0], loads[s][1]);
+      const limit = room(k, loads[s]);
       if (s === loads.length - 1) {
         if (left > limit) return false;
         perSlot[s] = left;
-        const next = loads
-          .map((l, i): [number, number] => [l[0] + perSlot[i] * cls[k].s, l[1] + perSlot[i] * cls[k].n])
-          .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        const next = loads.map((l, i) => l.map((v, r) => v + perSlot[i] * cls[k].cost[r])).sort(lexicographic);
         const ok = place(t + 1, next);
         return exhausted ? false : ok;
       }
@@ -376,8 +380,28 @@ export function packFeasibleNights(
     return false;
   };
 
-  const start: [number, number][] = Array.from({ length: slots }, () => [0, 0]);
+  const start = Array.from({ length: slots }, () => new Array<number>(R).fill(0));
   const packs = place(0, start);
   if (exhausted) return 'undecided';
   return packs ? 'packs' : 'infeasible';
+}
+
+// Two budgets, for a problem with a sleep window: launch class `j` costs `seconds[j]` waking seconds and
+// `nights[j]` sleep windows, against `capacity` and `nightCapacity` per slot.
+export function packFeasibleNights(
+  seconds: readonly number[],
+  nights: readonly number[],
+  counts: readonly number[],
+  capacity: number,
+  nightCapacity: number,
+  slots: number,
+  nodeBudget = DEFAULT_NODE_BUDGET
+): PackVerdict {
+  return packFeasibleBudgets(
+    seconds.map((s, j) => [s, nights[j]]),
+    counts,
+    [capacity, nightCapacity],
+    slots,
+    nodeBudget
+  );
 }

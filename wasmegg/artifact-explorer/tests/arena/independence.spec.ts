@@ -88,6 +88,7 @@ function libModules(): string[] {
 // judge and the scoreboard.
 const HARNESS_FILES = [
   'calendar.ts',
+  'capacity.ts',
   'contract.ts',
   'harness.ts',
   'instances.ts',
@@ -197,6 +198,7 @@ describe('arena independence', () => {
       'instances',
       '/sleep',
       '/calendar',
+      '/capacity',
     ];
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
@@ -271,6 +273,11 @@ describe('arena independence', () => {
   it('the sleep model stands alone', () => {
     // It decides what a launch costs once the player sleeps, which is as much the goalpost as the packer.
     expect(importsOf(readSource('sleep.ts'))).toEqual([]);
+  });
+
+  it('the capacity model stands alone', () => {
+    // It decides what a doubled launch yields, which is as much the goalpost as the sleep model.
+    expect(importsOf(readSource('capacity.ts'))).toEqual([]);
   });
 
   it('the calendar verifier stands alone', () => {

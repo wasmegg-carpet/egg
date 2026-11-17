@@ -1,6 +1,6 @@
-// The arena's calendar verifier: C1 for a problem with a sleep window. A sleep-aware candidate returns, per
-// slot, the launches it would fly and when; this checks them against the sleep rule and against the plan's own
-// allocation. Owned by the harness and never shared with `lib/mission-optimizer`, for the reason the packer and the sleep
+// The arena's calendar verifier: C1 for a problem with a sleep window or a 2x capacity window, and for any plan a
+// candidate returns a calendar with. A candidate returns, per slot, the launches it would fly and when; this
+// checks them against the sleep rule, the event window and the plan's own allocation. Owned by the harness and never shared with `lib/mission-optimizer`, for the reason the packer and the sleep
 // model are not: a verifier the planner also ran would agree with it whatever either computed. Imports
 // nothing. See ARENA.md, "Sleep".
 
@@ -15,20 +15,26 @@ export interface CalendarMenuEntry {
   id: string;
   actualTime: number;
   nights?: number;
+  variant?: string;
 }
 
-// The day the instance was stated with, as the harness built it, not as the candidate read it.
+// The day the instance was stated with, as the harness built it, not as the candidate read it. Without a sleep
+// window `sleepSeconds` is 0 and the horizon is the slot; without an event, `eventWindowSeconds` is 0.
 export interface CalendarDay {
   sleepSeconds: number;
   horizonSeconds: number;
   slots: number;
+  eventWindowSeconds?: number;
 }
 
 // Every way the calendar breaks the rule or misstates the plan; empty when it verifies. Each launch is timed
 // with the menu's `actualTime` and `nights` for the option it names, never with figures the candidate wrote
 // beside it: a launch occupies its slot for `actualTime + nights * S`, must start while the player is awake
 // (time of day at most `W`), may not start before the previous launch in its slot has finished, and must
-// finish by the horizon. The calendar's launches per option must equal `allocation` exactly.
+// finish by the horizon. A launch of a doubled option (`event` or `overhang` on the menu, whatever the candidate
+// says) must start at or before `eventWindowSeconds`, and there is none without a window: one rule, read off the
+// launch time, with no notion of which doubled launch is the last. The calendar's launches per option must equal
+// `allocation` exactly.
 export function calendarFaults(
   calendar: unknown,
   menu: readonly CalendarMenuEntry[],
@@ -73,6 +79,12 @@ export function calendarFaults(
         faults.push(
           `${where} (${entry.id}) at ${at}s launches ${timeOfDay}s into day ${dayIndex}, asleep after ${waking}s`
         );
+      }
+      const doubled = entry.variant === 'event' || entry.variant === 'overhang';
+      const window = day.eventWindowSeconds ?? 0;
+      if (doubled && !(window > 0)) faults.push(`${where} (${entry.id}) flies doubled with no 2x window`);
+      else if (doubled && at > window + TIME_TOL) {
+        faults.push(`${where} (${entry.id}) at ${at}s flies doubled, past the 2x window at ${window}s`);
       }
       free = Math.max(free, at) + entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds;
     });
