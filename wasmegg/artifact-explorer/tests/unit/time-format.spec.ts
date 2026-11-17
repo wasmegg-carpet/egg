@@ -86,10 +86,9 @@ function before(seconds: number, trim = false): string {
 
 describe('formatDuration default spelling', () => {
   it('is unchanged for every existing caller', () => {
-    const samples = [
-      0, 0.5, 1, 59, 59.999, 60, 61, 90.5, 3599, 3600, 3661, 86_399, 86_400, 90_061, 172_782, 31_535_999,
-      31_536_000, 31_536_000 + 90_061, 2 * 31_536_000 + 3_600, 3_153_600_000, 3_153_600_001, Infinity, NaN,
-    ];
+    const small = [0, 0.5, 1, 59, 59.999, 60, 61, 90.5, 3599, 3600, 3661, 86_399, 86_400, 90_061, 172_782];
+    const large = [31_535_999, 31_536_000, 31_536_000 + 90_061, 2 * 31_536_000 + 3_600, 3_153_600_000];
+    const samples = [...small, ...large, 3_153_600_001, Infinity, NaN];
     // A deterministic spread across the whole range as well, fractional seconds included.
     for (let x = 0.37; x < 4e9; x = x * 1.37 + 11) samples.push(x);
     for (const s of [...samples, ...samples.map(v => -v)]) {
