@@ -83,13 +83,27 @@ describe('sleepVariants', () => {
     expect(option).toEqual({ id: 'a', actualTime: HOUR, rawTime: 600, cost: 7 });
   });
 
+  it('returns the menu itself, untouched, with no sleep', () => {
+    // Regression: a zero-length night used to give every option a `~night<m>` twin charging its whole duration
+    // and a night it does not spend, where the arena's copy (and `capacityVariants` for a zero window) returns
+    // the menu as given.
+    const menu = [{ id: 'a', actualTime: HOUR }, { id: 'b', actualTime: 2 * DAY }];
+    expect(sleepVariants(menu, 0)).toBe(menu);
+    expect(sleepVariants(menu, -1)).toBe(menu);
+    expect(sleepVariants(menu, NaN)).toBe(menu);
+    expect(menu).toEqual([
+      { id: 'a', actualTime: HOUR },
+      { id: 'b', actualTime: 2 * DAY },
+    ]);
+  });
+
   // The arena judges plans against its own copy of this rule. The two are separate on purpose, and this is
   // what keeps them the same rule.
   it('agrees with the arena on every duration and sleep window', () => {
     const options = [];
     for (let seconds = 0; seconds <= 4 * DAY; seconds += 1234) options.push({ id: `d${seconds}`, actualTime: seconds });
     options.push({ id: 'w', actualTime: 16 * HOUR }, { id: 'day', actualTime: DAY });
-    for (const hours of [0.5, 4, 6, 8, 10, 12, MAX_SLEEP_HOURS]) {
+    for (const hours of [0, 0.5, 4, 6, 8, 10, 12, MAX_SLEEP_HOURS]) {
       expect(sleepVariants(options, hours * HOUR)).toEqual(arenaSleepVariants(options, hours * HOUR));
     }
   });

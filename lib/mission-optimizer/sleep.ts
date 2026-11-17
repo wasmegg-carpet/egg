@@ -49,8 +49,11 @@ export interface SleepVariantSource {
 //   `floor(d / D) + 1`: `max(d - m * sleep, (m - 1) * W)` waking seconds and `m` nights.
 // A zero-second overnight variant is ordinary (a short ship launched at bedtime) and still costs its night.
 // Overnight ids get a `~night<m>` suffix so every variant stays addressable; the daytime variant keeps the
-// option's own id.
-export function sleepVariants<T extends SleepVariantSource>(options: readonly T[], sleep: number): T[] {
+// option's own id. With no sleep (`sleep` 0, or anything that is not positive) this returns `options` itself,
+// untouched: no variant, no `nights` field, today's menu exactly, as the arena's copy and `capacityVariants` do.
+// Splitting a menu against a zero-length night would instead offer every option a phantom overnight twin.
+export function sleepVariants<T extends SleepVariantSource>(options: readonly T[], sleep: number): readonly T[] {
+  if (!(sleep > 0)) return options;
   const waking = DAY_SECONDS - sleep;
   const variants: T[] = [];
   for (const option of options) {
