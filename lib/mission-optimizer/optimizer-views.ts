@@ -51,8 +51,12 @@ export function isDoubled(choice: { variant?: CapacityVariant }): boolean {
   return choice.variant === 'event' || choice.variant === 'overhang';
 }
 
-const missionKey = (ship: MissionType, targetAfxId: ei.ArtifactSpec.Name) =>
-  `${ship.shipType}|${ship.durationType}|${targetAfxId}`;
+// What the player can tell two `choiceHistory` entries apart by: the mission, its target, whether it flies at 2x
+// and, where a view keeps them apart, its nights.
+function lineKey(choice: LaunchSolution, byNights: boolean): string {
+  const key = `${choice.ship.shipType}|${choice.ship.durationType}|${choice.targetAfxId}|${isDoubled(choice)}`;
+  return byNights ? `${key}|${choice.nights ?? 0}` : key;
+}
 
 // One line of a launch list: a mission, how many of it, and the two things that change how it is flown.
 export interface LaunchLine {
@@ -60,22 +64,22 @@ export interface LaunchLine {
   targetAfxId: ei.ArtifactSpec.Name;
   numShipsLaunched: number;
   // Sleep windows each launch flies through; 0 is a launch flown while awake, as is every launch of a plan made
-  // around the clock.
-  nights: number;
+  // around the clock. Absent on a line totalled across nights.
+  nights?: number;
   doubled: boolean;
 }
 
-// The plan's totals, one line per mission, nights and capacity: the list the card shows beside the timeline.
-// `choiceHistory` can name one mission several times, as its `event` and `overhang` variants or from more than
-// one option, and the player cannot tell those apart, so they are one line here. Sorted by ship, duration and
-// target, a mission's daytime line before its overnight ones and its 1x line before its 2x one.
-export function launchTotals(solution: OptimizerSolution): LaunchLine[] {
+// The plan's launches totalled over the three slots, one line per mission, target and capacity: `choiceHistory`
+// can name one mission several times, as a doubled launch's `event` and `overhang` variants or from more than one
+// option, and the player cannot tell those apart. `byNights` also keeps a mission's daytime and overnight launches
+// apart, as the card's two lists do; the humility missions file totals across them, because the ascension planner
+// flies both alike. Sorted by ship, duration, target, nights and capacity (1x first), so a list is a function of
+// the plan rather than of the order the solver emitted its choices in.
+export function launchTotals(solution: OptimizerSolution, { byNights = true } = {}): LaunchLine[] {
   const lines = new Map<string, LaunchLine>();
   for (const choice of solution.choiceHistory) {
     if (!(choice.numShipsLaunched > 0)) continue;
-    const nights = choice.nights ?? 0;
-    const doubled = isDoubled(choice);
-    const key = `${missionKey(choice.ship, choice.targetAfxId)}|${nights}|${doubled}`;
+    const key = lineKey(choice, byNights);
     const line = lines.get(key);
     if (line) line.numShipsLaunched += choice.numShipsLaunched;
     else
@@ -83,8 +87,8 @@ export function launchTotals(solution: OptimizerSolution): LaunchLine[] {
         ship: choice.ship,
         targetAfxId: choice.targetAfxId,
         numShipsLaunched: choice.numShipsLaunched,
-        nights,
-        doubled,
+        ...(byNights && { nights: choice.nights ?? 0 }),
+        doubled: isDoubled(choice),
       });
   }
   return [...lines.values()].sort(
@@ -92,20 +96,18 @@ export function launchTotals(solution: OptimizerSolution): LaunchLine[] {
       a.ship.shipType - b.ship.shipType ||
       a.ship.durationType - b.ship.durationType ||
       a.targetAfxId - b.targetAfxId ||
-      a.nights - b.nights ||
+      (a.nights ?? 0) - (b.nights ?? 0) ||
       Number(a.doubled) - Number(b.doubled)
   );
 }
 
-// One row per mission, target and capacity. A sleep-aware plan can launch the same mission both by day and
-// overnight, as two entries of `choiceHistory`; where a legendary comes from does not depend on when the ship
-// left, so those are one source here. Whether it flew doubled does change what it brings home, so a mission flown
-// at both capacities is two rows.
+// One row per mission, target and capacity. Where a legendary comes from does not depend on when the ship left,
+// so a mission's daytime and overnight launches are one source; whether it flew doubled changes what it brings
+// home, so a mission flown at both capacities is two.
 export function computeMissionLegendaryRows(solution: OptimizerSolution, rootId: string): MissionLegendaryRow[] {
   const rows = new Map<string, MissionLegendaryRow>();
   for (const choice of solution.choiceHistory) {
-    const doubled = isDoubled(choice);
-    const key = `${missionKey(choice.ship, choice.targetAfxId)}|${doubled}`;
+    const key = lineKey(choice, false);
     const legendaryDrops = choice.numShipsLaunched * (choice.legendarySupplyVector.get(rootId) ?? 0);
     const row = rows.get(key);
     if (row) {
@@ -117,7 +119,7 @@ export function computeMissionLegendaryRows(solution: OptimizerSolution, rootId:
         targetAfxId: choice.targetAfxId,
         numShipsLaunched: choice.numShipsLaunched,
         legendaryDrops,
-        doubled,
+        doubled: isDoubled(choice),
       });
     }
   }
@@ -244,7 +246,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
       divided = true;
     }
     const choice = solution.choiceHistory[launch.choice];
-    const key = `${missionKey(choice.ship, choice.targetAfxId)}|${choice.nights ?? 0}|${launch.doubled}`;
+    const key = `${choice.ship.shipType}|${choice.ship.durationType}|${choice.targetAfxId}|${choice.nights ?? 0}|${launch.doubled}`;
     tokens.push({ kind: 'launch', ...launch, key });
   }
   if (!divided) tokens.push({ kind: 'window-end' });

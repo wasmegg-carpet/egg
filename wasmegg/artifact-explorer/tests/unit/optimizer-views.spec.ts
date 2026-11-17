@@ -105,6 +105,21 @@ describe('launchTotals', () => {
     ]);
   });
 
+  it('totals across nights when asked, keeping capacity apart', () => {
+    const solution = makeSolution({
+      choiceHistory: [
+        choice(Ship.CHICKEN_ONE, 1, { nights: 1, variant: 'event' }),
+        choice(Ship.CHICKEN_ONE, 4, { nights: 0, variant: 'normal' }),
+        choice(Ship.CHICKEN_ONE, 2, { nights: 0, variant: 'overhang' }),
+      ],
+    });
+    expect(launchTotals(solution, { byNights: false })).toEqual([
+      expect.objectContaining({ numShipsLaunched: 4, doubled: false }),
+      expect.objectContaining({ numShipsLaunched: 3, doubled: true }),
+    ]);
+    expect(launchTotals(solution, { byNights: false }).every(line => line.nights === undefined)).toBe(true);
+  });
+
   it('reads a plan made without either window as 1x and daytime', () => {
     const [line] = launchTotals(makeSolution({ choiceHistory: [choice(Ship.CHICKEN_ONE, 2)] }));
     expect(line).toMatchObject({ numShipsLaunched: 2, nights: 0, doubled: false });

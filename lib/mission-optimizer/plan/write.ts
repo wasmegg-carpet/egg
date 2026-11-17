@@ -3,7 +3,7 @@
 
 import { ei, getArtifactTierPropsFromId } from '../../index';
 
-import { isDoubled } from '../optimizer-views';
+import { launchTotals } from '../optimizer-views';
 import type { OptimizerSolution } from '../types';
 
 import type { HumilityVisit } from './read';
@@ -22,41 +22,20 @@ import {
 
 const EGG_NAME_BY_ID = new Map<ei.Egg, VirtueEgg>(NON_HUMILITY_EGG_IDS.map(([name, id]) => [id, name]));
 
-// Launches of the same ship, duration, target and capacity are one row: AP flies them identically, and the
-// solver may reach the same option from more than one slot, by day and overnight, or as both of a doubled launch's
-// variants. A doubled launch stays its own row, marked, because it brings home twice as much. Sorted on the same
-// tuple, 1x before 2x, so the file is a function of the plan rather than of the order the solver happened to emit
-// its choices in.
-function aggregateLaunches(solution: OptimizerSolution): { launches: HumilityMissionsLaunch[]; gemCost: number } {
-  const byKey = new Map<string, { sort: [number, number, number, number]; launch: HumilityMissionsLaunch }>();
-  let gemCost = 0;
-
-  for (const run of solution.choiceHistory) {
-    if (!(run.numShipsLaunched > 0)) continue;
-    const doubled = isDoubled(run);
-    const key = `${run.ship.shipType}|${run.ship.durationType}|${run.targetAfxId}|${doubled}`;
-    const seen = byKey.get(key);
-    if (seen) {
-      seen.launch.count += run.numShipsLaunched;
-    } else {
-      byKey.set(key, {
-        sort: [run.ship.shipType, run.ship.durationType, run.targetAfxId, Number(doubled)],
-        launch: {
-          ship: spaceshipEnumName(run.ship.shipType),
-          duration: durationEnumName(run.ship.durationType),
-          targetAfxId: run.targetAfxId,
-          count: run.numShipsLaunched,
-          // Absent rather than false on a 1x launch, so a plan without an event writes the file it always did.
-          ...(doubled && { doubled: true as const }),
-        },
-      });
-    }
-    gemCost += run.ship.virtueGemCost * run.numShipsLaunched;
-  }
-
-  const launches = [...byKey.values()]
-    .sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || a.sort[2] - b.sort[2] || a.sort[3] - b.sort[3])
-    .map(e => e.launch);
+// One row per mission, target and capacity, totalled across nights: the ascension planner flies a mission's
+// daytime and overnight launches alike. A doubled launch keeps its own row, marked, because it brings home twice
+// as much.
+function launchesOf(solution: OptimizerSolution): { launches: HumilityMissionsLaunch[]; gemCost: number } {
+  const lines = launchTotals(solution, { byNights: false });
+  const launches = lines.map(line => ({
+    ship: spaceshipEnumName(line.ship.shipType),
+    duration: durationEnumName(line.ship.durationType),
+    targetAfxId: line.targetAfxId,
+    count: line.numShipsLaunched,
+    // Absent rather than false on a 1x launch, so a plan without an event writes no marker at all.
+    ...(line.doubled && { doubled: true as const }),
+  }));
+  const gemCost = lines.reduce((total, line) => total + line.ship.virtueGemCost * line.numShipsLaunched, 0);
   return { launches, gemCost };
 }
 
@@ -92,7 +71,7 @@ export function projectSolvedVisit(args: {
   gemBudget: number;
 }): HumilityMissionsVisit {
   const { visit, solution, effort, gemBudget } = args;
-  const { launches, gemCost } = aggregateLaunches(solution);
+  const { launches, gemCost } = launchesOf(solution);
   return {
     visitId: visit.visitId,
     visitIndex: visit.visitIndex,

@@ -9,7 +9,7 @@
       <mission-name class="min-w-0" :mission="line.ship" :target="line.targetAfxId" :no-link="true" />
       <double-capacity-badge v-if="line.doubled" />
       <!-- One night is what "overnight" already says; only a longer flight needs spelling out. -->
-      <span v-if="overnight && line.nights > 1" class="flex-shrink-0 text-xs text-gray-500"
+      <span v-if="overnight && (line.nights ?? 0) > 1" class="flex-shrink-0 text-xs text-gray-500"
         >· {{ line.nights }} nights each</span
       >
     </li>

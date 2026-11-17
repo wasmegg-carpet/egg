@@ -50,8 +50,8 @@ export default defineComponent({
     const totals = computed(() => launchTotals(props.solution));
     // Absent on a plan made around the clock, whose totals are then shown undivided, as they always were.
     const sleepHours = computed(() => Number(((props.solution.sleepSeconds ?? 0) / 3600).toFixed(2)));
-    const daytime = computed(() => totals.value.filter(line => line.nights === 0));
-    const overnight = computed(() => totals.value.filter(line => line.nights > 0));
+    const daytime = computed(() => totals.value.filter(line => !line.nights));
+    const overnight = computed(() => totals.value.filter(line => (line.nights ?? 0) > 0));
     const overnightTooltip =
       'Launch each of these so it is in the air when you go to sleep. A ship that lands during the night ' +
       'waits for you, and its slot launches again after you wake.';
