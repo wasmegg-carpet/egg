@@ -1027,6 +1027,23 @@ statistics are restored, so later slots see only what was kept. Layout MILP and
 margin counts include every attempt's. A slot without a doubled launch has one
 layout, section 10's, as before.
 
+The first attempt's layout MILPs get section 10's 1000 nodes; every other
+attempt's get 200 (`ALTERNATIVE_LAYOUT_LIMITS`). A layout MILP that cannot place
+everything usually runs to its node limit, and with six attempts a slot that was
+most of a combined plan's layout time. Over the forty-seed list
+(`tests/arena/` bench of the review's evaluation, cores pinned, the same problems
+for both, medians of three interleaved runs), with 8 hours of sleep and the
+48-hour window: post-MILP time 62.0 s to 41.8 s, total 232.0 s to 214.1 s, mean
+delivered log10(joint) -8.5623 to -8.5624, one seed 0.0033 better and one 0.0038
+worse. With 8 hours and the sliver, and with
+both drawn, nothing got worse (post-MILP 15.7 to 12.0 s and 22.7 to 15.9 s). With
+12 hours and a window straddling the horizon two seeds lost up to 0.015 and the
+mean went from -8.4186 to -8.4191 (post-MILP 30.0 to 21.8 s): a trade, measured.
+What did not pay: re-running the winning alternative, or every alternative near
+the best, at the full budget kept every seed but gave back most of the time;
+presolve on and a looser gap saved almost nothing; and identical layout MILPs
+across attempts (up to column order) were under 1% of the time.
+
 **Folds.** A doubled ship that takes off before bedtime by more than its flex
 and a night (`head >= flex + S`) lands in a waking window a night before its
 class says. Folded, it is a connector over `nights - 1` nights with flex

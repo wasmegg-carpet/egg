@@ -25,6 +25,16 @@ import { VERIFY_TOL_SECONDS, doubledCopiesOnMenu, slotFault, type TimedLaunch } 
 // clock here would make the plan a function of machine load.
 export const LAYOUT_LIMITS: MilpLimits = { maxNodes: 1000, relGap: 1e-6 };
 
+// The layout MILP's limits on a slot's alternative layouts around the 2x window (`ATTEMPTS` after the first, and every
+// fold), which the judge weighs against the first (SPEC.md section 14). Each alternative used to get the full 1000
+// nodes, and most of a combined plan's layout time went there: a layout MILP that cannot place everything usually
+// runs to its node limit, at one to three seconds a slot attempt. Measured over the forty-seed list with 8 hours of
+// sleep and a 48-hour window, 200 nodes cut post-MILP time from 62 to 42 seconds and total from 232 to 214 (medians
+// of three interleaved runs), with mean delivered log10(joint) -8.5623 to -8.5624 (one seed 0.0033 better, one 0.0038
+// worse); smaller budgets saved little more. It is a trade, not free: with 12 hours and a window straddling the horizon two seeds lost up to 0.015 and
+// the mean 0.0005. A slot without a doubled launch has only the first layout, so sleep-only plans are untouched.
+export const ALTERNATIVE_LAYOUT_LIMITS: MilpLimits = { maxNodes: 200, relGap: 1e-6 };
+
 // The layout MILP works in hours: seconds put a 16-hour window at 57600 against unit head coefficients.
 const HOUR = 3600;
 
@@ -67,6 +77,8 @@ interface SlotContext {
   // Drops one launch of one of `candidates` from the plan, chosen by the judge, and returns its class.
   drop: (candidates: readonly number[]) => number;
   stats: LayoutStats;
+  // The limits of this slot's layout MILPs: `LAYOUT_LIMITS`, or `ALTERNATIVE_LAYOUT_LIMITS` for an alternative.
+  limits: MilpLimits;
 }
 
 interface ClassLaunch {
@@ -330,7 +342,7 @@ function solveLayout(
 ): Placement | null {
   const { model, upper } = layoutMilp(conns, daytime, counts, ctx, margin, around, pinned);
   ctx.stats.layoutSolves++;
-  const solution = ctx.solve(model, LAYOUT_LIMITS);
+  const solution = ctx.solve(model, ctx.limits);
   if (solution.status !== 'optimal' && solution.status !== 'feasible') return null;
   const segments = conns.length + 1;
   return daytime.map((c, d) => {
@@ -988,6 +1000,7 @@ export function layOutPlan(
     solve,
     drop,
     stats,
+    limits: LAYOUT_LIMITS,
   };
   // One slot laid out as `how` says, settled against the window, and laid out again one launch lighter for as long
   // as the verifier rejects it; null when `how` folds ships whose chain does not stand. The connectors and heads
@@ -1042,7 +1055,7 @@ export function layOutPlan(
     let best: { value: number; saved: ReturnType<typeof save>; launches: ClassLaunch[] } | null = null;
     const attempt = (how: SlotHow) => {
       restore(before);
-      const laid = runSlot(ctx, k, how);
+      const laid = runSlot(how === TODAY ? ctx : { ...ctx, limits: ALTERNATIVE_LAYOUT_LIMITS }, k, how);
       if (laid === null) return null;
       const value = judged();
       if (best === null || value > best.value) best = { value, saved: save(), launches: laid.launches };
