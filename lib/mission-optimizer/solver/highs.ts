@@ -4,7 +4,7 @@
 
 import highsLoader from 'highs';
 import wasmUrl from 'highs/runtime?url';
-import { INF, SOLVER_OPTIONS, type MilpModel, type MilpSolution, type MilpSolve } from './types';
+import { INF, SOLVER_OPTIONS, SOLVER_RETRY_OPTIONS, type MilpModel, type MilpSolution, type MilpSolve } from './types';
 
 // On Windows `wasmUrl` arrives as `/@fs/C:/...`, and stripping only the `/@fs`
 // prefix leaves a leading slash the loader cannot open ahead of the drive letter,
@@ -28,6 +28,7 @@ export function loadHighs(): Promise<MilpSolve> {
         try {
           raw = highs.solve(lp, {
             ...SOLVER_OPTIONS,
+            ...(limits.retry && SOLVER_RETRY_OPTIONS),
             mip_max_nodes: limits.maxNodes,
             mip_rel_gap: limits.relGap,
           } as Parameters<typeof highs.solve>[1]);

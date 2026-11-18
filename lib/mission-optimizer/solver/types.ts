@@ -246,6 +246,9 @@ export interface MilpLimits {
   // int32 — see `SOLVER_OPTIONS`.
   maxNodes: number;
   relGap: number;
+  // Solve with `SOLVER_RETRY_OPTIONS` on top of `SOLVER_OPTIONS`: the one second attempt `solveWith` makes after
+  // HiGHS fails outright (SPEC.md section 8). Absent is false.
+  retry?: boolean;
 }
 
 export type MilpSolve = (model: MilpModel, limits: MilpLimits) => MilpSolution;
@@ -272,3 +275,9 @@ export const SOLVER_OPTIONS: Readonly<Record<string, boolean | number | string>>
   // simplex fails outright ("HiGHS error -1"). See SPEC.md section 4.
   dual_feasibility_tolerance: 1e-8,
 };
+
+// The second attempt's change: presolve on. HiGHS can fail out of `Highs_run` ("HiGHS error -1") on a model it
+// reads perfectly well, with presolve on (the failure that turned it off) and with it off (arena seed 2030 with a
+// 2x window straddling the horizon). A different code path through the same model, as deterministic as the first;
+// presolve only reformulates, so it cannot turn a wrong answer into a right-looking one. See SPEC.md section 8.
+export const SOLVER_RETRY_OPTIONS: Readonly<Record<string, boolean | number | string>> = { presolve: 'on' };

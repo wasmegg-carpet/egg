@@ -423,6 +423,18 @@ Presolve only reformulates; it cannot change the feasible set, so running withou
 it can turn a failure into an answer but never a wrong answer into a right-looking
 one.
 
+**With presolve off HiGHS can still throw the same way**, on other models: arena
+seed 2030, with a 2x window straddling the horizon, threw "HiGHS error -1" on its
+641-column plan MILP, at four times the node limit too, and the solve came back
+empty. With presolve on, or `random_seed: 1`, it solved. There is no incumbent to
+read out of a throw. So `solveWith` solves once more when HiGHS fails outright
+(status `unknown`, no primal): the same model with `SOLVER_RETRY_OPTIONS`, which
+turns presolve on (`MilpLimits.retry`). That is the other of the two code paths,
+each of which has been seen to survive the other's failure, and it is as
+deterministic as the first; a second failure is the end of the MILP (with a 2x
+window, section 16 still has a plan). Infeasible and unbounded are answers and
+are not retried.
+
 ## 9. The night budget
 
 A problem may carry `nightsPerSlot`, the whole sleep windows each slot has, and
@@ -1168,3 +1180,13 @@ D1, D2 and M3 test moves from it as before.
 
 **Measured.** The same 240-instance fuzz after the change: no 1x launch inside
 the window in any plan, no calendar fault from the arena's checker, no throw.
+
+**The window never does worse than none.** When a problem with a 2x window still
+comes back empty for want of a plan from the MILP (no scale, the MILP failed
+twice, or the plan did not beat the empty one), `solveWith` solves the same
+problem without the window, then flies that plan's calendar under the window
+(`layOutPlan`'s `given` calendar), promoting what goes up inside it. Its launches
+are all `normal` options, which the window leaves as they were, so it is a plan
+of the windowed problem, and promotion only raises its joint.
+`tests/unit/solve-fallback.spec.ts` holds seed 2030 to at least its windowless
+plan, and a solve whose windowed MILPs all fail to the windowless plan.

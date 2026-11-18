@@ -726,7 +726,8 @@ export function layOutPlan(
   options: readonly LaunchOption[],
   solve: MilpSolve,
   judge: (counts: readonly number[]) => number,
-  verify: SlotVerifier = slotFault
+  verify: SlotVerifier = slotFault,
+  given?: readonly (readonly CalendarLaunch[])[]
 ): PlanLayout {
   const day = model.day;
   const sleep = timelineOf(model);
@@ -927,14 +928,14 @@ export function layOutPlan(
 
   // The slot columns and the group totals are tied by the class rows, so after rounding they agree; were they
   // ever not to, a slot launch with no group behind it is taken off the latest slot, and a group launch with
-  // no slot behind it is trimmed.
+  // no slot behind it is trimmed. A `given` calendar replaces the columns, and `counts` are its own.
   const demand: number[][] = Array.from({ length: model.slots }, (_, k) =>
     Array.from({ length: layout.classes }, (_, c) => {
-      const v = columnValues[nCol(layout, c, k)];
+      const v = given ? 0 : columnValues[nCol(layout, c, k)];
       return Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
     })
   );
-  for (let c = 0; c < layout.classes; c++) {
+  for (let c = 0; c < layout.classes && !given; c++) {
     let slotTotal = demand.reduce((a, d) => a + d[c], 0);
     const groupTotal = groupsOf[c].reduce((a, g) => a + current[g], 0);
     for (let k = model.slots - 1; k >= 0 && slotTotal > groupTotal; k--) {
@@ -953,8 +954,26 @@ export function layOutPlan(
       doubled: layout.classVariant[l.cls] !== 'normal',
     }));
   const bySlot: ClassLaunch[][] = [];
-  const dealt = day === null ? balance(demand, model, layout) : demand;
-  for (let k = 0; k < model.slots && day === null; k++) {
+  // A calendar that verified without the 2x window (`solveWith`'s last resort, SPEC.md section 16), flown as it is
+  // with what goes up inside the window promoted.
+  if (given) {
+    const groupOf = new Map<number, number>();
+    model.groups.forEach((grp, g) => grp.members.forEach(option => groupOf.set(option, g)));
+    given.forEach((launches, k) => {
+      const slot = promote(
+        launches.map(l => {
+          const g = groupOf.get(l.option);
+          if (g === undefined) throw new Error(`layout: the given calendar flies option ${l.option}, in no group`);
+          return { cls: layout.classOf[g], launchAt: l.launchAt };
+        })
+      );
+      const fault = verify(timedOf(slot), sleep, window);
+      if (fault !== null) throw new Error(`layout: given slot ${k} fails verification: ${fault}`);
+      bySlot.push(slot);
+    });
+  }
+  const dealt = day === null && !given ? balance(demand, model, layout) : demand;
+  for (let k = 0; k < model.slots && day === null && !given; k++) {
     const launches = promote(backToBack(dealt[k], layout));
     const fault = verify(timedOf(launches), sleep, window);
     if (fault !== null) throw new Error(`layout: slot ${k} laid back to back fails verification: ${fault}`);
@@ -1009,7 +1028,7 @@ export function layOutPlan(
       if (saved.stats[i] !== undefined) stats[key] = saved.stats[i]!;
     });
   };
-  for (let k = 0; k < model.slots && ctx !== null; k++) {
+  for (let k = 0; k < model.slots && ctx !== null && !given; k++) {
     // Without a doubled launch on the slot there is one layout, section 10's.
     if (!demand[k].some((n, c) => n > 0 && ctx.doubled[c])) {
       bySlot.push(runSlot(ctx, k, TODAY)!.launches);
@@ -1046,7 +1065,7 @@ export function layOutPlan(
   // last block both leave each slot's timeline standing, and every launch keeps its class, so this changes when and
   // where launches go, never what the plan flies. The two slots are promoted again, since a launch can now go up
   // inside the window where it did not, or be the slot's last there (SPEC.md section 12).
-  if (ctx !== null) {
+  if (ctx !== null && !given) {
     const endOf = (launches: readonly ClassLaunch[]) => {
       const last = launches[launches.length - 1];
       return last ? wakingFrom(last.launchAt + blockOf(last.cls, ctx), ctx.day) : 0;

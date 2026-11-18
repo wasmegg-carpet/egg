@@ -6,6 +6,8 @@ import type {
   CraftSplitReport,
   LayoutStats,
   MilpLimits,
+  MilpModel,
+  MilpSolution,
   MilpSolve,
   PlanProblem,
   PlanResult,
@@ -251,13 +253,77 @@ function scales(model: Model, qs: readonly number[], solve: MilpSolve, limits: M
   // target's tangent grid.
   const theta: number[] = [];
   for (let t = 0; t < model.sortedTargets.length; t++) {
-    const solution = solve(scaleLp(t), limits);
+    const solution = solveOrRetry(solve, scaleLp(t), limits);
     if (solution.status !== 'optimal' && solution.status !== 'feasible') return null;
     const value = solution.columnValues[layout.scoreBase + t];
     if (!(value > 0) || !Number.isFinite(value)) return null;
     theta.push(value);
   }
   return theta;
+}
+
+// Only these two carry a point that is a plan rather than a waypoint on a ray or a leftover from an errored solve:
+// a whitelist, not a blacklist of the failures known today. `feasible` is an incumbent HiGHS stopped with, which is
+// used as it is.
+const solved = (solution: MilpSolution) => solution.status === 'optimal' || solution.status === 'feasible';
+
+// One solve, and when HiGHS fails outright (no plan, no incumbent, no verdict on the model) one more with
+// `SOLVER_RETRY_OPTIONS`. A model HiGHS calls infeasible or unbounded is not retried: that is an answer.
+function solveOrRetry(solve: MilpSolve, model: MilpModel, limits: MilpLimits): MilpSolution {
+  const first = solve(model, limits);
+  return first.status === 'unknown' ? solve(model, { ...limits, retry: true }) : first;
+}
+
+// The last resort when a problem with a 2x window comes back empty for want of a plan from the MILP (SPEC.md section
+// 16): the same problem without the window, its calendar flown under the window with every launch that goes up
+// inside it promoted. That plan flies only `normal` options, which the window leaves as they were, so it is a plan
+// of this problem too, and promotion only raises its joint: the window never does worse than no window would.
+function withoutWindow(
+  problem: PlanProblem,
+  model: Model,
+  solve: MilpSolve,
+  tuning: Tuning,
+  report: boolean,
+  none: Laid
+): PlanResult {
+  const empty = new Array<number>(model.groups.length).fill(0);
+  const plain = solveWith({ ...problem, eventWindowSeconds: undefined }, solve, tuning);
+  const groupOf = new Map<number, number>();
+  model.groups.forEach((grp, g) => grp.members.forEach(option => groupOf.set(option, g)));
+  const counts = empty.slice();
+  for (let option = 0; option < plain.allocation.length; option++) {
+    if (!(plain.allocation[option] > 0)) continue;
+    const g = groupOf.get(option);
+    if (g === undefined) return emit(problem, model, empty, report, none);
+    counts[g] += plain.allocation[option];
+  }
+  if (!plain.calendar || counts.every(n => n === 0)) return emit(problem, model, empty, report, none);
+  const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
+  const laid = layOutPlan(
+    model,
+    layoutOf(model, 'oa'),
+    new Float64Array(0),
+    counts,
+    problem.options,
+    solve,
+    judge,
+    slotFault,
+    plain.calendar
+  );
+  // What laying the plan out took is the windowless solve's; promotion is this one's.
+  const before = plain.layoutStats;
+  const stats: LayoutStats = before
+    ? { ...before, launchesDemoted: 0, launchesPromoted: laid.stats.launchesPromoted ?? 0 }
+    : laid.stats;
+  stats.launchesTrimmed += before ? laid.stats.launchesTrimmed : 0;
+  let keep: boolean;
+  try {
+    keep = judge(laid.counts) > judge(empty);
+  } catch {
+    keep = false;
+  }
+  if (!keep) return emit(problem, model, empty, report, none);
+  return emit(problem, model, laid.counts, report, { calendar: laid.calendar, layoutStats: stats });
 }
 
 export function solveWith(
@@ -270,16 +336,20 @@ export function solveWith(
   const empty = new Array<number>(model.groups.length).fill(0);
   const none = emptyLaid(model);
   if (model.groups.length === 0 || model.sortedTargets.length === 0) return emit(problem, model, empty, report, none);
+  // Every way below of coming back empty for want of a plan. With a 2x window that is not the end: the problem
+  // without it is solved and flown under it (`withoutWindow`).
+  const nothing = (): PlanResult =>
+    model.eventWindowSeconds > 0
+      ? withoutWindow(problem, model, solve, tuning, report, none)
+      : emit(problem, model, empty, report, none);
 
   const qs = effectiveQs(model);
   const limits: MilpLimits = { maxNodes: tuning.maxNodes, relGap: MIP_REL_GAP };
   const theta = scales(model, qs, solve, limits);
-  if (!theta) return emit(problem, model, empty, report, none);
+  if (!theta) return nothing();
 
-  const solution = solve(buildOaMilp(model, qs, theta, tuning.sigmaGrid), limits);
-  // A whitelist, not a blacklist of the failures known today: only these two carry a point that is a
-  // plan rather than a waypoint on a ray or a leftover from an errored solve.
-  if (solution.status !== 'optimal' && solution.status !== 'feasible') return emit(problem, model, empty, report, none);
+  const solution = solveOrRetry(solve, buildOaMilp(model, qs, theta, tuning.sigmaGrid), limits);
+  if (!solved(solution)) return nothing();
 
   const layout = layoutOf(model, 'oa');
   const counts = decodeCounts(model, layout, solution.columnValues);
@@ -296,7 +366,7 @@ export function solveWith(
   } catch {
     keep = false;
   }
-  if (!keep) return emit(problem, model, empty, report, none);
+  if (!keep) return nothing();
 
   // Every plan is laid out into the calendar it is returned with. Without a sleep window that is exact and trims
   // nothing (SPEC.md section 12). With one the MILP's plan is a relaxation of real days (SPEC.md section 9): what
@@ -315,6 +385,9 @@ export function solveWith(
   } catch {
     keepLaid = false;
   }
-  if (!keepLaid) return emit(problem, model, empty, report, { ...none, layoutStats: laid.stats });
+  if (!keepLaid)
+    return model.eventWindowSeconds > 0
+      ? nothing()
+      : emit(problem, model, empty, report, { ...none, layoutStats: laid.stats });
   return emit(problem, model, laid.counts, report, { calendar: laid.calendar, layoutStats: laid.stats });
 }
