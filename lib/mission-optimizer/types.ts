@@ -66,8 +66,9 @@ export interface LaunchSolution {
   actualFuel: number;
   actualFuelByEgg: Map<ei.Egg, number>;
   actualTime: number;
-  // Sleep windows each of these launches flies through. Absent on a plan made without a sleep window; on a
-  // sleep-aware plan 0 is a launch flown while awake and anything more is launched to fly overnight.
+  // Sleep windows the solver budgeted each of these launches for: the night count of the variant it chose. Absent
+  // on a plan made without a sleep window. What a launch actually flies through depends on when the calendar
+  // sends it up, and is `SlotLaunch.nights`; the views read that.
   nights?: number;
   // The capacity these launches fly at. Absent on a plan made without an event window; on one made with it,
   // `event` and `overhang` are doubled launches (the same mission can appear once per variant) and `normal` is not.
@@ -89,6 +90,10 @@ export interface SlotLaunch {
   choice: integer;
   // Seconds from the start of the plan (wake-up on day 0, with a sleep window).
   launchAt: number;
+  // On a sleep-aware plan, the sleep windows this ship is in the air for, read off its launch time and flight
+  // (`nightsFlown` in `optimizer-core.ts`): what the timeline and the totals show. It can differ from the entry's
+  // `nights`, the variant the solver budgeted it as. Absent on a plan made around the clock.
+  nights?: number;
 }
 
 // The three slots run concurrently, so the plan's wall-clock is the busiest

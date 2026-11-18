@@ -70,7 +70,7 @@ function counts(solution: OptimizerSolution) {
   const timeline = new Map<string, number>();
   for (const s of planTimeline(solution).slots)
     for (const row of launchRows(s.rows)) {
-      const key = lineOf(row.choice, row.doubled);
+      const key = lineOf({ ...row.choice, nights: row.nights }, row.doubled);
       timeline.set(key, (timeline.get(key) ?? 0) + row.count * row.repeat);
     }
   const totals = new Map(launchTotals(solution).map(line => [lineOf(line, line.doubled), line.numShipsLaunched]));
@@ -295,6 +295,31 @@ describe('planTimeline', () => {
     ]);
   });
 
+  it('marks a launch overnight by the nights the calendar flies it through, not by its variant', () => {
+    // Entry 0 was budgeted as an overnight variant but the calendar flies it in the morning, back the same day;
+    // entry 1 was budgeted as a daytime launch but goes up before bed and lands in the night.
+    const solution = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 1, { nights: 1 }), choice(Ship.CHICKEN_NINE, 1, { nights: 0 })],
+      slots: [
+        {
+          loadSeconds: DAY,
+          rawLoadSeconds: 0,
+          launches: [
+            { choice: 0, launchAt: 0, nights: 0 },
+            { choice: 1, launchAt: 14 * H, nights: 1 },
+          ],
+        },
+      ],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['day 0-0', '1x@0', `1x@${14 * H} night`]);
+    expect(launchTotals(solution).map(l => [l.ship.shipType, l.nights])).toEqual([
+      [Ship.CHICKEN_ONE, 0],
+      [Ship.CHICKEN_NINE, 1],
+    ]);
+    expectCountsAgree(solution);
+  });
+
   it('puts a divider that falls overnight between the two days, and folds no day across it', () => {
     const solution = makeSolution({
       sleepSeconds: 8 * H,
@@ -421,6 +446,47 @@ describe('the timeline of a solved plan', () => {
         for (let i = 0; i < row.repeat; i++) expect(flown).toContain(Math.round(row.launchAt + i * period * DAY));
       }
     });
+  });
+
+  // Review repro: 10.8-hour daytime ships over ten days with 8 hours of sleep. Re-timing sends some of them up in
+  // the afternoon to land in the night, so the variant's night count (0) is not what the player flies.
+  it('shows each launch overnight exactly when it is in the air at bedtime, and frees a slot only awake', async () => {
+    const flight = 10.8 * H;
+    const sleep = 8 * H;
+    const solution = finalizeSolutions(
+      [
+        await optimizeFull({
+          options: [makeOpt(1, flight, [[lt1, 1]], [], Name.LUNAR_TOTEM)],
+          recipeDag: dag(),
+          desiredArtifactNodeIds: [lt2],
+          fuelCapacity: 1000,
+          timeCapacityPerSlot: 10 * DAY,
+          sleepSeconds: sleep,
+          ownedStock: new Map(),
+          maximumCost: undefined,
+        }),
+      ],
+      dag()
+    )[0];
+    consistent(solution);
+    const bedtime = DAY - sleep;
+    const inAirAtBedtime = (at: number) => {
+      const d = Math.floor(at / DAY);
+      return at <= d * DAY + bedtime && d * DAY + bedtime < at + flight;
+    };
+    let overnight = 0;
+    for (const s of solution.slots!) {
+      for (const l of s.launches) {
+        expect(l.nights).toBe(inAirAtBedtime(l.launchAt) ? 1 : 0);
+        overnight += l.nights!;
+      }
+      expect(s.loadSeconds % DAY).toBeLessThanOrEqual(bedtime);
+    }
+    expect(overnight).toBeGreaterThan(0);
+    const totals = launchTotals(solution);
+    expect(totals.filter(l => l.nights! > 0).reduce((n, l) => n + l.numShipsLaunched, 0)).toBe(overnight);
+    for (const s of planTimeline(solution).slots)
+      for (const row of launchRows(s.rows)) expect(row.nights).toBe(inAirAtBedtime(row.launchAt) ? 1 : 0);
   });
 
   it('counts what the totals count with an event window, and doubles only inside it', async () => {

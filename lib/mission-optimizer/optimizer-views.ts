@@ -5,7 +5,14 @@ import type { ei, MissionType } from '../index';
 import { formatProbability } from '../index';
 import type { CraftChainMetrics, RecipeTreeNode } from './optimizer-tree';
 import { DAY_SECONDS } from './solver/types';
-import type { CapacityVariant, LaunchSolution, OptimizerSolution, SlotSummary, TargetProbability } from './types';
+import type {
+  CapacityVariant,
+  LaunchSolution,
+  OptimizerSolution,
+  SlotLaunch,
+  SlotSummary,
+  TargetProbability,
+} from './types';
 
 // Below 0.01% lib's formatProbability switches to "1.5×10⁻⁶%", which a player can't act on. Pair
 // it with the reading they'd actually use — the same number as odds — rather than ask lib (shared
@@ -46,45 +53,61 @@ export function isDoubled(choice: { variant?: CapacityVariant }): boolean {
   return choice.variant === 'event' || choice.variant === 'overhang';
 }
 
-// What the player can tell two `choiceHistory` entries apart by: the mission, its target, whether it flies at 2x
-// and, where a view keeps them apart, its nights.
-function lineKey(choice: LaunchSolution, byNights: boolean): string {
+// What the player can tell two launches apart by: the mission, its target, whether it flies at 2x and, where a
+// view keeps them apart, the nights it is in the air for (undefined where it does not).
+function lineKey(choice: LaunchSolution, nights: number | undefined): string {
   const key = `${choice.ship.shipType}|${choice.ship.durationType}|${choice.targetAfxId}|${isDoubled(choice)}`;
-  return byNights ? `${key}|${choice.nights ?? 0}` : key;
+  return nights === undefined ? key : `${key}|${nights}`;
 }
+
+// The nights a slot launch is in the air for, as the calendar flies it (`SlotLaunch.nights`). A solution from
+// before that field was carried falls back on the variant's own count.
+const flownNights = (solution: OptimizerSolution, launch: SlotLaunch): number =>
+  launch.nights ?? solution.choiceHistory[launch.choice].nights ?? 0;
 
 // One line of a launch list: a mission, how many of it, and the two things that change how it is flown.
 export interface LaunchLine {
   ship: MissionType;
   targetAfxId: ei.ArtifactSpec.Name;
   numShipsLaunched: number;
-  // Sleep windows each launch flies through; 0 is a launch flown while awake, as is every launch of a plan made
-  // around the clock. Absent on a line totalled across nights.
+  // Sleep windows each launch is in the air for, as the calendar flies it; 0 is a launch that is back before
+  // bed, as is every launch of a plan made around the clock. Absent on a line totalled across nights.
   nights?: number;
   doubled: boolean;
 }
 
 // The plan's launches totalled over the three slots, one line per mission, target and capacity: `choiceHistory`
 // can name one mission several times, as a doubled launch's `event` and `overhang` variants or from more than one
-// option, and the player cannot tell those apart. `byNights` also keeps a mission's daytime and overnight launches
-// apart, as the card's two lists do; the humility missions file totals across them, because the ascension planner
-// flies both alike. Sorted by ship, duration, target, nights and capacity (1x first), so a list is a function of
-// the plan rather than of the order the solver emitted its choices in.
+// option, and the player cannot tell those apart. `byNights` also keeps a mission's launches apart by the nights
+// they are in the air for, as the card's two lists do, counting each launch where the calendar flies it, so the
+// totals say what the timeline shows; the humility missions file totals across them, because the ascension
+// planner flies both alike. Sorted by ship, duration, target, nights and capacity (1x first), so a list is a
+// function of the plan rather than of the order the solver emitted its choices in.
 export function launchTotals(solution: OptimizerSolution, { byNights = true } = {}): LaunchLine[] {
   const lines = new Map<string, LaunchLine>();
-  for (const choice of solution.choiceHistory) {
-    if (!(choice.numShipsLaunched > 0)) continue;
-    const key = lineKey(choice, byNights);
+  const add = (choice: LaunchSolution, count: number, nights: number | undefined) => {
+    const key = lineKey(choice, nights);
     const line = lines.get(key);
-    if (line) line.numShipsLaunched += choice.numShipsLaunched;
+    if (line) line.numShipsLaunched += count;
     else
       lines.set(key, {
         ship: choice.ship,
         targetAfxId: choice.targetAfxId,
-        numShipsLaunched: choice.numShipsLaunched,
-        ...(byNights && { nights: choice.nights ?? 0 }),
+        numShipsLaunched: count,
+        ...(nights !== undefined && { nights }),
         doubled: isDoubled(choice),
       });
+  };
+  // A sleep-aware plan's nights are the calendar's, launch by launch; the calendar flies every launch of the plan
+  // exactly once (the solver's verifier holds it to the allocation).
+  if (byNights && (solution.sleepSeconds ?? 0) > 0 && solution.slots) {
+    for (const slot of solution.slots)
+      for (const launch of slot.launches) add(solution.choiceHistory[launch.choice], 1, flownNights(solution, launch));
+  } else {
+    for (const choice of solution.choiceHistory) {
+      if (choice.numShipsLaunched > 0)
+        add(choice, choice.numShipsLaunched, byNights ? (choice.nights ?? 0) : undefined);
+    }
   }
   return [...lines.values()].sort(
     (a, b) =>
@@ -102,7 +125,7 @@ export function launchTotals(solution: OptimizerSolution, { byNights = true } = 
 export function computeMissionLegendaryRows(solution: OptimizerSolution, rootId: string): MissionLegendaryRow[] {
   const rows = new Map<string, MissionLegendaryRow>();
   for (const choice of solution.choiceHistory) {
-    const key = lineKey(choice, false);
+    const key = lineKey(choice, undefined);
     const legendaryDrops = choice.numShipsLaunched * (choice.legendarySupplyVector.get(rootId) ?? 0);
     const row = rows.get(key);
     if (row) {
@@ -136,7 +159,8 @@ export interface TimelineLaunchRow {
   repeat: number;
   launchAt: number;
   doubled: boolean;
-  // Sleep windows each launch flies through: launched before bed, back after a night or more.
+  // Sleep windows each launch is in the air for, as the calendar flies it: in the air at bedtime, back after a
+  // night or more.
   nights: number;
 }
 
@@ -199,7 +223,9 @@ export function planTimeline(solution: OptimizerSolution): PlanTimeline {
 
 // A run of consecutive launches the player cannot tell apart (one `lineKey`), or the event window's end. `clock`
 // holds each launch's time of day, to the minute, so two days fold only when they are flown at the same times.
-type Segment = { choice: number; key: string; count: number; launchAt: number; clock: number[] } | 'window-end';
+type Segment =
+  | { choice: number; key: string; count: number; launchAt: number; clock: number[]; nights: number }
+  | 'window-end';
 
 // One day of a slot, or the whole slot on a plan made around the clock.
 interface Day {
@@ -235,13 +261,15 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
       day = { day: dayIndex, segments: [], windowEndsBefore: closes };
       days.push(day);
     } else if (closes) day.segments.push('window-end');
-    const key = lineKey(solution.choiceHistory[launch.choice], true);
+    const nights = flownNights(solution, launch);
+    const key = lineKey(solution.choiceHistory[launch.choice], nights);
     const last = day.segments[day.segments.length - 1];
     const clock = clockOf(launch.launchAt);
     if (last !== undefined && last !== 'window-end' && last.key === key) {
       last.count++;
       last.clock.push(clock);
-    } else day.segments.push({ choice: launch.choice, key, count: 1, launchAt: launch.launchAt, clock: [clock] });
+    } else
+      day.segments.push({ choice: launch.choice, key, count: 1, launchAt: launch.launchAt, clock: [clock], nights });
   }
 
   const signatures = days.map(signatureOf);
@@ -280,7 +308,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
         repeat,
         launchAt: segment.launchAt,
         doubled: isDoubled(choice),
-        nights: choice.nights ?? 0,
+        nights: segment.nights,
       });
     }
   };

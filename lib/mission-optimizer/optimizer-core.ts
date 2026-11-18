@@ -9,6 +9,7 @@ import { sleepCapacity, sleepSecondsOf, sleepVariants } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
 import {
+  DAY_SECONDS,
   fuelCostOnAxis,
   normalizeProblem,
   type CalendarLaunch,
@@ -64,12 +65,36 @@ interface Assembly {
   ownedStock: Map<string, number>;
 }
 
+// Slack on reading a launch time against a bedtime or a wake-up: the solver's verifier's own microsecond.
+const CLOCK_TOL = 1e-6;
+
+// The sleep windows a ship launched at `launchAt` is in the air for: the bedtimes from its launch up to, not
+// including, its landing `flightSeconds` later. A ship sent up at bedtime is one; one that lands as the player
+// goes to bed is not. This is what the player sees, and it can differ from the night count of the variant the
+// solver budgeted the launch as: a re-timed or folded launch can land a night early, and a daytime one can go up
+// before bed and land in the night (`solver/SPEC.md` section 14).
+export function nightsFlown(launchAt: number, flightSeconds: number, sleepSeconds: number): number {
+  if (!(sleepSeconds > 0)) return 0;
+  const bedtime = DAY_SECONDS - sleepSeconds;
+  const first = Math.ceil((launchAt - CLOCK_TOL - bedtime) / DAY_SECONDS);
+  const last = Math.ceil((launchAt + flightSeconds - CLOCK_TOL - bedtime) / DAY_SECONDS) - 1;
+  return Math.max(0, last - first + 1);
+}
+
+// The first instant at or after `t` the player is awake: `t` itself, or the next wake-up when `t` is in a night.
+function awakeFrom(t: number, sleepSeconds: number): number {
+  if (!(sleepSeconds > 0)) return t;
+  const day = Math.floor((t + CLOCK_TOL) / DAY_SECONDS);
+  return t - day * DAY_SECONDS <= DAY_SECONDS - sleepSeconds + CLOCK_TOL ? t : (day + 1) * DAY_SECONDS;
+}
+
 // Per-slot occupancy of a plan, read off the calendar the solver verified, which is the arrangement the plan
 // was accepted on: the MILP's own slot columns, laid out (`solver/SPEC.md` section 12). A slot's load is where
-// its last block ends — with a sleep window, the moment its last ship is back and the player is awake to collect
-// it; without one, the sum of its launches.
+// its last block ends — with a sleep window, the first moment after that the player is awake to collect its last
+// ship and launch again; without one, the sum of its launches.
 // Each launch keeps its place and names the `choiceHistory` entry it flies by index: `choiceOf` maps an option
-// index to that entry.
+// index to that entry. With a sleep window it also carries the nights it is in the air for, by its launch time
+// and its flight (`nightsFlown`).
 export function slotSummariesOfCalendar(
   options: LaunchOption[],
   calendar: CalendarLaunch[][],
@@ -80,14 +105,20 @@ export function slotSummariesOfCalendar(
   return calendar.map(launches => {
     const last = launches[launches.length - 1];
     return {
-      loadSeconds: last ? last.launchAt + last.wakingSeconds + last.nights * sleepSeconds : 0,
+      loadSeconds: last ? awakeFrom(last.launchAt + last.wakingSeconds + last.nights * sleepSeconds, sleepSeconds) : 0,
       rawLoadSeconds: launches.reduce((total, launch) => total + options[launch.option].rawTime, 0),
       launches: launches.map(launch => {
         const choice = choiceOf.get(launch.option);
         // The verifier holds the calendar to the allocation count for count, so this is a broken seam.
         if (choice === undefined)
           throw new Error(`optimizer: the calendar flies option ${launch.option}, never chosen`);
-        return { choice, launchAt: launch.launchAt };
+        return {
+          choice,
+          launchAt: launch.launchAt,
+          ...(sleepSeconds > 0 && {
+            nights: nightsFlown(launch.launchAt, options[launch.option].rawTime, sleepSeconds),
+          }),
+        };
       }),
     };
   });
