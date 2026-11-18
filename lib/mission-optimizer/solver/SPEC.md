@@ -470,9 +470,9 @@ Section 9's budget is a relaxation; this section is what stops it from being
 reported as a plan. A problem that also carries `sleep` (`types.ts`:
 `sleepSeconds` `S` and `horizonSeconds` `H`, the horizon `timeCapacityPerSlot`
 was before it came to count waking seconds) gets three more things, and every
-plan it returns has been laid out on real days and verified. **Absent means
-today's problem**: no fit rows and no trim, the calendar is section 12's back to
-back one, and the matrix and the result are the ones section 9 produced. `normalizeProblem` leaves the field
+plan it returns has been laid out on real days and verified. **Absent, the
+matrix is section 9's**: no fit rows and no trim, and the calendar is section
+12's back-to-back one. `normalizeProblem` leaves the field
 absent when absent, normalizes `H` like any other budget, and throws on an
 `S` outside `[0, 86400)`, since neither "no sleep" nor "no waking" is a safe
 reading of a malformed window.
@@ -731,14 +731,23 @@ A problem may carry both `eventWindowSeconds` `E` and `sleep`. The decision this
 rests on, the user's: the plan starts now at `t = 0`, the window is the prefix
 `[0, E]` of wall-clock time, nights included, and the player is at the start of
 a waking day at `t = 0`, the assumption section 10 already makes. No new input,
-no clock time. **Absent means today's problem**: with only a sleep window, only
-an event window, or neither, every number below reduces to the one sections 10
-to 12 use, and the matrix and the result are the ones they were.
-`tests/unit/window-sleep.spec.ts` holds the sleep-only matrix and plan to that
-with a zero window, an absent one and doubled copies on the menu; a run of the
-arena's own problem builder over seeds 2000-2005 under no window, an 8-hour
-sleep window, and the `inside` and `sliver` regimes alone gave hash-identical
-matrices and results before and after the change.
+no clock time. **Absent, the matrix is the one sections 10 to 12 build**: with
+only a sleep window, only an event window, or neither, every number below
+reduces to theirs, so the sleep-only matrix is section 10's, the window-only
+matrix section 11's, and with neither it is the matrix the solver built before
+either window existed. `tests/unit/window-sleep.spec.ts` holds the sleep-only
+matrix and plan to that with a zero window, an absent one and doubled copies on
+the menu; a run of the arena's own problem builder over seeds 2000-2005 under no
+window, an 8-hour sleep window, and the `inside` and `sliver` regimes alone gave
+hash-identical matrices and results before and after this section's rows.
+
+The plans are another matter, deliberately. With neither window the allocation
+and the joint are what they always were, on the same matrix, but the calendar
+is section 12's, balanced, so the reported makespan can be shorter. A sleep-only
+plan is not the overnight design's: section 14's re-timing lets it place
+launches the segments alone trimmed (a 10.8-hour daytime ship over ten days
+flies 42 launches where it flew 30), so its allocation and joint can be higher,
+and its slots are balanced as well.
 
 The ground truth is section 12's one predicate, which `verify.ts` and the arena's
 `calendar.ts` state for the combined case: a launch earns doubled yield
@@ -852,7 +861,7 @@ the plan is re-judged from the demoted and trimmed counts against the empty one,
 and everything reported — allocation, joint, per-target, craft split — is
 computed from them, so a demoted launch counts 1x. `layoutStats.launchesDemoted`
 counts demotions; it is present only with an event window, so a sleep-only
-result is unchanged.
+result carries no window statistics.
 
 **The layout MILP is not told about the window**, which the brief preferred as
 a constraint over a filter. It decides only how many launches of each daytime

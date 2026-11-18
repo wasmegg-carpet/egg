@@ -49,8 +49,8 @@ export interface PlanProblem {
   // and verified.
   readonly sleep?: SleepWindow;
   // Seconds of a 2x mission capacity event left, as a window starting at the plan's t = 0: a prefix, never an
-  // interval starting later. Absent or 0 means today's problem: no option may fly doubled, so one that carries a
-  // doubled `variant` is dropped, and the matrix and the result are what they were (SPEC.md section 11). The app
+  // interval starting later. Absent or 0 means no window: no option may fly doubled, so one that carries a doubled
+  // `variant` is dropped, and the matrix is the one built without a window (SPEC.md sections 11 and 13). The app
   // sets it from the player's "time left" (`optimizeFull`, via `../capacity.ts`). With a sleep window as well, the
   // window is wall-clock seconds from wake-up on day 0, nights included, and a doubled launch that the layout
   // cannot start inside it is flown at 1x instead (SPEC.md section 13).
@@ -171,7 +171,7 @@ export interface LayoutStats {
   verifierRetries: number;
   // Doubled launches the layout could not start inside the 2x window, flown at 1x as their normal twin instead
   // (SPEC.md section 13); not counted in `launchesTrimmed`, since they still fly. Present only when the problem
-  // also carries an event window, so a sleep-only result is the one it always was.
+  // also carries an event window, so a sleep-only result carries no window statistics.
   launchesDemoted?: number;
   // 1x launches the layout found going up inside the 2x window, flown doubled instead (SPEC.md section 16); a
   // trim the window forces is counted in `launchesTrimmed`. Present exactly when `launchesDemoted` is.
