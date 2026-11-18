@@ -24,7 +24,9 @@ export interface ScheduleSettings {
   // Hours a day the player sleeps and cannot launch; ships still fly and land. 0 plans around the clock.
   sleepHours: number;
   // A 2x mission capacity event in progress, and how much of it is left, as typed (e.g. '48h', '3h30m'). The
-  // window always starts when the plan does. Kept as typed, like the time budget, and read at use.
+  // window always starts when the plan does. Kept as typed, like the time budget, and read at use. Saved as typed
+  // too: the time left does not count down, so '48h' entered today still reads '48h' on a later visit, until the
+  // player changes it. The ascension planner also copies these settings into every visit not yet set up.
   doubleCapacityEnabled: boolean;
   doubleCapacityRemaining: string;
 }
