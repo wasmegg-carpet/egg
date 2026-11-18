@@ -651,6 +651,55 @@ function backToBack(demand: readonly number[], layout: Layout): ClassLaunch[] {
   return launches;
 }
 
+// The MILP's per-slot class counts without a sleep window, re-dealt so the busiest slot is as light as longest
+// processing time first makes it: `order_k` only sorts slots by load, so the MILP hands back whatever split it
+// branched to, three 10-hour launches as one slot of 30 hours (SPEC.md section 12). Every launch keeps its class,
+// so the allocation and the joint are the MILP's; each slot keeps every row the MILP's slots kept: seconds within
+// the slot, nights within its nights, `event` seconds within the window and at most one `overhang`. Doubled launches
+// are dealt first, `event` then `overhang`, longest first within each, then the rest longest first, each to the
+// lightest slot that takes it (ties to the lower slot). The MILP's own split stands unless this one's busiest slot is
+// strictly lighter.
+function balance(demand: readonly (readonly number[])[], model: Model, layout: Layout): number[][] {
+  const slots = demand.length;
+  const loadOf = (counts: readonly number[]) => counts.reduce((a, n, c) => a + n * layout.classSeconds[c], 0);
+  const busiest = Math.max(...demand.map(loadOf));
+  const order = layout.classSeconds
+    .map((_, c) => c)
+    .filter(c => demand.some(d => d[c] > 0))
+    .sort(
+      (a, b) =>
+        LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] ||
+        layout.classSeconds[b] - layout.classSeconds[a] ||
+        a - b
+    );
+  const out = Array.from({ length: slots }, () => new Array<number>(layout.classes).fill(0));
+  const load = new Array<number>(slots).fill(0);
+  const nights = new Array<number>(slots).fill(0);
+  const event = new Array<number>(slots).fill(0);
+  const overhang = new Array<number>(slots).fill(0);
+  for (const c of order) {
+    const seconds = layout.classSeconds[c];
+    const variant = layout.classVariant[c];
+    for (let n = demand.reduce((a, d) => a + d[c], 0); n > 0; n--) {
+      let to = -1;
+      for (let k = 0; k < slots; k++) {
+        if (load[k] + seconds > model.timeCapacitySeconds + LAYOUT_TOL) continue;
+        if (nights[k] + layout.classNights[c] > model.nightsPerSlot) continue;
+        if (variant === 'event' && event[k] + seconds > model.eventWindowBudget + LAYOUT_TOL) continue;
+        if (variant === 'overhang' && overhang[k] >= 1) continue;
+        if (to < 0 || load[k] < load[to]) to = k;
+      }
+      if (to < 0) return demand.map(d => d.slice());
+      out[to][c]++;
+      load[to] += seconds;
+      nights[to] += layout.classNights[c];
+      if (variant === 'event') event[to] += seconds;
+      if (variant === 'overhang') overhang[to]++;
+    }
+  }
+  return Math.max(...load) < busiest - LAYOUT_TOL ? out : demand.map(d => d.slice());
+}
+
 export interface PlanLayout {
   // Per group, the plan that was laid out: the solve's counts less every launch trimmed.
   counts: number[];
@@ -904,8 +953,9 @@ export function layOutPlan(
       doubled: layout.classVariant[l.cls] !== 'normal',
     }));
   const bySlot: ClassLaunch[][] = [];
+  const dealt = day === null ? balance(demand, model, layout) : demand;
   for (let k = 0; k < model.slots && day === null; k++) {
-    const launches = promote(backToBack(demand[k], layout));
+    const launches = promote(backToBack(dealt[k], layout));
     const fault = verify(timedOf(launches), sleep, window);
     if (fault !== null) throw new Error(`layout: slot ${k} laid back to back fails verification: ${fault}`);
     bySlot.push(launches);
@@ -986,6 +1036,48 @@ export function layOutPlan(
     }
     restore(best!.saved);
     bySlot.push(best!.launches);
+  }
+
+  // With a sleep window the slots are laid out one at a time from the MILP's split, which `order_k` only sorts, so
+  // one slot can fly everything while the others stand idle. The busiest slot's last launch moves to the end of
+  // whichever other slot it would finish soonest in, at that slot's first waking instant once it is free, as long as
+  // that finishes it, and so the pair, strictly sooner, it ends by the horizon, and a doubled launch still goes up
+  // inside the window; repeated until no move helps. Removing a slot's last launch and appending one after a slot's
+  // last block both leave each slot's timeline standing, and every launch keeps its class, so this changes when and
+  // where launches go, never what the plan flies. The two slots are promoted again, since a launch can now go up
+  // inside the window where it did not, or be the slot's last there (SPEC.md section 12).
+  if (ctx !== null) {
+    const endOf = (launches: readonly ClassLaunch[]) => {
+      const last = launches[launches.length - 1];
+      return last ? wakingFrom(last.launchAt + blockOf(last.cls, ctx), ctx.day) : 0;
+    };
+    const total = bySlot.reduce((a, launches) => a + launches.length, 0);
+    for (let moves = 0; moves < total * model.slots; moves++) {
+      const ends = bySlot.map(endOf);
+      const from = ends.indexOf(Math.max(...ends));
+      const moving = bySlot[from][bySlot[from].length - 1];
+      if (!moving) break;
+      const left = endOf(bySlot[from].slice(0, -1));
+      let to = -1;
+      let best = Infinity;
+      let at = 0;
+      for (let k = 0; k < model.slots; k++) {
+        if (k === from) continue;
+        const start = wakingFrom(ends[k], ctx.day);
+        const finish = start + blockOf(moving.cls, ctx);
+        if (finish > ctx.day.horizonSeconds + LAYOUT_TOL) continue;
+        if (ctx.doubled[moving.cls] && !inWindow({ cls: moving.cls, launchAt: start })) continue;
+        const end = wakingFrom(finish, ctx.day);
+        if (Math.max(end, left) < ends[from] - LAYOUT_TOL && end < best) [to, best, at] = [k, end, start];
+      }
+      if (to < 0) break;
+      bySlot[from] = promote(bySlot[from].slice(0, -1));
+      bySlot[to] = promote([...bySlot[to], { cls: moving.cls, launchAt: at }]);
+      for (const k of [from, to]) {
+        const fault = verify(timedOf(bySlot[k]), sleep, window);
+        if (fault !== null) throw new Error(`layout: slot ${k} fails verification after balancing: ${fault}`);
+      }
+    }
   }
 
   // A 1x launch still inside the window is one `promote` found no copy for in the model. It is flown as a group the

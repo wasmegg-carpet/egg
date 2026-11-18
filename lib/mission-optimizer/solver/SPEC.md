@@ -677,8 +677,28 @@ each slot's launches back to back from `t = 0` — `event` launches first, then
 the slot's one `overhang`, then the `normal` ones, class order within each —
 and `launchAt` is the prefix sum of the seconds before it. That order is section
 11's exactness argument written out, so a plan the window rows admit lays out
-with every doubled launch inside the window by construction. Nothing is trimmed,
-no layout MILP is built, and `layoutStats` is not reported.
+with every doubled launch inside the window by construction. No layout MILP is
+built, and `layoutStats` is not reported.
+
+**Balancing.** The MILP's split is whatever it branched to: `order_k` only
+sorts the slots by load, so fuel for three 10-hour launches on a 30-hour horizon
+came back as one slot flying all three, and the timeline (and the ascension
+planner's wait) said 30 hours where 10 would do. Before the back-to-back layout,
+`balance` re-deals the class counts longest processing time first: doubled
+launches first (`event`, then `overhang`), longest first within each, then the
+rest, each to the lightest slot that still keeps every row the MILP's slots
+kept: its seconds, its nights, `event` seconds within the window and one
+`overhang`. Every launch keeps its class, so the allocation and the joint are
+the MILP's. The MILP's own split stands unless the new one's busiest slot is
+strictly lighter. With a sleep window the slots are laid out one at a time and
+the same imbalance appears (in a fuzz of 120 sleep plans, 46 could finish
+sooner by moving one launch, by 13.8 hours on average). There the layout is not
+re-dealt but repaired at the end: the busiest slot's last launch moves to the
+end of the slot it would finish soonest in, at that slot's first waking instant,
+while that finishes the pair strictly sooner, ends by the horizon and keeps a
+doubled launch inside the window. Both leave each slot's timeline standing.
+Section 16's promotion runs after either, so a launch dealt into the window flies
+doubled.
 
 The verifier is the same one (`verify.ts`), handed `sleepSeconds` 0 and the slot
 as the horizon, under which its rules reduce to "back to back inside the slot".

@@ -452,6 +452,34 @@ describe('the layouts the judge chooses among', () => {
   });
 });
 
+describe('balancing the slots under sleep', () => {
+  // The sleep layout's counterpart of the back-to-back review repro: fuel for three 10-hour ships over three days,
+  // which the MILP may put in one slot, flown one a slot, so the plan is done the first afternoon.
+  it('moves launches off the busiest slot while that finishes the plan sooner', async () => {
+    const solve = await loadHighs();
+    const problem = problemOf([opt(10)], 3 * DAY_SECONDS, undefined, { fuelCapacity: 3 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING);
+    expect(result.allocation).toEqual([3]);
+    expect(shape(result.calendar!)).toEqual([[[0, false]], [[0, false]], [[0, false]]]);
+  });
+
+  it('keeps a moved doubled launch inside the window, and doubles a 1x launch moved into it', async () => {
+    const solve = await loadHighs();
+    const problem = problemOf(doubles([opt(10)], 30 * H), 3 * DAY_SECONDS, 30 * H, { fuelCapacity: 4 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
+    for (const slot of result.calendar!) {
+      expect(slotFault(slot, problem.sleep!, problem.eventWindowSeconds)).toBeNull();
+      for (const l of slot) expect(l.doubled).toBe(l.launchAt <= 30 * H);
+    }
+    const ends = result.calendar!.map(slot => {
+      const last = slot.at(-1);
+      return last ? last.launchAt + last.wakingSeconds + last.nights * S : 0;
+    });
+    // Four launches over three slots: no slot needs more than two, the second at the first wake-up after 10:00.
+    expect(Math.max(...ends)).toBeLessThanOrEqual(DAY_SECONDS + 10 * H);
+  });
+});
+
 describe('solving a window with sleep', () => {
   it('reports the plan the calendar flies, and promises only the doubled launches the days start', async () => {
     const solve = await loadHighs();

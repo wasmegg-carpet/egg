@@ -238,6 +238,28 @@ describe('every plan comes with its calendar', () => {
     }
   });
 
+  // Review repro: fuel for three 10-hour launches on a 30-hour horizon came back as one slot of three.
+  it('deals the launches out so the busiest slot is as light as it can be', async () => {
+    const solve = await loadHighs();
+    const problem = problemOf([makeOpt(1, 10 * 3600, [['B', 1]])], { timeCapacityPerSlot: 30 * 3600, fuelCapacity: 3 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING);
+    expect(result.allocation).toEqual([3]);
+    expect(result.calendar!.map(slot => slot.map(l => l.launchAt))).toEqual([[0], [0], [0]]);
+  });
+
+  it('deals doubled launches with the window rows each slot has to keep', async () => {
+    const solve = await loadHighs();
+    // Six 1-hour launches against a 2-hour window: two doubled a slot at most (an event and the overhang).
+    const options = withDoubles([makeOpt(1, 3600, [['B', 1]])], 7200);
+    const problem = problemOf(options, { eventWindowSeconds: 7200, timeCapacityPerSlot: 10 * 3600, fuelCapacity: 6 });
+    const result = solveWith(problem, solve, DEFAULT_TUNING, { report: true });
+    expect(result.calendar!.map(slot => slot.length)).toEqual([2, 2, 2]);
+    for (const slot of result.calendar!) {
+      expect(slotFault(slot, { sleepSeconds: 0, horizonSeconds: 10 * 3600 }, 7200)).toBeNull();
+      expect(slot.every(l => l.doubled)).toBe(true);
+    }
+  });
+
   it('the empty plan has an empty calendar, one slot per slot', async () => {
     const solve = await loadHighs();
     const result = solveWith(problemOf([makeOpt(1, 30, [['B', 1]])], { targets: [] }), solve, DEFAULT_TUNING);
