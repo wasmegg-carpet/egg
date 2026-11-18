@@ -294,7 +294,9 @@ function sameFlight(a: Group, b: Group, factor: number): boolean {
 // pruned ones included: when dominance dropped it, the first kept group (in group order) that dominates it
 // stands in, which flies in the same launch slot in no more seconds, nights or fuel and yields at least as much,
 // and one always survives, since the relation is a strict partial order (SPEC.md section 1). Only within the
-// normal variant, as dominance itself is.
+// normal variant, as dominance itself is. No menu from `capacityVariants` reaches the stand-in (a pruned twin's
+// doubled copies are pruned with it); it is kept because the solver takes any menu, and a hand-built one in
+// `window-sleep.spec.ts` does reach it (SPEC.md section 13).
 // Sets `copy` on every kept group (SPEC.md section 16). A doubled group's copies are exact: the same flight in the
 // other doubled variant, or nothing, since relabelling a doubled launch changes no yield. A normal group's are its own
 // doubled copies when they were kept; otherwise the first kept group of that variant, in group order, that dominates

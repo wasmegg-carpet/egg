@@ -318,7 +318,10 @@ so it does not happen, but it is counted separately so the scorecard never reads
 a judge timeout as an infeasible plan. Since C1 asks the packer only about a plan
 with no calendar, or with a sleep window, it can no longer arise for a candidate
 that returns a calendar on a sleep-free problem, as the shipped one does; it stays
-for candidates that return an allocation alone.
+for candidates that return an allocation alone. Every other invariant is reported rather
+than thrown, because what the arena measures is how far a candidate is from
+holding them — a suite that aborts on the first monotonicity wobble stops
+producing a scorecard and starts producing a stack trace.
 
 Alongside the tiers there is `tuning-bench.spec.ts`, opt-in via `BENCH` and
 excluded from `pnpm test` the same way. It is not a tier and not a test: it
@@ -334,12 +337,9 @@ and `BENCH_SEED_BASE` (2000) shape it. It measures neither invariant severity no
 monotonicity, so it can rule a budget out on cost but cannot on its own justify
 moving one.
 
-````
+```
 BENCH=1 ARENA_WINDOW=inside BENCH_BASES=1200,3600 pnpm exec vitest run tests/arena/tuning-bench.spec.ts
-``` Every other invariant is reported rather
-than thrown, because what the arena measures is how far a candidate is from
-holding them — a suite that aborts on the first monotonicity wobble stops
-producing a scorecard and starts producing a stack trace.
+```
 
 **Cost.** Minutes per instance, almost all of it solver runtime: `invariants.spec.ts`
 puts the four-instance smoke tier at about 12 minutes, and the forty-instance sweep
@@ -378,4 +378,3 @@ bespoke script. Such an entry ships or it is deleted; the roster is not where
 alternatives accumulate. It is one row for that reason and not because nothing
 has been tried: the shipped single-pass tuning was chosen over five registered
 arms, and all five were deleted once it was.
-````

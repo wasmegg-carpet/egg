@@ -30,7 +30,8 @@ describe('the tangent grid of a saturated target', () => {
 
 describe('ten- and forty-second ships over three days', () => {
   // Thousands of launches a slot, each worth a score of 0.1 on the one target: the plan is certain long before the
-  // slots are full. It used to come back empty, with probability 0, sleep window or 2x window or neither.
+  // slots are full, and must not come back empty at probability 0, sleep window or 2x window or neither (SPEC.md
+  // section 15).
   const settings = [
     {},
     { sleepSeconds: 8 * 3600 },

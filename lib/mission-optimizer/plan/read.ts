@@ -19,9 +19,10 @@ export interface HumilityVisit {
   visitIndex: number;
   label: string;
 
-  // Seconds since the epoch at which the player arrives on Humility, for looking up whether a 2x
-  // mission capacity event is running then. Null when the save carries no readable ascension
-  // start, in which case the visit is still planable, just undated.
+  // Seconds since the epoch at which the player arrives on Humility. Null when the save carries no
+  // readable ascension start, in which case the visit is still planable, just undated. The optimizer
+  // does not read it: a 2x mission capacity event is entered by the player as time left
+  // (`schedule-settings.ts`), not looked up by date.
   arrivalTimestamp: number | null;
   // Time the plan spends on Humility after arriving. Zero is normal and means the plan has
   // nothing scheduled there yet, which is exactly when a player comes here. The visit page takes

@@ -196,7 +196,9 @@ limit and the outer `max` stops a row ever being scaled _down_.
 Tangent cuts are where this bites, and they are the only rows ever observed to leave
 the window. A cut's two entries are `+1` on `z_t` and `-theta_t * g'(s_k)` on
 `sigma_t`, evaluated at the grid point `s_k = theta_t * sigma_k`. Section 4's floor
-caps that slope at `1/SIGMA_FLOOR = 100`, but nothing bounds it from below: past
+caps that slope at about `1/SIGMA_FLOOR = 100` on an ordinary grid (a saturated
+target's grid, section 15, reaches about `100 * theta`), but nothing bounds it
+from below: past
 `s ~ 400` it underflows — ~1e-179 measured — and the row's dynamic range is then wider
 than the window at any scale. `buildOaMilp` drops a slope under
 `FLAT_CUT_SLOPE = 1e-12` rather than writing it. `sigma <= 1`, so the dropped term is
@@ -221,7 +223,11 @@ Every target is therefore measured in units of its own ceiling. `theta_t` is the
 largest score `t` can reach when every other target is ignored and counts may be
 fractional (one continuous LP per target, `scaleLps`). Then `sigma_t = s_t/theta_t`
 lies in `[0, 1]` and a tangent at `sigma = a` has slope `1/a`. The grid bottoms out
-at `SIGMA_FLOOR`, so no tangent coefficient exceeds `1/SIGMA_FLOOR`.
+at `SIGMA_FLOOR`, so on an ordinary grid no tangent coefficient exceeds about
+`1/SIGMA_FLOOR`. A saturated target's grid continues below the floor (section
+15), down to a score of `DEEPEST_CUT_SCORE`, where the slope is about
+`theta / DEEPEST_CUT_SCORE`: about 8e5 at `theta` 8193, still well inside section
+3's window.
 
 `theta_t <= 0` means no allocation scores that target, so every plan has joint
 probability zero and the empty one is returned directly. A `sigma_t` of exactly
@@ -438,9 +444,23 @@ What changes when it is present:
   group key, and a group's cap gains `floor(slots * N / nights)`.
 - **Dominance.** A taker may not spend more nights than the group it stands
   in for, and spending fewer is strict. Without that an overnight variant,
-  which charges fewer waking seconds, would prune its own daytime twin. The
-  section 1 argument carries over unchanged: moving launches onto the
-  dominator in the same slot only lowers the night rows too.
+  which charges fewer waking seconds, would prune its own daytime twin. For
+  the slot, night and window rows section 1's argument carries over: moving
+  launches onto the dominator in the same slot only lowers them. For the
+  per-day fit rows of sections 10 and 14 it holds only for the right
+  dominator: a daytime taker is charged `u^(q)(seconds / W) > 0` in a fit row
+  where a one-night given is charged `nights - 1 = 0`, so moving a one-night
+  launch onto it can break that row. The precise claim: a pruned overnight
+  group is also dominated by a kept group that spends a night, which is
+  charged at most what the given is in every row, fit rows included. On a
+  menu from `sleepVariants` there always is one. A daytime dominator's own
+  one-night variant (`max(d - S, 0)` waking seconds, no more than the
+  daytime `d`; one night, no more than the given's; the same fuel and drops)
+  dominates the given too, and a maximal such group is kept: what prunes it
+  is either overnight, and then dominates the given as well, or daytime, and
+  then its own one-night variant does. So on those menus pruning loses no
+  optimum. On an arbitrary menu the pruned model is still a restriction, so
+  every plan it returns is feasible, but it may lose the optimum.
 - **Classes and bounds.** Duration classes are keyed by the pair (seconds,
   nights). A class's per-slot bound is the smaller of its time bound and
   `floor(N / nights)`. `boundsFollowFromRows` accepts a group that spends a
@@ -665,7 +685,7 @@ What else changes when `W` is present:
 
 **With sleep.** Under a sleep window launches wait for wake-up, so a slot's
 offsets are not prefix sums of its seconds and the pair above stops being exact.
-Section 13 is how the two combine; it used to be refused outright.
+Section 13 is how the two combine.
 
 ## 12. One timeline for every plan
 
@@ -719,11 +739,10 @@ A problem that states nights without a sleep window (section 9's relaxation
 alone, which the app never sends) gets the same back-to-back calendar in waking
 seconds: with no day, nothing times its nights, which ride along as data.
 
-This replaced a second packer. The calendar is the arrangement the plan was
-accepted on, so `optimizeFull` reads every plan's slot summaries off it; it used
-to repack a sleep-free plan's totals with its own exact packer (`packing.ts`,
-now gone), which could report a different arrangement from the one the MILP
-certified, and knew neither nights nor the window.
+There is no second packer. The calendar is the arrangement the plan was
+accepted on, so `optimizeFull` reads every plan's slot summaries off it. A
+packer of its own, repacking a plan's totals, could report an arrangement other
+than the one the MILP certified, and would know neither nights nor the window.
 
 ## 13. The 2x window with a sleep window
 
@@ -755,49 +774,34 @@ iff its `launchAt` is at most `E` (both directions since section 16); launches g
 one block at a time. Everything here is how the MILP and the layout get plans
 that keep it.
 
-**Rows.** Write `A = 86400 - S` for the waking window and `lambda(E)` for the
-last waking instant at or before `E` (`days.ts`, `lastWakingInstant`): `E` itself
-when it falls in a waking window, the bedtime before it when it falls in a night.
-`window_k` becomes
+**Rows.** Write `lambda(E)` for the last waking instant at or before `E`
+(`days.ts`, `lastWakingInstant`): `E` itself when it falls in a waking window,
+the bedtime before it when it falls in a night. No launch goes up asleep, so a
+doubled launch goes up at or before `lambda(E)`. The window rows hold a slot's
+`event` launches to what lies before that instant: its waking seconds
+(`window_k`), its whole nights (`windownight_k`) and its days one by one
+(`windowfit`); section 14 states them and why each is valid, and sets the
+`event` preprocessing drop and class bounds that follow from them.
+`overhang_k` is unchanged. Without a sleep window the waking seconds are `E`,
+there is no whole night and no fit row: section 11's rows exactly.
 
-```
-sum over event classes  (seconds + nights * S) * n[c][k]  <=  lambda(E)
-```
+_The labelling the window rows rest on._ Take any calendar the verifier passes,
+and one slot of it. Launch times in a slot only increase, so the doubled
+launches are a prefix `1..j` of the slot's launches. Label `1..j-1` `event` and
+`j` the `overhang`. Each block of `1..j-1` ends before the next launch starts,
+so they are disjoint intervals inside `[0, launchAt_j]`, and `launchAt_j <=
+lambda(E)`, since that launch is doubled and goes up awake. The labelling uses
+only options on the menu: a block inside `[0, lambda(E)]` has waking seconds at
+most `E`, which is the menu's own condition for an `event` copy. Section 14
+reads those blocks' waking seconds, nights and days against its rows; section 16
+flies the same labelling.
 
-and `overhang_k` is unchanged. An `event` launch is charged its **block**, the
-wall-clock seconds it holds its slot for (`model.ts`, `blockSeconds`), and the
-budget is `Model.eventWindowBudget`. Without a sleep window the block is the
-seconds and `lambda(E) = E`, which is section 11's row exactly.
-
-_Validity._ Take any calendar the verifier passes, and one slot of it. Launch
-times in a slot only increase, so the doubled launches are a prefix `1..j` of
-the slot's launches. Label `1..j-1` `event` and `j` the `overhang`. Each block
-of `1..j-1` ends before the next launch starts, so they are disjoint intervals
-inside `[0, launchAt_j]` and their lengths sum to at most `launchAt_j`. That
-launch is doubled, so `launchAt_j <= E`, and it goes up awake, so
-`launchAt_j <= lambda(E)`. Both rows hold. The labelling uses only options on
-the menu: a block of at most `lambda(E) <= E` has waking seconds at most `E`,
-which is the menu's own condition for an `event` copy. So the rows cut off no
-real schedule. The same argument bounds each `event` block by `lambda(E)` on
-its own, which is why preprocessing now drops an `event` option whose **block**
-exceeds the budget, and why an `event` class's per-slot bound is
-`floor(lambda(E) / block)` and its group's `slots` times that. Section 11's
-bounds, `floor(E / seconds)`, were still valid under sleep (`seconds <= block`
-and `lambda(E) <= E`) but weaker, and left a zero-second overnight `event`
-copy, which still holds its slot through a night, unbounded; the `overhang`
-bound of 1 needs no change.
-
-_What is relaxed._ The row charges blocks and nothing else: the waiting a
-daytime launch does for wake-up, and a night no block covers, are free in it.
-Three 10-hour launches against a 30-hour window pass it (20 hours of `event`
-blocks and the overhang), but real days start them at 0:00, 24:00 and 48:00. So
-with a sleep window the rows over-promise, as section 9's night budget does,
-and are exact only without one. Nothing in the model proves a doubled launch
-starts inside the window; the layout and the verifier do.
-
-Section 14 has since replaced `window_k` with stronger rows that also count
-the window's nights and its days one by one; the argument above is the one
-section 14's builds on.
+_What is relaxed._ The rows pool what lies before `lambda(E)` and place no
+launch on a day: the waiting a daytime launch does for wake-up is free in them
+(section 14, "Still relaxed"). So with a sleep window they over-promise, as
+section 9's night budget does, and are exact only without one. Nothing in the
+model proves a doubled launch starts inside the window; the layout and the
+verifier do.
 
 **Twins.** Each doubled group carries `twin`, the normal group its launches are
 flown as when they miss the window (`model.ts`, `linkTwins`): the group holding
@@ -808,7 +812,11 @@ are positive), but dominance can. Then the first kept normal group, in group
 order, that dominates the pruned twin stands in: it flies in the same launch
 slot in no more seconds, nights or fuel on any axis, so the timeline still
 stands and every budget still holds, and it yields at least what the twin would.
-One survives, since dominance is a strict partial order (section 1). A menu
+One survives, since dominance is a strict partial order (section 1). Only a
+hand-built menu reaches the stand-in: on a menu from `capacityVariants`, when a
+twin is pruned its doubled copies are pruned by the dominator's copies, which
+cost the same and yield twice as much. It is kept because the solver takes any
+menu, and `tests/unit/window-sleep.spec.ts` builds one that reaches it. A menu
 with no normal copy at all (a caller's choice; neither generator makes one) gives
 `twin = -1`, and such a launch is trimmed rather than demoted.
 
@@ -843,7 +851,7 @@ ordering on top, applied only when a slot holds doubled launches:
 
 All of these act only on a slot holding doubled launches, so a slot without one
 is laid out exactly as section 10 lays it out. They are one of the layouts the
-judge now chooses among for such a slot (section 14), no longer the only one.
+judge chooses among for such a slot (section 14).
 
 **Settle and demote.** Each slot, once laid out, is settled against the window
 (`layout.ts`, `settle`). Launches of equal seconds and nights hold the slot
@@ -897,14 +905,12 @@ in window order and taking off early (above) were added after the first combined
 run: they cut the drawn run's demotions from 77 launches to 18 and its
 violations from 10 to 6, with mean log10(joint) unchanged at -6.845.
 
-What still demoted was put down here to section 10's own day model: a
-variant's nights are fixed, so an overnight ship launched early still holds
-every night it was cut for, and a daytime 1x launch the greedy has nowhere else
-to put can sit before a doubled ship. Measured (section 14), that was the
-smaller part. Most demotions came from the rows, which charged an event launch
-nothing for waiting for wake-up, and from the layout, which fell back to
-section 10's order whenever that placed more seconds, however many doubled
-launches it pushed out of the window.
+Section 14 measured where the remaining demotions came from. Section 10's day
+model (a variant's nights are fixed, so an overnight ship launched early still
+holds every night it was cut for) was the smaller part. Most came from the rows,
+which charged an event launch nothing for waiting for wake-up, and from the
+layout, which fell back to section 10's order whenever that placed more seconds,
+however many doubled launches it pushed out of the window.
 
 ## 14. Promise and delivery under sleep
 
@@ -920,7 +926,8 @@ a layout the judge chooses, and a timeline that uses the waking time a section 1
 connector leaves idle.
 
 **What was wrong, measured.** Arena seed 2006, 8 hours of sleep, a 48-hour
-window. The section 13 `window_k` row let one slot plan 48 one-hour event
+window. The first combined `window_k` row, which charged each event launch its
+block against `lambda(E)`, let one slot plan 48 one-hour event
 launches, and the window has 32 waking hours. Another slot planned an overhang
 over three nights, cut to 32 waking hours, beside a 12.96-hour daytime ship
 (seed 2001, a 1-hour window). That pair fits the slot and night rows. But the

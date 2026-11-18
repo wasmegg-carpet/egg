@@ -44,9 +44,9 @@ export interface PlanProblem {
   // (`optimizeFull`, via `../sleep.ts`).
   readonly nightsPerSlot?: number;
   // The day the night budget above is cut from, which the per-day fit rows, the layout and the verifier need
-  // and `nightsPerSlot` alone does not say (SPEC.md section 10). Absent means today's problem: no fit rows,
-  // no layout, no `calendar` in the result. Present, every plan returned has been laid out on real days
-  // and verified.
+  // and `nightsPerSlot` alone does not say (SPEC.md section 10). Absent means no day: no fit rows, and the
+  // calendar every plan carries is laid back to back (SPEC.md section 12). Present, every plan returned has been
+  // laid out on real days and verified.
   readonly sleep?: SleepWindow;
   // Seconds of a 2x mission capacity event left, as a window starting at the plan's t = 0: a prefix, never an
   // interval starting later. Absent or 0 means no window: no option may fly doubled, so one that carries a doubled
