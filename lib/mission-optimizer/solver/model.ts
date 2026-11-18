@@ -32,7 +32,15 @@ export interface Group {
   // group that dominates the twin. -1 for a normal group, and for a doubled one whose twin is not on the menu at
   // all, which the layout then trims rather than demotes. See SPEC.md section 13.
   twin: number;
+  // The group a launch of this one is flown as when it goes up inside the 2x window as an `event` launch, and as
+  // the slot's `overhang`, the reverse of `twin` (SPEC.md section 16): for a doubled group, itself in its own
+  // variant and the same flight's other doubled group in the other; for a normal group, its own doubled copy or,
+  // when that was pruned or never on the menu, the first kept group of that variant that dominates the copy it
+  // would have been. -1 where there is neither.
+  copy: Record<DoubledVariant, number>;
 }
+
+export type DoubledVariant = Exclude<CapacityVariant, 'normal'>;
 
 export interface Model {
   // Sorted by node id; `requestedOrder` maps back to the caller's order.
@@ -266,15 +274,19 @@ function pruneDominated(groups: readonly Group[], timeCapacitySeconds: number, n
 // Whether `normal` is the same flight as the doubled group `doubled` at 1x: the same fuel, seconds and nights, and
 // exactly half of every drop. Doubling is exact in floating point, so this is an equality test, as the group key is.
 function isTwin(normal: Group, doubled: Group): boolean {
-  const same = (a: readonly number[], b: readonly number[], factor: number) =>
-    a.length === b.length && a.every((x, i) => x * factor === b[i]);
+  return normal.variant === 'normal' && sameFlight(normal, doubled, 2);
+}
+
+// Whether `b` flies what `a` does, with every drop `factor` times as large: the same fuel, seconds and nights.
+function sameFlight(a: Group, b: Group, factor: number): boolean {
+  const same = (x: readonly number[], y: readonly number[], f: number) =>
+    x.length === y.length && x.every((v, i) => v * f === y[i]);
   return (
-    normal.variant === 'normal' &&
-    normal.timeSeconds === doubled.timeSeconds &&
-    normal.nights === doubled.nights &&
-    same(normal.fuelFractions, doubled.fuelFractions, 1) &&
-    same(normal.yieldByItem, doubled.yieldByItem, 2) &&
-    same(normal.legendaryByTarget, doubled.legendaryByTarget, 2)
+    a.timeSeconds === b.timeSeconds &&
+    a.nights === b.nights &&
+    same(a.fuelFractions, b.fuelFractions, 1) &&
+    same(a.yieldByItem, b.yieldByItem, factor) &&
+    same(a.legendaryByTarget, b.legendaryByTarget, factor)
   );
 }
 
@@ -283,6 +295,35 @@ function isTwin(normal: Group, doubled: Group): boolean {
 // stands in, which flies in the same launch slot in no more seconds, nights or fuel and yields at least as much,
 // and one always survives, since the relation is a strict partial order (SPEC.md section 1). Only within the
 // normal variant, as dominance itself is.
+// Sets `copy` on every kept group (SPEC.md section 16). A doubled group's copies are exact: the same flight in the
+// other doubled variant, or nothing, since relabelling a doubled launch changes no yield. A normal group's are its own
+// doubled copies when they were kept; otherwise the first kept group of that variant, in group order, that dominates
+// the copy it would have had, which flies in the same launch slot in no more seconds, nights or fuel on any axis and
+// yields at least as much. Unlike a twin's stand-in it need not bound its own columns: it is chosen after the MILP.
+function linkCopies(kept: Group[]): void {
+  kept.forEach(grp => {
+    for (const variant of ['event', 'overhang'] as const) {
+      if (grp.variant === variant) {
+        grp.copy[variant] = kept.indexOf(grp);
+        continue;
+      }
+      const factor = grp.variant === 'normal' ? 2 : 1;
+      const own = kept.findIndex(other => other.variant === variant && sameFlight(grp, other, factor));
+      if (own >= 0 || grp.variant !== 'normal') {
+        grp.copy[variant] = own;
+        continue;
+      }
+      const wouldBe: Group = {
+        ...grp,
+        variant,
+        yieldByItem: grp.yieldByItem.map(y => 2 * y),
+        legendaryByTarget: grp.legendaryByTarget.map(y => 2 * y),
+      };
+      grp.copy[variant] = kept.findIndex(other => other.variant === variant && dominates(other, wouldBe));
+    }
+  });
+}
+
 function linkTwins(all: readonly Group[], kept: Group[], timeCapacitySeconds: number, nightsPerSlot: number): void {
   const index = new Map(kept.map((grp, g) => [grp, g]));
   for (const grp of kept) {
@@ -506,6 +547,7 @@ export function buildModel(raw: PlanProblem): Model {
       cap: cand.cap,
       members: [cand.index],
       twin: -1,
+      copy: { event: -1, overhang: -1 },
     });
   }
   for (const grp of groups) grp.members.sort((a, b) => a - b);
@@ -514,6 +556,7 @@ export function buildModel(raw: PlanProblem): Model {
   // bound that stays an over-statement of what the remaining ones can supply.
   const kept = pruneDominated(groups, timeCap, nightsCap);
   linkTwins(groups, kept, timeCap, nightsCap);
+  linkCopies(kept);
 
   return {
     sortedTargets: targets,

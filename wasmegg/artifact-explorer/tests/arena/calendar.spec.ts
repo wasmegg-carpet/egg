@@ -114,6 +114,31 @@ describe('calendarFaults with a sleep window and a 2x window', () => {
     expect(calendarFaults(cal, doubledMenu, [0, 2, 0], both).join('\n')).toMatch(/past the 2x window/);
   });
 
+  it('rejects a 1x launch inside the window that the menu could have doubled, by its place in the slot', () => {
+    const menu = [
+      { id: 'short', actualTime: 2 * H, variant: 'normal' },
+      { id: 'short::event', actualTime: 2 * H, variant: 'event' },
+      { id: 'short::overhang', actualTime: 2 * H, variant: 'overhang' },
+      { id: 'bare', actualTime: 2 * H, variant: 'normal' },
+    ];
+    const window: CalendarDay = { sleepSeconds: 0, horizonSeconds: 20 * H, slots: 1, eventWindowSeconds: 3 * H };
+    const go = (option: number, launchAt: number) => ({ option, optionId: menu[option].id, launchAt });
+    // Event at 0:00, overhang at 2:00 (the last inside), 1x after the window: the rule both ways.
+    expect(calendarFaults([[go(1, 0), go(2, 2 * H), go(0, 4 * H)]], menu, [1, 1, 1, 0], window)).toEqual([]);
+    // 1x at 0:00 with a doubled launch after it inside the window: it could have been an event launch.
+    expect(calendarFaults([[go(0, 0), go(2, 2 * H)]], menu, [1, 0, 1, 0], window).join('\n')).toMatch(
+      /1x inside the 2x window, as short::event could/
+    );
+    // 1x as the last launch inside: it could have been the overhang.
+    expect(calendarFaults([[go(1, 0), go(0, 2 * H)]], menu, [1, 1, 0, 0], window).join('\n')).toMatch(
+      /as short::overhang could/
+    );
+    // An option with no doubled copy on the menu may fly 1x anywhere, and a launch at the window's very end is not
+    // held to it.
+    expect(calendarFaults([[go(3, 0), go(1, 2 * H)]], menu, [0, 1, 0, 1], window)).toEqual([]);
+    expect(calendarFaults([[go(0, 3 * H)]], menu, [1, 0, 0, 0], window)).toEqual([]);
+  });
+
   it('a window closing in the night leaves bedtime as the last doubled launch', () => {
     const closingAsleep = { ...both, eventWindowSeconds: 20 * H };
     expect(calendarFaults([[at(1, 0), at(2, W)]], doubledMenu, [0, 1, 1], closingAsleep)).toEqual([]);

@@ -14,7 +14,7 @@ import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } 
 import { buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
 import { layOutPlan, timelineOf } from './layout';
-import { slotFault } from './verify';
+import { doubledCopiesOnMenu, slotFault } from './verify';
 
 export interface Tuning {
   maxNodes: number;
@@ -140,14 +140,18 @@ const NO_LAYOUT: LayoutStats = {
 function emptyLaid(model: Model): Laid {
   return {
     calendar: Array.from({ length: model.slots }, () => []),
-    layoutStats: { ...NO_LAYOUT, ...(model.day !== null && model.eventWindowSeconds > 0 && { launchesDemoted: 0 }) },
+    layoutStats: {
+      ...NO_LAYOUT,
+      ...(model.day !== null && model.eventWindowSeconds > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
+    },
   };
 }
 
 // The last gate before a plan leaves the solver, and the one that makes "only verified plans are reported" a
 // property of the code rather than of the layout being right: every launch is checked against the option it
-// names (not the figures the layout wrote down), every slot against the sleep rule and the event window, and
-// the calendar's launches against the allocation, count for count. A plan that fails is not returned at all.
+// names (not the figures the layout wrote down), every slot against the sleep rule and the event window both ways
+// (a doubled launch inside it, and no 1x launch inside it that the menu could have doubled), and the calendar's
+// launches against the allocation, count for count. A plan that fails is not returned at all.
 export function assertVerified(
   problem: PlanProblem,
   model: Model,
@@ -161,6 +165,7 @@ export function assertVerified(
   if (calendar.length !== model.slots)
     fail(`${calendar.length} slot(s) in the calendar, ${model.slots} in the problem`);
   const flown = new Array<number>(allocation.length).fill(0);
+  const copies = doubledCopiesOnMenu(problem.options);
   calendar.forEach((launches, k) => {
     for (const l of launches) {
       const opt = problem.options[l.option];
@@ -173,7 +178,12 @@ export function assertVerified(
       }
       flown[l.option]++;
     }
-    const fault = slotFault(launches, sleep, model.eventWindowSeconds);
+    const timed = launches.map(l => ({
+      ...l,
+      eventCopy: copies[l.option].event,
+      overhangCopy: copies[l.option].overhang,
+    }));
+    const fault = slotFault(timed, sleep, model.eventWindowSeconds);
     if (fault !== null) fail(`slot ${k}: ${fault}`);
   });
   for (let i = 0; i < allocation.length; i++) {
@@ -291,14 +301,17 @@ export function solveWith(
   // Every plan is laid out into the calendar it is returned with. Without a sleep window that is exact and trims
   // nothing (SPEC.md section 12). With one the MILP's plan is a relaxation of real days (SPEC.md section 9): what
   // does not fit is trimmed, and a doubled launch it cannot start inside the 2x window is flown at 1x (SPEC.md
-  // section 13), and only then judged again, the way the plan above was, against the empty one. Everything
-  // reported from here describes the plan as laid out.
+  // section 13). With or without one, a 1x launch that goes up inside the 2x window is flown doubled (section 16).
+  // The plan is then judged again, the way the plan above was, against the empty one. Everything reported from here
+  // describes the plan as laid out.
   const judge = (c: readonly number[]) => evaluateCounts(model, c, STEERING_PRECISION).logJoint;
   const laid = layOutPlan(model, layout, solution.columnValues, counts, problem.options, solve, judge);
   laid.stats.plannedLogJoint = planned;
   let keepLaid: boolean;
   try {
-    keepLaid = (laid.stats.launchesTrimmed === 0 && !laid.stats.launchesDemoted) || judge(laid.counts) > judge(empty);
+    keepLaid =
+      (laid.stats.launchesTrimmed === 0 && !laid.stats.launchesDemoted && !laid.stats.launchesPromoted) ||
+      judge(laid.counts) > judge(empty);
   } catch {
     keepLaid = false;
   }

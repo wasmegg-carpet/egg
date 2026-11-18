@@ -222,6 +222,8 @@ export interface LayoutTally {
   // the plans with any; 0 for a candidate that reports none.
   plansDemoted: number;
   launchesDemoted: number;
+  // 1x launches the candidate found going up inside the 2x window and flew doubled; 0 for one that reports none.
+  launchesPromoted: number;
 }
 
 const layoutTallies = new WeakMap<Planner, LayoutTally>();
@@ -237,6 +239,7 @@ function emptyTally(): LayoutTally {
     verifierRetries: 0,
     plansDemoted: 0,
     launchesDemoted: 0,
+    launchesPromoted: 0,
   };
 }
 
@@ -261,6 +264,7 @@ function tallyLayout(planner: Planner, result: PlanResult): void {
   t.verifierRetries += n(stats.verifierRetries);
   if (n(stats.launchesDemoted) > 0) t.plansDemoted++;
   t.launchesDemoted += n(stats.launchesDemoted);
+  t.launchesPromoted += n(stats.launchesPromoted);
   layoutTallies.set(planner, t);
 }
 

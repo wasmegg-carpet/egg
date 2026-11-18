@@ -58,8 +58,9 @@ reporting a plan whose craft accounting you did not work out yourself.
   and `nights` 1 (a short ship launched at bedtime) is not free: it uses a night.
   Only a launch costing neither is free.
 
-- **The window**, when `eventWindowSeconds` is present: a doubled launch goes
-  up at or before it. Stated by the calendar, below.
+- **The window**, when `eventWindowSeconds` is present: a launch is doubled if
+  and only if it goes up at or before it, since the game doubles whatever goes
+  up inside it. Stated by the calendar, below.
 
 - **Real days**, when `sleep` is present. A sleep-aware candidate returns
   `calendar` beside its allocation: per slot, its launches in launch order, each
@@ -77,10 +78,15 @@ reporting a plan whose craft accounting you did not work out yourself.
   on a calendar with `sleepSeconds` 0 and the slot as the horizon — launches back
   to back inside the slot — plus the window rule: a launch of an option the menu
   marks `event` or `overhang` must start at or before `eventWindowSeconds`, and
-  none may fly without a window. The rule reads the launch time and the menu's
-  variant, never a flag the candidate wrote, and has no notion of which doubled
-  launch is a slot's last. A window-on plan with no calendar fails. A calendar
-  returned for a problem with neither window is verified all the same.
+  none may fly without a window. Conversely a launch of a `normal` option that
+  starts inside the window, by more than the tolerance, fails when the menu
+  holds a doubled copy it could have flown there: the `overhang` copy
+  (`<id>::overhang`) for the slot's last launch at or before the window's end,
+  the `event` copy (`<id>::event`) for an earlier one, the ids this harness's
+  `capacity.ts` gives them. The rule reads the launch time and the menu's
+  variants and ids, never a flag the candidate wrote. A window-on plan with no
+  calendar fails. A calendar returned for a problem with neither window is
+  verified all the same.
 
 The harness decides this with its own packer (`pack-feasibility.ts`:
 `packFeasible`, and `packFeasibleBudgets` once any launch in the plan spends a

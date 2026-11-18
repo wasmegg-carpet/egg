@@ -8,7 +8,7 @@ import { buildOaMilp, effectiveQs, layoutOf, scaleLps } from 'lib/mission-optimi
 import { DEFAULT_TUNING, assertVerified, solveWith } from 'lib/mission-optimizer/solver/solve';
 import { loadHighs } from 'lib/mission-optimizer/solver/highs';
 import { normalizeProblem, type PlanProblem, type PlanResult } from 'lib/mission-optimizer/solver/types';
-import { slotFault } from 'lib/mission-optimizer/solver/verify';
+import { doubledCopiesOnMenu, slotFault } from 'lib/mission-optimizer/solver/verify';
 import type { CapacityVariant, LaunchOption } from 'lib/mission-optimizer/types';
 import { craftDag, makeOpt } from './spec-helpers';
 
@@ -257,7 +257,6 @@ describe('planning through a 2x capacity window', () => {
     const problem = problemOf(options, { eventWindowSeconds: window });
     const result = solveWith(problem, solve, DEFAULT_TUNING);
     expect(flown(result)).toEqual(result.allocation);
-    let doubledTotal = 0;
     for (const slot of result.calendar!) {
       const variants = slot.map(l => options[l.option].variant);
       // Event, then overhang, then normal: the window closes at one cut in the list.
@@ -269,10 +268,12 @@ describe('planning through a 2x capacity window', () => {
         if (l.doubled) expect(l.launchAt).toBeLessThanOrEqual(window);
       }
       expect(slotFault(slot, { sleepSeconds: 0, horizonSeconds: 1000 }, window)).toBeNull();
-      doubledTotal += slot.filter(l => l.doubled).length;
+      // Doubling costs nothing, so every slot fills its window: doubled exactly when it goes up inside it, and the
+      // slot's last doubled launch still in the air when the window closes.
+      for (const l of slot) expect(l.doubled).toBe(l.launchAt <= window);
+      const lastDoubled = slot.filter(l => l.doubled).at(-1)!;
+      expect(lastDoubled.launchAt + lastDoubled.wakingSeconds).toBeGreaterThanOrEqual(window);
     }
-    // Doubling costs nothing, so every slot fills its window.
-    expect(doubledTotal).toBeGreaterThanOrEqual(3);
   });
 
   it('is never worse off for a longer window', async () => {
@@ -307,6 +308,37 @@ describe('the verifier holds doubled launches to the window', () => {
     expect(slotFault([launch(0, true)], day, 0)).toMatch(/doubled with no 2x window/);
   });
 
+  it('rejects a 1x launch inside the window that the menu could have doubled there, and nothing else', () => {
+    const copies = { eventCopy: true, overhangCopy: true };
+    const plain = (launchAt: number) => ({ ...launch(launchAt, false), ...copies });
+    // Event at 0, then a 1x launch at 50 that is the last inside a window of 60: it could have been the overhang.
+    expect(slotFault([launch(0, true), plain(50)], day, 60)).toMatch(/at 1x inside the 2x window/);
+    // A 1x launch first, a doubled overhang after it: it could have been an event launch.
+    expect(slotFault([plain(0), launch(50, true)], day, 60)).toMatch(/at 1x inside the 2x window/);
+    // Held to its own copy for its place: an event copy alone does not make the last launch inside a fault.
+    expect(slotFault([launch(0, true), { ...plain(50), overhangCopy: false }], day, 60)).toBeNull();
+    expect(slotFault([{ ...plain(0), eventCopy: false }, launch(50, true)], day, 60)).toBeNull();
+    // At the window's very end, or past it, a 1x launch is not held to it; with no copy on the menu, never.
+    expect(slotFault([launch(0, true), plain(60)], day, 60)).toBeNull();
+    expect(slotFault([launch(0, false), launch(50, false)], day, 60)).toBeNull();
+  });
+
+  it("reads a launch's doubled copies off the menu by its numbers", () => {
+    const base = makeOpt(1, 30, [['B', 1]]);
+    const options = [...withDoubles([base], 60), makeOpt(1, 30, [['B', 3]]), { ...makeOpt(1, 90, [['B', 1]]) }];
+    expect(doubledCopiesOnMenu(options)).toEqual([
+      { event: true, overhang: true },
+      { event: false, overhang: false },
+      { event: false, overhang: false },
+      { event: false, overhang: false },
+      { event: false, overhang: false },
+    ]);
+    expect(doubledCopiesOnMenu(withDoubles([makeOpt(1, 90, [['B', 1]])], 60))[0]).toEqual({
+      event: false,
+      overhang: true,
+    });
+  });
+
   it('the solver refuses a window plan whose calendar breaks it, whoever produced it', async () => {
     const solve = await loadHighs();
     const options = withDoubles([makeOpt(1, 30, [['B', 1]])], 60);
@@ -314,13 +346,14 @@ describe('the verifier holds doubled launches to the window', () => {
     const result = solveWith(problem, solve, DEFAULT_TUNING);
     const model = buildModel(problem);
     expect(() => assertVerified(problem, model, result.allocation, result.calendar!)).not.toThrow();
-    // The same launches, the normal ones first: every doubled launch now goes up after the window.
+    // The same launches, the normal ones first: every doubled launch now goes up after the window, and a 1x launch
+    // goes up inside it. The first fault in the slot is the 1x launch at t = 0.
     const late = result.calendar!.map(slot => {
       const reordered = [...slot.filter(l => !l.doubled), ...slot.filter(l => l.doubled)];
       let at = 0;
       return reordered.map(l => ({ ...l, launchAt: (at += l.wakingSeconds) - l.wakingSeconds }));
     });
-    expect(() => assertVerified(problem, model, result.allocation, late)).toThrow(/2x window closes/);
+    expect(() => assertVerified(problem, model, result.allocation, late)).toThrow(/at 1x inside the 2x window/);
     const relabelled = result.calendar!.map(slot => slot.map(l => ({ ...l, doubled: false })));
     expect(() => assertVerified(problem, model, result.allocation, relabelled)).toThrow(/as doubled=false/);
   });

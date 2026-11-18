@@ -433,7 +433,9 @@ describe('the layouts the judge chooses among', () => {
   it('keeps doubled launches inside the window when the 1x order would pack more seconds', async () => {
     // One waking day. Doubled first, ten 1-hour launches and a 5-hour ship fill fifteen hours; the three 5-hour
     // ships first would fill sixteen and push nine doubled launches out. Section 13 kept whichever placed more
-    // seconds; the judge keeps the doubled ones, worth two each against a 5-hour ship's three.
+    // seconds; the judge keeps the doubled ones, worth two each against a 5-hour ship's three. The 5-hour ship that
+    // follows them goes up at 10:00, the window's last instant, so it is doubled too: the slot's overhang, the
+    // 1-hour overhang before it relabelled an event launch (section 16).
     const options = doubles([opt(1, 0, 1), opt(5, 0, 3)], 10 * H);
     const problem = problemOf(options, DAY_SECONDS, 10 * H);
     const perSlot = new Array<number>(options.length).fill(0);
@@ -441,8 +443,12 @@ describe('the layouts the judge chooses among', () => {
     perSlot[options.findIndex(o => o.actualTime === H && o.variant === 'overhang')] = 1;
     perSlot[options.findIndex(o => o.actualTime === 5 * H && o.variant === 'normal')] = 3;
     const { laid } = await laidOut(problem, perSlot);
-    expect(laid.stats.launchesDemoted).toBe(0);
-    for (const slot of laid.calendar) expect(slot.filter(l => l.doubled).length).toBe(10);
+    expect(laid.stats).toMatchObject({ launchesDemoted: 0, launchesPromoted: 3 });
+    for (const slot of laid.calendar) {
+      expect(slot.filter(l => l.doubled).length).toBe(11);
+      for (const l of slot) expect(l.doubled).toBe(l.launchAt <= 10 * H);
+      expect(slot.filter(l => variantOf(problem, l.option) === 'overhang').map(l => l.launchAt)).toEqual([10 * H]);
+    }
   });
 });
 

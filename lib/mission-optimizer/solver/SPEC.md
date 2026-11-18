@@ -682,11 +682,16 @@ no layout MILP is built, and `layoutStats` is not reported.
 
 The verifier is the same one (`verify.ts`), handed `sleepSeconds` 0 and the slot
 as the horizon, under which its rules reduce to "back to back inside the slot".
-It gains one rule for the window: a launch marked `doubled` goes up at or
+It gains one rule for the window, in both directions: a launch is doubled if
+and only if it goes up at or before `W`. A launch marked `doubled` goes up at or
 before `W` (within `VERIFY_TOL_SECONDS`), and with no window there is no doubled
-launch. That one predicate is the whole window rule; the `event` / `overhang`
-split exists only to state it linearly in the MILP. `assertVerified` checks each
-launch's `doubled` against its option's variant, as it checks seconds and nights.
+launch; a 1x launch inside the window is a fault when the menu could have flown
+it doubled there (section 16). That predicate is the whole window rule; the
+`event` / `overhang` split exists only to state it linearly in the MILP.
+`assertVerified` checks each launch's `doubled` against its option's variant, as
+it checks seconds and nights. The back-to-back order puts every doubled launch
+inside the window; a 1x launch can land there too, and section 16's promotion
+flies it doubled.
 A no-sleep slot the verifier rejects is a bug and throws, rather than being
 trimmed as a sleep-aware one is.
 
@@ -716,8 +721,8 @@ sleep window, and the `inside` and `sliver` regimes alone gave hash-identical
 matrices and results before and after the change.
 
 The ground truth is section 12's one predicate, which `verify.ts` and the arena's
-`calendar.ts` already state for the combined case: a launch earns doubled yield
-iff its `launchAt` is at most `E`; launches go up only while awake; a slot flies
+`calendar.ts` state for the combined case: a launch earns doubled yield
+iff its `launchAt` is at most `E` (both directions since section 16); launches go up only while awake; a slot flies
 one block at a time. Everything here is how the MILP and the layout get plans
 that keep it.
 
@@ -1059,3 +1064,71 @@ and their plan is the one they always got. `tests/unit/saturated-target.spec.ts`
 holds the reported case to a plan near certainty under each setting. The added
 cuts are ordinary tangents, so the envelope still over-estimates `g` (section 3),
 and the judge still decides (section 5).
+
+## 16. Doubled if and only if inside the window
+
+The game doubles every launch that goes up inside the window, whatever the plan
+says. So the rule is two-sided: a launch is doubled **if and only if** its
+`launchAt` is at most `E`. Sections 12 and 13 held only one side, a doubled
+launch inside the window. `settle` demotes a doubled launch that misses it but
+never doubled a 1x launch that made it, and the MILP is indifferent between the
+two whenever the objective saturates. Over the review's 240-instance fuzz
+(synthetic menus through `capacityVariants`), 1 plan in 80 with the window alone
+and 6 in 80 with sleep as well flew 1x launches inside the window, and their
+timelines showed un-badged launches above the "2x capacity ends" divider.
+
+**Promotion.** After `settle` on a sleep-aware slot, and after the back-to-back
+layout on one without sleep, `promote` (`layout.ts`) labels the slot's launches
+inside the window canonically: the last one is the slot's `overhang`, the
+earlier ones `event` launches. Each earlier one ends before the last one goes up,
+which is at most `E`, so their seconds sum to at most `E` and each has an `event`
+copy on a menu from `capacityVariants` (whose condition is `actualTime <= E`);
+the last always has an `overhang` copy. A 1x launch is flown as its group's
+`copy` of that variant (`model.ts`, `linkCopies`, the reverse of `twin`), the
+group chosen by the judge when its class has more than one with a copy; only a
+launch the menu itself could have doubled there is promoted. A doubled launch
+with the other label is relabelled to the same flight's other copy, which
+changes no yield. When an earlier `overhang` has no `event` copy to become, the
+last launch takes the `event` label instead if it can, so the slot keeps one
+`overhang`. Launch times do not move, so the slot verifies as it did.
+
+**When the model has no copy.** A normal group's own doubled copy can be missing
+from the model while the menu has it. Dominance can prune it; on a menu from
+`capacityVariants` the dominator then has a normal twin that dominates the group
+itself and prunes it too, unless that twin's columns are not bounded by the rows
+(`boundsFollowFromRows`), as a zero-second daytime launch's are not while its
+`overhang` copy's are. Preprocessing can drop
+it: under sleep an `event` copy whose waking seconds or nights exceed the
+window's (section 14), which a launch can only need when the calendar flies it
+through fewer nights than its variant counts. `copy` then names the first kept
+group of that variant that dominates the copy it would have had: no more
+seconds, nights or fuel, at least every drop, so its block is no longer and the
+slot still verifies. With no such group the launch stays 1x, and a last pass
+before the calendar is written either flies it as a group of its class the menu
+holds no copy of for that place, or, when none is left, drops it, the judge
+choosing the group, counted in `launchesTrimmed`. Dropping a launch only frees
+its slot. Neither branch fired over the review's fuzz (sleep, window and both).
+
+**The joint.** A promotion moves one launch onto the same flight at twice every
+drop, or onto a group that dominates that, at no more fuel. More supply never
+lowers the judge's optimum, so promotion cannot lower the joint. The plan is
+re-judged from the promoted counts as it is after trims and demotions (section
+10), and `layoutStats.launchesPromoted` counts promotions beside
+`launchesDemoted`. `tests/unit/window-promotion.spec.ts` holds a plan with
+nothing trimmed or demoted to at least what the MILP promised.
+
+**The verifier and the arena.** `slotFault` holds a 1x launch inside the window
+to the menu: it is a fault when the menu holds the same flight as an `overhang`
+(for the slot's last launch at or before `E`) or as an `event` launch (for an
+earlier one). `assertVerified` reads those copies off the menu's numbers
+(`doubledCopiesOnMenu`: equal seconds, nights and fuel, exactly twice every
+drop), never off the model. A 1x launch is held to this only a microsecond clear
+of `E`, where a doubled one is admitted a microsecond past it, so no launch at
+the edge has to be both. The arena's `calendar.ts` states the same rule
+independently, finding copies by the ids its own `capacity.ts` gives them. The
+canonical labels keep the arena's labelled packer satisfied (`event` seconds of
+a slot within `E`, one `overhang`), so `feasible` accepts a promoted plan, and
+D1, D2 and M3 test moves from it as before.
+
+**Measured.** The same 240-instance fuzz after the change: no 1x launch inside
+the window in any plan, no calendar fault from the arena's checker, no throw.

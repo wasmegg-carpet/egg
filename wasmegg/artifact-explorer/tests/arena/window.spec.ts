@@ -171,8 +171,11 @@ describe('C1 checks the calendar it was given', () => {
       [],
       [],
     ]);
-    expect(out.map(v => v.invariant)).toEqual(['C1-feasibility']);
-    expect(out[0].detail).toMatch(/flies doubled, past the 2x window/);
+    // Broken both ways: the 1x launch goes up inside the window, where the game doubles it, and the doubled one
+    // after it.
+    expect(out.map(v => v.invariant)).toEqual(['C1-feasibility', 'C1-feasibility']);
+    expect(out[0].detail).toMatch(/flies 1x inside the 2x window/);
+    expect(out[1].detail).toMatch(/flies doubled, past the 2x window/);
   });
 
   it('reads the window rule off the launch time, not the labels', () => {

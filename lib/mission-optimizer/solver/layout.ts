@@ -2,12 +2,13 @@
 // is real work: per slot, which waking window each daytime launch is flown in and when each overnight ship goes,
 // as launch times the verifier then checks, and what does not fit is trimmed, one launch at a time, by the
 // solver's own judge (SPEC.md section 10). Without one it is exact and trivial: a slot's launches back to back,
-// doubled ones first (SPEC.md section 12).
+// doubled ones first (SPEC.md section 12). Either way every launch that goes up inside the 2x window is then flown
+// doubled (SPEC.md section 16).
 
 import type { CapacityVariant, LaunchOption } from '../types';
 import type { DaySchedule } from './days';
 import { nCol, type Layout } from './milp';
-import type { Model } from './model';
+import type { DoubledVariant, Model } from './model';
 import {
   DAY_SECONDS,
   INF,
@@ -18,7 +19,7 @@ import {
   type MilpSolve,
   type SleepWindow,
 } from './types';
-import { slotFault, type TimedLaunch } from './verify';
+import { VERIFY_TOL_SECONDS, doubledCopiesOnMenu, slotFault, type TimedLaunch } from './verify';
 
 // A node limit and never a timeout, for SPEC.md section 7's reason: the layout decides what is trimmed, so a
 // clock here would make the plan a function of machine load.
@@ -71,6 +72,9 @@ interface SlotContext {
 interface ClassLaunch {
   cls: number;
   launchAt: number;
+  // The group this launch is flown as, when it has to be one in particular: a 1x launch inside the 2x window whose
+  // class has groups the menu could have doubled there and groups it could not (SPEC.md section 16).
+  group?: number;
 }
 
 // Ordered by flex, alternately largest and smallest so a long landing is followed by a short take-off, and, when
@@ -685,7 +689,7 @@ export function layOutPlan(
     layoutSolves: 0,
     marginResolves: 0,
     verifierRetries: 0,
-    ...(day !== null && window > 0 && { launchesDemoted: 0 }),
+    ...(day !== null && window > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
   };
   const groupsOf: number[][] = Array.from({ length: layout.classes }, () => []);
   for (let g = 0; g < layout.groups; g++) groupsOf[layout.classOf[g]].push(g);
@@ -795,6 +799,83 @@ export function layOutPlan(
     return out.filter((l): l is ClassLaunch => l !== null);
   };
 
+  const judged = () => {
+    try {
+      return judge(current);
+    } catch {
+      return -Infinity;
+    }
+  };
+
+  // Per group, whether the menu holds its flight at 2x as an `event` and as an `overhang` option: what the verifier
+  // holds a 1x launch inside the window to (SPEC.md section 16).
+  const menuCopies = doubledCopiesOnMenu(options);
+  const onMenu = (g: number, variant: DoubledVariant) => menuCopies[model.groups[g].members[0]][variant];
+  const inWindow = (l: ClassLaunch) => window > 0 && l.launchAt <= window + LAYOUT_TOL;
+
+  // Moves one launch from group `from` to group `to`, in `current`.
+  const move = (from: number, to: number) => {
+    current[from]--;
+    current[to]++;
+  };
+
+  // The reverse of `settle`: every launch inside the 2x window goes up doubled, since the game doubles it whatever
+  // the plan says (SPEC.md section 16). Labelled canonically: the slot's last launch inside the window is its
+  // `overhang` and the earlier ones are `event` launches. Each of those ends before the last one starts, so their
+  // seconds fit the window, as the window rows' argument has it (section 11). A 1x launch the menu could have doubled
+  // there is flown as its group's `copy` of that variant, the group chosen by the judge when its class has more than
+  // one; a doubled launch with the other label is relabelled to the same flight's other copy, which changes no yield,
+  // and keeps its label when there is none. The slot holds no more than one `overhang`: when an earlier one cannot
+  // be relabelled, the last launch takes the `event` label if it can. Launch times do not move, and a copy's block is
+  // never longer than its own (a stand-in dominates it), so the slot verifies as it did. Each promotion moves a
+  // launch onto the same flight, or one that dominates it, at twice the drops, so the judge's joint does not fall.
+  const promote = (launches: readonly ClassLaunch[]): ClassLaunch[] => {
+    const out = launches.slice();
+    const inside = out.flatMap((l, i) => (inWindow(l) ? [i] : []));
+    const relabel = (i: number, want: DoubledVariant): boolean => {
+      const { cls, launchAt } = out[i];
+      const variant = layout.classVariant[cls];
+      if (variant === want) return true;
+      if (variant !== 'normal') {
+        const g = groupsOf[cls].find(h => current[h] > 0 && model.groups[h].copy[want] >= 0);
+        if (g === undefined) return false;
+        const to = model.groups[g].copy[want];
+        move(g, to);
+        out[i] = { cls: layout.classOf[to], launchAt };
+        return true;
+      }
+      const pinned = out[i].group;
+      const candidates = (pinned === undefined ? groupsOf[cls] : [pinned]).filter(
+        g => current[g] > 0 && onMenu(g, want) && model.groups[g].copy[want] >= 0
+      );
+      if (candidates.length === 0) return false;
+      let best = candidates[0];
+      if (candidates.length > 1) {
+        let value = -Infinity;
+        for (const g of candidates) {
+          const to = model.groups[g].copy[want];
+          move(g, to);
+          const v = judged();
+          move(to, g);
+          if (v > value) [value, best] = [v, g];
+        }
+      }
+      const to = model.groups[best].copy[want];
+      move(best, to);
+      stats.launchesPromoted = (stats.launchesPromoted ?? 0) + 1;
+      out[i] = { cls: layout.classOf[to], launchAt };
+      return true;
+    };
+    if (inside.length === 0) return out;
+    const last = inside[inside.length - 1];
+    let overhangLeft = false;
+    for (const i of inside.slice(0, -1)) {
+      if (!relabel(i, 'event') && layout.classVariant[out[i].cls] === 'overhang') overhangLeft = true;
+    }
+    if (!(overhangLeft && relabel(last, 'event'))) relabel(last, 'overhang');
+    return out;
+  };
+
   // The slot columns and the group totals are tied by the class rows, so after rounding they agree; were they
   // ever not to, a slot launch with no group behind it is taken off the latest slot, and a group launch with
   // no slot behind it is trimmed.
@@ -824,7 +905,7 @@ export function layOutPlan(
     }));
   const bySlot: ClassLaunch[][] = [];
   for (let k = 0; k < model.slots && day === null; k++) {
-    const launches = backToBack(demand[k], layout);
+    const launches = promote(backToBack(demand[k], layout));
     const fault = verify(timedOf(launches), sleep, window);
     if (fault !== null) throw new Error(`layout: slot ${k} laid back to back fails verification: ${fault}`);
     bySlot.push(launches);
@@ -847,7 +928,7 @@ export function layOutPlan(
     for (;;) {
       const laid = layOutSlot(want, slotCtx, how);
       if (laid === null) return null;
-      const launches = settle(laid.launches);
+      const launches = promote(settle(laid.launches));
       if (verify(timedOf(launches), sleep, window) === null) return { launches, conns: laid.conns, heads: laid.heads };
       stats.verifierRetries++;
       const placed = new Array<number>(layout.classes).fill(0);
@@ -861,7 +942,13 @@ export function layOutPlan(
 
   // What a slot's attempt leaves behind, so the next attempt can start where it did and the best can be restored:
   // the plan's counts, and the statistics that describe that plan rather than the work of finding it.
-  const PLAN_STATS = ['launchesTrimmed', 'overnightTrimmed', 'verifierRetries', 'launchesDemoted'] as const;
+  const PLAN_STATS = [
+    'launchesTrimmed',
+    'overnightTrimmed',
+    'verifierRetries',
+    'launchesDemoted',
+    'launchesPromoted',
+  ] as const;
   const save = () => ({
     counts: current.slice(),
     stats: PLAN_STATS.map(key => stats[key]),
@@ -872,14 +959,6 @@ export function layOutPlan(
       if (saved.stats[i] !== undefined) stats[key] = saved.stats[i]!;
     });
   };
-  const judged = () => {
-    try {
-      return judge(current);
-    } catch {
-      return -Infinity;
-    }
-  };
-
   for (let k = 0; k < model.slots && ctx !== null; k++) {
     // Without a doubled launch on the slot there is one layout, section 10's.
     if (!demand[k].some((n, c) => n > 0 && ctx.doubled[c])) {
@@ -909,17 +988,61 @@ export function layOutPlan(
     bySlot.push(best!.launches);
   }
 
-  // Each class's launches go to its groups in group order, slot by slot; a group's launches are all flown as
-  // its first member, as `emit` reports them.
+  // A 1x launch still inside the window is one `promote` found no copy for in the model. It is flown as a group the
+  // menu holds no copy of for its place in the slot, as the verifier reads that place, when its class has one to
+  // spare; otherwise the menu could double it and the model cannot, and it leaves the plan, the judge choosing which
+  // of its class's groups gives up the launch (SPEC.md section 16). Removing a launch frees its slot, so the slot
+  // still verifies; it can change which launch is the slot's last inside the window, so this runs to a fixed point.
   const left = current.slice();
+  for (let changed = window > 0; changed; ) {
+    changed = false;
+    left.splice(0, left.length, ...current);
+    for (const launches of bySlot) for (const l of launches) delete l.group;
+    for (const launches of bySlot) {
+      let lastInside = -1;
+      launches.forEach((l, i) => l.launchAt <= window + VERIFY_TOL_SECONDS && (lastInside = i));
+      for (let i = 0; i < launches.length && !changed; i++) {
+        const l = launches[i];
+        if (layout.classVariant[l.cls] !== 'normal' || !(l.launchAt < window - VERIFY_TOL_SECONDS)) continue;
+        const want: DoubledVariant = i === lastInside ? 'overhang' : 'event';
+        const spare = groupsOf[l.cls].find(g => left[g] > 0 && !onMenu(g, want));
+        if (spare !== undefined) {
+          left[spare]--;
+          l.group = spare;
+          continue;
+        }
+        let best = -Infinity;
+        let gone = -1;
+        for (const g of groupsOf[l.cls]) {
+          if (!(left[g] > 0)) continue;
+          current[g]--;
+          const v = judged();
+          current[g]++;
+          if (gone < 0 || v > best) [best, gone] = [v, g];
+        }
+        if (gone < 0) throw new Error(`layout: class ${l.cls} has more launches than its groups`);
+        current[gone]--;
+        stats.launchesTrimmed++;
+        launches.splice(i, 1);
+        changed = true;
+      }
+      if (changed) break;
+    }
+  }
+
+  // Each class's launches go to its groups in group order, slot by slot, after the launches pinned to a group
+  // above; a group's launches are all flown as its first member, as `emit` reports them.
   const next = new Array<number>(layout.classes).fill(0);
   const calendar = bySlot.map(launches =>
     launches.map(l => {
       const members = groupsOf[l.cls];
-      while (next[l.cls] < members.length && left[members[next[l.cls]]] === 0) next[l.cls]++;
-      if (next[l.cls] >= members.length) throw new Error(`layout: class ${l.cls} has more launches than its groups`);
-      const g = members[next[l.cls]];
-      left[g]--;
+      let g = l.group;
+      if (g === undefined) {
+        while (next[l.cls] < members.length && left[members[next[l.cls]]] === 0) next[l.cls]++;
+        if (next[l.cls] >= members.length) throw new Error(`layout: class ${l.cls} has more launches than its groups`);
+        g = members[next[l.cls]];
+        left[g]--;
+      }
       const option = model.groups[g].members[0];
       return {
         option,

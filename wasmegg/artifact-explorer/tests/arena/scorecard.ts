@@ -237,7 +237,8 @@ export function formatScorecard(r: SweepResult): string {
       `    layout (candidate-reported, ${lt.solves} fresh sleep-on solve(s)): ${lt.plansTrimmed} plan(s) trimmed, ` +
         `${lt.launchesTrimmed} launch(es) dropped (${lt.overnightTrimmed} overnight), ${lt.layoutSolves} layout MILP(s) ` +
         `(${lt.marginResolves} margin re-solve(s)), ${lt.verifierRetries} verifier retr${lt.verifierRetries === 1 ? 'y' : 'ies'}` +
-        `, ${lt.plansDemoted} plan(s) demoted, ${lt.launchesDemoted} doubled launch(es) flown at 1x`
+        `, ${lt.plansDemoted} plan(s) demoted, ${lt.launchesDemoted} doubled launch(es) flown at 1x` +
+        `, ${lt.launchesPromoted} 1x launch(es) inside the window flown doubled`
     );
   }
 
