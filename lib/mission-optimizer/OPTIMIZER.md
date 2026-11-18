@@ -210,18 +210,25 @@ missing. Four things downstream read the plan differently because of it:
 
 - _Slots._ `slots`, `timeUnitsUsed` and `runningTimeSeconds` are read off the
   calendar, the arrangement the plan was accepted on, for every plan; nothing
-  repacks a plan's totals. With a sleep window the makespan is wall-clock:
-  where the last-finishing slot's calendar ends, nights included. The card's idle figure is still the horizon minus the
-  busiest slot's real flight time, so with sleep it also counts the rest of a
-  night after a ship has landed.
+  repacks a plan's totals. The layout balances the slots, so the busiest one is
+  no busier than it has to be (`solver/SPEC.md` section 12). With a sleep window
+  the makespan is wall-clock: the first moment the player is awake after the
+  last-finishing slot's last block ends, nights included. The card's idle figure
+  is still the horizon minus the busiest slot's real flight time, so with sleep
+  it also counts the rest of a night after a ship has landed.
 - _The timeline._ Each `SlotSummary` carries its calendar's launches, naming
   their `choiceHistory` entry by index (`finalizeSolutions` follows the entries
   when it sorts them), and when each goes up. `planTimeline`
   (`optimizer-views.ts`) is the per-slot timeline every plan card shows, with day
   headings on a sleep-aware plan and a repeating routine of days shown once.
-- _The launch list._ A choice carries `nights`, and the card's totals
-  (`launchTotals`) show the launches flown while awake and the ones flown
-  overnight as two lists. The same mission can appear in both.
+- _The launch list._ Each slot launch carries the nights it is in the air
+  for, read off its launch time and flight (`nightsFlown`), which can differ
+  from the night count of the variant the solver budgeted it as: a re-timed
+  launch can be back before bed, a daytime one sent up in the evening lands in
+  the night. The card's totals (`launchTotals`) and the timeline's overnight
+  marks read that, so the launches shown as flown while awake and the ones
+  shown overnight are what the calendar flies. The same mission can appear in
+  both lists.
 - _The export._ The humility missions file folds a mission's daytime and
   overnight launches into one line, as it folds any two entries of one mission.
   `makespanSeconds` is the wall-clock makespan above, `effort` is the cadence
@@ -258,7 +265,10 @@ solved against a window, and each `choiceHistory` entry then carries the
 `variant` it flew: `event` and `overhang` are doubled, and one mission can appear
 once per variant. The calendar the plan was accepted on says per launch whether
 it is doubled and when it goes up, and the timeline shows both, with a divider
-where the window closes. Every view folds `event` and `overhang`, which the
+where the window closes. A launch is doubled exactly when it goes up inside the
+window, as the game doubles it: the layout flies doubled any 1x launch it finds
+there, and the solver's verifier holds both directions (`solver/SPEC.md`
+section 16). Every view folds `event` and `overhang`, which the
 player flies alike, and keeps a doubled launch apart from the same mission at
 1x: the totals and the legendary sources badge it, and the humility missions
 file writes it on its own line marked `doubled: true` (absent otherwise, so a
