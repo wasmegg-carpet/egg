@@ -197,8 +197,9 @@ export function planTimeline(solution: OptimizerSolution): PlanTimeline {
   return { slots: (solution.slots ?? []).map(slot => slotTimeline(solution, slot, byDay, window)), byDay };
 }
 
-// A run of consecutive launches the player cannot tell apart (one `lineKey`), or the event window's end.
-type Segment = { choice: number; key: string; count: number; launchAt: number } | 'window-end';
+// A run of consecutive launches the player cannot tell apart (one `lineKey`), or the event window's end. `clock`
+// holds each launch's time of day, to the minute, so two days fold only when they are flown at the same times.
+type Segment = { choice: number; key: string; count: number; launchAt: number; clock: number[] } | 'window-end';
 
 // One day of a slot, or the whole slot on a plan made around the clock.
 interface Day {
@@ -209,9 +210,16 @@ interface Day {
   windowEndsBefore: boolean;
 }
 
-// What a day flies, without when: two days with the same signature are flown alike.
+// What a day flies and at what time of day: two days with the same signature are flown alike, so one can stand
+// for the other in a fold.
 const signatureOf = (day: Day) =>
-  day.segments.map(segment => (segment === 'window-end' ? '|' : `${segment.key}:${segment.count}`)).join(',');
+  day.segments
+    .map(segment => (segment === 'window-end' ? '|' : `${segment.key}:${segment.count}@${segment.clock.join('/')}`))
+    .join(',');
+
+// A launch's time of day, in whole minutes: finer than a player reads a clock, coarse enough that float drift in a
+// launch time never splits two days that are flown alike.
+const clockOf = (launchAt: number) => Math.round((launchAt - Math.floor(launchAt / DAY_SECONDS) * DAY_SECONDS) / 60);
 
 function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boolean, window: number): SlotTimeline {
   // The window opens with the plan, so a slot starts inside it. The divider goes before the first launch that
@@ -229,8 +237,11 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
     } else if (closes) day.segments.push('window-end');
     const key = lineKey(solution.choiceHistory[launch.choice], true);
     const last = day.segments[day.segments.length - 1];
-    if (last !== undefined && last !== 'window-end' && last.key === key) last.count++;
-    else day.segments.push({ choice: launch.choice, key, count: 1, launchAt: launch.launchAt });
+    const clock = clockOf(launch.launchAt);
+    if (last !== undefined && last !== 'window-end' && last.key === key) {
+      last.count++;
+      last.clock.push(clock);
+    } else day.segments.push({ choice: launch.choice, key, count: 1, launchAt: launch.launchAt, clock: [clock] });
   }
 
   const signatures = days.map(signatureOf);
@@ -289,7 +300,9 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
     }
     let next = i;
     while (next < days.length && days[next].day < start + period * times) next++;
-    const lastDay = days[next - 1].day;
+    // Every day the fold covers, the quiet days of the last time round included: a two-day routine flown twice
+    // covers four days, whichever of them holds the last launch.
+    const lastDay = start + period * times - 1;
     if (!byDay) emit(days[i], 1, null);
     else if (period === 1) emit(days[i], times, { kind: 'day', firstDay: start, lastDay });
     else {

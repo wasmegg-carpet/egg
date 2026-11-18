@@ -269,6 +269,32 @@ describe('planTimeline', () => {
     expectCountsAgree(solution);
   });
 
+  it('folds no two days that fly the same launches at different times of day', () => {
+    const solution = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 3, { nights: 0 })],
+      // Day 1 flies what day 0 does, two hours later; day 2 flies it as day 1 does.
+      slots: [slot([0, 0], [0, DAY + 2 * H], [0, 2 * DAY + 2 * H])],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['day 0-0', '1x@0', 'day 1-2', `1x*2@${DAY + 2 * H}`]);
+  });
+
+  it('gives a routine every day it covers, quiet days of the last time round included', () => {
+    // A two-day routine, one launch and a quiet day, flown twice: days 0 to 3, though the last launch is on day 2.
+    const solution = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 2, { nights: 0 }), choice(Ship.CHICKEN_NINE, 1, { nights: 0 })],
+      slots: [slot([0, 0], [0, 2 * DAY], [1, 4 * DAY])],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
+      'routine 0-3 every 2 x2',
+      'day 0-0 (1/2)',
+      '1x*2@0',
+      'day 4-4',
+      `1x@${4 * DAY}`,
+    ]);
+  });
+
   it('puts a divider that falls overnight between the two days, and folds no day across it', () => {
     const solution = makeSolution({
       sleepSeconds: 8 * H,
@@ -363,6 +389,38 @@ describe('the timeline of a solved plan', () => {
     const solution = await solve({ sleepSeconds: 8 * H }, 3 * DAY);
     consistent(solution);
     expect(planTimeline(solution).slots.some(s => s.rows[0]?.kind === 'day')).toBe(true);
+  });
+
+  // Review repro: 30-hour ships and 8 hours of sleep over ten days, where the ships go up at a different time of
+  // day from one day to the next. Every launch time a folded row stands for has to be one the calendar flies.
+  it('folds only days flown at the same times, so every time a fold stands for is flown', async () => {
+    const solution = finalizeSolutions(
+      [
+        await optimizeFull({
+          options: [makeOpt(1, 30 * H, [[lt1, 1]], [], Name.LUNAR_TOTEM)],
+          recipeDag: dag(),
+          desiredArtifactNodeIds: [lt2],
+          fuelCapacity: 1000,
+          timeCapacityPerSlot: 10 * DAY,
+          sleepSeconds: 8 * H,
+          ownedStock: new Map(),
+          maximumCost: undefined,
+        }),
+      ],
+      dag()
+    )[0];
+    consistent(solution);
+    const timeline = planTimeline(solution);
+    timeline.slots.forEach((s, k) => {
+      const flown = new Set(solution.slots![k].launches.map(l => Math.round(l.launchAt)));
+      let period = 1;
+      for (const row of s.rows) {
+        if (row.kind === 'routine') period = row.period;
+        if (row.kind === 'day' && !row.routineDay) period = 1;
+        if (row.kind !== 'launch') continue;
+        for (let i = 0; i < row.repeat; i++) expect(flown).toContain(Math.round(row.launchAt + i * period * DAY));
+      }
+    });
   });
 
   it('counts what the totals count with an event window, and doubles only inside it', async () => {
