@@ -29833,5 +29833,23 @@
     "startTimestamp": 1795021200,
     "type": "piggy-boost",
     "ultra": false
+  },
+  {
+    "endTimestamp": 1795194000,
+    "id": "event-11-19",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1795107600,
+    "type": "vehicle-sale",
+    "ultra": false
+  },
+  {
+    "endTimestamp": 1795194000,
+    "id": "ultra-11-19",
+    "message": "15% OFF SHELLS!",
+    "multiplier": 0.85,
+    "startTimestamp": 1795107600,
+    "type": "shell-sale",
+    "ultra": true
   }
 ]
