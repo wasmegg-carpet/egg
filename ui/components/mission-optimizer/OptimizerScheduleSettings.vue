@@ -30,7 +30,7 @@
             type="number"
             inputmode="decimal"
             min="0"
-            :max="maxSinceWake"
+            :max="MAX_HOURS_SINCE_WAKE"
             step="0.5"
             :value="modelValue.hoursSinceWake"
             :class="inputClass"
@@ -87,7 +87,7 @@ import { formatDuration } from 'lib';
 import {
   clampHoursSinceWake,
   eventWindowInput,
-  maxHoursSinceWake,
+  MAX_HOURS_SINCE_WAKE,
   MAX_SLEEP_HOURS,
   MIN_SLEEP_HOURS,
   normalizeEventRemaining,
@@ -148,7 +148,7 @@ export default defineComponent({
       const typed = input.value.trim() === '' ? 0 : Number(input.value);
       const next = normalizeScheduleSettings({
         ...props.modelValue,
-        hoursSinceWake: clampHoursSinceWake(typed, props.modelValue.sleepHours),
+        hoursSinceWake: clampHoursSinceWake(typed),
       });
       input.value = String(next.hoursSinceWake);
       emit('update:modelValue', next);
@@ -181,11 +181,9 @@ export default defineComponent({
     // Both settings are clocks, and the plan has to start somewhere on them. "Now" is the only moment the
     // planner can know, and with sleep on it also has to say where in the day that is. The wording, and the
     // explanation the note opens, are `schedule-settings.ts`'s, so the timeline's footnote says the same.
-    const maxSinceWake = computed(() => maxHoursSinceWake(props.modelValue.sleepHours));
     const timing = computed<Timing>(() => ({
       sleepHours: props.modelValue.sleepEnabled ? props.modelValue.sleepHours : 0,
-      // What the solver will plan: the offset held to the control's range, as it holds it to the sleep it is handed.
-      hoursSinceWake: Math.min(props.modelValue.hoursSinceWake, maxSinceWake.value),
+      hoursSinceWake: props.modelValue.hoursSinceWake,
       event: props.modelValue.doubleCapacityEnabled && !eventWindow.value.invalid,
     }));
     const timingNote = computed(() => timingNoteOf(timing.value));
@@ -210,7 +208,7 @@ export default defineComponent({
       uid,
       MAX_SLEEP_HOURS,
       MIN_SLEEP_HOURS,
-      maxSinceWake,
+      MAX_HOURS_SINCE_WAKE,
       update,
       onSleepToggle,
       onSinceWakeChange,

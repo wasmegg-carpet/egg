@@ -26,18 +26,17 @@ export const DEFAULT_SLEEP_HOURS = 8;
 
 const DAY_HOURS = 24;
 
-// The most "since you woke" the control accepts for a given sleep, in hours: for now the length of the waking
-// window, `24 - sleepHours`, the awake case the solver models (`solver/SPEC.md` section 17). Past it the player is
-// up past their usual bedtime just to launch, a case the solver clamps until its night case lands. The control's
-// range, and what the timing copy takes the solver to plan, are both read from here, so widening the range is
-// this one function.
-export const maxHoursSinceWake = (sleepHours: number): number => DAY_HOURS - sleepHours;
+// The most "since you woke" the control accepts, in hours, whatever the sleep: anything short of a whole day. Up
+// to `24 - sleepHours` the player is awake at T+0; past it they are up past their usual bedtime just to launch, and
+// sleep the rest of that night (`solver/SPEC.md` section 17). Held to the control's step below 24, because the
+// solver reads a whole day as no offset at all.
+export const MAX_HOURS_SINCE_WAKE = 23.5;
 
-// A typed "since you woke" held to what the control accepts for the sleep it is typed against: 0 for anything
-// that is not a number.
-export function clampHoursSinceWake(hours: unknown, sleepHours: number): number {
+// A typed or stored "since you woke" held to what the control accepts: 0 for anything that is not a number. It
+// does not depend on the sleep hours, so changing those never changes it.
+export function clampHoursSinceWake(hours: unknown): number {
   if (typeof hours !== 'number' || !Number.isFinite(hours)) return 0;
-  return Math.min(maxHoursSinceWake(sleepHours), Math.max(0, hours));
+  return Math.min(MAX_HOURS_SINCE_WAKE, Math.max(0, hours));
 }
 
 // What the event's "time left" starts at: the whole of a 48-hour event, which is also the most it can be.
@@ -79,12 +78,6 @@ export function clampSleepHours(hours: unknown): number {
   if (typeof hours !== 'number' || !Number.isFinite(hours)) return 0;
   return Math.min(MAX_SLEEP_HOURS, Math.max(0, hours));
 }
-
-// A stored "since you woke" as hours: 0 for anything that is not a number, and otherwise within a day. It is
-// not held to `maxHoursSinceWake`, which depends on the sleep hours it is read against: those can change after it
-// was entered, and the solver clamps it to them.
-const normalizedHoursSinceWake = (hours: unknown): number =>
-  typeof hours === 'number' && Number.isFinite(hours) ? Math.min(DAY_HOURS, Math.max(0, hours)) : 0;
 
 // The settings with sleep switched on or off. Switching on with no hours kept starts at `DEFAULT_SLEEP_HOURS`
 // rather than at the minimum; hours that were kept stay as they were.
@@ -152,8 +145,8 @@ export function scheduleArgsOf(settings: ScheduleSettings): ScheduleArgs | null 
     if (window.invalid) return null;
     eventWindowSeconds = window.seconds;
   }
-  // Not clamped here: the solver holds the offset to the sleep it is handed.
-  const wakeOffsetSeconds = sleepSeconds > 0 ? Math.round(normalizedHoursSinceWake(settings.hoursSinceWake) * HOUR) : 0;
+  // Anywhere short of a day: awake at T+0 up to the waking window's length, past it up in the night to launch.
+  const wakeOffsetSeconds = sleepSeconds > 0 ? Math.round(clampHoursSinceWake(settings.hoursSinceWake) * HOUR) : 0;
   return {
     ...(sleepSeconds > 0 && { sleepSeconds }),
     ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
@@ -185,7 +178,7 @@ export function normalizeScheduleSettings(stored: Partial<Record<keyof ScheduleS
   return {
     sleepEnabled,
     sleepHours: sleepEnabled ? Math.max(MIN_SLEEP_HOURS, hours) : hours,
-    hoursSinceWake: normalizedHoursSinceWake(stored.hoursSinceWake),
+    hoursSinceWake: clampHoursSinceWake(stored.hoursSinceWake),
     doubleCapacityEnabled: stored.doubleCapacityEnabled === true,
     doubleCapacityRemaining:
       typeof stored.doubleCapacityRemaining === 'string'

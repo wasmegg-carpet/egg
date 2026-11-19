@@ -11,7 +11,7 @@ import {
   DEFAULT_SLEEP_HOURS,
   eventWindowInput,
   formatPlanClock,
-  maxHoursSinceWake,
+  MAX_HOURS_SINCE_WAKE,
   MAX_SLEEP_HOURS,
   MIN_SLEEP_HOURS,
   newScheduleSettings,
@@ -188,13 +188,13 @@ describe('schedule settings', () => {
     expect(withSleepEnabled(before, false).hoursSinceWake).toBe(10);
   });
 
-  it('holds a typed time since waking to the waking window of the sleep it is typed against', () => {
-    expect(maxHoursSinceWake(8)).toBe(16);
-    expect(maxHoursSinceWake(16)).toBe(8);
-    expect(clampHoursSinceWake(3, 8)).toBe(3);
-    expect(clampHoursSinceWake(20, 8)).toBe(16);
-    expect(clampHoursSinceWake(-1, 8)).toBe(0);
-    for (const bad of ['3', NaN, undefined]) expect(clampHoursSinceWake(bad, 8)).toBe(0);
+  it('holds a time since waking to just short of a day, whatever the sleep', () => {
+    expect(MAX_HOURS_SINCE_WAKE).toBeLessThan(24);
+    expect(clampHoursSinceWake(3)).toBe(3);
+    expect(clampHoursSinceWake(20)).toBe(20);
+    expect(clampHoursSinceWake(24)).toBe(MAX_HOURS_SINCE_WAKE);
+    expect(clampHoursSinceWake(-1)).toBe(0);
+    for (const bad of ['3', NaN, undefined]) expect(clampHoursSinceWake(bad)).toBe(0);
   });
 
   it('prints a time on the plan clock as the timeline does', () => {
