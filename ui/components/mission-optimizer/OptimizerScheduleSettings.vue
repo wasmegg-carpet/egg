@@ -21,6 +21,24 @@
         <span :class="unitClass">h/day</span>
       </div>
       <p v-if="modelValue.sleepEnabled" :class="hintClass" class="text-gray-400">{{ sleepHint }}</p>
+
+      <template v-if="modelValue.sleepEnabled">
+        <label :for="`${uid}-since-wake`" :class="labelClass" class="mt-2">Since you woke</label>
+        <div class="mt-1 flex items-center gap-2">
+          <input
+            :id="`${uid}-since-wake`"
+            type="number"
+            inputmode="decimal"
+            min="0"
+            :max="maxSinceWake"
+            step="0.5"
+            :value="modelValue.hoursSinceWake"
+            :class="inputClass"
+            @change="onSinceWakeChange"
+          />
+          <span :class="unitClass">h</span>
+        </div>
+      </template>
     </div>
 
     <div>
@@ -67,7 +85,9 @@ import { computed, defineComponent, PropType } from 'vue';
 
 import { formatDuration } from 'lib';
 import {
+  clampHoursSinceWake,
   eventWindowInput,
+  maxHoursSinceWake,
   MAX_SLEEP_HOURS,
   MIN_SLEEP_HOURS,
   normalizeEventRemaining,
@@ -75,6 +95,7 @@ import {
   timingNote as timingNoteOf,
   timingTooltip,
   withSleepEnabled,
+  type Timing,
   type ScheduleSettings,
 } from 'lib/mission-optimizer/schedule-settings';
 import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
@@ -82,6 +103,8 @@ import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
 // Sleep and the 2x capacity event, the two settings that say when the player can launch and what a launch
 // brings home. Both apps' planners show this one control, so the two read the same fields the same way; the
 // rules themselves (range, default, what a typed "time left" means) are `schedule-settings.ts`'s.
+let instances = 0;
+
 export default defineComponent({
   components: { DoubleCapacityBadge },
   props: {
@@ -93,6 +116,8 @@ export default defineComponent({
     'update:modelValue': (_settings: ScheduleSettings) => true,
   },
   setup(props, { emit }) {
+    const uid = `schedule-settings-${++instances}`;
+
     function update(patch: Partial<ScheduleSettings>) {
       emit('update:modelValue', normalizeScheduleSettings({ ...props.modelValue, ...patch }));
     }
@@ -113,6 +138,19 @@ export default defineComponent({
         sleepHours: input.value.trim() === '' ? 0 : Number(input.value),
       });
       input.value = String(next.sleepHours);
+      emit('update:modelValue', next);
+    }
+
+    // Held to what the sleep it is typed against allows. A value kept from before the sleep hours changed is left
+    // alone until it is typed over, and the solver reads it against the sleep it is handed.
+    function onSinceWakeChange(event: Event) {
+      const input = event.target as HTMLInputElement;
+      const typed = input.value.trim() === '' ? 0 : Number(input.value);
+      const next = normalizeScheduleSettings({
+        ...props.modelValue,
+        hoursSinceWake: clampHoursSinceWake(typed, props.modelValue.sleepHours),
+      });
+      input.value = String(next.hoursSinceWake);
       emit('update:modelValue', next);
     }
 
@@ -143,8 +181,11 @@ export default defineComponent({
     // Both settings are clocks, and the plan has to start somewhere on them. "Now" is the only moment the
     // planner can know, and with sleep on it also has to say where in the day that is. The wording, and the
     // explanation the note opens, are `schedule-settings.ts`'s, so the timeline's footnote says the same.
-    const timing = computed(() => ({
-      sleeping: props.modelValue.sleepEnabled && props.modelValue.sleepHours > 0,
+    const maxSinceWake = computed(() => maxHoursSinceWake(props.modelValue.sleepHours));
+    const timing = computed<Timing>(() => ({
+      sleepHours: props.modelValue.sleepEnabled ? props.modelValue.sleepHours : 0,
+      // What the solver will plan: the offset held to the control's range, as it holds it to the sleep it is handed.
+      hoursSinceWake: Math.min(props.modelValue.hoursSinceWake, maxSinceWake.value),
       event: props.modelValue.doubleCapacityEnabled && !eventWindow.value.invalid,
     }));
     const timingNote = computed(() => timingNoteOf(timing.value));
@@ -166,10 +207,13 @@ export default defineComponent({
     );
 
     return {
+      uid,
       MAX_SLEEP_HOURS,
       MIN_SLEEP_HOURS,
+      maxSinceWake,
       update,
       onSleepToggle,
+      onSinceWakeChange,
       onSleepHoursChange,
       onRemainingChange,
       sleepHint,

@@ -187,6 +187,15 @@ describe('the sleep setting', () => {
     expect(isMissionFilters({ ...older, sleepEnabled: 'on' })).toBe(false);
     expect(newMissionFilters().sleepEnabled).toBe(false);
   });
+
+  it('accepts filters saved before the time since waking existed, and rejects a mistyped one', () => {
+    const older: Partial<MissionFilters> = newMissionFilters();
+    delete older.hoursSinceWake;
+    expect(isMissionFilters(older)).toBe(true);
+    expect(isMissionFilters({ ...older, hoursSinceWake: 3.5 })).toBe(true);
+    expect(isMissionFilters({ ...older, hoursSinceWake: '3.5' })).toBe(false);
+    expect(newMissionFilters().hoursSinceWake).toBe(0);
+  });
 });
 
 describe('optimizeFull with a sleep window', () => {

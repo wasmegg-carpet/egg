@@ -1,6 +1,6 @@
 // The player's schedule, as both apps ask for it: whether they sleep and for how many hours a day, and whether a
 // 2x mission capacity event is running and how much of it is left. The artifact explorer's sidebar and the
-// ascension planner's inline panel edit the same four fields through the same component (`ui/components/mission-optimizer/
+// ascension planner's inline panel edit the same five fields through the same component (`ui/components/mission-optimizer/
 // OptimizerScheduleSettings.vue`), and every rule about what a stored or typed value means lives here, so
 // neither app can clamp, default or reject one differently from the other.
 //
@@ -24,6 +24,22 @@ export const MIN_SLEEP_HOURS = 0.5;
 // What switching sleep on starts from when no hours are kept.
 export const DEFAULT_SLEEP_HOURS = 8;
 
+const DAY_HOURS = 24;
+
+// The most "since you woke" the control accepts for a given sleep, in hours: for now the length of the waking
+// window, `24 - sleepHours`, the awake case the solver models (`solver/SPEC.md` section 17). Past it the player is
+// up past their usual bedtime just to launch, a case the solver clamps until its night case lands. The control's
+// range, and what the timing copy takes the solver to plan, are both read from here, so widening the range is
+// this one function.
+export const maxHoursSinceWake = (sleepHours: number): number => DAY_HOURS - sleepHours;
+
+// A typed "since you woke" held to what the control accepts for the sleep it is typed against: 0 for anything
+// that is not a number.
+export function clampHoursSinceWake(hours: unknown, sleepHours: number): number {
+  if (typeof hours !== 'number' || !Number.isFinite(hours)) return 0;
+  return Math.min(maxHoursSinceWake(sleepHours), Math.max(0, hours));
+}
+
 // What the event's "time left" starts at: the whole of a 48-hour event, which is also the most it can be.
 export const DEFAULT_DOUBLE_CAPACITY_REMAINING = formatDuration(MAX_DOUBLE_CAPACITY_SECONDS, true, { max: 'h' });
 
@@ -34,6 +50,10 @@ export interface ScheduleSettings {
   // Hours a day the player sleeps and cannot launch; ships still fly and land. At least `MIN_SLEEP_HOURS` while
   // `sleepEnabled`.
   sleepHours: number;
+  // Hours since the player last woke, at the plan's start (now), while `sleepEnabled`; 0 is just woken up. Kept as
+  // entered when `sleepHours` changes, so it can outrun the range the control then offers: the solver reads it
+  // against the sleep it is handed. Ignored with sleep off.
+  hoursSinceWake: number;
   // A 2x mission capacity event in progress, and how much of it is left, as typed (e.g. '48h', '3h30m'). The
   // window always starts when the plan does. Kept as typed, like the time budget, and read at use. Saved as typed
   // too: the time left does not count down, so '48h' entered today still reads '48h' on a later visit, until the
@@ -46,6 +66,7 @@ export function newScheduleSettings(): ScheduleSettings {
   return {
     sleepEnabled: false,
     sleepHours: 0,
+    hoursSinceWake: 0,
     doubleCapacityEnabled: false,
     doubleCapacityRemaining: DEFAULT_DOUBLE_CAPACITY_REMAINING,
   };
@@ -58,6 +79,12 @@ export function clampSleepHours(hours: unknown): number {
   if (typeof hours !== 'number' || !Number.isFinite(hours)) return 0;
   return Math.min(MAX_SLEEP_HOURS, Math.max(0, hours));
 }
+
+// A stored "since you woke" as hours: 0 for anything that is not a number, and otherwise within a day. It is
+// not held to `maxHoursSinceWake`, which depends on the sleep hours it is read against: those can change after it
+// was entered, and the solver clamps it to them.
+const normalizedHoursSinceWake = (hours: unknown): number =>
+  typeof hours === 'number' && Number.isFinite(hours) ? Math.min(DAY_HOURS, Math.max(0, hours)) : 0;
 
 // The settings with sleep switched on or off. Switching on with no hours kept starts at `DEFAULT_SLEEP_HOURS`
 // rather than at the minimum; hours that were kept stay as they were.
@@ -112,6 +139,8 @@ export function normalizeEventRemaining(input: string): string | null {
 // solving without one would answer a question the player did not ask.
 export interface ScheduleArgs {
   sleepSeconds?: number;
+  // Only with sleep on, and only above 0: how long ago the player woke, at the plan's start.
+  wakeOffsetSeconds?: number;
   eventWindowSeconds?: number;
 }
 
@@ -123,8 +152,11 @@ export function scheduleArgsOf(settings: ScheduleSettings): ScheduleArgs | null 
     if (window.invalid) return null;
     eventWindowSeconds = window.seconds;
   }
+  // Not clamped here: the solver holds the offset to the sleep it is handed.
+  const wakeOffsetSeconds = sleepSeconds > 0 ? Math.round(normalizedHoursSinceWake(settings.hoursSinceWake) * HOUR) : 0;
   return {
     ...(sleepSeconds > 0 && { sleepSeconds }),
+    ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
   };
 }
@@ -135,12 +167,13 @@ export function scheduleSettingsFieldsValid(x: Partial<Record<keyof ScheduleSett
   return (
     (x.sleepEnabled === undefined || typeof x.sleepEnabled === 'boolean') &&
     (x.sleepHours === undefined || typeof x.sleepHours === 'number') &&
+    (x.hoursSinceWake === undefined || typeof x.hoursSinceWake === 'number') &&
     (x.doubleCapacityEnabled === undefined || typeof x.doubleCapacityEnabled === 'boolean') &&
     (x.doubleCapacityRemaining === undefined || typeof x.doubleCapacityRemaining === 'string')
   );
 }
 
-// A stored record's four fields as the controls may show them: missing or mistyped ones take their defaults,
+// A stored record's five fields as the controls may show them: missing or mistyped ones take their defaults,
 // and sleep is held to its range. A record from before sleep could be switched off has no `sleepEnabled`: it is on
 // exactly when its stored hours were above 0, which is what those hours meant. While on, the hours are at least
 // `MIN_SLEEP_HOURS`. A "time left" that does not parse is kept as typed, as the time budget is, for the field to
@@ -152,6 +185,7 @@ export function normalizeScheduleSettings(stored: Partial<Record<keyof ScheduleS
   return {
     sleepEnabled,
     sleepHours: sleepEnabled ? Math.max(MIN_SLEEP_HOURS, hours) : hours,
+    hoursSinceWake: normalizedHoursSinceWake(stored.hoursSinceWake),
     doubleCapacityEnabled: stored.doubleCapacityEnabled === true,
     doubleCapacityRemaining:
       typeof stored.doubleCapacityRemaining === 'string'
@@ -164,44 +198,84 @@ export function normalizeScheduleSettings(stored: Partial<Record<keyof ScheduleS
 // What T+0 on the plan is
 // ---------------------------------------------------------------------------
 
-// The plan starts at the one moment the planner can know, now, and with sleep on it also has to say where in the
-// day that is. These are the words for it, as the planner works today; the settings' tooltip and the timeline's
-// footnote both read them, so a change to what T+0 means (an input for how long ago the player woke, say) is
-// made here and nowhere else.
+// T+0 is always now: the moment the settings are entered, which with the event on is the moment the event shows
+// the time left that was entered. With sleep on the plan also has to say where in the player's day now is, which
+// is "since you woke": `W = 24 - sleep hours` is the waking window, and `x` hours into it the player is awake and
+// goes to sleep at T+(W - x), wakes at T+(24 - x) and keeps those hours. Past it (`x > W`) they are up past their
+// usual bedtime just to launch at T+0 and sleep until T+(24 - x), their usual wake-up. These functions are the
+// words for it; the settings' note and tooltip and the timeline's footnote all read them, so a change to what T+0
+// means is made here and nowhere else.
 
-// Where the plan's clock starts, to finish "T+ counts from ...".
-export function timingZero({ sleeping, event }: { sleeping: boolean; event: boolean }): string {
-  if (sleeping && event) return 'now, the moment the event shows the time left you entered, with you just woken up';
-  if (sleeping) return 'when you wake up';
-  if (event) return 'now, the moment the event shows the time left you entered';
-  return 'when you start launching';
+export interface Timing {
+  // Hours a day of sleep the plan is made around; 0 for none.
+  sleepHours: number;
+  // Hours since the player woke, at T+0 (`ScheduleSettings.hoursSinceWake`); read only with sleep on.
+  hoursSinceWake: number;
+  // Whether a 2x capacity event runs, the plan's window starting at T+0.
+  event: boolean;
+}
+
+// A time on the plan's clock as the timeline prints it, floored to the minute so a time read off the card is never
+// later than the one the plan was verified at: a doubled launch shown at T+47h59m still goes up inside a 48h window.
+export const formatPlanClock = (seconds: number): string =>
+  seconds >= 60 ? `T+${formatDuration(seconds, true)}` : 'T+0';
+
+const clockOfHours = (hours: number): string => formatPlanClock(Math.round(hours * HOUR));
+
+// The plan's sleep as the copy reads it: the clock times of the player's next bedtime and wake-up, and whether
+// they are already past it.
+function sleepTimes({ sleepHours, hoursSinceWake }: Timing) {
+  const waking = DAY_HOURS - sleepHours;
+  const x = Math.max(0, hoursSinceWake);
+  return { bedtime: waking - x, wakeUp: DAY_HOURS - x, pastBedtime: x > waking };
+}
+
+// The sleep part of the timing, short enough for a footnote.
+function sleepClause(timing: Timing): string {
+  const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
+  return pastBedtime
+    ? `you sleep until ${clockOfHours(wakeUp)}`
+    : `you go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}`;
+}
+
+const eventClause = 'the moment the event shows the time left you entered';
+
+// Where the plan's clock starts and what it says about the day, to finish "T+ counts from ...".
+export function timingZero(timing: Timing): string {
+  const now = timing.event ? `now, ${eventClause}` : 'now';
+  return timing.sleepHours > 0 ? `${now}; ${sleepClause(timing)}` : now;
 }
 
 // The line under the settings that opens the explanation below, or '' when neither setting has a start to
 // explain.
-export function timingNote({ sleeping, event }: { sleeping: boolean; event: boolean }): string {
-  if (sleeping && event) return 'The plan starts now, as you wake up, with the event already running.';
-  if (sleeping) return 'The plan starts now, as you wake up.';
-  if (event) return 'The plan starts now.';
-  return '';
+export function timingNote(timing: Timing): string {
+  const running = timing.event ? ', with the event already running' : '';
+  if (timing.sleepHours > 0) {
+    const x = Math.max(0, timing.hoursSinceWake);
+    const since =
+      Math.round(x * HOUR) >= 60 ? `${formatDuration(Math.round(x * HOUR), true)} after you woke` : 'as you wake up';
+    return `The plan starts now, ${since}${running}.`;
+  }
+  return timing.event ? 'The plan starts now.' : '';
 }
 
-// The explanation behind the note: what T+0 is, then how to read the rest of the plan. Plain text, as the
-// tooltips here are.
-export function timingTooltip({ sleeping, event }: { sleeping: boolean; event: boolean }): string {
-  const parts: string[] = [];
-  if (sleeping && event)
+// The explanation behind the note: what T+0 is, where the day goes from there, then how to read the rest of the
+// plan. Plain text, as the tooltips here are.
+export function timingTooltip(timing: Timing): string {
+  const sleeping = timing.sleepHours > 0;
+  if (!sleeping && !timing.event) return '';
+  const parts = [`T+0 on the plan is now${timing.event ? `, ${eventClause}` : ''}.`];
+  if (sleeping) {
+    const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
     parts.push(
-      'T+0 on the plan is now, the moment the event shows the time left you entered, and the plan assumes you have just woken up.'
-    );
-  else if (sleeping) parts.push('T+0 on the plan is when you wake up. Start launching then.');
-  else if (event) parts.push('T+0 on the plan is now, the moment the event shows the time left you entered.');
-  if (sleeping)
-    parts.push(
+      pastBedtime
+        ? `You're up past your usual bedtime: launch at T+0, then sleep until ${clockOfHours(wakeUp)}, your usual wake-up.`
+        : `You go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}, then keep the same hours.`,
       'No launches during your sleep hours, but ships still fly and land. A ship that lands while you sleep ' +
         'waits until you wake. The green dot is a launch while you are awake, the indigo dot a launch that is in ' +
         'the air when you go to sleep.'
     );
-  if (event) parts.push('Launches with the 2× badge go up inside the event.');
+  }
+  if (timing.event) parts.push('Launches with the 2× badge go up inside the event.');
   return parts.join(' ');
 }

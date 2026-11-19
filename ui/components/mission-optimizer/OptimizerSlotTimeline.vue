@@ -59,15 +59,12 @@
 <script lang="ts">
 import { computed, defineComponent, PropType } from 'vue';
 
-import { formatDuration } from 'lib';
 import { planTimeline, type OptimizerSolution } from 'lib/mission-optimizer';
-import { timingZero } from 'lib/mission-optimizer/schedule-settings';
+import { formatPlanClock, timingZero } from 'lib/mission-optimizer/schedule-settings';
 import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
 import MissionName from './MissionName.vue';
 
-// Offsets read as a clock from the plan's start, floored to the minute, so a time read off the card is never later
-// than the one the plan was verified at: a doubled launch shown at T+47h59m still goes up inside a 48h window.
-const clock = (seconds: number) => (seconds >= 60 ? `T+${formatDuration(seconds, true)}` : 'T+0');
+const clock = formatPlanClock;
 
 export default defineComponent({
   components: { DoubleCapacityBadge, MissionName },
@@ -76,10 +73,11 @@ export default defineComponent({
   },
   setup(props) {
     const timeline = computed(() => planTimeline(props.solution));
-    // Where T+0 is, in the words the settings use for it.
+    // Where T+0 is and what the day does from there, in the words the settings use for it.
     const zero = computed(() =>
       timingZero({
-        sleeping: (props.solution.sleepSeconds ?? 0) > 0,
+        sleepHours: (props.solution.sleepSeconds ?? 0) / 3600,
+        hoursSinceWake: (props.solution.wakeOffsetSeconds ?? 0) / 3600,
         event: (props.solution.eventWindowSeconds ?? 0) > 0,
       })
     );
