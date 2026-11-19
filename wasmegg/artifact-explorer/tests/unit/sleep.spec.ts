@@ -148,6 +148,14 @@ describe('the sleep setting', () => {
     expect(isMissionFilters({ ...older, sleepHours: 8 })).toBe(true);
     expect(isMissionFilters({ ...older, sleepHours: '8' })).toBe(false);
   });
+
+  it('accepts filters saved before sleep could be switched off, and reads them as on exactly when hours were set', () => {
+    const older: Partial<MissionFilters> = newMissionFilters();
+    delete older.sleepEnabled;
+    expect(isMissionFilters({ ...older, sleepHours: 8 })).toBe(true);
+    expect(isMissionFilters({ ...older, sleepEnabled: 'on' })).toBe(false);
+    expect(newMissionFilters().sleepEnabled).toBe(false);
+  });
 });
 
 describe('optimizeFull with a sleep window', () => {

@@ -51,11 +51,16 @@ describe('the request the panel sends', () => {
   it('passes sleep and the event window through, the event capped as the explorer caps it', () => {
     const { input } = buildRequest(
       visit,
-      asked({ sleepHours: 8, doubleCapacityEnabled: true, doubleCapacityRemaining: '3d' }),
+      asked({ sleepEnabled: true, sleepHours: 8, doubleCapacityEnabled: true, doubleCapacityRemaining: '3d' }),
       player
     )!;
     expect(input.sleepSeconds).toBe(8 * 3600);
     expect(input.eventWindowSeconds).toBe(MAX_DOUBLE_CAPACITY_SECONDS);
+  });
+
+  it('asks no sleep while it is switched off, whatever hours it keeps', () => {
+    const { input } = buildRequest(visit, asked({ sleepEnabled: false, sleepHours: 8 }), player)!;
+    expect('sleepSeconds' in input).toBe(false);
   });
 
   it('poses no question while the event is on with no time left typed', () => {
@@ -73,19 +78,38 @@ describe("the panel's stored settings", () => {
 
   it('loads a visit saved before the schedule settings existed with them off', () => {
     const older: Partial<OptimizerVisitSettings> = asked({});
+    delete older.sleepEnabled;
     delete older.sleepHours;
     delete older.doubleCapacityEnabled;
     delete older.doubleCapacityRemaining;
     storage[STORED] = JSON.stringify({ version: 1, template: older, visits: { [visit.visitId]: older } });
     const settings = useHumilityOptimizerStore().settingsFor(visit);
-    expect(settings).toMatchObject({ sleepHours: 0, doubleCapacityEnabled: false, doubleCapacityRemaining: '48h' });
+    expect(settings).toMatchObject({
+      sleepEnabled: false,
+      sleepHours: 0,
+      doubleCapacityEnabled: false,
+      doubleCapacityRemaining: '48h',
+    });
     expect(settings.targetIds).toEqual(['puzzle-cube-4']);
+  });
+
+  it('reads a visit saved with sleep hours but no switch as sleeping, and one saved with none as not', () => {
+    const asleep = { ...asked({}), sleepHours: 7 } as Partial<OptimizerVisitSettings>;
+    delete asleep.sleepEnabled;
+    storage[STORED] = JSON.stringify({ version: 1, template: asleep, visits: { [visit.visitId]: asleep } });
+    expect(useHumilityOptimizerStore().settingsFor(visit)).toMatchObject({ sleepEnabled: true, sleepHours: 7 });
   });
 
   it('keeps what was set for a visit, carries it to the next one, and clamps it on reload', async () => {
     const store = useHumilityOptimizerStore();
-    store.update(visit, { sleepHours: 30, doubleCapacityEnabled: true, doubleCapacityRemaining: '5h' });
+    store.update(visit, {
+      sleepEnabled: true,
+      sleepHours: 30,
+      doubleCapacityEnabled: true,
+      doubleCapacityRemaining: '5h',
+    });
     expect(store.settingsFor({ ...visit, visitId: 'another' })).toMatchObject({
+      sleepEnabled: true,
       doubleCapacityEnabled: true,
       doubleCapacityRemaining: '5h',
     });
@@ -93,6 +117,7 @@ describe("the panel's stored settings", () => {
     await nextTick();
     setActivePinia(createPinia());
     expect(useHumilityOptimizerStore().settingsFor(visit)).toMatchObject({
+      sleepEnabled: true,
       sleepHours: 16,
       doubleCapacityEnabled: true,
     });

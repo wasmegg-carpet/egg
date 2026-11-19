@@ -1,22 +1,26 @@
 <template>
   <div class="space-y-3">
     <div>
-      <label :for="`${uid}-sleep`" :class="labelClass">Sleep</label>
+      <label class="flex items-center gap-2 cursor-pointer select-none" :class="labelClass">
+        <input type="checkbox" :class="checkboxClass" :checked="modelValue.sleepEnabled" @change="onSleepToggle" />
+        Sleep
+      </label>
       <div class="mt-1 flex items-center gap-2">
         <input
-          :id="`${uid}-sleep`"
           type="number"
           inputmode="decimal"
-          min="0"
+          aria-label="Hours of sleep a day"
+          :min="MIN_SLEEP_HOURS"
           :max="MAX_SLEEP_HOURS"
           step="0.5"
+          :disabled="!modelValue.sleepEnabled"
           :value="modelValue.sleepHours"
           :class="inputClass"
           @change="onSleepHoursChange"
         />
-        <span :class="unitClass">hours a day</span>
+        <span :class="unitClass">h/day</span>
       </div>
-      <p :class="hintClass" class="text-gray-400">{{ sleepHint }}</p>
+      <p v-if="modelValue.sleepEnabled" :class="hintClass" class="text-gray-400">{{ sleepHint }}</p>
     </div>
 
     <div>
@@ -27,7 +31,9 @@
           :checked="modelValue.doubleCapacityEnabled"
           @change="update({ doubleCapacityEnabled: ($event.target as HTMLInputElement).checked })"
         />
-        2× mission capacity event
+        <span v-tippy="eventTooltip" class="cursor-help border-b border-dotted border-gray-400/60"
+          >2× mission capacity event</span
+        >
         <double-capacity-badge />
       </label>
       <div class="mt-1 flex items-center gap-2">
@@ -48,7 +54,11 @@
       <p v-else-if="modelValue.doubleCapacityEnabled" :class="hintClass" class="text-gray-400">{{ eventHint }}</p>
     </div>
 
-    <p v-if="startsNowNote" :class="hintClass" class="text-gray-500">{{ startsNowNote }}</p>
+    <p v-if="timingNote" :class="hintClass" class="text-gray-500">
+      <span v-tippy="timingExplanation" class="cursor-help border-b border-dotted border-gray-400/60">{{
+        timingNote
+      }}</span>
+    </p>
   </div>
 </template>
 
@@ -59,13 +69,15 @@ import { formatDuration } from 'lib';
 import {
   eventWindowInput,
   MAX_SLEEP_HOURS,
+  MIN_SLEEP_HOURS,
   normalizeEventRemaining,
   normalizeScheduleSettings,
+  timingNote as timingNoteOf,
+  timingTooltip,
+  withSleepEnabled,
   type ScheduleSettings,
 } from 'lib/mission-optimizer/schedule-settings';
 import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
-
-let instances = 0;
 
 // Sleep and the 2x capacity event, the two settings that say when the player can launch and what a launch
 // brings home. Both apps' planners show this one control, so the two read the same fields the same way; the
@@ -81,15 +93,19 @@ export default defineComponent({
     'update:modelValue': (_settings: ScheduleSettings) => true,
   },
   setup(props, { emit }) {
-    const uid = `schedule-settings-${++instances}`;
-
     function update(patch: Partial<ScheduleSettings>) {
       emit('update:modelValue', normalizeScheduleSettings({ ...props.modelValue, ...patch }));
     }
 
+    // Switching sleep on with no hours kept starts at a usual night's; off, the hours stay as they were.
+    function onSleepToggle(event: Event) {
+      emit('update:modelValue', withSleepEnabled(props.modelValue, (event.target as HTMLInputElement).checked));
+    }
+
     // Committed on change rather than on every keystroke, so typing "10" does not solve for one hour of sleep
     // on the way. The field is rewritten from what was kept, because a clamped value that equals the old one
-    // would otherwise leave what was typed on screen.
+    // would otherwise leave what was typed on screen. While sleep is on, a number below the step is held at it
+    // rather than read as off: switching sleep off is the checkbox's.
     function onSleepHoursChange(event: Event) {
       const input = event.target as HTMLInputElement;
       const next = normalizeScheduleSettings({
@@ -110,15 +126,8 @@ export default defineComponent({
       update({ doubleCapacityRemaining: remaining });
     }
 
-    const sleepHours = computed(() => props.modelValue.sleepHours);
-    const sleepHint = computed(() => {
-      const hours = sleepHours.value;
-      if (!(hours > 0)) return 'Hours a day you cannot launch. At 0 the plan relaunches around the clock.';
-      return (
-        `No launches for ${hours} ${hours === 1 ? 'hour' : 'hours'} a day. Ships still fly and land ` +
-        'while you sleep, and Effort sets how often you launch while awake.'
-      );
-    });
+    // What the sleep and the event say themselves is in the tooltips; this is what they do not.
+    const sleepHint = 'Effort sets how often you launch while awake.';
 
     const eventWindow = computed(() => eventWindowInput(props.modelValue.doubleCapacityRemaining));
     const eventRejected = computed(() => props.modelValue.doubleCapacityEnabled && eventWindow.value.invalid);
@@ -126,19 +135,20 @@ export default defineComponent({
       const left = formatDuration(eventWindow.value.seconds, true, { max: 'h' });
       return eventWindow.value.truncated
         ? `An event runs ${left} at most, so that is all the plan counts on.`
-        : `Missions launched in the next ${left} bring home twice the loot. A bare number is hours.`;
+        : `Plans around ${left}. A bare number is hours.`;
     });
+    const eventTooltip =
+      'The event counts down from now. Missions launched inside it bring home double what they otherwise would.';
 
     // Both settings are clocks, and the plan has to start somewhere on them. "Now" is the only moment the
-    // planner can know, and with sleep on it also has to say where in the day that is.
-    const startsNowNote = computed(() => {
-      const sleeping = sleepHours.value > 0;
-      const event = props.modelValue.doubleCapacityEnabled && !eventWindow.value.invalid;
-      if (sleeping && event) return 'The plan starts now, as you wake up, with the event already running.';
-      if (sleeping) return 'The plan starts now, as you wake up.';
-      if (event) return 'The plan starts now.';
-      return '';
-    });
+    // planner can know, and with sleep on it also has to say where in the day that is. The wording, and the
+    // explanation the note opens, are `schedule-settings.ts`'s, so the timeline's footnote says the same.
+    const timing = computed(() => ({
+      sleeping: props.modelValue.sleepEnabled && props.modelValue.sleepHours > 0,
+      event: props.modelValue.doubleCapacityEnabled && !eventWindow.value.invalid,
+    }));
+    const timingNote = computed(() => timingNoteOf(timing.value));
+    const timingExplanation = computed(() => timingTooltip(timing.value));
 
     const labelClass = computed(() =>
       props.compact ? 'block text-xs font-medium text-gray-700' : 'block text-sm text-gray-600'
@@ -156,15 +166,18 @@ export default defineComponent({
     );
 
     return {
-      uid,
       MAX_SLEEP_HOURS,
+      MIN_SLEEP_HOURS,
       update,
+      onSleepToggle,
       onSleepHoursChange,
       onRemainingChange,
       sleepHint,
       eventRejected,
       eventHint,
-      startsNowNote,
+      eventTooltip,
+      timingNote,
+      timingExplanation,
       labelClass,
       inputClass,
       unitClass,
