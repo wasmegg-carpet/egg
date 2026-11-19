@@ -107,9 +107,9 @@ export function normalizeEventRemaining(input: string): string | null {
 }
 
 // What the optimizer is asked to plan around, as `OptimizeArgs` fields. Each is absent rather than 0 when off,
-// so a request without it carries no field for it at all. Sleep off asks for none whatever `sleepHours` holds. Null when the event is on but its "time left" is not
-// a duration: there is no window to hand the solver, and solving without one would answer a question the
-// player did not ask.
+// so a request without it carries no field for it at all. Sleep off asks for none whatever `sleepHours` holds.
+// Null when the event is on but its "time left" is not a duration: there is no window to hand the solver, and
+// solving without one would answer a question the player did not ask.
 export interface ScheduleArgs {
   sleepSeconds?: number;
   eventWindowSeconds?: number;
