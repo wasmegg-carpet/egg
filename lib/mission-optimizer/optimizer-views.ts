@@ -247,6 +247,11 @@ const signatureOf = (day: Day) =>
 // launch time never splits two days that are flown alike.
 const clockOf = (launchAt: number) => Math.round((launchAt - Math.floor(launchAt / DAY_SECONDS) * DAY_SECONDS) / 60);
 
+// A launch time on the player's regular day: seconds since the wake-up the plan starts `wakeOffsetSeconds` after, so
+// a plan's days break at its wake-ups (`solver/SPEC.md` section 17). The plan's own time when it starts at wake-up.
+export const sinceWake = (solution: OptimizerSolution, launchAt: number) =>
+  launchAt + (solution.wakeOffsetSeconds ?? 0);
+
 function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boolean, window: number): SlotTimeline {
   // The window opens with the plan, so a slot starts inside it. The divider goes before the first launch that
   // leaves after it closes, or under the slot's last launch when none does.
@@ -255,7 +260,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
   for (const launch of slot.launches) {
     const closes = windowOpen && launch.launchAt > window;
     if (closes) windowOpen = false;
-    const dayIndex = byDay ? Math.floor(launch.launchAt / DAY_SECONDS) : 0;
+    const dayIndex = byDay ? Math.floor(sinceWake(solution, launch.launchAt) / DAY_SECONDS) : 0;
     let day = days[days.length - 1];
     if (day?.day !== dayIndex) {
       day = { day: dayIndex, segments: [], windowEndsBefore: closes };
@@ -264,7 +269,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
     const nights = flownNights(solution, launch);
     const key = lineKey(solution.choiceHistory[launch.choice], nights);
     const last = day.segments[day.segments.length - 1];
-    const clock = clockOf(launch.launchAt);
+    const clock = clockOf(sinceWake(solution, launch.launchAt));
     if (last !== undefined && last !== 'window-end' && last.key === key) {
       last.count++;
       last.clock.push(clock);

@@ -86,6 +86,7 @@ export function projectSolvedVisit(args: {
     gemBudget,
     effort,
     ...(solution.sleepSeconds !== undefined && { sleepSeconds: solution.sleepSeconds }),
+    ...(solution.wakeOffsetSeconds !== undefined && { wakeOffsetSeconds: solution.wakeOffsetSeconds }),
     ...(solution.eventWindowSeconds !== undefined && { eventWindowSeconds: solution.eventWindowSeconds }),
   };
 }

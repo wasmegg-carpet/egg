@@ -1,5 +1,5 @@
-// The app's sleep model: a day is a waking window followed by a sleep window, the plan starts at wake-up, and
-// sleep forbids launching and nothing else. `optimizeFull` uses it to turn a wall-clock horizon and a menu
+// The app's sleep model: a day is a waking window followed by a sleep window, the plan starts some time after a
+// wake-up (at it, by default), and sleep forbids launching and nothing else. `optimizeFull` uses it to turn a wall-clock horizon and a menu
 // into the sleep-aware problem `solver/SPEC.md` sections 9 and 10 describe.
 //
 // Deliberately not shared with the arena, which keeps its own copy of the same rule
@@ -20,19 +20,34 @@ export function sleepSecondsOf(value: number | undefined): number {
   return Math.min(value, MAX_SLEEP_SECONDS);
 }
 
+// A wake offset as the solver may be handed it, for a player who sleeps `sleep` seconds a day: the seconds since
+// they last woke up, at the plan's start. 0 for anything that is not a usable offset (absent, non-finite,
+// non-positive) and with no sleep window, where there is no wake-up to count from; never more than the waking
+// window. Past the waking window the player is in the night at the plan's start, which is not modelled yet: read
+// as bedtime, the latest awake instant, a placeholder the night case replaces (`solver/SPEC.md` section 17).
+export function wakeOffsetSecondsOf(value: number | undefined, sleep: number): number {
+  if (!(sleep > 0) || value === undefined || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(value, DAY_SECONDS - sleep);
+}
+
 // What one slot of horizon `horizon` offers once the player sleeps `sleep` seconds a day: `nights` whole
 // sleep windows, and the waking seconds around them. A trailing partial night is unused, and a trailing
-// partial day contributes at most one waking window.
+// partial day contributes at most one waking window. A plan starting `wakeOffset` seconds after a wake-up (at most
+// the waking window) runs from there on the player's regular day: the first waking window has that much less left,
+// and the nights fall where the regular day puts them (`solver/SPEC.md` section 17).
 export interface SleepCapacity {
   wakingSecondsPerSlot: number;
   nightsPerSlot: number;
 }
 
-export function sleepCapacity(horizon: number, sleep: number): SleepCapacity {
+export function sleepCapacity(horizon: number, sleep: number, wakeOffset = 0): SleepCapacity {
   const waking = DAY_SECONDS - sleep;
-  const h = Number.isFinite(horizon) && horizon > 0 ? horizon : 0;
+  const h = (Number.isFinite(horizon) && horizon > 0 ? horizon : 0) + wakeOffset;
   const days = Math.floor(h / DAY_SECONDS);
-  return { wakingSecondsPerSlot: days * waking + Math.min(h - days * DAY_SECONDS, waking), nightsPerSlot: days };
+  return {
+    wakingSecondsPerSlot: days * waking + Math.min(h - days * DAY_SECONDS, waking) - wakeOffset,
+    nightsPerSlot: days,
+  };
 }
 
 // The fields a variant is built from; generic so display-only fields ride along untouched.

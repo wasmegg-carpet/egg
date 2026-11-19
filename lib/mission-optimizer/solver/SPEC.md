@@ -501,7 +501,8 @@ the app never sets this field without the `sleep` field that turns them on.
 Section 9's budget is a relaxation; this section is what stops it from being
 reported as a plan. A problem that also carries `sleep` (`types.ts`:
 `sleepSeconds` `S` and `horizonSeconds` `H`, the horizon `timeCapacityPerSlot`
-was before it came to count waking seconds) gets three more things, and every
+was before it came to count waking seconds, and optionally `wakeOffsetSeconds`,
+section 17) gets three more things, and every
 plan it returns has been laid out on real days and verified. **Absent, the
 matrix is section 9's**: no fit rows and no trim, and the calendar is section
 12's back-to-back one. `normalizeProblem` leaves the field
@@ -622,7 +623,8 @@ the allocation, exactly. A failure throws, as the solver's other internal
 failures do (`Rows.end`, `logGrid`); an unverified plan is never returned.
 
 **Result.** `PlanResult.calendar`: per slot, launches in order, each with its
-option index and id, `launchAt` (seconds from wake-up on day 0), waking seconds
+option index and id, `launchAt` (seconds from the plan's start: wake-up on day 0,
+or `wakeOffsetSeconds` after it, section 17), waking seconds
 and nights. A group's launches are flown as its first member, as `emit`
 allocates them. `PlanResult.layoutStats`: launches trimmed (overnight ones
 counted apart), layout MILPs solved, margin re-solves, verifier retries.
@@ -762,7 +764,8 @@ A problem may carry both `eventWindowSeconds` `E` and `sleep`. The decision this
 rests on, the user's: the plan starts now at `t = 0`, the window is the prefix
 `[0, E]` of wall-clock time, nights included, and the player is at the start of
 a waking day at `t = 0`, the assumption section 10 already makes. No new input,
-no clock time. **Absent, the matrix is the one sections 10 to 12 build**: with
+no clock time. (Section 17 lets the plan start later in a waking day; the window
+still opens at `t = 0`.) **Absent, the matrix is the one sections 10 to 12 build**: with
 only a sleep window, only an event window, or neither, every number below
 reduces to theirs, so the sleep-only matrix is section 10's, the window-only
 matrix section 11's, and with neither it is the matrix the solver built before
@@ -1207,3 +1210,125 @@ are all `normal` options, which the window leaves as they were, so it is a plan
 of the windowed problem, and promotion only raises its joint.
 `tests/unit/solve-fallback.spec.ts` holds seed 2030 to at least its windowless
 plan, and a solve whose windowed MILPs all fail to the windowless plan.
+
+## 17. A plan that starts after wake-up
+
+Sections 10 to 16 assume the player wakes up at `t = 0`. The decision this
+section rests on, the user's: the plan may instead start `x =
+SleepWindow.wakeOffsetSeconds` after the player last woke, and the player keeps
+their regular schedule. Write `r = t + x` for time on that regular day. Its
+wake-ups are at `r = k D`, its waking windows `[k D, k D + W]` and its nights
+`[k D + W, (k + 1) D]`. The plan runs over `[x, x + H]` in `r`.
+
+- **The awake case, `0 <= x <= W`**, is what is modelled. The player is awake at
+  `t = 0` with `W - x` of the first waking window left, and every later day is a
+  whole one.
+- **The night case, `W < x < D`**, is not modelled yet: the player is up at
+  `t = 0` only to launch, and then sleeps the `D - x` left until the regular
+  wake-up. Until it is, `normalizeProblem` reads such an `x` as `W`, bedtime, the
+  latest awake instant, and so do `wakeOffsetSecondsOf` (`../sleep.ts`) and the
+  arena's `wakeOffsetOf`. This is a placeholder, and it is safe: under it the
+  first wake-up comes at `t = S` rather than at the real `t = D - x`, which is
+  earlier, and every block still charges a whole `S` for its first night. So a
+  plan for the clamped offset launches only when the player really is awake, and
+  holds each slot for at least as long as the flights do. It only wastes up to
+  `x - W` of the first morning.
+- **`x = 0`, or absent**, is the problem of sections 10 to 16 exactly (below).
+- **The 2x window** still opens at `t = 0` and closes at `t = E`, so in `r` it is
+  `[x, x + E]`. It composes with the offset and needs nothing of its own.
+- **Without a sleep window** there is no day, and the offset is ignored. The app
+  drops it (`wakeOffsetSecondsOf`), and the solver never reads it when `day` is
+  null.
+
+**The design: shift into the regular day.** Every piece of day arithmetic in
+this directory is periodic from a wake-up at 0: `daySchedule`, the layout's
+segments and chain, `wakingFrom`, `compact`, `lastWakingInstant`,
+`wakingSecondsBefore`, `windowShape` and `leastWakingIn`. So the solver does not
+learn a new kind of day with a short first window. It times each slot on the
+regular day as a slot of horizon `H + x` whose first `x` seconds are a fixed
+**busy block**: a daytime item of `x` waking seconds and no night, at `r = 0`,
+in every slot, worth nothing. Every function above then holds as written. The
+shift is applied where the regular day meets the plan's own clock, and nowhere
+else:
+
+- **Capacity** (`../sleep.ts`, `sleepCapacity(H, S, x)`). The waking seconds of
+  `[x, x + H]` are those of `[0, x + H]` less the `x` already spent. The whole
+  nights are the ones that end by `x + H`, `floor((x + H) / D)`, since none
+  starts before `x <= W`. `sleepVariants` is unchanged: a variant's charge
+  depends only on `W` and `S`. The effort floor applies before the split, as
+  always. At Low effort each launch charges `W` and holds `D`, and a horizon of
+  `k` days holds `k` of them whatever `x` is.
+- **`daySchedule`**. `horizonSeconds` is `H + x`, the end of the plan on the
+  regular day, and the busy block's `x` joins the waking capacity the tail is
+  cut from. `planHorizonSeconds` keeps `H` for the verifier, and
+  `wakeOffsetSeconds` keeps `x`.
+- **Rows.** `slot_k` and `night_k` are unchanged in form: the slot row reads
+  the plan's waking seconds, and the night row the nights just stated. Every fit
+  row of section 10 and every window fit row of section 14 has the busy block as
+  an item in the first waking window, so its right-hand side loses
+  `u^(q)(x / W)`. That is valid by the same argument as the rows themselves: under
+  `u^(q)` a window's items sum to at most 1, and items summing to at most `P / W`
+  sum to at most `floor((q + 1) P / W) / q`, busy block included. The window
+  closes at `r = x + E` (`windowShape(E, W, x)`). Its waking seconds `A` are the
+  plan's, after the busy block, and `P` still counts the busy block when the
+  window closes on the first day, which is what the fit row's argument reads. A
+  doubled launch goes up awake in `[x, lambda]`, so `leastWakingIn` takes `x` as
+  its earliest start.
+- **Layout** (`layout.ts`). The first segment holds the busy block before its
+  daytime launches. `capacityOf` and `chainHeads` take `x` off it, launch times
+  start from `x`, `compact` starts from `x`, and an empty slot is free from `x`
+  when the slots are balanced. A slot is laid out in `r`, and every comparison
+  against the window and every launch time the calendar or the verifier sees is
+  `r - x`, computed once (`planAt`). The `given` calendar of section 16's
+  fallback is in the plan's own seconds and is shifted in.
+- **Verifier** (`verify.ts`) and the arena's `calendar.ts`. These state the rule
+  in the plan's own seconds: no launch before `t = 0`, blocks back to back, the
+  last ending by `H`, and the window against `E`. Only the time of day is read on
+  the regular day, at `t + x`.
+- **What the player sees** (`../optimizer-core.ts`). `nightsFlown` and
+  `awakeFrom` read bedtimes and wake-ups at `t + x`, so a slot's nights and load
+  are the regular day's. `OptimizerSolution.wakeOffsetSeconds` carries `x`, and
+  is absent at 0. `sinceWake` (`../optimizer-views.ts`) is a launch time on the
+  regular day, so the timeline's days break at the player's wake-ups, `t = k D -
+  x`, and its times of day are hours since waking.
+
+The alternative was a schedule with a first window of `W - x`. It would have
+touched every one of those functions, each with its own special case for day 0.
+The shift touches each at one place, the busy block, and the validity arguments
+of sections 10 and 14 carry over with the busy block as one more item.
+
+**`x = 0` is the problem without it, bit for bit.** `normalizeProblem` leaves the
+field absent at 0, as the app and the arena's problem builder do, so no object
+anywhere carries it. Every change above adds `x` to a time or takes it from one,
+which at `x = 0` is an IEEE identity. The rest are guarded and do not run at 0:
+the fit rows' busy term is not written.
+`tests/unit/wake-offset.spec.ts` holds the model, the MILP matrix and the solved
+plan to that at `x = 0` against an absent offset. The 40-seed measurement below
+holds the shipped solver to it against the revision before this section.
+
+**What the night case will need.** In `r` the plan then starts at `x`, inside
+the night `[W, D]`. The only awake instant before the first wake-up is `t = 0`
+itself.
+
+- **Verifier** (and the arena's `calendar.ts`). A launch at exactly `t = 0` is
+  admitted though its time of day is past bedtime.
+- **The first night** is `D - x`, shorter than `S`. A block over it as section 9
+  charges it, `waking + m S`, over-states the flight by `x - W`. That is safe, but
+  it costs launches. Exact would need either a first-night variant per option,
+  or a verifier and layout that read blocks against the real nights rather than
+  against `m S`. The second changes the meaning of a variant's `nights`.
+- **Capacity.** The first day has no waking seconds after `t = 0`. A launch at
+  `t = 0` takes the first night, and the nights are the ones ending by `x + H`, as
+  now.
+- **Layout.** The first segment is a zero-length window whose connector takes
+  off at `t = 0`. That is the awake case at `x = W` with a shorter first night,
+  which is why the clamp to `W` is the placeholder. The busy block is then the
+  whole first window: `u^(q)(1) = 1` off every fit row.
+- **Views.** A launch at `t = 0` belongs to a day 0 that is only that launch,
+  before the first wake-up at `t = D - x`.
+- **The placeholder itself:** the clamp in `normalizeProblem`, in
+  `wakeOffsetSecondsOf` and in the arena's `wakeOffsetOf`, which must change
+  together.
+
+**Measured.** See the addendum to the review's evaluation (eval/REPORT.md,
+"Wake offset") for the full tables.

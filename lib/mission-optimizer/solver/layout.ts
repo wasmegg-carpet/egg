@@ -137,15 +137,21 @@ export function connectorsOf(
   return runs.flatMap((run, r) => alternating(run, r === runs.length - 1));
 }
 
-// Segment `j` is the waking time between connector `j - 1` landing and connector `j` leaving; the last one is
-// the trailing partial day.
+// What of segment `j` the plan's start has already taken: the first segment's first `wakeOffsetSeconds`, a busy
+// block before any launch when the plan starts after wake-up (SPEC.md section 17), and nothing anywhere else.
+function busyIn(j: number, day: DaySchedule): number {
+  return j === 0 ? day.wakeOffsetSeconds : 0;
+}
+
+// Segment `j` is the waking time between connector `j - 1` landing and connector `j` leaving, less the busy block
+// in the first; the last one is the trailing partial day.
 function capacityOf(j: number, conns: readonly Connector[], day: DaySchedule): number {
-  return j < conns.length ? day.wakingSeconds : day.tailSeconds;
+  return (j < conns.length ? day.wakingSeconds : day.tailSeconds) - busyIn(j, day);
 }
 
 // Each connector's head, given the daytime seconds `used` in each segment, or the first segment that cannot
 // hold its share. Taking every head as large as its segment allows is exact rather than greedy: a larger head
-// only shortens the landing that the next segment has to absorb.
+// only shortens the landing that the next segment has to absorb. The first segment also holds the busy block.
 function chainHeads(
   conns: readonly Connector[],
   used: readonly number[],
@@ -158,13 +164,15 @@ function chainHeads(
     const conn = conns[j];
     const afterCap = j === conns.length - 1 ? day.tailSeconds : W;
     const lo = Math.max(0, conn.flex - afterCap);
-    const h = Math.min(conn.early ? W : conn.flex, W, W - after - used[j]);
+    const h = Math.min(conn.early ? W : conn.flex, W, W - after - used[j] - busyIn(j, day));
     if (h < lo - LAYOUT_TOL) return { heads, fail: j };
     const head = Math.max(h, lo);
     heads.push(head);
     after = Math.max(0, conn.flex - head);
   }
-  if (after + used[conns.length] > day.tailSeconds + LAYOUT_TOL) return { heads, fail: conns.length };
+  if (after + used[conns.length] + busyIn(conns.length, day) > day.tailSeconds + LAYOUT_TOL) {
+    return { heads, fail: conns.length };
+  }
   return { heads, fail: -1 };
 }
 
@@ -544,10 +552,10 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   if (fail >= 0) throw new Error(`layout: segment ${fail} over-full after placement`);
 
   const laid: ClassLaunch[] = [];
-  // A zero-second daytime launch takes no time at all; it goes at the very start.
+  // A zero-second daytime launch takes no time at all; it goes at the very start, which is the plan's start.
   counts.forEach((n, c) => {
     if (ctx.classNights[c] === 0 && !(ctx.classSeconds[c] > 0))
-      for (let i = 0; i < n; i++) laid.push({ cls: c, launchAt: 0 });
+      for (let i = 0; i < n; i++) laid.push({ cls: c, launchAt: day.wakeOffsetSeconds });
   });
   // Within a segment, doubled launches go up first and shortest first, which starts as many of them as early as
   // any order can; the rest in the greedy's order. Only the totals reach the chain, so the order is free.
@@ -559,7 +567,7 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   let after = 0;
   for (let j = 0; j < segments; j++) {
     const dayStart = startDay * DAY_SECONDS;
-    let offset = after;
+    let offset = after + busyIn(j, day);
     for (const d of launchOrder) {
       const c = daytime[d];
       for (let i = 0; i < placed[d][j]; i++) {
@@ -587,7 +595,7 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   let launches = laid;
   if (left.some(n => n > 0)) {
     const retimed = compact(laid, ctx);
-    let free = retimed.reduce((end, l) => Math.max(end, l.launchAt + blockOf(l.cls, ctx)), 0);
+    let free = retimed.reduce((end, l) => Math.max(end, l.launchAt + blockOf(l.cls, ctx)), day.wakeOffsetSeconds);
     let appended = 0;
     daytime.forEach((c, d) => {
       for (; left[d] > 0; left[d]--, appended++) {
@@ -619,14 +627,14 @@ function wakingFrom(t: number, day: DaySchedule): number {
 }
 
 // `launches` in the order given, each re-timed to the first waking instant at or after the end of the block before
-// it. Never later than it was, for a timeline that verified: by induction each block ends no later than it did, so
-// the instant a launch waits for is no later either. Earliest start is optimal for a fixed order, since a block
-// that ends earlier never makes the next one start later.
+// it, the first at the plan's start. Never later than it was, for a timeline that verified: by induction each block
+// ends no later than it did, so the instant a launch waits for is no later either. Earliest start is optimal for a
+// fixed order, since a block that ends earlier never makes the next one start later.
 function compact(
   launches: readonly ClassLaunch[],
   ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>
 ): ClassLaunch[] {
-  let free = 0;
+  let free = ctx.day.wakeOffsetSeconds;
   return launches.map(l => {
     const launchAt = wakingFrom(free, ctx.day);
     free = launchAt + blockOf(l.cls, ctx);
@@ -634,11 +642,17 @@ function compact(
   });
 }
 
-// What one slot's timeline is verified against. Without a sleep window: no sleep, and the slot itself as the
-// horizon, so the verifier's rules reduce to launches going up back to back inside the slot (SPEC.md section 12).
+// What one slot's timeline is verified against, in the plan's own seconds. Without a sleep window: no sleep, and the
+// slot itself as the horizon, so the verifier's rules reduce to launches going up back to back inside the slot
+// (SPEC.md section 12).
 export function timelineOf(model: Model): SleepWindow {
-  return model.day
-    ? { sleepSeconds: model.day.sleepSeconds, horizonSeconds: model.day.horizonSeconds }
+  const day = model.day;
+  return day
+    ? {
+        sleepSeconds: day.sleepSeconds,
+        horizonSeconds: day.planHorizonSeconds,
+        ...(day.wakeOffsetSeconds > 0 && { wakeOffsetSeconds: day.wakeOffsetSeconds }),
+      }
     : { sleepSeconds: 0, horizonSeconds: model.timeCapacitySeconds };
 }
 
@@ -744,6 +758,12 @@ export function layOutPlan(
   const day = model.day;
   const sleep = timelineOf(model);
   const window = model.eventWindowSeconds;
+  // The layout times a slot on the player's regular day, from the wake-up at or before the plan's start, which is
+  // `shift` seconds before it (SPEC.md section 17); the calendar, the verifier and the window are in the plan's own
+  // seconds. `planAt` is a launch's plan time, computed as the calendar writes it, so every comparison against the
+  // window here is the one the verifier makes. Without an offset the two clocks are one.
+  const shift = day?.wakeOffsetSeconds ?? 0;
+  const planAt = (l: ClassLaunch) => l.launchAt - shift;
   const current = counts.slice();
   const stats: LayoutStats = {
     launchesTrimmed: 0,
@@ -845,7 +865,7 @@ export function layOutPlan(
         .sort((a, b) => LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] || a - b);
       if (doubled.length === 0) continue;
       // Launch order, so the doubled ones that still miss the window are the last of the first `doubled.length`.
-      const late = positions.slice(0, doubled.length).filter(i => launches[i].launchAt > window + LAYOUT_TOL).length;
+      const late = positions.slice(0, doubled.length).filter(i => planAt(launches[i]) > window + LAYOUT_TOL).length;
       const demoted: (number | null)[] = [];
       for (let n = 0; n < late; n++) {
         const { from, to } = demote([...new Set(doubled)]);
@@ -873,7 +893,7 @@ export function layOutPlan(
   // holds a 1x launch inside the window to (SPEC.md section 16).
   const menuCopies = doubledCopiesOnMenu(options);
   const onMenu = (g: number, variant: DoubledVariant) => menuCopies[model.groups[g].members[0]][variant];
-  const inWindow = (l: ClassLaunch) => window > 0 && l.launchAt <= window + LAYOUT_TOL;
+  const inWindow = (l: ClassLaunch) => window > 0 && planAt(l) <= window + LAYOUT_TOL;
 
   // Moves one launch from group `from` to group `to`, in `current`.
   const move = (from: number, to: number) => {
@@ -960,7 +980,7 @@ export function layOutPlan(
 
   const timedOf = (launches: readonly ClassLaunch[]): TimedLaunch[] =>
     launches.map(l => ({
-      launchAt: l.launchAt,
+      launchAt: planAt(l),
       wakingSeconds: layout.classSeconds[l.cls],
       nights: layout.classNights[l.cls],
       doubled: layout.classVariant[l.cls] !== 'normal',
@@ -976,7 +996,7 @@ export function layOutPlan(
         launches.map(l => {
           const g = groupOf.get(l.option);
           if (g === undefined) throw new Error(`layout: the given calendar flies option ${l.option}, in no group`);
-          return { cls: layout.classOf[g], launchAt: l.launchAt };
+          return { cls: layout.classOf[g], launchAt: l.launchAt + shift };
         })
       );
       const fault = verify(timedOf(slot), sleep, window);
@@ -1079,9 +1099,10 @@ export function layOutPlan(
   // where launches go, never what the plan flies. The two slots are promoted again, since a launch can now go up
   // inside the window where it did not, or be the slot's last there (SPEC.md section 12).
   if (ctx !== null && !given) {
+    // An empty slot is free from the plan's start.
     const endOf = (launches: readonly ClassLaunch[]) => {
       const last = launches[launches.length - 1];
-      return last ? wakingFrom(last.launchAt + blockOf(last.cls, ctx), ctx.day) : 0;
+      return last ? wakingFrom(last.launchAt + blockOf(last.cls, ctx), ctx.day) : shift;
     };
     const total = bySlot.reduce((a, launches) => a + launches.length, 0);
     for (let moves = 0; moves < total * model.slots; moves++) {
@@ -1124,10 +1145,10 @@ export function layOutPlan(
     for (const launches of bySlot) for (const l of launches) delete l.group;
     for (const launches of bySlot) {
       let lastInside = -1;
-      launches.forEach((l, i) => l.launchAt <= window + VERIFY_TOL_SECONDS && (lastInside = i));
+      launches.forEach((l, i) => planAt(l) <= window + VERIFY_TOL_SECONDS && (lastInside = i));
       for (let i = 0; i < launches.length && !changed; i++) {
         const l = launches[i];
-        if (layout.classVariant[l.cls] !== 'normal' || !(l.launchAt < window - VERIFY_TOL_SECONDS)) continue;
+        if (layout.classVariant[l.cls] !== 'normal' || !(planAt(l) < window - VERIFY_TOL_SECONDS)) continue;
         const want: DoubledVariant = i === lastInside ? 'overhang' : 'event';
         const spare = groupsOf[l.cls].find(g => left[g] > 0 && !onMenu(g, want));
         if (spare !== undefined) {
@@ -1171,7 +1192,7 @@ export function layOutPlan(
       return {
         option,
         optionId: options[option].id,
-        launchAt: l.launchAt,
+        launchAt: planAt(l),
         wakingSeconds: layout.classSeconds[l.cls],
         nights: layout.classNights[l.cls],
         doubled: layout.classVariant[l.cls] !== 'normal',

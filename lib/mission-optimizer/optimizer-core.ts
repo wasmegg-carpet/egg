@@ -5,7 +5,7 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { capacityVariants, eventWindowSecondsOf } from './capacity';
-import { sleepCapacity, sleepSecondsOf, sleepVariants } from './sleep';
+import { sleepCapacity, sleepSecondsOf, sleepVariants, wakeOffsetSecondsOf } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
 import {
@@ -42,6 +42,12 @@ export interface OptimizeArgs {
   // Present, the menu is split into daytime and overnight variants and only a plan laid out on real days is
   // returned (`solver/SPEC.md` sections 9 and 10).
   sleepSeconds?: number;
+  // Seconds since the player last woke up, now: the plan starts that far into a waking day of the regular schedule
+  // `sleepSeconds` sets, so the first waking window has that much less left, and every later day is a whole one
+  // (`solver/SPEC.md` section 17). Absent or 0 starts the plan at wake-up, as it always did; ignored without
+  // `sleepSeconds`. Past the waking window (the player is up in the night) is not modelled yet and reads as
+  // bedtime (`wakeOffsetSecondsOf`).
+  wakeOffsetSeconds?: number;
   // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is no event. Present, the
   // menu gains the doubled variants (`capacity.ts`), capped at `MAX_DOUBLE_CAPACITY_SECONDS`, and the window
   // rows hold them inside it (`solver/SPEC.md` section 11). The caller passes the menu as enumerated; it never
@@ -72,20 +78,24 @@ const CLOCK_TOL = 1e-6;
 // including, its landing `flightSeconds` later. A ship sent up at bedtime is one; one that lands as the player
 // goes to bed is not. This is what the player sees, and it can differ from the night count of the variant the
 // solver budgeted the launch as: a re-timed or folded launch can land a night early, and a daytime one can go up
-// before bed and land in the night (`solver/SPEC.md` section 14).
-export function nightsFlown(launchAt: number, flightSeconds: number, sleepSeconds: number): number {
+// before bed and land in the night (`solver/SPEC.md` section 14). Bedtimes fall on the regular day, `wakeOffset`
+// seconds ahead of the plan's clock (section 17).
+export function nightsFlown(launchAt: number, flightSeconds: number, sleepSeconds: number, wakeOffset = 0): number {
   if (!(sleepSeconds > 0)) return 0;
   const bedtime = DAY_SECONDS - sleepSeconds;
-  const first = Math.ceil((launchAt - CLOCK_TOL - bedtime) / DAY_SECONDS);
-  const last = Math.ceil((launchAt + flightSeconds - CLOCK_TOL - bedtime) / DAY_SECONDS) - 1;
+  const at = launchAt + wakeOffset;
+  const first = Math.ceil((at - CLOCK_TOL - bedtime) / DAY_SECONDS);
+  const last = Math.ceil((at + flightSeconds - CLOCK_TOL - bedtime) / DAY_SECONDS) - 1;
   return Math.max(0, last - first + 1);
 }
 
 // The first instant at or after `t` the player is awake: `t` itself, or the next wake-up when `t` is in a night.
-function awakeFrom(t: number, sleepSeconds: number): number {
+// In the plan's seconds, with its wake-ups `wakeOffset` before each whole day of the regular one.
+function awakeFrom(t: number, sleepSeconds: number, wakeOffset: number): number {
   if (!(sleepSeconds > 0)) return t;
-  const day = Math.floor((t + CLOCK_TOL) / DAY_SECONDS);
-  return t - day * DAY_SECONDS <= DAY_SECONDS - sleepSeconds + CLOCK_TOL ? t : (day + 1) * DAY_SECONDS;
+  const at = t + wakeOffset;
+  const day = Math.floor((at + CLOCK_TOL) / DAY_SECONDS);
+  return at - day * DAY_SECONDS <= DAY_SECONDS - sleepSeconds + CLOCK_TOL ? t : (day + 1) * DAY_SECONDS - wakeOffset;
 }
 
 // Per-slot occupancy of a plan, read off the calendar the solver verified, which is the arrangement the plan
@@ -94,18 +104,21 @@ function awakeFrom(t: number, sleepSeconds: number): number {
 // ship and launch again; without one, the sum of its launches.
 // Each launch keeps its place and names the `choiceHistory` entry it flies by index: `choiceOf` maps an option
 // index to that entry. With a sleep window it also carries the nights it is in the air for, by its launch time
-// and its flight (`nightsFlown`).
+// and its flight (`nightsFlown`). `wakeOffset` is the plan's start on the player's regular day (0, at wake-up).
 export function slotSummariesOfCalendar(
   options: LaunchOption[],
   calendar: CalendarLaunch[][],
   sleepSeconds: number,
-  choiceOf: ReadonlyMap<number, number>
+  choiceOf: ReadonlyMap<number, number>,
+  wakeOffset = 0
 ): SlotSummary[] {
   if (calendar.every(launches => launches.length === 0)) return [];
   return calendar.map(launches => {
     const last = launches[launches.length - 1];
     return {
-      loadSeconds: last ? awakeFrom(last.launchAt + last.wakingSeconds + last.nights * sleepSeconds, sleepSeconds) : 0,
+      loadSeconds: last
+        ? awakeFrom(last.launchAt + last.wakingSeconds + last.nights * sleepSeconds, sleepSeconds, wakeOffset)
+        : 0,
       rawLoadSeconds: launches.reduce((total, launch) => total + options[launch.option].rawTime, 0),
       launches: launches.map(launch => {
         const choice = choiceOf.get(launch.option);
@@ -116,7 +129,7 @@ export function slotSummariesOfCalendar(
           choice,
           launchAt: launch.launchAt,
           ...(sleepSeconds > 0 && {
-            nights: nightsFlown(launch.launchAt, options[launch.option].rawTime, sleepSeconds),
+            nights: nightsFlown(launch.launchAt, options[launch.option].rawTime, sleepSeconds, wakeOffset),
           }),
         };
       }),
@@ -133,7 +146,11 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // each option into the ways it can sit against those nights (`sleep.ts`). Without one this is today's
   // problem field for field: the menu as given, and neither sleep field on it.
   const sleepSeconds = sleepSecondsOf(args.sleepSeconds);
-  const capacity = sleepSeconds > 0 ? sleepCapacity(args.timeCapacityPerSlot, sleepSeconds) : undefined;
+  // Where the plan starts on the player's regular day: 0, at wake-up, unless they say they woke earlier. Without a
+  // sleep window there is no day, and it is 0 whatever they said.
+  const wakeOffsetSeconds = wakeOffsetSecondsOf(args.wakeOffsetSeconds, sleepSeconds);
+  const capacity =
+    sleepSeconds > 0 ? sleepCapacity(args.timeCapacityPerSlot, sleepSeconds, wakeOffsetSeconds) : undefined;
   // The event window, likewise: doubled variants of whatever the sleep split produced, so a doubled launch keeps
   // its nights and its waking seconds. Without one the menu passes through untouched.
   const eventWindowSeconds = eventWindowSecondsOf(args.eventWindowSeconds);
@@ -156,7 +173,11 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : args.timeCapacityPerSlot,
     ...(capacity && {
       nightsPerSlot: capacity.nightsPerSlot,
-      sleep: { sleepSeconds, horizonSeconds: args.timeCapacityPerSlot },
+      sleep: {
+        sleepSeconds,
+        horizonSeconds: args.timeCapacityPerSlot,
+        ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
+      },
     }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
     slots: NUM_SLOTS,
@@ -205,9 +226,10 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
 
   // `assembleSolution` pushes one `choiceHistory` entry per allocated option, in `alloc`'s order.
   const choiceOf = new Map([...alloc.keys()].map((option, choice) => [option, choice]));
-  const slots = slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds, choiceOf);
+  const slots = slotSummariesOfCalendar(feasibleOptions, calendar, sleepSeconds, choiceOf, wakeOffsetSeconds);
   return assembleFullSolution(assembly, alloc, slots, craftSplit, {
     ...(capacity && { sleepSeconds }),
+    ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
   });
 }
@@ -217,7 +239,7 @@ function assembleFullSolution(
   bestAlloc: Map<number, number>,
   bestSlots: SlotSummary[],
   craftSplit: CraftSplitReport | undefined,
-  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'eventWindowSeconds'>
+  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'wakeOffsetSeconds' | 'eventWindowSeconds'>
 ): OptimizerSolution {
   const { recipeDag, ownedStock, targets } = a;
   const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
