@@ -89,13 +89,21 @@ interface ClassLaunch {
   group?: number;
 }
 
+// Where an order of connectors starts. `largest`, the usual: the first segment is a whole waking window with no
+// landing in it, so the largest flex goes first. With a wake offset the first segment starts busy, as if a landing
+// of `wakeOffsetSeconds` ran into it (SPEC.md section 17), and the usual order can fail there where another stands:
+// `small` alternates from the smallest instead, as a long landing calls for, and `smallest` flies the smallest first
+// and then the usual alternation, so the landing after it is as short as it can be.
+type OrderStart = 'largest' | 'small' | 'smallest';
+
 // Ordered by flex, alternately largest and smallest so a long landing is followed by a short take-off, and, when
 // `smallestLast`, with the smallest held back to the end so nothing lands past the final wake-up into a short tail.
-function alternating(conns: Connector[], smallestLast: boolean): Connector[] {
+function alternating(conns: Connector[], smallestLast: boolean, start: OrderStart = 'largest'): Connector[] {
   const sorted = conns.sort((a, b) => a.flex - b.flex || a.cls - b.cls);
+  const first = start === 'smallest' ? sorted.shift() : undefined;
   const last = smallestLast ? sorted.shift() : undefined;
-  const out: Connector[] = [];
-  for (let lo = 0, hi = sorted.length - 1, big = true; lo <= hi; big = !big)
+  const out: Connector[] = first ? [first] : [];
+  for (let lo = 0, hi = sorted.length - 1, big = start !== 'small'; lo <= hi; big = !big)
     out.push(big ? sorted[hi--] : sorted[lo++]);
   if (last) out.push(last);
   return out;
@@ -106,11 +114,13 @@ function alternating(conns: Connector[], smallestLast: boolean): Connector[] {
 // rows' argument flies them in, each alternating among themselves from the largest flex (the one that can take off
 // earliest in its day) — and everything else follows in the usual order, so the ships that must start inside the
 // 2x window take the first nights (SPEC.md section 13). A heuristic either way: another order may place more,
-// which makes what this layout places a lower bound on what fits, never an over-statement.
+// which makes what this layout places a lower bound on what fits, never an over-statement. `start` says where the
+// first run starts (`OrderStart`).
 export function connectorsOf(
   counts: readonly number[],
   ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'> & Partial<Pick<SlotContext, 'doubled' | 'overhang'>>,
-  doubledFirst = false
+  doubledFirst = false,
+  start: OrderStart = 'largest'
 ): Connector[] {
   const all: Connector[] = [];
   let nights = 0;
@@ -134,7 +144,19 @@ export function connectorsOf(
   // Only the last run holds its smallest back for the tail; without a doubled ship that is the one usual order.
   // In either order a doubled ship takes off as early as its day allows.
   for (const conn of all) if (conn.cls !== NULL_CONNECTOR && ctx.doubled?.[conn.cls] === true) conn.early = true;
-  return runs.flatMap((run, r) => alternating(run, r === runs.length - 1));
+  return runs.flatMap((run, r) => alternating(run, r === runs.length - 1, r === 0 ? start : 'largest'));
+}
+
+// The connector orders a slot tries, in turn: the usual one, and with a wake offset the two that start from small
+// flexes, for a first segment that begins busy (`OrderStart`). Without an offset, the usual one alone.
+function connectorOrders(
+  counts: readonly number[],
+  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'> & Partial<Pick<SlotContext, 'doubled' | 'overhang'>>,
+  doubledFirst = false
+): Connector[][] {
+  const usual = connectorsOf(counts, ctx, doubledFirst);
+  if (!(ctx.day.wakeOffsetSeconds > 0)) return [usual];
+  return [usual, connectorsOf(counts, ctx, doubledFirst, 'small'), connectorsOf(counts, ctx, doubledFirst, 'smallest')];
 }
 
 // What of segment `j` the plan's start has already taken: the first segment's first `wakeOffsetSeconds`, a busy
@@ -420,6 +442,8 @@ interface SlotHow {
   around: 'wrap' | 'strict';
   // Positions, in the order of the connectors that stood, of the doubled ships flown as folds.
   fold?: ReadonlySet<number>;
+  // The laid-out slot re-timed with its doubled launches first (`regroup` in `layOutPlan`); only with a wake offset.
+  regroup?: boolean;
 }
 
 const TODAY: SlotHow = { doubledFirst: true, around: 'wrap' };
@@ -487,15 +511,15 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   // any daytime launch is placed around them. The night rows make the first loop idle unless the problem's
   // nights and horizon disagree; the second fires where two long landings and take-offs meet in one day.
   // Doubled ships first when that order stands, the usual order when only it does (SPEC.md section 13); with no
-  // doubled ship the two are one order, tried once.
+  // doubled ship the two are one order, tried once. With a wake offset each is tried from its other starts as well
+  // when it does not stand from the usual one (`connectorOrders`, SPEC.md section 17).
   const standing = (): Connector[] | null => {
     if (how.doubledFirst) {
-      const first = connectorsOf(counts, ctx, true);
-      if (standsAlone(first, day)) return first;
+      const first = connectorOrders(counts, ctx, true).find(order => standsAlone(order, day));
+      if (first) return first;
       if (!counts.some((n, c) => n > 0 && ctx.classNights[c] > 0 && ctx.doubled[c])) return null;
     }
-    const usual = connectorsOf(counts, ctx);
-    return standsAlone(usual, day) ? usual : null;
+    return connectorOrders(counts, ctx).find(order => standsAlone(order, day)) ?? null;
   };
   while (nightsOf() > day.nights) dropOvernight(overnight());
   for (;;) {
@@ -590,22 +614,41 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   // sooner; what the segments could not place then goes on the end, longest first, while it still ends by the
   // horizon (SPEC.md section 14). The re-timed slot is kept when that places a launch more; otherwise the segments'
   // timeline stands, as it is. What does not fit even there leaves the plan, one launch at a time, each the one the
-  // judge misses least.
+  // judge misses least. With a wake offset the first waking window is short, and a launch the segments could not
+  // fit in it may still go up at the plan's start and fly on into the night: before going on the end, what was left
+  // over is tried at the front, longest first, while the re-timed slot still ends by the horizon (SPEC.md section
+  // 17). A 1x launch goes there only on a slot without a doubled launch, which it would push out of the 2x window.
   const left = daytime.map((c, d) => counts[c] - placed[d].reduce((a, n) => a + n, 0));
   let launches = laid;
   if (left.some(n => n > 0)) {
-    const retimed = compact(laid, ctx);
-    let free = retimed.reduce((end, l) => Math.max(end, l.launchAt + blockOf(l.cls, ctx)), day.wakeOffsetSeconds);
-    let appended = 0;
+    let order = laid;
+    let gained = 0;
+    const endOf = (timeline: readonly ClassLaunch[]) =>
+      timeline.reduce((end, l) => Math.max(end, l.launchAt + blockOf(l.cls, ctx)), day.wakeOffsetSeconds);
+    if (day.wakeOffsetSeconds > 0) {
+      const holdsDoubled = laid.some(l => ctx.doubled[l.cls]);
+      daytime.forEach((c, d) => {
+        if (holdsDoubled && !ctx.doubled[c]) return;
+        while (left[d] > 0) {
+          const trial = [{ cls: c, launchAt: 0 }, ...order];
+          if (endOf(compact(trial, ctx)) > day.horizonSeconds + LAYOUT_TOL) break;
+          order = trial;
+          left[d]--;
+          gained++;
+        }
+      });
+    }
+    const retimed = compact(order, ctx);
+    let free = endOf(retimed);
     daytime.forEach((c, d) => {
-      for (; left[d] > 0; left[d]--, appended++) {
+      for (; left[d] > 0; left[d]--, gained++) {
         const at = wakingFrom(free, day);
         if (at + ctx.classSeconds[c] > day.horizonSeconds + LAYOUT_TOL) break;
         retimed.push({ cls: c, launchAt: at });
         free = at + ctx.classSeconds[c];
       }
     });
-    if (appended > 0) launches = retimed;
+    if (gained > 0) launches = retimed;
     else daytime.forEach((c, d) => (left[d] = counts[c] - placed[d].reduce((a, n) => a + n, 0)));
   }
   daytime.forEach((c, d) => {
@@ -1025,12 +1068,35 @@ export function layOutPlan(
   // One slot laid out as `how` says, settled against the window, and laid out again one launch lighter for as long
   // as the verifier rejects it; null when `how` folds ships whose chain does not stand. The connectors and heads
   // are those of the layout that verified.
+  // A laid-out slot with its doubled launches moved to the front: the `event` ones by block, shortest first, then the
+  // `overhang`, then the rest in the order laid out, each at the first waking instant the one before it leaves
+  // (`compact`), so the doubled ones go up as early as that order allows. What then ends past the horizon comes off
+  // the end, the judge choosing the group within its class. An attempt for a slot with a wake offset, whose busy first
+  // segment the segments' doubled-first order can serve badly (SPEC.md section 17); the judge weighs it against the
+  // others.
+  const regroup = (launches: readonly ClassLaunch[], slotCtx: SlotContext): ClassLaunch[] => {
+    const order = [
+      ...launches
+        .filter(l => slotCtx.doubled[l.cls] && !slotCtx.overhang[l.cls])
+        .sort((a, b) => blockOf(a.cls, slotCtx) - blockOf(b.cls, slotCtx) || a.cls - b.cls),
+      ...launches.filter(l => slotCtx.overhang[l.cls]),
+      ...launches.filter(l => !slotCtx.doubled[l.cls]),
+    ];
+    const timeline = compact(order, slotCtx);
+    for (let last = timeline[timeline.length - 1]; last !== undefined; last = timeline[timeline.length - 1]) {
+      if (last.launchAt + blockOf(last.cls, slotCtx) <= slotCtx.day.horizonSeconds + LAYOUT_TOL) break;
+      timeline.pop();
+      drop([last.cls]);
+    }
+    return timeline;
+  };
+
   const runSlot = (slotCtx: SlotContext, k: number, how: SlotHow) => {
     let want = demand[k];
     for (;;) {
       const laid = layOutSlot(want, slotCtx, how);
       if (laid === null) return null;
-      const launches = promote(settle(laid.launches));
+      const launches = promote(settle(how.regroup ? regroup(laid.launches, slotCtx) : laid.launches));
       if (verify(timedOf(launches), sleep, window) === null) return { launches, conns: laid.conns, heads: laid.heads };
       stats.verifierRetries++;
       const placed = new Array<number>(layout.classes).fill(0);
@@ -1086,6 +1152,8 @@ export function layOutPlan(
       const fold = laid && foldable(laid.conns, laid.heads, ctx.day);
       if (fold && fold.size > 0) attempt({ ...how, fold });
     }
+    // With a wake offset, section 13's layout and the usual order once more, regrouped (`regroup`, SPEC.md section 17).
+    if (ctx.day.wakeOffsetSeconds > 0) for (const how of [ATTEMPTS[0], ATTEMPTS[2]]) attempt({ ...how, regroup: true });
     restore(best!.saved);
     bySlot.push(best!.launches);
   }

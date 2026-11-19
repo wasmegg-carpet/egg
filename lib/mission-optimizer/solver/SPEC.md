@@ -1297,11 +1297,58 @@ touched every one of those functions, each with its own special case for day 0.
 The shift touches each at one place, the busy block, and the validity arguments
 of sections 10 and 14 carry over with the busy block as one more item.
 
+**Two layout orders, for the busy first segment.** Laid out as section 10 lays
+it, a slot can fail where an offset makes the first segment short. Arena seed
+2000 (8 hours of sleep, 12 hours awake, Low effort) had a slot of thirteen
+16-hour one-night ships, one two-night ship and two one-night ships of 20.5
+waking hours. That slot flies: the two-night ship lands at a wake-up, and the
+long ships follow it. But `alternating` put the largest flex first, and a
+20.5-hour ship needs a 4.5-hour head where the first segment has 4. No single
+drop stood the chain up, so the judge dropped 16-hour ships one by one until the
+slot was empty. The busy block acts like a landing of `x` into the first
+segment, and a long landing calls for a short take-off. So with an offset, a
+slot whose usual order does not stand also tries two more (`connectorOrders`):
+alternating from the smallest flex (`small`), and the smallest first, then the
+usual alternation (`smallest`). The first order that stands is used. Without an
+offset, only the usual order is tried.
+
+**The first morning's leftovers, at the front.** With an offset, a daytime
+launch the segments could not place may still go up at the plan's start and fly
+on into the night. Seed 2001, 12 hours awake, three days: a 12.96-hour daytime
+ship and a 32-hour three-night ship fill a slot when the daytime one goes first,
+at `t = 0`. But it fits neither the 4 hours left of the first window nor the
+12-hour last morning, and the re-timed slot (section 14) only appends. So when
+segments leave launches over, with an offset, each leftover, longest first, is
+tried at the front of the re-timed slot. It stays there while the slot still ends
+by the horizon, and only then does the rest go on the end. A 1x launch goes to
+the front only on a slot without a doubled launch, which it would push out of
+the 2x window. Before these two changes, the first smoke pass with 12 hours awake
+lost 0.83 log10 against its promise on seed 2000 and 0.06 on seed 2001. After
+them it lost nothing on either.
+
+**Doubled launches regrouped at the front.** The doubled-first order of section
+13 is built on segments, and with an offset its first segment is short. Arena
+seed 2007 (8 hours of sleep, starting at bedtime, a 48-hour window) has a slot of
+two 4-hour one-night `event` ships, two 12-hour daytime `event` launches and an
+18.7-hour one-night `overhang`. All five fly doubled if they go up back to back,
+each at the first waking instant: at 0, 12, 24, 36 and 48 hours. The segments
+put the overhang third, and four launches across the plan were demoted: 0.40
+log10 under the promise. So a slot with a doubled launch and an offset has two
+more attempts (`regroup`): section 13's layout and the usual order, each laid
+out and then re-timed. The doubled launches come first, the `event` ones by
+block, shortest first, then the `overhang`. The rest follow in the order laid
+out, each at the first waking instant the one before it leaves. Whatever then
+ends past the horizon comes off the end, the judge choosing the group within
+its class. The judge weighs these against the other attempts, as in section 14.
+The timeline is `compact`'s, so it verifies by construction. On seed 2007 the
+gap fell to 0.019. Without an offset these attempts are not made.
+
 **`x = 0` is the problem without it, bit for bit.** `normalizeProblem` leaves the
 field absent at 0, as the app and the arena's problem builder do, so no object
 anywhere carries it. Every change above adds `x` to a time or takes it from one,
 which at `x = 0` is an IEEE identity. The rest are guarded and do not run at 0:
-the fit rows' busy term is not written.
+the fit rows' busy term is not written, and the extra connector orders, the
+front insertion and the regrouped attempts are skipped.
 `tests/unit/wake-offset.spec.ts` holds the model, the MILP matrix and the solved
 plan to that at `x = 0` against an absent offset. The 40-seed measurement below
 holds the shipped solver to it against the revision before this section.
