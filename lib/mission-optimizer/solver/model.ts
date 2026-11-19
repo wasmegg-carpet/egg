@@ -502,8 +502,12 @@ export function buildModel(raw: PlanProblem): Model {
     const atStart = opt.atStartSeconds !== undefined;
     const atStartBlock = atStart ? opt.atStartSeconds! : 0;
     if (atStart && (!(firstNight > 0) || !(atStartBlock >= 0) || atStartBlock > day!.planHorizonSeconds)) return;
-    // A window that closes before the first wake-up has nothing doubled in it but the launches at T+0, each of which
-    // is its slot's last doubled launch, an `overhang`.
+    // A launch at T+0 goes up inside any 2x window, which opens at T+0, and the game doubles it (section 16): flown at
+    // 1x it is a fault wherever the menu has its doubled copy, and `capacityVariants` gives every option an
+    // `overhang` one. So with a window only its doubled copies are kept, and the window rows see it, as the
+    // labelling they rest on has it (section 13). A window that closes before the first wake-up has nothing doubled
+    // in it but the launches at T+0, each of which is its slot's last doubled launch, an `overhang`.
+    if (atStart && variant === 'normal' && window > 0) return;
     if (firstNight > 0 && window < firstNight && variant !== 'normal' && (!atStart || variant === 'event')) return;
 
     const yieldEntries: Entry[] = [];

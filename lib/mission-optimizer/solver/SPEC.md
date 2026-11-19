@@ -1404,9 +1404,15 @@ _What the model adds._
 - **Drops.** T+0 options are dropped without a night at the start, and when the
   charge is past the horizon.
 - **The 2x window.** It closes at `E - F` on the regular day (`windowShape`).
-  When `E < F` it closes before the first wake-up, and only the T+0 launches go
-  up inside it, each its slot's last doubled launch. So every other doubled
-  option is dropped, and so is every T+0 `event` copy.
+  A T+0 launch always goes up inside it, and section 16 makes it doubled: every
+  option has an `overhang` copy, so a 1x T+0 launch is a fault. So with a window
+  the T+0 `normal` options are dropped, and the window rows see every T+0 launch,
+  as the labelling of section 13 has it. Without the drop, the first 40-seed run
+  planned a 1x T+0 launch ahead of two doubled ones that could not both start
+  inside the window (seed 2029, 0.36 log10 lost). When `E < F` the window closes
+  before the first wake-up, and only the T+0 launches go up inside it, each its
+  slot's last doubled launch. So every other doubled option is dropped, and so is
+  every T+0 `event` copy.
 - **Absent means unchanged.** `start_k` has no entries without a T+0 class, and
   `Rows.end` drops it, so `x <= W` builds the matrix it did.
 
@@ -1416,7 +1422,11 @@ and the waking seconds of `R`'s day a busy block. That is the awake case's busy
 block, with its layout orders and its first-morning fixes (`layOutAround`). Its
 block in the layout is its landing, the longest of its class's groups. The
 balancing pass never moves it, and `settle` never swaps it with a later launch
-of equal numbers. The regrouped attempts run only in the awake case.
+of equal numbers. The regrouped attempts run here too, the T+0 launch kept first
+and the rest re-timed from its landing. A doubled ship that must go up late in
+the day after it, which the segments cannot fly, is one such case: seed 2030, at
+20 hours and with the 48-hour window, lost 0.89 log10 without them, and nothing
+with them.
 
 _Verifier and arena._ Both admit a launch at exactly `t = 0`, to a microsecond,
 while the player is in the night, and no other launch in that night. A T+0

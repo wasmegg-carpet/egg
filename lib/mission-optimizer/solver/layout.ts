@@ -675,9 +675,10 @@ function wakingFrom(t: number, day: DaySchedule): number {
 // fixed order, since a block that ends earlier never makes the next one start later.
 function compact(
   launches: readonly ClassLaunch[],
-  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>
+  ctx: Pick<SlotContext, 'classSeconds' | 'classNights' | 'day'>,
+  from = ctx.day.wakeOffsetSeconds
 ): ClassLaunch[] {
-  let free = ctx.day.wakeOffsetSeconds;
+  let free = from;
   return launches.map(l => {
     const launchAt = wakingFrom(free, ctx.day);
     free = launchAt + blockOf(l.cls, ctx);
@@ -1087,7 +1088,10 @@ export function layOutPlan(
   // the end, the judge choosing the group within its class. An attempt for a slot with a wake offset, whose busy first
   // segment the segments' doubled-first order can serve badly (SPEC.md section 17); the judge weighs it against the
   // others.
-  const regroup = (launches: readonly ClassLaunch[], slotCtx: SlotContext): ClassLaunch[] => {
+  // A launch at T+0 keeps its place, first, and the rest is re-timed from its landing.
+  const regroup = (laidOut: readonly ClassLaunch[], slotCtx: SlotContext): ClassLaunch[] => {
+    const start = laidOut.filter(l => isStart(l.cls));
+    const launches = laidOut.filter(l => !isStart(l.cls));
     const order = [
       ...launches
         .filter(l => slotCtx.doubled[l.cls] && !slotCtx.overhang[l.cls])
@@ -1095,13 +1099,13 @@ export function layOutPlan(
       ...launches.filter(l => slotCtx.overhang[l.cls]),
       ...launches.filter(l => !slotCtx.doubled[l.cls]),
     ];
-    const timeline = compact(order, slotCtx);
+    const timeline = compact(order, slotCtx, start.length > 0 ? blockEnd(start[0], slotCtx) : undefined);
     for (let last = timeline[timeline.length - 1]; last !== undefined; last = timeline[timeline.length - 1]) {
       if (last.launchAt + blockOf(last.cls, slotCtx) <= slotCtx.day.horizonSeconds + LAYOUT_TOL) break;
       timeline.pop();
       drop([last.cls]);
     }
-    return timeline;
+    return [...start, ...timeline];
   };
 
   // A slot's launches laid out around its launch at T+0, when the plan starts in the night and the slot has one
@@ -1206,8 +1210,11 @@ export function layOutPlan(
       const fold = laid && foldable(laid.conns, laid.heads, ctx.day);
       if (fold && fold.size > 0) attempt({ ...how, fold });
     }
-    // With a wake offset, section 13's layout and the usual order once more, regrouped (`regroup`, SPEC.md section 17).
-    if (ctx.day.wakeOffsetSeconds > 0) for (const how of [ATTEMPTS[0], ATTEMPTS[2]]) attempt({ ...how, regroup: true });
+    // With a wake offset, awake or in the night, section 13's layout and the usual order once more, regrouped
+    // (`regroup`, SPEC.md section 17).
+    if (ctx.day.wakeOffsetSeconds > 0 || ctx.day.firstNightSeconds > 0) {
+      for (const how of [ATTEMPTS[0], ATTEMPTS[2]]) attempt({ ...how, regroup: true });
+    }
     restore(best!.saved);
     bySlot.push(best!.launches);
   }
