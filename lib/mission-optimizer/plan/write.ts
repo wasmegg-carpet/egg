@@ -22,11 +22,19 @@ import {
 
 const EGG_NAME_BY_ID = new Map<ei.Egg, VirtueEgg>(NON_HUMILITY_EGG_IDS.map(([name, id]) => [id, name]));
 
-// One row per mission, target and capacity, totalled across nights: the ascension planner flies a mission's
-// daytime and overnight launches alike. A doubled launch keeps its own row, marked, because it brings home twice
-// as much.
+// One row per mission, target and capacity, totalled across daytime and overnight launches: the ascension planner
+// flies them alike, so the file carries no overnight split and no night counts. A doubled launch keeps its own
+// row, marked, because it brings home twice as much.
 function launchesOf(solution: OptimizerSolution): { launches: HumilityMissionsLaunch[]; gemCost: number } {
-  const lines = launchTotals(solution, { byNights: false });
+  // The file's own order, as it always was (ship, duration, target, 1x before doubled), not the card's doubled-first
+  // one: the importer stages launches in file order, and a plan card's sort is not the file's to change.
+  const lines = launchTotals(solution, { byOvernight: false }).sort(
+    (a, b) =>
+      a.ship.shipType - b.ship.shipType ||
+      a.ship.durationType - b.ship.durationType ||
+      a.targetAfxId - b.targetAfxId ||
+      Number(a.doubled) - Number(b.doubled)
+  );
   const launches = lines.map(line => ({
     ship: spaceshipEnumName(line.ship.shipType),
     duration: durationEnumName(line.ship.durationType),

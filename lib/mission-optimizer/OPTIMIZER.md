@@ -182,16 +182,18 @@ large it is.
 
 ## Sleep
 
-The Sleep setting (`sleepHours`, 0 by default) is the hours a day the player
-cannot launch. Both apps edit it, and the event's two fields below, through one
+The Sleep setting (`sleepEnabled`, off by default, and `sleepHours`) is the hours
+a day the player cannot launch; off, the hours are kept but the plan is made
+around the clock. Both apps edit it, and the event's two fields below, through one
 control (`ui/components/mission-optimizer/OptimizerScheduleSettings.vue`), and
 `schedule-settings.ts` holds every rule about what a stored or typed value means
 and turns the three into `OptimizeArgs`, with its bounds read from `sleep.ts` and
 `capacity.ts` rather than restated. Ships still fly and land through the
 night; one that lands while the player is asleep waits. The plan starts at
-wake-up, every day is the same, and all three slots share the schedule. At 0
-neither the request nor the problem carries a sleep field, and the plan is
-made around the clock.
+wake-up, every day is the same, and all three slots share the schedule. With sleep
+off neither the request nor the problem carries a sleep field, and the plan is
+made around the clock. A record saved before the switch existed is on exactly
+when its hours were above 0, and while on the hours are at least half an hour.
 
 **`optimizeFull` owns the translation.** Its `timeCapacityPerSlot` stays the
 wall-clock horizon whether or not the player sleeps. Given `sleepSeconds`, it
@@ -219,18 +221,22 @@ missing. Four things downstream read the plan differently because of it:
 - _The timeline._ Each `SlotSummary` carries its calendar's launches, naming
   their `choiceHistory` entry by index (`finalizeSolutions` follows the entries
   when it sorts them), and when each goes up. `planTimeline`
-  (`optimizer-views.ts`) is the per-slot timeline every plan card shows, with day
-  headings on a sleep-aware plan and a repeating routine of days shown once.
+  (`optimizer-views.ts`) is the per-slot timeline every plan card shows: every
+  launch of every day in order, runs of identical launches merged (never across
+  a day on a sleep-aware plan), and no day headings or folded days, since the T+
+  times say where a day ends.
 - _The launch list._ Each slot launch carries the nights it is in the air
   for, read off its launch time and flight (`nightsFlown`), which can differ
   from the night count of the variant the solver budgeted it as: a re-timed
   launch can be back before bed, a daytime one sent up in the evening lands in
   the night. The card's totals (`launchTotals`) and the timeline's overnight
   marks read that, so the launches shown as flown while awake and the ones
-  shown overnight are what the calendar flies. The same mission can appear in
-  both lists.
+  shown overnight are what the calendar flies. Only whether a launch is in the
+  air at bedtime is shown (a green or an indigo dot), not for how many nights,
+  so lines split by that and the same mission can appear in both lists. Each
+  list is sorted doubled before 1x, then by ship, duration and target.
 - _The export._ The humility missions file folds a mission's daytime and
-  overnight launches into one line, as it folds any two entries of one mission.
+  overnight launches into one line (`launchTotals` with `byOvernight: false`), as it folds any two entries of one mission.
   `makespanSeconds` is the wall-clock makespan above, `effort` is the cadence
   while awake, and the visit carries `sleepSeconds` when the plan had a sleep
   window. The ascension planner reads `makespanSeconds` as how long to wait the
