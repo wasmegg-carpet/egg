@@ -72,7 +72,9 @@ export interface Model {
   // `eventWindowNights` nights. Without a sleep window the window itself and no night; with one, the waking seconds
   // and the whole nights before the last waking instant at or before its end, `eventWindowLatest`, since no launch
   // goes up asleep (SPEC.md sections 13 and 14). `eventWindowPartial` is the part of that instant's waking window
-  // before it, which the window's per-day fit rows read.
+  // before it, which the window's per-day fit rows read. With a wake offset, `eventWindowLatest` and
+  // `eventWindowPartial` are on the regular day from the wake-up at or before the plan's start, as `day` is, and
+  // `eventWindowBudget` is the plan's own waking seconds (SPEC.md section 17).
   eventWindowBudget: number;
   eventWindowNights: number;
   eventWindowLatest: number;
@@ -439,11 +441,11 @@ export function buildModel(raw: PlanProblem): Model {
   const slots = problem.slots;
   const day = problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null;
   // Without a sleep window, the window itself and no night (SPEC.md section 11); with one, what lies before its last
-  // waking instant (sections 13 and 14).
+  // waking instant (sections 13 and 14), on the regular day when the plan starts after wake-up (section 17).
   const shape =
     day === null
       ? { latest: window, nights: 0, waking: window, partial: window }
-      : windowShape(window, day.wakingSeconds);
+      : windowShape(window, day.wakingSeconds, day.wakeOffsetSeconds);
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {

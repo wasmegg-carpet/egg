@@ -121,7 +121,7 @@ function slotCharge(model: Model, grp: Pick<Model['groups'][number], 'timeSecond
   const day = model.day;
   if (day === null || grp.variant === 'normal') return grp.timeSeconds;
   const block = blockSeconds(grp.timeSeconds, grp.nights, day);
-  const least = leastWakingIn(block, model.eventWindowLatest, day.wakingSeconds) - WINDOW_TOL;
+  const least = leastWakingIn(block, model.eventWindowLatest, day.wakingSeconds, day.wakeOffsetSeconds) - WINDOW_TOL;
   return least > grp.timeSeconds ? least : grp.timeSeconds;
 }
 
@@ -391,6 +391,11 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
   const day = model.day;
   if (day !== null) {
     const fitQ = fitQs(layout.classSeconds, layout.classNights, day.wakingSeconds);
+    // A plan that starts after wake-up finds the first waking window's first `wakeOffsetSeconds` taken: a daytime
+    // item of its own in that window, worth `u^(q)` of it in every fit row and every window fit row, whose right-hand
+    // sides lose that much (SPEC.md section 17). None, and every row is the one above exactly.
+    const busy = (q: number) =>
+      day.wakeOffsetSeconds > 0 ? fitCoefficient(day.wakeOffsetSeconds, 0, day.wakingSeconds, q) : 0;
     for (let k = 0; k < layout.slots; k++) {
       for (const q of fitQ) {
         rows.begin(`fit_k${k}_q${q}`);
@@ -400,7 +405,7 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
             fitCoefficient(layout.classSeconds[c], layout.classNights[c], day.wakingSeconds, q)
           );
         }
-        rows.end(-INF, day.windows);
+        rows.end(-INF, day.windows - busy(q));
       }
     }
 
@@ -426,7 +431,7 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
           }
         }
         const partial = Math.floor(((q + 1) * model.eventWindowPartial) / day.wakingSeconds + FIT_INTEGER_TOL) / q;
-        rows.end(-INF, model.eventWindowNights + Math.min(1, partial));
+        rows.end(-INF, model.eventWindowNights + Math.min(1, partial) - busy(q));
       }
     }
   }

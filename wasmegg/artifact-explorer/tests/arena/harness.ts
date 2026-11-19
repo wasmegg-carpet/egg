@@ -12,7 +12,7 @@ import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
 import { capacityVariants, isDoubled } from './capacity';
 import { packFeasible, packFeasibleBudgets, type PackVerdict } from './pack-feasibility';
-import { sleepCapacity, sleepVariants } from './sleep';
+import { sleepCapacity, sleepVariants, wakeOffsetOf } from './sleep';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
 // plan that lands exactly on the cap can read a few ulps over it.
@@ -55,6 +55,9 @@ export interface SolveOverrides {
   sleepSeconds?: number;
   // Seconds of 2x capacity window left, replacing the instance's own. Reaches the menu and the problem together.
   eventWindowSeconds?: number;
+  // Seconds since the player woke up at the plan's start, replacing the instance's own; read against whichever
+  // sleep window applies (`wakeOffsetOf`).
+  wakeOffsetSeconds?: number;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -70,12 +73,19 @@ export interface SolveOverrides {
 function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay {
   const sleepSeconds = over.sleepSeconds ?? inst.sleepSeconds;
   const eventWindowSeconds = over.eventWindowSeconds ?? inst.eventWindowSeconds;
+  const wake = wakeOf(inst, over);
   return {
     sleepSeconds: sleepSeconds > 0 ? sleepSeconds : 0,
     horizonSeconds: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
     slots: NUM_SLOTS,
     eventWindowSeconds: eventWindowSeconds > 0 ? eventWindowSeconds : 0,
+    ...(wake > 0 && { wakeOffsetSeconds: wake }),
   };
+}
+
+// The wake offset after overrides, against the sleep window after overrides: 0 without sleep.
+function wakeOf(inst: ArenaInstance, over: SolveOverrides): number {
+  return wakeOffsetOf(over.wakeOffsetSeconds ?? inst.wakeOffsetSeconds ?? 0, over.sleepSeconds ?? inst.sleepSeconds);
 }
 
 function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProblem {
@@ -100,7 +110,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
   if (over.transformOptions) options = over.transformOptions(options);
   // With sleep, the slot budget becomes waking seconds plus whole nights. Without, `nightsPerSlot` is absent
   // rather than undefined, so a sleep-free instance states today's problem exactly.
-  const capacity = sleep > 0 ? sleepCapacity(horizon, sleep) : null;
+  const wake = wakeOf(inst, over);
+  const capacity = sleep > 0 ? sleepCapacity(horizon, sleep, wake) : null;
 
   return {
     options,
@@ -112,7 +123,10 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : horizon,
     ...(capacity ? { nightsPerSlot: capacity.nightsPerSlot } : {}),
     // The day itself, which the candidate needs to lay its plan out on real days and return a calendar.
-    ...(capacity ? { sleep: { sleepSeconds: sleep, horizonSeconds: horizon } } : {}),
+    // The wake offset rides on it, absent when the plan starts at wake-up, so such a problem is today's exactly.
+    ...(capacity
+      ? { sleep: { sleepSeconds: sleep, horizonSeconds: horizon, ...(wake > 0 ? { wakeOffsetSeconds: wake } : {}) } }
+      : {}),
     // Absent rather than 0 without one, so a window-free instance states today's problem exactly.
     ...(window > 0 ? { eventWindowSeconds: window } : {}),
     slots: NUM_SLOTS,
@@ -182,6 +196,7 @@ function problemKey(problem: PlanProblem): string {
     problem.timeCapacityPerSlot,
     ...(problem.nightsPerSlot === undefined ? [] : [`nights${problem.nightsPerSlot}`]),
     ...(problem.sleep === undefined ? [] : [`sleep${problem.sleep.sleepSeconds}/${problem.sleep.horizonSeconds}`]),
+    ...(problem.sleep?.wakeOffsetSeconds === undefined ? [] : [`wake${problem.sleep.wakeOffsetSeconds}`]),
     // Left out, the cache serves a plan solved for one window to a problem with another, and A11-window compares a
     // plan against itself and passes.
     ...(problem.eventWindowSeconds === undefined ? [] : [`window${problem.eventWindowSeconds}`]),

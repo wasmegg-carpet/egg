@@ -60,9 +60,12 @@ export function doubledCopiesOnMenu(options: readonly LaunchOption[]): { event: 
 // launches, so the last is held to its `overhang` copy and the others to their `event` copies (SPEC.md section
 // 16). A 1x launch is held to this only a microsecond clear of the window's edge, where a doubled one is admitted
 // a microsecond past it, so no launch at the edge has to be both. A problem without a sleep window is checked as
-// one with `sleepSeconds` 0 and its slot as the horizon.
+// one with `sleepSeconds` 0 and its slot as the horizon. Every time is the plan's own, from t = 0; the time of day
+// alone is read on the player's regular day, `wakeOffsetSeconds` later, since the plan starts that long after a
+// wake-up (SPEC.md section 17), and nothing may go up before t = 0.
 export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, eventWindowSeconds = 0): string | null {
   const waking = DAY_SECONDS - sleep.sleepSeconds;
+  const offset = sleep.wakeOffsetSeconds ?? 0;
   const inside = (l: TimedLaunch) => eventWindowSeconds > 0 && l.launchAt < eventWindowSeconds - VERIFY_TOL_SECONDS;
   // The last launch that may be doubled, which is the one that could be the overhang.
   let lastInside = -1;
@@ -81,8 +84,9 @@ export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, 
         : `launch ${i} at ${launchAt}s overlaps the previous block, which ends at ${free}s`;
     }
     // Read so that a time a hair under midnight-plus-a-day counts as wake-up, not as the end of the night.
-    const day = Math.floor((launchAt + VERIFY_TOL_SECONDS) / DAY_SECONDS);
-    const timeOfDay = launchAt - day * DAY_SECONDS;
+    const sinceWake = launchAt + offset;
+    const day = Math.floor((sinceWake + VERIFY_TOL_SECONDS) / DAY_SECONDS);
+    const timeOfDay = sinceWake - day * DAY_SECONDS;
     if (timeOfDay > waking + VERIFY_TOL_SECONDS) {
       return `launch ${i} at ${launchAt}s is ${timeOfDay}s into day ${day}, after bedtime at ${waking}s`;
     }

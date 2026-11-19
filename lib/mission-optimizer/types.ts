@@ -88,7 +88,7 @@ export interface LaunchSolution {
 export interface SlotLaunch {
   // Index into `OptimizerSolution.choiceHistory`.
   choice: integer;
-  // Seconds from the start of the plan (wake-up on day 0, with a sleep window).
+  // Seconds from the start of the plan (wake-up on day 0 with a sleep window, or `wakeOffsetSeconds` after it).
   launchAt: number;
   // On a sleep-aware plan, the sleep windows this ship is in the air for, read off its launch time and flight
   // (`nightsFlown` in `optimizer-core.ts`): what the timeline and the totals show. It can differ from the entry's
@@ -131,13 +131,19 @@ export interface OptimizerSolution {
   expectedCrafts: number;
   fuelUsed: number;
   fuelByEgg: Map<ei.Egg, number>;
-  // Makespan: the busiest slot's floored load. With a sleep window, wall-clock seconds from the plan's first
-  // wake-up to the end of the last-finishing slot's calendar, so it counts the nights too.
+  // Makespan: the busiest slot's floored load. With a sleep window, wall-clock seconds from the plan's start (its
+  // first wake-up, unless `wakeOffsetSeconds` says otherwise) to the end of the last-finishing slot's calendar, so
+  // it counts the nights too.
   timeUnitsUsed: integer;
   runningTimeSeconds: integer; // the busiest slot's real (raw) flight time
   // The sleep window the plan was laid out around, in seconds a day. Absent when it was planned around the
   // clock, which is also what tells the card and the export that `choiceHistory` carries no `nights`.
   sleepSeconds?: number;
+  // How long the player had been awake when the plan starts, in seconds: wake-ups fall at `k * 86400 -
+  // wakeOffsetSeconds` on the plan's clock, so day `k` of the plan runs from there (the first day is the rest of
+  // the waking day the player is in). Absent when the plan starts at wake-up, as it always did, and on a plan made
+  // around the clock. Set only alongside `sleepSeconds`.
+  wakeOffsetSeconds?: number;
   // The 2x capacity event window the plan was solved against, in seconds from the start of the plan. Absent when
   // there was none, which is also what tells the card and the export that `choiceHistory` carries no `variant`.
   // Carried on the solution rather than read back off the settings, which stay editable after a solve.

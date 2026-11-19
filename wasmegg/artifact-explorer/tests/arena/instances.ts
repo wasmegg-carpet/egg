@@ -4,7 +4,7 @@
 import { ei, fuelTankSizes, newShipsConfig, shipMaxLevel, spaceshipList, type ShipsConfig } from 'lib';
 import { EFFORT_LEVELS, type EffortLevel } from 'lib/mission-optimizer/effort';
 import { candidateTargets, mulberry32, pick, randInt } from '../oracle/generate';
-import { assertSleepSeconds } from './sleep';
+import { DAY_SECONDS, assertSleepSeconds } from './sleep';
 
 export interface ArenaInstance {
   label: string;
@@ -21,6 +21,9 @@ export interface ArenaInstance {
   // Seconds of 2x capacity window left from the plan's start; 0 is today's problem. See `ARENA_WINDOW` below and
   // ARENA.md.
   eventWindowSeconds: number;
+  // Seconds since the player last woke up, at the plan's start; absent is 0, a plan starting at wake-up, today's
+  // problem. Meaningful only with sleep. See `ARENA_WAKE` below and ARENA.md.
+  wakeOffsetSeconds?: number;
 }
 
 // The windows `generateInstance` draws from, in hours. 0 is in the draw so `draw` mixes sleep-free instances in.
@@ -43,6 +46,19 @@ function sleepOverride(drawn: number): number {
 }
 
 const HOUR = 3600;
+
+// `ARENA_WAKE`: unset, every instance starts at wake-up (today's arena, every recorded figure unchanged); a number of
+// hours, that long since the player woke on every instance, composing with `ARENA_SLEEP` and `ARENA_WINDOW`. Not
+// drawn, so no seed's other fields move. Read per call, like `ARENA_SLEEP`.
+function wakeOverride(): number {
+  const raw = process.env.ARENA_WAKE;
+  if (raw === undefined || raw === '') return 0;
+  const hours = Number(raw);
+  if (!Number.isFinite(hours) || hours < 0 || hours * HOUR >= DAY_SECONDS) {
+    throw new Error(`ARENA_WAKE must be a number of hours in [0, 24), got ${JSON.stringify(raw)}`);
+  }
+  return hours * HOUR;
+}
 
 // Where a 2x capacity window can sit relative to the plan, named against the horizon, which is what decides
 // whether the window constrains anything the horizon does not already.
@@ -120,6 +136,7 @@ export function generateInstance(seed: number): ArenaInstance {
   // After sleep, for the same reason: every field above, sleep included, keeps its value for every seed.
   const drawnRegime = pick(rng, EVENT_REGIME_NAMES);
 
+  const wakeOffsetSeconds = wakeOverride();
   return {
     label: `arena:${seed}`,
     seed,
@@ -132,6 +149,7 @@ export function generateInstance(seed: number): ArenaInstance {
     effort,
     sleepSeconds: sleepOverride(drawnSleep),
     eventWindowSeconds: windowOverride(drawnRegime, timeCapacityPerSlot),
+    ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
   };
 }
 
@@ -141,6 +159,7 @@ export function describeInstance(inst: ArenaInstance): string {
     `effort=${inst.effort}, ${(inst.timeCapacityPerSlot / 86400).toFixed(0)}d, ` +
     `fuel=${inst.fuelCapacity.toExponential(1)}, craft=${inst.craftingLevel}, prev=${inst.previousCrafts}` +
     (inst.sleepSeconds > 0 ? `, sleep=${+(inst.sleepSeconds / 3600).toFixed(2)}h` : '') +
+    ((inst.wakeOffsetSeconds ?? 0) > 0 ? `, awake ${+(inst.wakeOffsetSeconds! / HOUR).toFixed(2)}h` : '') +
     (inst.eventWindowSeconds > 0 ? `, 2x for ${+(inst.eventWindowSeconds / HOUR).toFixed(2)}h` : '')
   );
 }

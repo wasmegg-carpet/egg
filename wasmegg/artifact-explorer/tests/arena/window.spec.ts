@@ -83,6 +83,22 @@ function c1(window: number, slots: (problem: PlanProblem) => Launch[][] | null) 
 describe('instances', () => {
   afterEach(() => {
     delete process.env.ARENA_WINDOW;
+    delete process.env.ARENA_WAKE;
+  });
+
+  it('start at wake-up unless ARENA_WAKE asks, and take the offset without moving any other field', () => {
+    const plain = [2000, 2001].map(generateInstance);
+    expect(plain.every(i => !('wakeOffsetSeconds' in i))).toBe(true);
+    process.env.ARENA_WAKE = '12';
+    const awake = [2000, 2001].map(generateInstance);
+    awake.forEach((inst, i) => {
+      expect(inst.wakeOffsetSeconds).toBe(12 * HOUR);
+      expect({ ...inst, wakeOffsetSeconds: undefined }).toEqual(plain[i]);
+    });
+    process.env.ARENA_WAKE = '0';
+    expect('wakeOffsetSeconds' in generateInstance(2000)).toBe(false);
+    process.env.ARENA_WAKE = '24';
+    expect(() => generateInstance(2000)).toThrow(/ARENA_WAKE/);
   });
 
   it('carry no window unless ARENA_WINDOW asks, and draw it without moving any other field', () => {

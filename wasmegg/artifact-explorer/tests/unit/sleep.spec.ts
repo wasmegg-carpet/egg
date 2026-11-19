@@ -8,10 +8,20 @@ import { describe, it, expect } from 'vitest';
 import { ei, MissionType } from 'lib';
 import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
 import { computeMissionLegendaryRows } from 'lib/mission-optimizer/optimizer-views';
-import { MAX_SLEEP_SECONDS, sleepCapacity, sleepSecondsOf, sleepVariants } from 'lib/mission-optimizer/sleep';
+import {
+  MAX_SLEEP_SECONDS,
+  sleepCapacity,
+  sleepSecondsOf,
+  sleepVariants,
+  wakeOffsetSecondsOf,
+} from 'lib/mission-optimizer/sleep';
 import { MAX_SLEEP_HOURS } from 'lib/mission-optimizer/schedule-settings';
 import { isMissionFilters, newMissionFilters, type MissionFilters } from '@/store/schema';
-import { sleepCapacity as arenaSleepCapacity, sleepVariants as arenaSleepVariants } from '../arena/sleep';
+import {
+  sleepCapacity as arenaSleepCapacity,
+  sleepVariants as arenaSleepVariants,
+  wakeOffsetOf as arenaWakeOffsetOf,
+} from '../arena/sleep';
 import { craftDag, makeOpt, makeSolution } from './spec-helpers';
 
 const HOUR = 3600;
@@ -128,9 +138,30 @@ describe('sleepCapacity', () => {
       }
     }
   });
+
+  it('agrees with the arena on every horizon, wake offset and sleep window', () => {
+    for (const horizon of [0, 1, HOUR, 15 * HOUR, DAY, DAY + 1, 2.5 * DAY, 30 * DAY, NaN, -5]) {
+      for (const sleep of [4 * HOUR, EIGHT_HOURS, 12 * HOUR, 16 * HOUR]) {
+        for (const hours of [0, 0.5, 4, 8, 12, 16]) {
+          const wake = wakeOffsetSecondsOf(hours * HOUR, sleep);
+          expect(sleepCapacity(horizon, sleep, wake)).toEqual(arenaSleepCapacity(horizon, sleep, wake));
+        }
+      }
+    }
+  });
 });
 
 describe('the sleep setting', () => {
+  it('is read as 0 by the app without sleep, and clamped like the arena with it', () => {
+    for (const value of [undefined, 0, -1, NaN, Infinity]) expect(wakeOffsetSecondsOf(value, EIGHT_HOURS)).toBe(0);
+    expect(wakeOffsetSecondsOf(5 * HOUR, 0)).toBe(0);
+    for (const sleep of [4 * HOUR, EIGHT_HOURS, 12 * HOUR]) {
+      for (const hours of [0, 1, 5.5, 12, 16, 19, 23]) {
+        expect(wakeOffsetSecondsOf(hours * HOUR, sleep)).toBe(arenaWakeOffsetOf(hours * HOUR, sleep));
+      }
+    }
+  });
+
   it('reads anything that is not a usable window as none', () => {
     for (const value of [undefined, 0, -1, NaN, Infinity]) expect(sleepSecondsOf(value)).toBe(0);
     expect(sleepSecondsOf(EIGHT_HOURS)).toBe(EIGHT_HOURS);

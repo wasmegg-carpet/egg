@@ -1,5 +1,5 @@
-// The arena's sleep model: a day is a waking window `W` followed by a sleep window `S`, the plan starts at
-// wake-up, and sleep forbids launching and nothing else. Owned by the harness and never shared with
+// The arena's sleep model: a day is a waking window `W` followed by a sleep window `S`, the plan starts `x` seconds
+// after a wake-up (0 by default), and sleep forbids launching and nothing else. Owned by the harness and never shared with
 // `lib/mission-optimizer`, for the same reason the packer is not: a variant rule used by both the planner and its judge
 // would agree with itself no matter what it computed. Imports nothing. See ARENA.md, "Sleep".
 
@@ -13,12 +13,28 @@ export interface SleepCapacity {
   nightsPerSlot: number;
 }
 
-export function sleepCapacity(horizon: number, sleep: number): SleepCapacity {
+// With a wake offset `x` the slot is `[x, x + H]` on the player's regular day, whose wake-ups are at `k * D`: the
+// waking seconds are those of `[0, x + H]` less the `x` already spent awake before the plan, and the whole nights
+// are those that end by `x + H` (none can start before `x`, which is at most `W`).
+export function sleepCapacity(horizon: number, sleep: number, wake = 0): SleepCapacity {
   const waking = DAY_SECONDS - sleep;
   const h = Number.isFinite(horizon) && horizon > 0 ? horizon : 0;
-  const n = Math.floor(h / DAY_SECONDS);
-  const rho = h - n * DAY_SECONDS;
-  return { wakingSecondsPerSlot: n * waking + Math.min(rho, waking), nightsPerSlot: n };
+  const end = wake + h;
+  const n = Math.floor(end / DAY_SECONDS);
+  const rho = end - n * DAY_SECONDS;
+  return { wakingSecondsPerSlot: n * waking + Math.min(rho, waking) - wake, nightsPerSlot: n };
+}
+
+// The wake offset an instance is stated with: seconds since the player last woke up, at the plan's start. 0 with
+// no sleep, where there is no day to be into. Only the awake case is stated so far: an offset past the waking
+// window (the player is up in the night at the plan's start) is read as bedtime, `W`, the same placeholder the
+// planner's boundary applies, until the night case is modelled on both sides.
+export function wakeOffsetOf(wake: number, sleep: number): number {
+  if (!(sleep > 0) || !(wake > 0)) return 0;
+  if (!Number.isFinite(wake) || wake >= DAY_SECONDS) {
+    throw new Error(`wake offset must be in [0, ${DAY_SECONDS}) seconds, got ${wake}`);
+  }
+  return Math.min(wake, DAY_SECONDS - sleep);
 }
 
 export function assertSleepSeconds(sleep: number): void {

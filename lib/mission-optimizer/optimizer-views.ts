@@ -198,6 +198,11 @@ export function planTimeline(solution: OptimizerSolution): PlanTimeline {
   return { slots: (solution.slots ?? []).map(slot => slotTimeline(solution, slot, byDay, window)) };
 }
 
+// A launch time on the player's regular day: seconds since the wake-up the plan starts `wakeOffsetSeconds` after, so
+// a plan's days break at its wake-ups (`solver/SPEC.md` section 17). The plan's own time when it starts at wake-up.
+export const sinceWake = (solution: OptimizerSolution, launchAt: number) =>
+  launchAt + (solution.wakeOffsetSeconds ?? 0);
+
 function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boolean, window: number): SlotTimeline {
   const rows: TimelineRow[] = [];
   const windowEnd: TimelineWindowEndRow = { kind: 'window-end', at: window };
@@ -213,7 +218,7 @@ function slotTimeline(solution: OptimizerSolution, slot: SlotSummary, byDay: boo
       rows.push(windowEnd);
       run = null;
     }
-    const day = byDay ? Math.floor(launch.launchAt / DAY_SECONDS) : 0;
+    const day = byDay ? Math.floor(sinceWake(solution, launch.launchAt) / DAY_SECONDS) : 0;
     const choice = solution.choiceHistory[launch.choice];
     const overnight = flownNights(solution, launch) > 0;
     const key = lineKey(choice, overnight);
