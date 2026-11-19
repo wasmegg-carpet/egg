@@ -112,8 +112,16 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
   const overhangs = layout.classVariant.map(v => (v === 'overhang' ? 1 : 0));
   const doubledLoads = slotLoads(model, layout, columnValues, doubled);
   const overhangLoads = slotLoads(model, layout, columnValues, overhangs);
+  // And the start row: one launch at T+0 a slot (SPEC.md section 17).
+  const startLoads = slotLoads(
+    model,
+    layout,
+    columnValues,
+    layout.classAtStart.map(t => (t ? 1 : 0))
+  );
   for (let k = 0; k < model.slots; k++) {
     if (overhangLoads[k] > 1) return false;
+    if (startLoads[k] > 1) return false;
     if (!(window > 0) && doubledLoads[k] > 0) return false;
   }
   return true;
@@ -184,6 +192,9 @@ export function assertVerified(
       ...l,
       eventCopy: copies[l.option].event,
       overhangCopy: copies[l.option].overhang,
+      ...(problem.options[l.option].atStartSeconds !== undefined && {
+        atStartSeconds: problem.options[l.option].atStartSeconds,
+      }),
     }));
     const fault = slotFault(timed, sleep, model.eventWindowSeconds);
     if (fault !== null) fail(`slot ${k}: ${fault}`);

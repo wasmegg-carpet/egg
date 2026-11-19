@@ -12,7 +12,7 @@ import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
 import { capacityVariants, isDoubled } from './capacity';
 import { packFeasible, packFeasibleBudgets, type PackVerdict } from './pack-feasibility';
-import { sleepCapacity, sleepVariants, wakeOffsetOf } from './sleep';
+import { sleepCapacity, sleepVariants, startVariants, wakeOffsetOf } from './sleep';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
 // plan that lands exactly on the cap can read a few ulps over it.
@@ -106,11 +106,15 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
   const horizon = over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot;
   const window = over.eventWindowSeconds ?? inst.eventWindowSeconds;
   const menu = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
-  let options = [...capacityVariants(sleepVariants(menu, sleep), window)];
+  // Starting in the night, the menu also holds each option as a launch at T+0, before capacity so a doubled T+0
+  // launch keeps its charge; otherwise there are none, and the menu is what it always was.
+  const wake = wakeOf(inst, over);
+  let options = [
+    ...capacityVariants([...sleepVariants(menu, sleep), ...startVariants(menu, sleep, wake, horizon)], window),
+  ];
   if (over.transformOptions) options = over.transformOptions(options);
   // With sleep, the slot budget becomes waking seconds plus whole nights. Without, `nightsPerSlot` is absent
   // rather than undefined, so a sleep-free instance states today's problem exactly.
-  const wake = wakeOf(inst, over);
   const capacity = sleep > 0 ? sleepCapacity(horizon, sleep, wake) : null;
 
   return {
@@ -174,7 +178,8 @@ function problemKey(problem: PlanProblem): string {
         `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}` +
         (o.nights === undefined ? '' : `|n${o.nights}`) +
         // An `event` and an `overhang` copy of one launch are identical in every number above.
-        (o.variant === undefined ? '' : `|v${o.variant}`)
+        (o.variant === undefined ? '' : `|v${o.variant}`) +
+        (o.atStartSeconds === undefined ? '' : `|s${o.atStartSeconds}`)
     )
     .join(';');
   const dag = [...problem.dag.keys()]

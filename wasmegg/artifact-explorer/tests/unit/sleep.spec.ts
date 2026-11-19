@@ -13,6 +13,7 @@ import {
   sleepCapacity,
   sleepSecondsOf,
   sleepVariants,
+  startVariants,
   wakeOffsetSecondsOf,
 } from 'lib/mission-optimizer/sleep';
 import { MAX_SLEEP_HOURS } from 'lib/mission-optimizer/schedule-settings';
@@ -20,6 +21,7 @@ import { isMissionFilters, newMissionFilters, type MissionFilters } from '@/stor
 import {
   sleepCapacity as arenaSleepCapacity,
   sleepVariants as arenaSleepVariants,
+  startVariants as arenaStartVariants,
   wakeOffsetOf as arenaWakeOffsetOf,
 } from '../arena/sleep';
 import { craftDag, makeOpt, makeSolution } from './spec-helpers';
@@ -117,6 +119,58 @@ describe('sleepVariants', () => {
   });
 });
 
+describe('startVariants', () => {
+  // Twenty hours awake with an 8-hour night: four hours of it left, the first wake-up four hours in.
+  const at = (hours: number, horizon = 3 * DAY) =>
+    startVariants([{ id: 'x', actualTime: hours * HOUR }], EIGHT_HOURS, 20 * HOUR, horizon).map(v => [
+      v.id,
+      v.actualTime / HOUR,
+      v.nights,
+      v.atStartSeconds! / HOUR,
+    ]);
+
+  it('takes nothing from a ship back before the first wake-up, and holds the slot to its landing', () => {
+    expect(at(1)).toEqual([['x~start', 0, 0, 1]]);
+    expect(at(4)).toEqual([['x~start', 0, 0, 4]]);
+  });
+
+  it('takes the waking hours after the wake-up a ship is still out for', () => {
+    expect(at(10)).toEqual([['x~start', 6, 0, 10]]);
+    // Landing at bedtime, the whole first day.
+    expect(at(20)).toEqual([['x~start', 16, 0, 20]]);
+  });
+
+  it('takes the night a ship lands in, and the day before it, but no night the horizon cuts', () => {
+    expect(at(24)).toEqual([['x~start', 16, 1, 24]]);
+    expect(at(30)).toEqual([['x~start', 18, 1, 30]]);
+    // With the horizon a day, the night it lands in is no part of the budget.
+    expect(at(24, DAY)).toEqual([['x~start', 16, 0, 24]]);
+    expect(at(25, DAY)).toEqual([]);
+  });
+
+  it('is nothing unless the plan starts in the night', () => {
+    for (const wake of [0, 4 * HOUR, 16 * HOUR]) {
+      expect(startVariants([{ id: 'x', actualTime: HOUR }], EIGHT_HOURS, wake, DAY)).toEqual([]);
+    }
+    expect(startVariants([{ id: 'x', actualTime: HOUR }], 0, 20 * HOUR, DAY)).toEqual([]);
+  });
+
+  it('agrees with the arena on every charge, offset, horizon and sleep window', () => {
+    const options = [];
+    for (let seconds = 0; seconds <= 4 * DAY; seconds += 1234) options.push({ id: `d${seconds}`, actualTime: seconds });
+    options.push({ id: 'w', actualTime: 16 * HOUR }, { id: 'day', actualTime: DAY });
+    for (const sleep of [4 * HOUR, EIGHT_HOURS, 12 * HOUR, MAX_SLEEP_HOURS * HOUR]) {
+      for (const hours of [0, 12, 16, 17, 20, 23, 23.9]) {
+        for (const horizon of [HOUR, 5 * HOUR, DAY, 2.5 * DAY, 4 * DAY]) {
+          expect(startVariants(options, sleep, hours * HOUR, horizon)).toEqual(
+            arenaStartVariants(options, sleep, hours * HOUR, horizon)
+          );
+        }
+      }
+    }
+  });
+});
+
 describe('sleepCapacity', () => {
   it('counts whole days as a waking window and a night each', () => {
     expect(sleepCapacity(3 * DAY, EIGHT_HOURS)).toEqual({ wakingSecondsPerSlot: 48 * HOUR, nightsPerSlot: 3 });
@@ -142,7 +196,7 @@ describe('sleepCapacity', () => {
   it('agrees with the arena on every horizon, wake offset and sleep window', () => {
     for (const horizon of [0, 1, HOUR, 15 * HOUR, DAY, DAY + 1, 2.5 * DAY, 30 * DAY, NaN, -5]) {
       for (const sleep of [4 * HOUR, EIGHT_HOURS, 12 * HOUR, 16 * HOUR]) {
-        for (const hours of [0, 0.5, 4, 8, 12, 16]) {
+        for (const hours of [0, 0.5, 4, 8, 12, 16, 17, 20, 23, 23.9]) {
           const wake = wakeOffsetSecondsOf(hours * HOUR, sleep);
           expect(sleepCapacity(horizon, sleep, wake)).toEqual(arenaSleepCapacity(horizon, sleep, wake));
         }
@@ -152,8 +206,10 @@ describe('sleepCapacity', () => {
 });
 
 describe('the sleep setting', () => {
-  it('is read as 0 by the app without sleep, and clamped like the arena with it', () => {
-    for (const value of [undefined, 0, -1, NaN, Infinity]) expect(wakeOffsetSecondsOf(value, EIGHT_HOURS)).toBe(0);
+  it('is read as 0 by the app without sleep or past a day, and like the arena otherwise', () => {
+    for (const value of [undefined, 0, -1, NaN, Infinity, DAY, 30 * HOUR]) {
+      expect(wakeOffsetSecondsOf(value, EIGHT_HOURS)).toBe(0);
+    }
     expect(wakeOffsetSecondsOf(5 * HOUR, 0)).toBe(0);
     for (const sleep of [4 * HOUR, EIGHT_HOURS, 12 * HOUR]) {
       for (const hours of [0, 1, 5.5, 12, 16, 19, 23]) {

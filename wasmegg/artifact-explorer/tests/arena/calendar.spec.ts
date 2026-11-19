@@ -179,3 +179,33 @@ describe('calendarFaults with a wake offset', () => {
     expect(calendarFaults(valid(), menu, validAllocation, { ...day, wakeOffsetSeconds: 0 })).toEqual([]);
   });
 });
+
+// A plan that starts in the night: the player is up at T+0 to launch, and asleep from then to the next wake-up.
+describe('calendarFaults with the plan starting in the night', () => {
+  // Twenty hours awake: four hours of night left, the first wake-up at 4 hours, bedtime at 20.
+  const night: CalendarDay = { ...day, slots: 1, wakeOffsetSeconds: 20 * H };
+  const startMenu = [...menu, { id: 'long~start', actualTime: 6 * H, nights: 0, atStartSeconds: 10 * H }];
+  const go = (option: number, launchAt: number) => ({ option, optionId: startMenu[option].id, launchAt });
+
+  it('admits a launch at T+0, and the next one from the wake-up after its landing', () => {
+    expect(calendarFaults([[go(3, 0), go(1, 10 * H)]], startMenu, [0, 1, 0, 1], night)).toEqual([]);
+    // Any launch may go up at T+0; the first wake-up is 4 hours in.
+    expect(calendarFaults([[go(1, 0), go(0, 6 * H)]], startMenu, [1, 1, 0, 0], night)).toEqual([]);
+    expect(calendarFaults([[go(0, 4 * H)]], startMenu, [1, 0, 0, 0], night)).toEqual([]);
+  });
+
+  it('admits nothing else in that night, and holds a T+0 launch to T+0 and to its landing', () => {
+    expect(calendarFaults([[go(1, 60)]], startMenu, [0, 1, 0, 0], night).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[go(1, 3 * H)]], startMenu, [0, 1, 0, 0], night).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[go(3, 4 * H)]], startMenu, [0, 0, 0, 1], night).join('\n')).toMatch(/T\+0 launch/);
+    expect(calendarFaults([[go(3, 0), go(1, 9 * H)]], startMenu, [0, 1, 0, 1], night).join('\n')).toMatch(
+      /before the slot is free/
+    );
+  });
+
+  it('holds a T+0 launch to T+0 in a plan starting awake', () => {
+    expect(
+      calendarFaults([[go(3, 0)]], startMenu, [0, 0, 0, 1], { ...night, wakeOffsetSeconds: 12 * H }).join('\n')
+    ).toMatch(/T\+0 launch/);
+  });
+});

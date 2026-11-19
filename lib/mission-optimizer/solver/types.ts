@@ -74,8 +74,8 @@ export interface SleepWindow {
   // Seconds since the player last woke up, at the plan's t = 0: wake-ups are at `k * DAY_SECONDS -
   // wakeOffsetSeconds`, and the first waking window has `DAY_SECONDS - sleepSeconds - wakeOffsetSeconds` left in it.
   // Absent or 0 is a plan that starts at wake-up, today's problem exactly. Up to the waking window `W`, the player
-  // is awake at t = 0 (SPEC.md section 17); past it, in the night, is not modelled yet, and `normalizeProblem` reads
-  // it as `W`, bedtime, a placeholder the night case replaces.
+  // is awake at t = 0; past it they are in the night, up at t = 0 only to launch, and asleep until the next wake-up
+  // at `DAY_SECONDS - wakeOffsetSeconds` (SPEC.md section 17).
   readonly wakeOffsetSeconds?: number;
 }
 
@@ -136,9 +136,7 @@ function sleepWindowOf(sleep: SleepWindow): SleepWindow {
   if (offset !== undefined && (!Number.isFinite(offset) || offset < 0 || offset >= DAY_SECONDS)) {
     throw new Error(`wake offset must be in [0, ${DAY_SECONDS}) seconds, got ${offset}`);
   }
-  // Placeholder for the night case (SPEC.md section 17): a player whose waking window is over at t = 0 is read as
-  // at bedtime, the latest awake instant, until the night case is modelled.
-  const wake = offset === undefined ? 0 : Math.min(offset, DAY_SECONDS - sleep.sleepSeconds);
+  const wake = offset ?? 0;
   return {
     sleepSeconds: sleep.sleepSeconds,
     horizonSeconds: capacityOf(sleep.horizonSeconds),
