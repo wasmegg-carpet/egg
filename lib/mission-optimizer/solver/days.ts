@@ -4,11 +4,24 @@
 import { DAY_SECONDS, type SleepWindow } from './types';
 
 // One slot's horizon as the layout and the fit rows see it: `nights` sleep windows, each closing a waking
-// window of `wakingSeconds`, then a trailing partial day of `tailSeconds` (0 for a whole-day horizon).
+// window of `wakingSeconds`, then a trailing partial day of `tailSeconds` (0 for a whole-day horizon). Times are
+// on the player's regular day, from the wake-up at or before the plan's start (SPEC.md section 17): the plan runs
+// from `wakeOffsetSeconds` to `horizonSeconds`, and the first `wakeOffsetSeconds` of the first waking window are a
+// busy block no launch can use. With the plan starting at wake-up, the offset is 0 and these are the plan's own
+// seconds.
 export interface DaySchedule {
   sleepSeconds: number;
   wakingSeconds: number;
+  // The end of the plan, on the regular day: `planHorizonSeconds + wakeOffsetSeconds`.
   horizonSeconds: number;
+  // The plan's own horizon, `SleepWindow.horizonSeconds`, which the verifier reads.
+  planHorizonSeconds: number;
+  // The busy block: the waking seconds of the first window spent before the plan starts. The wake offset when the
+  // player is awake at the start, 0 when they are in the night.
+  wakeOffsetSeconds: number;
+  // When the plan starts in the night: what is left of it, `D - x` (SPEC.md section 17), and the schedule is the
+  // regular day from the wake-up that ends it, which is `firstNightSeconds` into the plan. 0 otherwise.
+  firstNightSeconds: number;
   nights: number;
   // Waking windows the horizon touches, a partial trailing one included: `ceil(H / D)`.
   windows: number;
@@ -18,16 +31,29 @@ export interface DaySchedule {
 // `wakingCapacity` and `nightsPerSlot` are the problem's `timeCapacityPerSlot` and `nightsPerSlot`, which the
 // caller derives from the same horizon. Each is also capped by what the horizon itself has room for, so a
 // caller whose three fields disagree gets a schedule no larger than any of them says, and the layout never
-// places a launch past what the horizon allows.
+// places a launch past what the horizon allows. With a wake offset the slot is the regular day's from its
+// wake-up: the busy block's seconds join the waking capacity, and its horizon is the plan's plus the offset.
 export function daySchedule(sleep: SleepWindow, wakingCapacity: number, nightsPerSlot: number): DaySchedule {
   const wakingSeconds = DAY_SECONDS - sleep.sleepSeconds;
-  const horizonSeconds = sleep.horizonSeconds;
+  const wake = sleep.wakeOffsetSeconds ?? 0;
+  // In the night at the start, the schedule starts at the next wake-up, with no busy block.
+  const firstNightSeconds = wake > wakingSeconds ? DAY_SECONDS - wake : 0;
+  const offset = firstNightSeconds > 0 ? 0 : wake;
+  const horizonSeconds =
+    firstNightSeconds > 0 ? Math.max(0, sleep.horizonSeconds - firstNightSeconds) : sleep.horizonSeconds + offset;
   const nights = Math.max(0, Math.min(nightsPerSlot, Math.floor(horizonSeconds / DAY_SECONDS)));
-  const tail = Math.min(wakingCapacity - nights * wakingSeconds, horizonSeconds - nights * DAY_SECONDS, wakingSeconds);
+  const tail = Math.min(
+    wakingCapacity + offset - nights * wakingSeconds,
+    horizonSeconds - nights * DAY_SECONDS,
+    wakingSeconds
+  );
   return {
     sleepSeconds: sleep.sleepSeconds,
     wakingSeconds,
     horizonSeconds,
+    planHorizonSeconds: sleep.horizonSeconds,
+    wakeOffsetSeconds: offset,
+    firstNightSeconds,
     nights,
     windows: Math.ceil(horizonSeconds / DAY_SECONDS),
     tailSeconds: Math.max(0, tail),
@@ -89,7 +115,10 @@ export function wakingSecondsBefore(t: number, wakingSeconds: number): number {
 // The 2x window as the window rows read it under a sleep window (SPEC.md section 14): `latest`, the last waking
 // instant at or before its end; the `nights` that fall wholly before that instant; the waking seconds before it,
 // `waking`, which is `latest - nights * S`; and `partial`, the part of the waking window `latest` falls in that
-// lies before it (a whole waking window when the window closes in a night).
+// lies before it (a whole waking window when the window closes in a night). On the regular day from the wake-up at
+// or before the plan's start (SPEC.md section 17): the window closes at `eventWindowSeconds + wakeOffset`, and the
+// waking seconds are the plan's, after the busy block; `partial` still counts the busy block when the window closes
+// on the first day, which is how the window's fit rows read it. With no offset every figure is the plan's own.
 export interface WindowShape {
   latest: number;
   nights: number;
@@ -97,26 +126,27 @@ export interface WindowShape {
   partial: number;
 }
 
-export function windowShape(eventWindowSeconds: number, wakingSeconds: number): WindowShape {
-  const latest = lastWakingInstant(eventWindowSeconds, wakingSeconds);
+export function windowShape(eventWindowSeconds: number, wakingSeconds: number, wakeOffset = 0): WindowShape {
+  const latest = lastWakingInstant(eventWindowSeconds + wakeOffset, wakingSeconds);
   const nights = Math.floor(latest / DAY_SECONDS);
   return {
     latest,
     nights,
-    waking: wakingSecondsBefore(latest, wakingSeconds),
+    waking: wakingSecondsBefore(latest, wakingSeconds) - wakeOffset,
     partial: latest - nights * DAY_SECONDS,
   };
 }
 
-// The fewest waking seconds a block of `block` seconds can hold when it starts awake at or before `latest`: what a
-// doubled launch, which must go up inside the window, takes out of its slot's waking seconds at the least (SPEC.md
-// section 14). The waking seconds of `[t, t + block]` are piecewise linear in `t`, so the least is at a start the
-// window allows that is also a wake-up, a bedtime, `latest`, 0, or a start that puts the block's end on a wake-up
-// or a bedtime.
-export function leastWakingIn(block: number, latest: number, wakingSeconds: number): number {
+// The fewest waking seconds a block of `block` seconds can hold when it starts awake at or after `earliest` and at
+// or before `latest`: what a doubled launch, which must go up inside the window, takes out of its slot's waking
+// seconds at the least (SPEC.md section 14). `earliest` is the plan's start on the regular day, its wake offset
+// (section 17). The waking seconds of `[t, t + block]` are piecewise linear in `t`, so the least is at a start the
+// window allows that is also a wake-up, a bedtime, `latest`, `earliest`, or a start that puts the block's end on a
+// wake-up or a bedtime.
+export function leastWakingIn(block: number, latest: number, wakingSeconds: number, earliest = 0): number {
   const D = DAY_SECONDS;
   const held = (t: number) => wakingSecondsBefore(t + block, wakingSeconds) - wakingSecondsBefore(t, wakingSeconds);
-  const starts = [0, latest];
+  const starts = [earliest, latest];
   for (let day = 0; day * D <= latest; day++) starts.push(day * D, day * D + wakingSeconds);
   for (let day = Math.max(0, Math.floor(block / D) - 1); day * D <= latest + block; day++) {
     starts.push(day * D - block, day * D + wakingSeconds - block);
@@ -125,8 +155,8 @@ export function leastWakingIn(block: number, latest: number, wakingSeconds: numb
   for (const raw of starts) {
     // Read to a microsecond, so a start float arithmetic puts a hair outside the window or past bedtime still
     // counts; held there, it differs from the exact start's by as little.
-    if (!(raw >= -WINDOW_TOL && raw <= latest + WINDOW_TOL)) continue;
-    const t = Math.min(Math.max(raw, 0), latest);
+    if (!(raw >= earliest - WINDOW_TOL && raw <= latest + WINDOW_TOL)) continue;
+    const t = Math.min(Math.max(raw, earliest), latest);
     if (t - Math.floor(t / D) * D > wakingSeconds + WINDOW_TOL) continue;
     least = Math.min(least, held(t));
   }

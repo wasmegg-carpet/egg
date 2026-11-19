@@ -1,10 +1,9 @@
 <template>
   <div>
     <div :class="headingClass">Launch plan</div>
-    <optimizer-slot-timeline :solution="solution" />
 
     <template v-if="totals.length > 0">
-      <div :class="headingClass" class="mt-3">Totals</div>
+      <div :class="headingClass">Totals</div>
       <!-- A sleep-aware plan is a day and night routine: what to launch while awake, and what to have in the air overnight. -->
       <template v-if="sleepHours > 0">
         <p class="text-xs text-gray-500">
@@ -21,11 +20,13 @@
               >Overnight</span
             >
           </div>
-          <optimizer-choice-list :lines="overnight" overnight />
+          <optimizer-choice-list :lines="overnight" />
         </template>
       </template>
       <optimizer-choice-list v-else :lines="totals" />
     </template>
+
+    <optimizer-slot-timeline :solution="solution" />
   </div>
 </template>
 
@@ -36,8 +37,8 @@ import { launchTotals, type OptimizerSolution } from 'lib/mission-optimizer';
 import OptimizerChoiceList from './OptimizerChoiceList.vue';
 import OptimizerSlotTimeline from './OptimizerSlotTimeline.vue';
 
-// The plan as the player flies it: each slot's launches in order, then the same launches totalled over the three
-// slots. Both are read off one solution, so a mission's count in the totals is the sum of its lines in the
+// The plan as the player flies it: the launches totalled over the three slots, then each slot's launches in
+// order. Both are read off one solution, so a mission's count in the totals is the sum of its lines in the
 // timeline. The explorer's solution card and the ascension planner's inline panel both show this.
 export default defineComponent({
   components: { OptimizerChoiceList, OptimizerSlotTimeline },
@@ -50,8 +51,9 @@ export default defineComponent({
     const totals = computed(() => launchTotals(props.solution));
     // Absent on a plan made around the clock, whose totals are one undivided list.
     const sleepHours = computed(() => Number(((props.solution.sleepSeconds ?? 0) / 3600).toFixed(2)));
-    const daytime = computed(() => totals.value.filter(line => !line.nights));
-    const overnight = computed(() => totals.value.filter(line => (line.nights ?? 0) > 0));
+    // `launchTotals` has sorted each list: doubled before 1x, then by ship, duration and target.
+    const daytime = computed(() => totals.value.filter(line => !line.overnight));
+    const overnight = computed(() => totals.value.filter(line => line.overnight));
     const overnightTooltip =
       'Launch each of these so it is in the air when you go to sleep. A ship that lands during the night ' +
       'waits for you, and its slot launches again after you wake.';

@@ -16,6 +16,8 @@ export interface CalendarMenuEntry {
   actualTime: number;
   nights?: number;
   variant?: string;
+  // A launch at T+0 in the night the plan starts in (`startVariants`): its charge from T+0.
+  atStartSeconds?: number;
 }
 
 // The day the instance was stated with, as the harness built it, not as the candidate read it. Without a sleep
@@ -25,12 +27,16 @@ export interface CalendarDay {
   horizonSeconds: number;
   slots: number;
   eventWindowSeconds?: number;
+  // Seconds since the player woke up, at the plan's start: the player's day runs that far ahead of the plan's clock.
+  // Absent or 0 starts the plan at wake-up.
+  wakeOffsetSeconds?: number;
 }
 
 // Every way the calendar breaks the rule or misstates the plan; empty when it verifies. Each launch is timed
 // with the menu's `actualTime` and `nights` for the option it names, never with figures the candidate wrote
 // beside it: a launch occupies its slot for `actualTime + nights * S`, must start while the player is awake
-// (time of day at most `W`), may not start before the previous launch in its slot has finished, and must
+// (time of day at most `W`, the day counted from the player's last wake-up, `wakeOffsetSeconds` before the plan's
+// start), may not start before the plan does or before the previous launch in its slot has finished, and must
 // finish by the horizon. A launch of a doubled option (`event` or `overhang` on the menu, whatever the candidate
 // says) must start at or before `eventWindowSeconds`, and there is none without a window. Conversely, the game
 // doubles whatever goes up inside the window, so a launch of a `normal` option strictly inside it (by more than the
@@ -48,6 +54,7 @@ export function calendarFaults(
   if (!Array.isArray(calendar)) return ['calendar is not an array'];
   if (calendar.length !== day.slots) return [`calendar has ${calendar.length} slot(s), the problem has ${day.slots}`];
   const waking = DAY_SECONDS - day.sleepSeconds;
+  const awakeFor = day.wakeOffsetSeconds ?? 0;
   const flown = new Array<number>(menu.length).fill(0);
   const window = day.eventWindowSeconds ?? 0;
   const ids = new Set(menu.map(entry => entry.id));
@@ -83,9 +90,16 @@ export function calendarFaults(
       if (at < free - TIME_TOL) {
         faults.push(`${where} (${entry.id}) at ${at}s starts before the slot is free at ${free}s`);
       }
-      const dayIndex = Math.floor((at + TIME_TOL) / DAY_SECONDS);
-      const timeOfDay = at - dayIndex * DAY_SECONDS;
-      if (timeOfDay > waking + TIME_TOL) {
+      // On the player's own day, which started `awakeFor` before the plan did. A plan starting in the night has the
+      // player up at T+0 to launch, at that instant only.
+      const sinceWake = awakeFor + at;
+      const dayIndex = Math.floor((sinceWake + TIME_TOL) / DAY_SECONDS);
+      const timeOfDay = sinceWake - dayIndex * DAY_SECONDS;
+      const upToLaunch = awakeFor > waking && Math.abs(at) <= TIME_TOL;
+      if (entry.atStartSeconds !== undefined && !upToLaunch) {
+        faults.push(`${where} (${entry.id}) at ${at}s is a T+0 launch, flown elsewhere`);
+      }
+      if (timeOfDay > waking + TIME_TOL && !upToLaunch) {
         faults.push(
           `${where} (${entry.id}) at ${at}s launches ${timeOfDay}s into day ${dayIndex}, asleep after ${waking}s`
         );
@@ -99,7 +113,8 @@ export function calendarFaults(
         if (ids.has(copy))
           faults.push(`${where} (${entry.id}) at ${at}s flies 1x inside the 2x window, as ${copy} could`);
       }
-      free = Math.max(free, at) + entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds;
+      // A launch at T+0 holds its slot to its landing; every other launch for its waking seconds and its nights.
+      free = Math.max(free, at) + (entry.atStartSeconds ?? entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds);
     });
     if (free > day.horizonSeconds + TIME_TOL) {
       faults.push(`slot ${k} is busy until ${free}s, past the ${day.horizonSeconds}s horizon`);

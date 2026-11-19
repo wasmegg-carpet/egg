@@ -501,7 +501,8 @@ the app never sets this field without the `sleep` field that turns them on.
 Section 9's budget is a relaxation; this section is what stops it from being
 reported as a plan. A problem that also carries `sleep` (`types.ts`:
 `sleepSeconds` `S` and `horizonSeconds` `H`, the horizon `timeCapacityPerSlot`
-was before it came to count waking seconds) gets three more things, and every
+was before it came to count waking seconds, and optionally `wakeOffsetSeconds`,
+section 17) gets three more things, and every
 plan it returns has been laid out on real days and verified. **Absent, the
 matrix is section 9's**: no fit rows and no trim, and the calendar is section
 12's back-to-back one. `normalizeProblem` leaves the field
@@ -622,7 +623,8 @@ the allocation, exactly. A failure throws, as the solver's other internal
 failures do (`Rows.end`, `logGrid`); an unverified plan is never returned.
 
 **Result.** `PlanResult.calendar`: per slot, launches in order, each with its
-option index and id, `launchAt` (seconds from wake-up on day 0), waking seconds
+option index and id, `launchAt` (seconds from the plan's start: wake-up on day 0,
+or `wakeOffsetSeconds` after it, section 17), waking seconds
 and nights. A group's launches are flown as its first member, as `emit`
 allocates them. `PlanResult.layoutStats`: launches trimmed (overnight ones
 counted apart), layout MILPs solved, margin re-solves, verifier retries.
@@ -675,7 +677,7 @@ What else changes when `W` is present:
   would be pinned at 0. `variant` is part of the group key, so an `event` and an
   `overhang` copy of one launch, identical in every other number, never merge
   into one group and lose a row. A group's cap gains `slots * floor(W /
-  seconds)` for `event` and `slots` for `overhang`.
+seconds)` for `event` and `slots` for `overhang`.
 - **Dominance only within a variant.** A doubled copy costs exactly what its
   normal twin does and yields twice as much, so across variants it would prune
   the twin — and then every launch of the plan would have to fly doubled, which
@@ -762,7 +764,8 @@ A problem may carry both `eventWindowSeconds` `E` and `sleep`. The decision this
 rests on, the user's: the plan starts now at `t = 0`, the window is the prefix
 `[0, E]` of wall-clock time, nights included, and the player is at the start of
 a waking day at `t = 0`, the assumption section 10 already makes. No new input,
-no clock time. **Absent, the matrix is the one sections 10 to 12 build**: with
+no clock time. (Section 17 lets the plan start later in a waking day; the window
+still opens at `t = 0`.) **Absent, the matrix is the one sections 10 to 12 build**: with
 only a sleep window, only an event window, or neither, every number below
 reduces to theirs, so the sleep-only matrix is section 10's, the window-only
 matrix section 11's, and with neither it is the matrix the solver built before
@@ -1207,3 +1210,321 @@ are all `normal` options, which the window leaves as they were, so it is a plan
 of the windowed problem, and promotion only raises its joint.
 `tests/unit/solve-fallback.spec.ts` holds seed 2030 to at least its windowless
 plan, and a solve whose windowed MILPs all fail to the windowless plan.
+
+## 17. A plan that starts after wake-up
+
+Sections 10 to 16 assume the player wakes up at `t = 0`. The decision this
+section rests on, the user's: the plan may instead start `x =
+SleepWindow.wakeOffsetSeconds` after the player last woke, and the player keeps
+their regular schedule. Write `r = t + x` for time on that regular day. Its
+wake-ups are at `r = k D`, its waking windows `[k D, k D + W]` and its nights
+`[k D + W, (k + 1) D]`. The plan runs over `[x, x + H]` in `r`.
+
+- **The awake case, `0 <= x <= W`.** The player is awake at `t = 0` with
+  `W - x` of the first waking window left, and every later day is a whole one.
+- **The night case, `W < x < D`** (below, "The night case"). The player is up
+  at `t = 0` only to launch: each slot may send one ship at that instant. Then
+  they sleep the `D - x` left until the regular wake-up, and every later day is a
+  whole one. `x = W` is bedtime, in the awake case.
+- **`x = 0`, or absent**, is the problem of sections 10 to 16 exactly (below).
+- **The 2x window** still opens at `t = 0` and closes at `t = E`, so in `r` it is
+  `[x, x + E]`. It composes with the offset and needs nothing of its own.
+- **Without a sleep window** there is no day, and the offset is ignored. The app
+  drops it (`wakeOffsetSecondsOf`), and the solver never reads it when `day` is
+  null.
+
+**The design: shift into the regular day.** Every piece of day arithmetic in
+this directory is periodic from a wake-up at 0: `daySchedule`, the layout's
+segments and chain, `wakingFrom`, `compact`, `lastWakingInstant`,
+`wakingSecondsBefore`, `windowShape` and `leastWakingIn`. So the solver does not
+learn a new kind of day with a short first window. It times each slot on the
+regular day as a slot of horizon `H + x` whose first `x` seconds are a fixed
+**busy block**: a daytime item of `x` waking seconds and no night, at `r = 0`,
+in every slot, worth nothing. Every function above then holds as written. The
+shift is applied where the regular day meets the plan's own clock, and nowhere
+else:
+
+- **Capacity** (`../sleep.ts`, `sleepCapacity(H, S, x)`). The waking seconds of
+  `[x, x + H]` are those of `[0, x + H]` less the `x` already spent. The whole
+  nights are the ones that end by `x + H`, `floor((x + H) / D)`, since none
+  starts before `x <= W`. `sleepVariants` is unchanged: a variant's charge
+  depends only on `W` and `S`. The effort floor applies before the split, as
+  always. At Low effort each launch charges `W` and holds `D`, and a horizon of
+  `k` days holds `k` of them whatever `x` is.
+- **`daySchedule`**. `horizonSeconds` is `H + x`, the end of the plan on the
+  regular day, and the busy block's `x` joins the waking capacity the tail is
+  cut from. `planHorizonSeconds` keeps `H` for the verifier, and
+  `wakeOffsetSeconds` keeps `x`.
+- **Rows.** `slot_k` and `night_k` are unchanged in form: the slot row reads
+  the plan's waking seconds, and the night row the nights just stated. Every fit
+  row of section 10 and every window fit row of section 14 has the busy block as
+  an item in the first waking window, so its right-hand side loses
+  `u^(q)(x / W)`. That is valid by the same argument as the rows themselves: under
+  `u^(q)` a window's items sum to at most 1, and items summing to at most `P / W`
+  sum to at most `floor((q + 1) P / W) / q`, busy block included. The window
+  closes at `r = x + E` (`windowShape(E, W, x)`). Its waking seconds `A` are the
+  plan's, after the busy block, and `P` still counts the busy block when the
+  window closes on the first day, which is what the fit row's argument reads. A
+  doubled launch goes up awake in `[x, lambda]`, so `leastWakingIn` takes `x` as
+  its earliest start.
+- **Layout** (`layout.ts`). The first segment holds the busy block before its
+  daytime launches. `capacityOf` and `chainHeads` take `x` off it, launch times
+  start from `x`, `compact` starts from `x`, and an empty slot is free from `x`
+  when the slots are balanced. A slot is laid out in `r`, and every comparison
+  against the window and every launch time the calendar or the verifier sees is
+  `r - x`, computed once (`planAt`). The `given` calendar of section 16's
+  fallback is in the plan's own seconds and is shifted in.
+- **Verifier** (`verify.ts`) and the arena's `calendar.ts`. These state the rule
+  in the plan's own seconds: no launch before `t = 0`, blocks back to back, the
+  last ending by `H`, and the window against `E`. Only the time of day is read on
+  the regular day, at `t + x`.
+- **What the player sees** (`../optimizer-core.ts`). `nightsFlown` and
+  `awakeFrom` read bedtimes and wake-ups at `t + x`, so a slot's nights and load
+  are the regular day's. `OptimizerSolution.wakeOffsetSeconds` carries `x`, and
+  is absent at 0. `sinceWake` (`../optimizer-views.ts`) is a launch time on the
+  regular day, so the timeline's days break at the player's wake-ups, `t = k D -
+x`, and its times of day are hours since waking.
+
+The alternative was a schedule with a first window of `W - x`. It would have
+touched every one of those functions, each with its own special case for day 0.
+The shift touches each at one place, the busy block, and the validity arguments
+of sections 10 and 14 carry over with the busy block as one more item.
+
+**Two layout orders, for the busy first segment.** Laid out as section 10 lays
+it, a slot can fail where an offset makes the first segment short. Arena seed
+2000 (8 hours of sleep, 12 hours awake, Low effort) had a slot of thirteen
+16-hour one-night ships, one two-night ship and two one-night ships of 20.5
+waking hours. That slot flies: the two-night ship lands at a wake-up, and the
+long ships follow it. But `alternating` put the largest flex first, and a
+20.5-hour ship needs a 4.5-hour head where the first segment has 4. No single
+drop stood the chain up, so the judge dropped 16-hour ships one by one until the
+slot was empty. The busy block acts like a landing of `x` into the first
+segment, and a long landing calls for a short take-off. So with an offset, a
+slot whose usual order does not stand also tries two more (`connectorOrders`):
+alternating from the smallest flex (`small`), and the smallest first, then the
+usual alternation (`smallest`). The first order that stands is used. Without an
+offset, only the usual order is tried.
+
+**The first morning's leftovers, at the front.** With an offset, a daytime
+launch the segments could not place may still go up at the plan's start and fly
+on into the night. Seed 2001, 12 hours awake, three days: a 12.96-hour daytime
+ship and a 32-hour three-night ship fill a slot when the daytime one goes first,
+at `t = 0`. But it fits neither the 4 hours left of the first window nor the
+12-hour last morning, and the re-timed slot (section 14) only appends. So when
+segments leave launches over, with an offset, each leftover, longest first, is
+tried at the front of the re-timed slot. It stays there while the slot still ends
+by the horizon, and only then does the rest go on the end. A 1x launch goes to
+the front only on a slot without a doubled launch, which it would push out of
+the 2x window. Before these two changes, the first smoke pass with 12 hours awake
+lost 0.83 log10 against its promise on seed 2000 and 0.06 on seed 2001. After
+them it lost nothing on either.
+
+**Doubled launches regrouped at the front.** The doubled-first order of section
+13 is built on segments, and with an offset its first segment is short. Arena
+seed 2007 (8 hours of sleep, starting at bedtime, a 48-hour window) has a slot of
+two 4-hour one-night `event` ships, two 12-hour daytime `event` launches and an
+18.7-hour one-night `overhang`. All five fly doubled if they go up back to back,
+each at the first waking instant: at 0, 12, 24, 36 and 48 hours. The segments
+put the overhang third, and four launches across the plan were demoted: 0.40
+log10 under the promise. So a slot with a doubled launch and an offset has two
+more attempts (`regroup`): section 13's layout and the usual order, each laid
+out and then re-timed. The doubled launches come first, the `event` ones by
+block, shortest first, then the `overhang`. The rest follow in the order laid
+out, each at the first waking instant the one before it leaves. Whatever then
+ends past the horizon comes off the end, the judge choosing the group within
+its class. The judge weighs these against the other attempts, as in section 14.
+The timeline is `compact`'s, so it verifies by construction. On seed 2007 the
+gap fell to 0.019. Without an offset these attempts are not made.
+
+**`x = 0` is the problem without it, bit for bit.** `normalizeProblem` leaves the
+field absent at 0, as the app and the arena's problem builder do, so no object
+anywhere carries it. Every change above adds `x` to a time or takes it from one,
+which at `x = 0` is an IEEE identity. The rest are guarded and do not run at 0:
+the fit rows' busy term is not written, and the extra connector orders, the
+front insertion and the regrouped attempts are skipped.
+`tests/unit/wake-offset.spec.ts` holds the model, the MILP matrix and the solved
+plan to that at `x = 0` against an absent offset. The 40-seed measurement below
+holds the shipped solver to it against the revision before this section.
+
+**The night case.** Write `F = D - x` for what is left of the night at `t = 0`.
+The awake case had a placeholder for this: an `x` past `W` was read as `W`. It
+was not safe, as this section once said it was. The clamped day's waking windows
+run `x - W` later than the real ones, so a launch near a clamped bedtime falls
+in the real night. It is gone from `normalizeProblem`, `wakeOffsetSecondsOf`
+(which now reads only a value of a day or more as 0) and the arena's
+`wakeOffsetOf`. The night is modelled at its real length. Up to `t = F` the only
+instant a launch can go up is `t = 0`. From `t = F` on, the plan is one that
+starts at a wake-up, over the horizon `H - F`, which sections 10 to 16 already
+solve. So the solver times everything after `F` on the regular day from that
+wake-up (`daySchedule`: `firstNightSeconds = F`, no busy block, horizon
+`H - F`). What is new is the launch at `t = 0`, one per slot.
+
+_Why one variant per option at T+0, and not blocks read against real nights._
+The menu's variants charge `m` nights of `S` each, and a launch at `t = 0` flies
+through a first night of `F < S`. Reading a variant's block against real nights
+would keep the variant's waking charge, `max(d - m S, (m - 1) W)`. But a launch
+at `t = 0` needs `d - F - (m - 1) S` of it, which is more, so the variant would
+under-charge it and the MILP over-promise. A launch at `t = 0` has a fixed
+start, so what it takes from its slot is determined. So the menu holds each
+option once more as a **T+0 variant** (`startVariants` in `../sleep.ts`; the
+arena's own copy in `tests/arena/sleep.ts`), which charges exactly that:
+
+- `atStartSeconds` is `d`, the option's whole charge (the effort floor
+  included). The launch holds its slot from `t = 0` to its landing, `t = d`,
+  which must be inside the horizon. The verifier and the arena's checker read
+  the block as exactly that.
+- On the regular day from the first wake-up, its slot is next usable at the
+  first waking instant at or after its landing, `R` (`max(0, d - F)` after the
+  wake-up, rounded up to a wake-up when it lands in a night). Its `actualTime`
+  is the waking seconds before `min(R, H - F)`. Its `nights` are the whole
+  nights before that point which the slot's budget counts; a night the horizon
+  cuts is no part of the budget. A ship back before the wake-up takes nothing.
+- Its id gets a `~start` suffix, and `capacityVariants` doubles it like any
+  other option.
+
+These charges are exact, not a relaxation: every schedule with a launch at
+`t = 0` takes exactly them from the slot's waking seconds and nights. A variant
+charging fewer would over-promise; one per night count, as `sleepVariants`
+makes, would let the MILP pick a cheaper count than the launch can fly. The rest
+of the slot's rows treat it as a launch of those numbers starting at the first
+wake-up, which is when the slot sees it. The slot row and the night row count
+it, and the fit rows count it as an item, which is valid since it starts at a
+wake-up. As the window rows' first launch, it is an `event` or the `overhang`
+like any other.
+
+_What the model adds._
+
+- **Group key.** T+0 groups are keyed apart (`Group.atStart`).
+- **Dominance and copies.** Dominance, twins and copies stay within T+0 or
+  within the rest.
+- **Start row.** A new row `start_k`, `sum over T+0 classes n[c][k] <= 1`,
+  allows one launch at `t = 0` a slot. A slot flies one block at a time; only a
+  ship of zero charge could share the instant, and none has one.
+- **Charge.** A T+0 launch is charged its own seconds in `slot_k`, since its
+  start is known (`slotCharge`).
+- **Drops.** T+0 options are dropped without a night at the start, and when the
+  charge is past the horizon.
+- **The 2x window.** It closes at `E - F` on the regular day (`windowShape`).
+  A T+0 launch always goes up inside it, and section 16 makes it doubled: every
+  option has an `overhang` copy, so a 1x T+0 launch is a fault. So with a window
+  the T+0 `normal` options are dropped, and the window rows see every T+0 launch,
+  as the labelling of section 13 has it. Without the drop, the first 40-seed run
+  planned a 1x T+0 launch ahead of two doubled ones that could not both start
+  inside the window (seed 2029, 0.36 log10 lost). When `E < F` the window closes
+  before the first wake-up, and only the T+0 launches go up inside it, each its
+  slot's last doubled launch. So every other doubled option is dropped, and so is
+  every T+0 `event` copy.
+- **Absent means unchanged.** `start_k` has no entries without a T+0 class, and
+  `Rows.end` drops it, so `x <= W` builds the matrix it did.
+
+_Layout._ A slot with a T+0 launch puts it at `t = 0` (`-F` on the layout's
+clock). It lays the rest out on the regular day from `R`: its whole days gone
+and the waking seconds of `R`'s day a busy block. That is the awake case's busy
+block, with its layout orders and its first-morning fixes (`layOutAround`). Its
+block in the layout is its landing, the longest of its class's groups. The
+balancing pass never moves it, and `settle` never swaps it with a later launch
+of equal numbers. The regrouped attempts run here too, the T+0 launch kept first
+and the rest re-timed from its landing. A doubled ship that must go up late in
+the day after it, which the segments cannot fly, is one such case: seed 2030, at
+20 hours and with the 48-hour window, lost 0.89 log10 without them, and nothing
+with them.
+
+_Verifier and arena._ Both admit a launch at exactly `t = 0`, to a microsecond,
+while the player is in the night, and no other launch in that night. A T+0
+variant may go up only there. Any other option may go up there too, with its
+usual block, which is longer than its flight. `tests/unit/wake-offset.spec.ts`
+holds the two checkers to the same verdict on random calendars, over offsets of
+the whole day, T+0 launches included.
+
+_What the player sees._ A ship sent at `t = 0` goes up while the player is
+going back to sleep. So `nightsFlown` counts that night for it, however soon it
+lands: the timeline marks it overnight (indigo) whenever it is in the air at all
+after `t = 0`. Slot loads read its block as its landing. `sinceWake`'s day 0 is
+that one instant, and day 1 starts at the first wake-up.
+
+**Measured, the night case.** Seeds 2000-2039, 8 hours of sleep, alone and
+with the window `inside` and `straddle-under`, at 18, 20 and 23 hours awake.
+All of these were judged by the arena, as below.
+
+- **Identity at `x <= W`.** At `x = 0` in all five regimes and at 4, 12 and 16
+  hours, every seed gave the same allocation, calendar, reported joint and
+  `layoutStats` as the revision before this case (one run each, rerun after the
+  last fix on three regimes).
+- **Faults.** There was no C0 or C1 fault. One packer was undecided (8 hours,
+  `straddle-under`, 20 hours awake, seed 2031) on a calendar that verified.
+
+| regime        | x   | mean log10 | x = 0   | gap    | gap > 0.02 | time / x = 0 |
+| ------------- | --- | ---------- | ------- | ------ | ---------- | ------------ |
+| 8 h           | 18  | -9.1114    | -9.1056 | 0.0101 | 6          | 1.66         |
+| 8 h           | 20  | -9.1131    |         | 0.0101 | 6          | 1.67         |
+| 8 h           | 23  | -9.1159    |         | 0.0087 | 5          | 1.66         |
+| 8 h, inside   | 18  | -8.5702    | -8.5624 | 0.0103 | 6          | 1.16         |
+| 8 h, inside   | 20  | -8.5763    |         | 0.0107 | 6          | 1.25         |
+| 8 h, inside   | 23  | -8.5874    |         | 0.0153 | 8          | 1.37         |
+| 8 h, straddle | 18  | -8.3930    | -8.4006 | 0.0129 | 9          | 1.56         |
+| 8 h, straddle | 20  | -8.4033    |         | 0.0203 | 10         | 1.60         |
+| 8 h, straddle | 23  | -8.4021    |         | 0.0183 | 10         | 1.49         |
+
+Time is the total against the same tree's `x = 0` run under the same machine
+load. Nearly all of it is the main MILP, whose menu is a third larger with the
+T+0 variants: for 8 hours at 20 awake, 103 of 109 s, against 57 of 66 at
+`x = 0`. The one gap over 0.02 is 8 hours, `straddle-under`, 20 hours awake. At
+20 and 23 hours awake, seed 2037 there loses 0.31 and 0.30, a seed that loses
+0.36 at `x = 0` as well.
+
+Against the placeholder, which solved any such `x` as `W`: under the real
+offset, 34 to 37 of its 40 plans per regime fail the arena's calendar. They
+launch in the real night, because the clamped waking windows run `x - W` late.
+Against the valid ones, exact modelling delivered more on 2 seeds, the same on
+33 and less on 5, by 0.019 to 0.052. In each of the five the MILP promised the
+same as the placeholder, or less by 0.012 after its search took another path,
+and the layout delivered less. Seed 2001 with the window is three of them, a
+doubled ship the regrouped attempts do not reach.
+
+**Measured.** Seeds 2000-2039, problems from the arena's own builder,
+`ARENA_WAKE` for the offset. Every plan was judged by the arena's evaluator and
+`calendarFaults`, cores pinned. Identity first. At `x = 0`, under no sleep or
+window, 8 hours of sleep, the 48-hour window, and 8 hours with the window
+`inside` and `straddle-under`, every seed gave the same allocation, calendar
+(options and launch times), reported joint and `layoutStats` as the revision
+before this section, in every run. The time was within noise. With 8 hours of
+sleep alone, the sum over three runs each was 57.3 s against 59.2 s, per-seed
+median ratio 1.03, while the same code's own runs spread from 56 to 66 s.
+
+With an offset (the gap is the plan's promise less what the judge delivered,
+mean over the 39 scoring seeds; time is the sum of one run against the median
+of the `x = 0` runs):
+
+| regime        | x   | C0/C1 | mean log10 | vs x = 0 | gap    | gap > 0.02 | time s (x = 0) |
+| ------------- | --- | ----- | ---------- | -------- | ------ | ---------- | -------------- |
+| 8 h           | 0   | 0     | -9.1056    |          | 0.0080 | 4          | 61.6           |
+| 8 h           | 4   | 0     | -9.1059    | -0.0003  | 0.0087 | 7          | 56.2           |
+| 8 h           | 12  | 0     | -9.1072    | -0.0016  | 0.0101 | 7          | 53.9           |
+| 8 h           | 16  | 0     | -9.1080    | -0.0024  | 0.0105 | 8          | 55.1           |
+| 8 h, inside   | 0   | 0     | -8.5624    |          | 0.0103 | 9          | 176.1          |
+| 8 h, inside   | 4   | 0     | -8.5792    | -0.0168  | 0.0268 | 10         | 176.2          |
+| 8 h, inside   | 12  | 0     | -8.5644    | -0.0020  | 0.0125 | 9          | 188.0          |
+| 8 h, inside   | 16  | 0     | -8.5585    | +0.0038  | 0.0064 | 6          | 184.1          |
+| 8 h, straddle | 0   | 0     | -8.4006    |          | 0.0244 | 12         | 201.7          |
+| 8 h, straddle | 4   | 0 (1) | -8.3955    | +0.0051  | 0.0181 | 7          | 204.4          |
+| 8 h, straddle | 12  | 0     | -8.3897    | +0.0109  | 0.0110 | 7          | 212.3          |
+| 8 h, straddle | 16  | 0     | -8.3881    | +0.0125  | 0.0092 | 6          | 234.2          |
+
+The one mark is not a fault: the arena's packer was undecided within its node
+budget on seed 2021 (C1-inconclusive), and that plan's calendar verified. The
+one gap over 0.02 is seed 2037 with 4 hours awake and the 48-hour window: 0.44,
+an overnight ship the layout trims and a doubled one it demotes. That seed loses
+0.36 under straddle at `x = 0` already. Without it the mean is 0.016. Quality
+against `x` is what the capacity says. A horizon of whole days has the same
+waking hours and nights at every `x`, cut differently, and sleep alone loses
+0.002 log10 at most. With the window, 16 hours awake does better than none: it
+lines bedtime, a launch instant, up with the window's start. But it also gets
+the regrouped attempts, which `x = 0` does not, and its gap is the smallest.
+That suggests the regrouped attempts would help at `x = 0` too, which this
+section does not change. Planned above `x = 0`'s plan on at most 10 seeds per
+regime: a different matrix steers a node-limited search elsewhere. Time is
+within about 5% except with the window from bedtime, which is +16% under
+straddle: the two extra attempts, on every slot with a doubled launch.
+`ARENA_SLEEP=8 ARENA_WINDOW=inside ARENA_WAKE=12 pnpm arena` (smoke) had no C0 or
+C1 failure, two soft violations (A3-menu 0.004 nats, M2-projection 0.011 nats)
+and a mean gap of 0.008.

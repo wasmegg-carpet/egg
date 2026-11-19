@@ -113,6 +113,9 @@ export interface HumilityMissionsVisit {
   // exported without a sleep window is exactly what it was before the field existed. AP does not read it;
   // `launches` already folds daytime and overnight launches of a mission into one line.
   sleepSeconds?: number;
+  // How long the player had been awake when the plan starts, in seconds, with `sleepSeconds`. Absent on a plan that
+  // starts at wake-up, so such a file is exactly what it was before the field existed. AP does not read it.
+  wakeOffsetSeconds?: number;
   // The 2x capacity event window the plan was solved against, in seconds from its start. Absent on a plan made
   // without one, as `sleepSeconds` is. AP does not read it; the launches it doubled carry `doubled`.
   eventWindowSeconds?: number;

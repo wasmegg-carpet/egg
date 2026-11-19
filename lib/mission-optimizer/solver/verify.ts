@@ -17,6 +17,9 @@ export interface TimedLaunch {
   nights: number;
   // Absent is false.
   doubled?: boolean;
+  // For a launch at T+0 in the night the plan starts in, its option's `atStartSeconds`: it may go up at T+0 only,
+  // and holds its slot from there for that long, to its landing (SPEC.md section 17). Absent for every other launch.
+  atStartSeconds?: number;
   // For a 1x launch, whether the menu holds the same flight as an `event` and as an `overhang` copy
   // (`doubledCopiesOnMenu`). Absent is false, which leaves a 1x launch unchecked against the window.
   eventCopy?: boolean;
@@ -38,6 +41,7 @@ export function doubledCopiesOnMenu(options: readonly LaunchOption[]): { event: 
       o.actualTime,
       o.nights ?? 0,
       o.actualFuel,
+      o.atStartSeconds ?? '',
       entries(o.fuelByEgg, 1),
       entries(o.yieldVector, f),
       entries(o.legendaryYieldVector, f),
@@ -60,9 +64,16 @@ export function doubledCopiesOnMenu(options: readonly LaunchOption[]): { event: 
 // launches, so the last is held to its `overhang` copy and the others to their `event` copies (SPEC.md section
 // 16). A 1x launch is held to this only a microsecond clear of the window's edge, where a doubled one is admitted
 // a microsecond past it, so no launch at the edge has to be both. A problem without a sleep window is checked as
-// one with `sleepSeconds` 0 and its slot as the horizon.
+// one with `sleepSeconds` 0 and its slot as the horizon. Every time is the plan's own, from t = 0; the time of day
+// alone is read on the player's regular day, `wakeOffsetSeconds` later, since the plan starts that long after a
+// wake-up (SPEC.md section 17), and nothing may go up before t = 0. A plan that starts in the night (an offset past
+// the waking window) has one instant in it the player is up to launch, t = 0 itself: a launch there is admitted
+// asleep, and nowhere else in that night. A launch of a T+0 variant goes up there and nowhere else, and holds its
+// slot from there to its landing, `atStartSeconds` later.
 export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, eventWindowSeconds = 0): string | null {
   const waking = DAY_SECONDS - sleep.sleepSeconds;
+  const offset = sleep.wakeOffsetSeconds ?? 0;
+  const firstNight = offset > waking ? DAY_SECONDS - offset : 0;
   const inside = (l: TimedLaunch) => eventWindowSeconds > 0 && l.launchAt < eventWindowSeconds - VERIFY_TOL_SECONDS;
   // The last launch that may be doubled, which is the one that could be the overhang.
   let lastInside = -1;
@@ -81,10 +92,16 @@ export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, 
         : `launch ${i} at ${launchAt}s overlaps the previous block, which ends at ${free}s`;
     }
     // Read so that a time a hair under midnight-plus-a-day counts as wake-up, not as the end of the night.
-    const day = Math.floor((launchAt + VERIFY_TOL_SECONDS) / DAY_SECONDS);
-    const timeOfDay = launchAt - day * DAY_SECONDS;
-    if (timeOfDay > waking + VERIFY_TOL_SECONDS) {
+    const sinceWake = launchAt + offset;
+    const day = Math.floor((sinceWake + VERIFY_TOL_SECONDS) / DAY_SECONDS);
+    const timeOfDay = sinceWake - day * DAY_SECONDS;
+    const atStart = firstNight > 0 && Math.abs(launchAt) <= VERIFY_TOL_SECONDS;
+    if (timeOfDay > waking + VERIFY_TOL_SECONDS && !atStart) {
       return `launch ${i} at ${launchAt}s is ${timeOfDay}s into day ${day}, after bedtime at ${waking}s`;
+    }
+    const startCharge = launches[i].atStartSeconds;
+    if (startCharge !== undefined && !atStart) {
+      return `launch ${i} at ${launchAt}s is a T+0 launch, flown ${firstNight > 0 ? 'later' : 'with no night at the start'}`;
     }
     if (launches[i].doubled) {
       if (!(eventWindowSeconds > 0)) return `launch ${i} at ${launchAt}s is doubled with no 2x window`;
@@ -94,7 +111,7 @@ export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, 
     } else if (inside(launches[i]) && (i === lastInside ? launches[i].overhangCopy : launches[i].eventCopy)) {
       return `launch ${i} at ${launchAt}s is flown at 1x inside the 2x window, which closes at ${eventWindowSeconds}s`;
     }
-    free = launchAt + wakingSeconds + nights * sleep.sleepSeconds;
+    free = launchAt + (startCharge ?? wakingSeconds + nights * sleep.sleepSeconds);
   }
   if (free > sleep.horizonSeconds + VERIFY_TOL_SECONDS) {
     return `the last block ends at ${free}s, past the ${sleep.horizonSeconds}s horizon`;

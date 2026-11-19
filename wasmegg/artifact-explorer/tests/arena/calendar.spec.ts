@@ -147,3 +147,65 @@ describe('calendarFaults with a sleep window and a 2x window', () => {
     );
   });
 });
+
+// A plan that starts after the player woke up: the same rule, the day counted from that wake-up rather than from the
+// plan's start (ARENA.md, "Sleep").
+describe('calendarFaults with a wake offset', () => {
+  // Twelve hours awake at the plan's start: bedtime is 4 hours in, and the next wake-up 12 hours in.
+  const awake: CalendarDay = { ...day, slots: 1, wakeOffsetSeconds: 12 * H };
+
+  it('accepts launches in what is left of the first waking day, and from the next wake-up', () => {
+    // A bedtime launch 4 hours in, a 10-hour ship at the next wake-up 12 hours in, and a 6-hour one after it.
+    const cal = [[launch(2, 4 * H), launch(0, 12 * H), launch(1, 22 * H)]];
+    expect(calendarFaults(cal, menu, [1, 1, 1], awake)).toEqual([]);
+    // A 10-hour ship at the start lands in the night, which sleep does not forbid.
+    expect(calendarFaults([[launch(0, 0)]], menu, [1, 0, 0], awake)).toEqual([]);
+  });
+
+  it('rejects a launch in the shifted night, which the same time from wake-up would allow', () => {
+    // Five hours in is 17 hours since waking: asleep, though five hours after a wake-up is broad day.
+    expect(calendarFaults([[launch(1, 5 * H)]], menu, [0, 1, 0], awake).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[launch(1, 5 * H)]], menu, [0, 1, 0], { ...day, slots: 1 })).toEqual([]);
+    // Eleven hours in is 23 hours since waking: still asleep; twelve is the wake-up.
+    expect(calendarFaults([[launch(1, 11 * H)]], menu, [0, 1, 0], awake).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[launch(1, 12 * H)]], menu, [0, 1, 0], awake)).toEqual([]);
+  });
+
+  it('rejects a launch before the plan starts', () => {
+    expect(calendarFaults([[launch(1, -60)]], menu, [0, 1, 0], awake).join('\n')).toMatch(/before the slot is free/);
+  });
+
+  it('is the rule without one at an offset of 0', () => {
+    expect(calendarFaults(valid(), menu, validAllocation, { ...day, wakeOffsetSeconds: 0 })).toEqual([]);
+  });
+});
+
+// A plan that starts in the night: the player is up at T+0 to launch, and asleep from then to the next wake-up.
+describe('calendarFaults with the plan starting in the night', () => {
+  // Twenty hours awake: four hours of night left, the first wake-up at 4 hours, bedtime at 20.
+  const night: CalendarDay = { ...day, slots: 1, wakeOffsetSeconds: 20 * H };
+  const startMenu = [...menu, { id: 'long~start', actualTime: 6 * H, nights: 0, atStartSeconds: 10 * H }];
+  const go = (option: number, launchAt: number) => ({ option, optionId: startMenu[option].id, launchAt });
+
+  it('admits a launch at T+0, and the next one from the wake-up after its landing', () => {
+    expect(calendarFaults([[go(3, 0), go(1, 10 * H)]], startMenu, [0, 1, 0, 1], night)).toEqual([]);
+    // Any launch may go up at T+0; the first wake-up is 4 hours in.
+    expect(calendarFaults([[go(1, 0), go(0, 6 * H)]], startMenu, [1, 1, 0, 0], night)).toEqual([]);
+    expect(calendarFaults([[go(0, 4 * H)]], startMenu, [1, 0, 0, 0], night)).toEqual([]);
+  });
+
+  it('admits nothing else in that night, and holds a T+0 launch to T+0 and to its landing', () => {
+    expect(calendarFaults([[go(1, 60)]], startMenu, [0, 1, 0, 0], night).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[go(1, 3 * H)]], startMenu, [0, 1, 0, 0], night).join('\n')).toMatch(/asleep/);
+    expect(calendarFaults([[go(3, 4 * H)]], startMenu, [0, 0, 0, 1], night).join('\n')).toMatch(/T\+0 launch/);
+    expect(calendarFaults([[go(3, 0), go(1, 9 * H)]], startMenu, [0, 1, 0, 1], night).join('\n')).toMatch(
+      /before the slot is free/
+    );
+  });
+
+  it('holds a T+0 launch to T+0 in a plan starting awake', () => {
+    expect(
+      calendarFaults([[go(3, 0)]], startMenu, [0, 0, 0, 1], { ...night, wakeOffsetSeconds: 12 * H }).join('\n')
+    ).toMatch(/T\+0 launch/);
+  });
+});

@@ -53,27 +53,26 @@ const slot = (...launches: [number, number][]) => {
 
 const launchRows = (rows: TimelineRow[]) => rows.filter((r): r is TimelineLaunchRow => r.kind === 'launch');
 const shape = (rows: TimelineRow[]) =>
-  rows.map(r => {
-    if (r.kind === 'launch')
-      return `${r.count}x${r.repeat > 1 ? `*${r.repeat}` : ''}@${r.launchAt}${r.doubled ? ' 2x' : ''}${r.nights ? ' night' : ''}`;
-    if (r.kind === 'day')
-      return `day ${r.firstDay}-${r.lastDay}${r.routineDay ? ` (${r.routineDay.day}/${r.routineDay.of})` : ''}`;
-    if (r.kind === 'routine') return `routine ${r.firstDay}-${r.lastDay} every ${r.period} x${r.times}`;
-    return `ends ${r.at}`;
-  });
+  rows.map(r =>
+    r.kind === 'launch'
+      ? `${r.count}x@${r.launchAt}${r.doubled ? ' 2x' : ''}${r.overnight ? ' night' : ''}`
+      : `ends ${r.at}`
+  );
 
-// What the timeline counts of each line of the totals (mission, target, nights, capacity), next to what the
+// What the timeline counts of each line of the totals (mission, target, overnight, capacity), next to what the
 // totals count: the card shows both, and they must agree.
-const lineOf = (c: { ship: MissionType; targetAfxId: number; nights?: number }, doubled: boolean) =>
-  `${c.ship.shipType}|${c.ship.durationType}|${c.targetAfxId}|${c.nights ?? 0}|${doubled}`;
+const lineOf = (c: { ship: MissionType; targetAfxId: number }, overnight: boolean | undefined, doubled: boolean) =>
+  `${c.ship.shipType}|${c.ship.durationType}|${c.targetAfxId}|${overnight ?? false}|${doubled}`;
 function counts(solution: OptimizerSolution) {
   const timeline = new Map<string, number>();
   for (const s of planTimeline(solution).slots)
     for (const row of launchRows(s.rows)) {
-      const key = lineOf({ ...row.choice, nights: row.nights }, row.doubled);
-      timeline.set(key, (timeline.get(key) ?? 0) + row.count * row.repeat);
+      const key = lineOf(row.choice, row.overnight, row.doubled);
+      timeline.set(key, (timeline.get(key) ?? 0) + row.count);
     }
-  const totals = new Map(launchTotals(solution).map(line => [lineOf(line, line.doubled), line.numShipsLaunched]));
+  const totals = new Map(
+    launchTotals(solution).map(line => [lineOf(line, line.overnight, line.doubled), line.numShipsLaunched])
+  );
   return { timeline, totals };
 }
 function expectCountsAgree(solution: OptimizerSolution) {
@@ -82,7 +81,7 @@ function expectCountsAgree(solution: OptimizerSolution) {
 }
 
 describe('launchTotals', () => {
-  it("folds a mission's event and overhang variants into one 2x line, apart from its 1x line", () => {
+  it("folds a mission's event and overhang variants into one 2x line, ahead of its 1x line", () => {
     const solution = makeSolution({
       choiceHistory: [
         choice(Ship.CHICKEN_ONE, 3, { variant: 'normal' }),
@@ -91,8 +90,8 @@ describe('launchTotals', () => {
       ],
     });
     expect(launchTotals(solution).map(l => [l.numShipsLaunched, l.doubled])).toEqual([
-      [3, false],
       [3, true],
+      [3, false],
     ]);
   });
 
@@ -100,13 +99,58 @@ describe('launchTotals', () => {
     const solution = makeSolution({
       choiceHistory: [choice(Ship.CHICKEN_ONE, 1, { nights: 1 }), choice(Ship.CHICKEN_ONE, 4, { nights: 0 })],
     });
-    expect(launchTotals(solution).map(l => [l.numShipsLaunched, l.nights])).toEqual([
-      [4, 0],
-      [1, 1],
+    expect(launchTotals(solution).map(l => [l.numShipsLaunched, l.overnight])).toEqual([
+      [4, false],
+      [1, true],
     ]);
   });
 
-  it('totals across nights when asked, keeping capacity apart', () => {
+  it('does not tell a one-night launch from a two-night one: both are one overnight line', () => {
+    const solution = makeSolution({
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 3, { nights: 1 }), choice(Ship.CHICKEN_ONE, 2, { nights: 2 })],
+    });
+    expect(launchTotals(solution).map(l => [l.numShipsLaunched, l.overnight])).toEqual([[5, true]]);
+  });
+
+  it('sorts doubled before 1x, then by ship, duration and target, awake before overnight', () => {
+    const withDuration = (c: LaunchSolution, duration: ei.MissionInfo.DurationType): LaunchSolution => ({
+      ...c,
+      ship: new MissionType(c.ship.shipType, duration),
+    });
+    const [first, second] = [Name.LUNAR_TOTEM, Name.TUNGSTEN_ANKH].sort((a, b) => a - b);
+    const solution = makeSolution({
+      choiceHistory: [
+        choice(Ship.HENERPRISE, 1, { nights: 1 }),
+        choice(Ship.HENERPRISE, 1, { variant: 'event' }),
+        choice(Ship.HENERPRISE, 1),
+        withDuration(choice(Ship.CHICKEN_NINE, 1, { target: first }), Duration.EPIC),
+        choice(Ship.CHICKEN_NINE, 1, { target: second }),
+        choice(Ship.CHICKEN_NINE, 1, { target: first }),
+        choice(Ship.CHICKEN_NINE, 1, { variant: 'event', target: second }),
+      ],
+    });
+    const order = (s: OptimizerSolution) =>
+      launchTotals(s).map(l => [
+        l.overnight ? 'night' : 'awake',
+        l.doubled ? '2x' : '1x',
+        Ship[l.ship.shipType],
+        Duration[l.ship.durationType],
+        l.targetAfxId,
+      ]);
+    expect(order(solution)).toEqual([
+      ['awake', '2x', 'CHICKEN_NINE', 'SHORT', second],
+      ['awake', '2x', 'HENERPRISE', 'SHORT', Name.UNKNOWN],
+      ['awake', '1x', 'CHICKEN_NINE', 'SHORT', first],
+      ['awake', '1x', 'CHICKEN_NINE', 'SHORT', second],
+      ['awake', '1x', 'CHICKEN_NINE', 'EPIC', first],
+      ['awake', '1x', 'HENERPRISE', 'SHORT', Name.UNKNOWN],
+      ['night', '1x', 'HENERPRISE', 'SHORT', Name.UNKNOWN],
+    ]);
+    // A function of the plan, not of the order the solver emitted its choices in.
+    expect(order({ ...solution, choiceHistory: [...solution.choiceHistory].reverse() })).toEqual(order(solution));
+  });
+
+  it('totals across overnight when asked, keeping capacity apart', () => {
     const solution = makeSolution({
       choiceHistory: [
         choice(Ship.CHICKEN_ONE, 1, { nights: 1, variant: 'event' }),
@@ -114,16 +158,17 @@ describe('launchTotals', () => {
         choice(Ship.CHICKEN_ONE, 2, { nights: 0, variant: 'overhang' }),
       ],
     });
-    expect(launchTotals(solution, { byNights: false })).toEqual([
-      expect.objectContaining({ numShipsLaunched: 4, doubled: false }),
+    // Doubled first, as in every list.
+    expect(launchTotals(solution, { byOvernight: false })).toEqual([
       expect.objectContaining({ numShipsLaunched: 3, doubled: true }),
+      expect.objectContaining({ numShipsLaunched: 4, doubled: false }),
     ]);
-    expect(launchTotals(solution, { byNights: false }).every(line => line.nights === undefined)).toBe(true);
+    expect(launchTotals(solution, { byOvernight: false }).every(line => line.overnight === undefined)).toBe(true);
   });
 
   it('reads a plan made without either window as 1x and daytime', () => {
     const [line] = launchTotals(makeSolution({ choiceHistory: [choice(Ship.CHICKEN_ONE, 2)] }));
-    expect(line).toMatchObject({ numShipsLaunched: 2, nights: 0, doubled: false });
+    expect(line).toMatchObject({ numShipsLaunched: 2, overnight: false, doubled: false });
     expect(isDoubled({})).toBe(false);
   });
 });
@@ -215,7 +260,7 @@ describe('planTimeline', () => {
     expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['2x@0 2x', `1x@${2 * H}`, `ends ${5 * H}`]);
   });
 
-  it('heads each day on a sleep-aware plan and folds identical days into a block', () => {
+  it('lists every launch of every day, with no heading and no fold, and the T+ times alone say which day it is', () => {
     const day = (d: number): [number, number][] => [
       [0, d * DAY],
       [0, d * DAY + H],
@@ -224,29 +269,52 @@ describe('planTimeline', () => {
     const solution = makeSolution({
       sleepSeconds: 8 * H,
       choiceHistory: [choice(Ship.CHICKEN_ONE, 9, { nights: 0 }), choice(Ship.CHICKEN_NINE, 4, { nights: 1 })],
-      // Days 0-2 alike, day 3 different, day 5 like the first ones but not next to them.
+      // Days 0-2 alike, then a different day 3, and day 5 like the first ones.
       slots: [
         slot(...day(0), ...day(1), ...day(2), [0, 3 * DAY], [0, 5 * DAY], [0, 5 * DAY + H], [1, 5 * DAY + 15 * H]),
       ],
     });
-    const timeline = planTimeline(solution);
-    expect(timeline.byDay).toBe(true);
-    expect(shape(timeline.slots[0].rows)).toEqual([
-      'day 0-2',
-      '2x*3@0',
-      `1x*3@${15 * H} night`,
-      'day 3-3',
+    const rows = planTimeline(solution).slots[0].rows;
+    expect(rows.every(r => r.kind === 'launch')).toBe(true);
+    expect(shape(rows)).toEqual([
+      '2x@0',
+      `1x@${15 * H} night`,
+      `2x@${DAY}`,
+      `1x@${DAY + 15 * H} night`,
+      `2x@${2 * DAY}`,
+      `1x@${2 * DAY + 15 * H} night`,
       `1x@${3 * DAY}`,
-      'day 5-5',
       `2x@${5 * DAY}`,
       `1x@${5 * DAY + 15 * H} night`,
     ]);
     expectCountsAgree(solution);
   });
 
-  // A ship that takes more than a day to come round gives a plan a rhythm of several days rather than one.
-  it('folds a routine of several days, flown over and over, into one showing of it', () => {
-    // A three-day routine: two launches, a quiet day, one overnight launch; four times over, then a different day.
+  it('never merges a run across a day boundary on a sleep plan, but does without sleep', () => {
+    // The same mission launched at the end of one day and the start of the next, back to back in the slot.
+    const launches: [number, number][] = [
+      [0, 14 * H],
+      [0, 15 * H],
+      [0, DAY],
+      [0, DAY + H],
+    ];
+    const asleep = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 4, { nights: 0 })],
+      slots: [slot(...launches)],
+    });
+    expect(shape(planTimeline(asleep).slots[0].rows)).toEqual([`2x@${14 * H}`, `2x@${DAY}`]);
+    expectCountsAgree(asleep);
+
+    const awake = makeSolution({
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 4)],
+      slots: [slot(...launches)],
+    });
+    expect(shape(planTimeline(awake).slots[0].rows)).toEqual([`4x@${14 * H}`]);
+  });
+
+  it('lists a quiet day or a long routine launch by launch rather than folding it', () => {
+    // Two launches, a quiet day and one overnight launch, four times over: nothing folds, every launch is a row.
     const routine = (d: number): [number, number][] => [
       [0, d * DAY],
       [0, d * DAY + 2 * H],
@@ -254,45 +322,16 @@ describe('planTimeline', () => {
     ];
     const solution = makeSolution({
       sleepSeconds: 8 * H,
-      choiceHistory: [choice(Ship.CHICKEN_ONE, 9, { nights: 0 }), choice(Ship.CHICKEN_NINE, 4, { nights: 1 })],
-      slots: [slot(...routine(0), ...routine(3), ...routine(6), ...routine(9), [0, 12 * DAY])],
+      choiceHistory: [choice(Ship.CHICKEN_ONE, 8, { nights: 0 }), choice(Ship.CHICKEN_NINE, 4, { nights: 1 })],
+      slots: [slot(...routine(0), ...routine(3), ...routine(6), ...routine(9))],
     });
-    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
-      'routine 0-11 every 3 x4',
-      'day 0-0 (1/3)',
-      '2x*4@0',
-      'day 2-2 (3/3)',
-      `1x*4@${2 * DAY + 15 * H} night`,
-      'day 12-12',
-      `1x@${12 * DAY}`,
-    ]);
+    const rows = launchRows(planTimeline(solution).slots[0].rows);
+    expect(rows).toHaveLength(8);
+    expect(rows.map(r => r.count)).toEqual([2, 1, 2, 1, 2, 1, 2, 1]);
+    expect(rows.map(r => r.launchAt)).toEqual(
+      [0, 2, 3, 5, 6, 8, 9, 11].map((d, i) => (i % 2 === 0 ? d * DAY : d * DAY + 15 * H))
+    );
     expectCountsAgree(solution);
-  });
-
-  it('folds no two days that fly the same launches at different times of day', () => {
-    const solution = makeSolution({
-      sleepSeconds: 8 * H,
-      choiceHistory: [choice(Ship.CHICKEN_ONE, 3, { nights: 0 })],
-      // Day 1 flies what day 0 does, two hours later; day 2 flies it as day 1 does.
-      slots: [slot([0, 0], [0, DAY + 2 * H], [0, 2 * DAY + 2 * H])],
-    });
-    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['day 0-0', '1x@0', 'day 1-2', `1x*2@${DAY + 2 * H}`]);
-  });
-
-  it('gives a routine every day it covers, quiet days of the last time round included', () => {
-    // A two-day routine, one launch and a quiet day, flown twice: days 0 to 3, though the last launch is on day 2.
-    const solution = makeSolution({
-      sleepSeconds: 8 * H,
-      choiceHistory: [choice(Ship.CHICKEN_ONE, 2, { nights: 0 }), choice(Ship.CHICKEN_NINE, 1, { nights: 0 })],
-      slots: [slot([0, 0], [0, 2 * DAY], [1, 4 * DAY])],
-    });
-    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
-      'routine 0-3 every 2 x2',
-      'day 0-0 (1/2)',
-      '1x*2@0',
-      'day 4-4',
-      `1x@${4 * DAY}`,
-    ]);
   });
 
   it('marks a launch overnight by the nights the calendar flies it through, not by its variant', () => {
@@ -312,15 +351,35 @@ describe('planTimeline', () => {
         },
       ],
     });
-    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['day 0-0', '1x@0', `1x@${14 * H} night`]);
-    expect(launchTotals(solution).map(l => [l.ship.shipType, l.nights])).toEqual([
-      [Ship.CHICKEN_ONE, 0],
-      [Ship.CHICKEN_NINE, 1],
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['1x@0', `1x@${14 * H} night`]);
+    expect(launchTotals(solution).map(l => [l.ship.shipType, l.overnight])).toEqual([
+      [Ship.CHICKEN_ONE, false],
+      [Ship.CHICKEN_NINE, true],
     ]);
     expectCountsAgree(solution);
   });
 
-  it('puts a divider that falls overnight between the two days, and folds no day across it', () => {
+  it('merges consecutive same-ship overnight launches whatever their night counts', () => {
+    const solution = makeSolution({
+      sleepSeconds: 8 * H,
+      choiceHistory: [choice(Ship.CHICKEN_NINE, 3, { nights: 1 })],
+      slots: [
+        {
+          loadSeconds: 4 * DAY,
+          rawLoadSeconds: 0,
+          launches: [
+            { choice: 0, launchAt: 14 * H, nights: 1 },
+            { choice: 0, launchAt: 15 * H, nights: 2 },
+            { choice: 0, launchAt: 16 * H, nights: 1 },
+          ],
+        },
+      ],
+    });
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([`3x@${14 * H} night`]);
+    expectCountsAgree(solution);
+  });
+
+  it('puts a divider that falls between two days between them, and merges no run across it', () => {
     const solution = makeSolution({
       sleepSeconds: 8 * H,
       eventWindowSeconds: 20 * H,
@@ -330,13 +389,7 @@ describe('planTimeline', () => {
       ],
       slots: [slot([0, 0], [0, H], [1, DAY], [1, DAY + H])],
     });
-    expect(shape(planTimeline(solution).slots[0].rows)).toEqual([
-      'day 0-0',
-      '2x@0 2x',
-      `ends ${20 * H}`,
-      'day 1-1',
-      `2x@${DAY}`,
-    ]);
+    expect(shape(planTimeline(solution).slots[0].rows)).toEqual(['2x@0 2x', `ends ${20 * H}`, `2x@${DAY}`]);
   });
 
   it('follows its entries to where finalizeSolutions sorts them', () => {
@@ -410,15 +463,24 @@ describe('the timeline of a solved plan', () => {
     consistent(solution);
   });
 
-  it('counts what the totals count with a sleep window, and heads its days', async () => {
+  it('counts what the totals count with a sleep window, and lists every launch', async () => {
     const solution = await solve({ sleepSeconds: 8 * H }, 3 * DAY);
     consistent(solution);
-    expect(planTimeline(solution).slots.some(s => s.rows[0]?.kind === 'day')).toBe(true);
+    // Nothing folds: a row is a run of launches within one day, so the rows hold exactly the calendar's launches.
+    const timeline = planTimeline(solution);
+    timeline.slots.forEach((s, k) => {
+      expect(s.rows.every(r => r.kind === 'launch')).toBe(true);
+      const times = launchRows(s.rows).flatMap(r => Array(r.count).fill(r.launchAt));
+      expect(times.length).toBe(solution.slots![k].launches.length);
+      for (const row of launchRows(s.rows))
+        expect(solution.slots![k].launches.map(l => l.launchAt)).toContain(row.launchAt);
+    });
   });
 
   // Review repro: 30-hour ships and 8 hours of sleep over ten days, where the ships go up at a different time of
-  // day from one day to the next. Every launch time a folded row stands for has to be one the calendar flies.
-  it('folds only days flown at the same times, so every time a fold stands for is flown', async () => {
+  // day from one day to the next. Every launch is listed at the time the calendar flies it, none stands in for
+  // another, and no run spans a day.
+  it('lists each launch at the time the calendar flies it, over ten days of long ships', async () => {
     const solution = finalizeSolutions(
       [
         await optimizeFull({
@@ -437,14 +499,17 @@ describe('the timeline of a solved plan', () => {
     consistent(solution);
     const timeline = planTimeline(solution);
     timeline.slots.forEach((s, k) => {
-      const flown = new Set(solution.slots![k].launches.map(l => Math.round(l.launchAt)));
-      let period = 1;
-      for (const row of s.rows) {
-        if (row.kind === 'routine') period = row.period;
-        if (row.kind === 'day' && !row.routineDay) period = 1;
-        if (row.kind !== 'launch') continue;
-        for (let i = 0; i < row.repeat; i++) expect(flown).toContain(Math.round(row.launchAt + i * period * DAY));
+      const launches = solution.slots![k].launches;
+      // Each row is a run of consecutive launches from one day: it starts at a launch's time, and the launches that
+      // follow it in the calendar, as many as it counts, are all in the same day.
+      let at = 0;
+      for (const row of launchRows(s.rows)) {
+        expect(launches[at].launchAt).toBe(row.launchAt);
+        const day = Math.floor(row.launchAt / DAY);
+        for (let i = 0; i < row.count; i++) expect(Math.floor(launches[at + i].launchAt / DAY)).toBe(day);
+        at += row.count;
       }
+      expect(at).toBe(launches.length);
     });
   });
 
@@ -484,9 +549,9 @@ describe('the timeline of a solved plan', () => {
     }
     expect(overnight).toBeGreaterThan(0);
     const totals = launchTotals(solution);
-    expect(totals.filter(l => l.nights! > 0).reduce((n, l) => n + l.numShipsLaunched, 0)).toBe(overnight);
+    expect(totals.filter(l => l.overnight).reduce((n, l) => n + l.numShipsLaunched, 0)).toBe(overnight);
     for (const s of planTimeline(solution).slots)
-      for (const row of launchRows(s.rows)) expect(row.nights).toBe(inAirAtBedtime(row.launchAt) ? 1 : 0);
+      for (const row of launchRows(s.rows)) expect(row.overnight).toBe(inAirAtBedtime(row.launchAt));
   });
 
   it('counts what the totals count with an event window, and doubles only inside it', async () => {

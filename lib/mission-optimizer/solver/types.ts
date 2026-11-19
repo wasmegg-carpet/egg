@@ -52,7 +52,7 @@ export interface PlanProblem {
   // interval starting later. Absent or 0 means no window: no option may fly doubled, so one that carries a doubled
   // `variant` is dropped, and the matrix is the one built without a window (SPEC.md sections 11 and 13). The app
   // sets it from the player's "time left" (`optimizeFull`, via `../capacity.ts`). With a sleep window as well, the
-  // window is wall-clock seconds from wake-up on day 0, nights included, and a doubled launch that the layout
+  // window is wall-clock seconds from the plan's start, nights included, and a doubled launch that the layout
   // cannot start inside it is flown at 1x instead (SPEC.md section 13).
   readonly eventWindowSeconds?: number;
   readonly slots: number;
@@ -65,12 +65,18 @@ export interface PlanProblem {
 export const DAY_SECONDS = 86400;
 
 // A day is a waking window of `DAY_SECONDS - sleepSeconds` followed by `sleepSeconds` of sleep, the same every
-// day and shared by every slot; the plan starts at wake-up and runs `horizonSeconds`, which is what
-// `timeCapacityPerSlot` was before it came to count waking seconds only. Sleep forbids launching and nothing
-// else. See SPEC.md section 10.
+// day and shared by every slot; the plan starts `wakeOffsetSeconds` after a wake-up and runs `horizonSeconds`,
+// which is what `timeCapacityPerSlot` was before it came to count waking seconds only. Sleep forbids launching and
+// nothing else. See SPEC.md sections 10 and 17.
 export interface SleepWindow {
   readonly sleepSeconds: number;
   readonly horizonSeconds: number;
+  // Seconds since the player last woke up, at the plan's t = 0: wake-ups are at `k * DAY_SECONDS -
+  // wakeOffsetSeconds`, and the first waking window has `DAY_SECONDS - sleepSeconds - wakeOffsetSeconds` left in it.
+  // Absent or 0 is a plan that starts at wake-up, today's problem exactly. Up to the waking window `W`, the player
+  // is awake at t = 0; past it they are in the night, up at t = 0 only to launch, and asleep until the next wake-up
+  // at `DAY_SECONDS - wakeOffsetSeconds` (SPEC.md section 17).
+  readonly wakeOffsetSeconds?: number;
 }
 
 // A problem that has been through `normalizeProblem`: its axes are materialized, so nothing
@@ -120,11 +126,22 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
 // The horizon is a budget and follows the rule above. The sleep window is not one: no reading of a malformed
 // value is the safe one (0 would hand back the nights, a whole day would forbid every launch), and the only
 // path to one is a programming error, so it throws, as a malformed `craftBudget` does.
+// The wake offset is not a budget either, and is held the same way: a value outside a day throws. Left absent when
+// absent or 0, so a plan that starts at wake-up normalizes to exactly what it did before the field existed.
 function sleepWindowOf(sleep: SleepWindow): SleepWindow {
   if (!Number.isFinite(sleep.sleepSeconds) || sleep.sleepSeconds < 0 || sleep.sleepSeconds >= DAY_SECONDS) {
     throw new Error(`sleep window must be in [0, ${DAY_SECONDS}) seconds, got ${sleep.sleepSeconds}`);
   }
-  return { sleepSeconds: sleep.sleepSeconds, horizonSeconds: capacityOf(sleep.horizonSeconds) };
+  const offset = sleep.wakeOffsetSeconds;
+  if (offset !== undefined && (!Number.isFinite(offset) || offset < 0 || offset >= DAY_SECONDS)) {
+    throw new Error(`wake offset must be in [0, ${DAY_SECONDS}) seconds, got ${offset}`);
+  }
+  const wake = offset ?? 0;
+  return {
+    sleepSeconds: sleep.sleepSeconds,
+    horizonSeconds: capacityOf(sleep.horizonSeconds),
+    ...(wake > 0 && { wakeOffsetSeconds: wake }),
+  };
 }
 
 // Optional self-report of what a planner believes its own plan is worth; supplying
@@ -142,8 +159,8 @@ export interface CraftSplitReport {
   byTarget: Map<string, number>;
 }
 
-// One launch on a slot's timeline. `launchAt` is seconds from the plan's start (wake-up on day 0, with a sleep
-// window); the launch occupies its slot for `wakingSeconds + nights * sleepSeconds` (just `wakingSeconds`
+// One launch on a slot's timeline. `launchAt` is seconds from the plan's start (`wakeOffsetSeconds` after a wake-up,
+// with a sleep window); the launch occupies its slot for `wakingSeconds + nights * sleepSeconds` (just `wakingSeconds`
 // without one), after which the next launch may go.
 export interface CalendarLaunch {
   // Index into `problem.options`, and that option's id, so a reader can check one against the other.

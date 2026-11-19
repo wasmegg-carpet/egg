@@ -155,6 +155,36 @@ it always was. `ARENA_SLEEP` decides whether it is used: unset, every instance
 sleeps 0 and the arena is unchanged; a number of hours (`ARENA_SLEEP=8`) puts
 that window on every instance; `draw` uses each seed's drawn window.
 
+**Wake offset.** The plan may start `x` seconds after the player woke up, on
+their regular day: wake-ups at `k*D - x` of the plan's clock. `sleep.ts` states
+it on its own.
+
+- **Awake at the start, `x <= W`.** The first waking window has `W - x` left.
+  The slot is `[x, x + H]` of the regular day: `timeCapacityPerSlot` is the
+  waking seconds of `[0, x + H]` less `x`, and `nightsPerSlot` is
+  `floor((x + H) / D)`.
+- **In the night at the start, `W < x < D`.** The player is up at `t = 0` only
+  to launch, and asleep until the wake-up at `D - x`. The budget is what
+  `[D, x + H]` of the regular day holds: its waking seconds, and its whole
+  nights (the night the plan starts in is not one). `startVariants` adds each
+  option once more as a launch at T+0, id suffixed `~start`. Its
+  `atStartSeconds` is the option's `actualTime`, `d`, and it holds its slot to
+  its landing, `d` from T+0, inside the horizon. Its `actualTime` and `nights`
+  are what `[D, min(R, x + H)]` holds, where `R` is the first waking instant at
+  or after its landing.
+
+`sleep` gains `wakeOffsetSeconds: x`, absent at 0, so an instance starting at
+wake-up states today's problem exactly. C1 reads a launch's time of day at
+`launchAt + x` and everything else in the plan's own seconds, so a launch before
+`t = 0` is a fault. With the plan starting in the night, a launch at exactly
+`t = 0` is admitted, and nothing else in that night. A T+0 entry may go up only
+at `t = 0`, and its block is `atStartSeconds`. With `S = 0` the offset is
+ignored. `ARENA_WAKE` sets it: unset, every plan starts at wake-up; a number of
+hours (`ARENA_WAKE=12`) sets that offset on every instance. It composes with
+`ARENA_SLEEP` and `ARENA_WINDOW`, and nothing is drawn for it, so no seed's other
+fields move. A10-sleep keeps the instance's offset at every sleep step. So one
+offset can be awake at one step and in the night at another.
+
 ## The 2x capacity window
 
 Egg, Inc. periodically doubles every ship's capacity for 48 hours; a mission
@@ -288,6 +318,7 @@ ARENA=deep pnpm arena                       # + D1/D2 local optimality
 SOLVER=my-solver ARENA=sweep pnpm arena     # one entry
 ARENA_SLEEP=8 ARENA=sweep pnpm arena        # an 8-hour sleep window on every instance
 ARENA_WINDOW=inside ARENA=sweep pnpm arena  # a 48-hour 2x window on every instance
+ARENA_SLEEP=8 ARENA_WAKE=12 ARENA=sweep pnpm arena  # 8 hours of sleep, 12 hours awake at the start
 ARENA_INSTANCES=80 ARENA_SEED_BASE=9000 ARENA=sweep pnpm arena
 pnpm arena:check                            # independence guard only
 ```
@@ -300,6 +331,7 @@ pnpm arena:check                            # independence guard only
 | `SOLVER`          | whole roster           | run one entry                                                     |
 | `ARENA_SLEEP`     | unset (no sleep)       | hours of sleep on every instance, or `draw`; see Sleep            |
 | `ARENA_WINDOW`    | unset (no window)      | a regime on every instance, or `draw`; see The 2x capacity window |
+| `ARENA_WAKE`      | unset (start at wake)  | hours since the player woke, at the plan's start; see Sleep       |
 | `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure                  |
 
 The sweep is opt-in and `pnpm test` does not run it: every tier here is minutes
