@@ -2,7 +2,7 @@
 // Pinned because it is part of the goalpost: a variant rule that drifted would move every sleep-on score.
 
 import { describe, expect, it } from 'vitest';
-import { DAY_SECONDS, sleepCapacity, sleepVariants } from './sleep';
+import { DAY_SECONDS, sleepCapacity, sleepVariants, wakeOffsetOf } from './sleep';
 
 const H = 3600;
 
@@ -115,5 +115,34 @@ describe('sleepCapacity', () => {
     });
     // Under a day: no night at all.
     expect(sleepCapacity(5 * H, S)).toEqual({ wakingSecondsPerSlot: 5 * H, nightsPerSlot: 0 });
+  });
+});
+
+describe('a wake offset', () => {
+  const S = 8 * H;
+  it('takes what the first day has left, and puts the nights where the regular day has them', () => {
+    // Four hours awake, three days: 12 + 16 + 16 waking hours, then the 4 of the fourth morning.
+    expect(sleepCapacity(3 * DAY_SECONDS, S, 4 * H)).toEqual({ wakingSecondsPerSlot: 48 * H, nightsPerSlot: 3 });
+    // At bedtime: the first night at once, then three whole waking windows.
+    expect(sleepCapacity(3 * DAY_SECONDS, S, 16 * H)).toEqual({ wakingSecondsPerSlot: 48 * H, nightsPerSlot: 3 });
+    // Twelve hours awake, two and a half days: 4 + 16 + 16 waking hours, and the night that ends the horizon.
+    expect(sleepCapacity(2.5 * DAY_SECONDS, S, 12 * H)).toEqual({ wakingSecondsPerSlot: 36 * H, nightsPerSlot: 3 });
+    // Half a day from bedtime: all night and four waking hours.
+    expect(sleepCapacity(12 * H, S, 16 * H)).toEqual({ wakingSecondsPerSlot: 4 * H, nightsPerSlot: 1 });
+  });
+
+  it('is the plan starting at wake-up at 0', () => {
+    for (const horizon of [0, H, 15 * H, DAY_SECONDS, 2.5 * DAY_SECONDS, 30 * DAY_SECONDS]) {
+      expect(sleepCapacity(horizon, S, 0)).toEqual(sleepCapacity(horizon, S));
+    }
+  });
+
+  it('is read against the waking window: none without sleep, and bedtime past it until the night case lands', () => {
+    expect(wakeOffsetOf(5 * H, 0)).toBe(0);
+    expect(wakeOffsetOf(0, S)).toBe(0);
+    expect(wakeOffsetOf(5 * H, S)).toBe(5 * H);
+    expect(wakeOffsetOf(20 * H, S)).toBe(16 * H);
+    expect(() => wakeOffsetOf(DAY_SECONDS, S)).toThrow(/wake offset/);
+    expect(() => wakeOffsetOf(Infinity, S)).toThrow(/wake offset/);
   });
 });
