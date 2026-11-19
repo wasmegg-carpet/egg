@@ -8,9 +8,13 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 const ARENA = __dirname;
 const TESTS = resolve(ARENA, '..');
 const SRC = resolve(TESTS, '../src');
-const LIB = join(SRC, 'lib');
+// The optimizer is shared with the ascension planner and lives in the workspace's `lib`.
+const LIB = resolve(TESTS, '../../../lib/mission-optimizer');
+const LIB_SPEC = 'lib/mission-optimizer';
+// The explorer's own barrel re-exports the shared one, so it is as much a way in as `LIB` is.
+const APP_LIB = join(SRC, 'lib');
 // The shared spec fixtures. `optimize` there runs the planner in-process, so it is as much a way to reach
-// the incumbent as `src/lib` is, and candidates are held away from both.
+// the incumbent as `lib/mission-optimizer` is, and candidates are held away from both.
 const UNIT = join(TESTS, 'unit');
 const SOLVERS = join(ARENA, 'solvers');
 
@@ -59,6 +63,7 @@ function resolveSpec(fromFile: string, spec: string): string | null {
   const bare = spec.split('?')[0];
   let base: string;
   if (bare.startsWith('@/')) base = join(SRC, bare.slice(2));
+  else if (bare === LIB_SPEC || bare.startsWith(`${LIB_SPEC}/`)) base = join(LIB, bare.slice(LIB_SPEC.length));
   else if (bare.startsWith('./') || bare.startsWith('../')) base = resolve(dirname(fromFile), bare);
   else return null;
   for (const candidate of [base, `${base}.ts`, join(base, 'index.ts'), `${base}.vue`, `${base}.json`]) {
@@ -82,17 +87,21 @@ function libModules(): string[] {
 // Files that make up the fixed part of the arena: the problem, the rules, the
 // judge and the scoreboard.
 const HARNESS_FILES = [
+  'calendar.ts',
+  'capacity.ts',
   'contract.ts',
   'harness.ts',
   'instances.ts',
   'invariants.ts',
   'pack-feasibility.ts',
   'scorecard.ts',
+  'sleep.ts',
 ];
 
 // The planner and everything downstream of it. The harness must not run any of
 // this: it is the thing being measured.
 const IMPLEMENTATION = [
+  'capacity.ts', // the app's 2x capacity variants; the arena states its problems with its own `capacity.ts`
   'objective.ts', // the objective's own g/g'/line search and the craft-count-to-probability step; the judge re-derives all three
   'optimizer-client.ts', // worker-backed entry point to the planner
   'optimizer-core.ts', // the plan pipeline; calls the planner
@@ -103,43 +112,48 @@ const IMPLEMENTATION = [
   'optimizer-views.ts', // render models built from a plan
   'optimizer-worker-protocol.ts',
   'optimizer.worker.ts',
-  'packing.ts', // the app's packer — the arena has its own, on purpose
   // The ascension-planner seam. `write.ts` projects a finished plan; the other two read the file
   // that supplies one's budgets. None of it is anything the arena states a problem with.
   'plan/read.ts',
   'plan/schema.ts',
   'plan/write.ts',
+  'schedule-settings.ts', // the apps' sleep and 2x event settings, bounded by `sleep.ts` and `capacity.ts`
+  'sleep.ts', // the app's sleep variants and capacities; the arena states its problems with its own `sleep.ts`
+  'solver/days.ts',
   'solver/evaluator.ts', // objective evaluation; the judge is re-derived, not shared
   'solver/highs.ts',
+  'solver/layout.ts',
   'solver/milp.ts',
   'solver/model.ts',
   'solver/simplex.ts',
   'solver/solve.ts',
   'solver/types.ts',
+  'solver/verify.ts', // the planner's own calendar verifier; the arena verifies with `calendar.ts` instead
 ];
 
 // Game data, problem construction and pure types. The harness needs these to state a problem at all, and
 // none of them decide anything about a plan.
 const PROBLEM_SURFACE = [
-  'artifacts.ts',
-  'filter.ts',
+  'artifact-catalog.ts',
+  'effort.ts',
   'index.ts',
+  'loot-data.d.ts', // what the type checker sees in place of the dataset; no code
   'loot-json.ts',
   'loot.ts',
   'missions.ts',
+  'player-data.ts',
   'problem-inputs.ts',
-  'tank-ids.ts',
   'types.ts',
 ];
 
 // The entries allowed to import production code, because they *are* production code: each is a shim around
-// `src/lib/solver/`. The exception stays narrow — only into `src/lib/solver/`, and only for a file that does
+// `lib/mission-optimizer/solver/`. The exception stays narrow — only into `lib/mission-optimizer/solver/`, and only for a file that does
 // no solving of its own, which the shim check below enforces on every entry in this list.
 const SHIM_ENTRIES = [join(SOLVERS, 'highs', 'index.ts')];
 const SHIMS_MAY_IMPORT = join(LIB, 'solver');
 
 describe('arena independence', () => {
-  it('the src/lib classification is exhaustive and has no dead entries', () => {
+  it('the lib/mission-optimizer classification is exhaustive and has no dead entries', () => {
     const classified = [...IMPLEMENTATION, ...PROBLEM_SURFACE].sort();
     expect(new Set(classified).size).toBe(classified.length);
     expect(classified).toEqual(libModules());
@@ -166,7 +180,7 @@ describe('arena independence', () => {
 
   it('the harness names no solver', () => {
     // `registry.ts` is the only file allowed to know which candidates exist. Code only: a comment may cite
-    // `src/lib/solver/SPEC.md` as the document an invariant was argued in.
+    // `lib/mission-optimizer/solver/SPEC.md` as the document an invariant was argued in.
     const offenders: string[] = [];
     for (const file of HARNESS_FILES) {
       const src = stripComments(readSource(file));
@@ -176,7 +190,17 @@ describe('arena independence', () => {
   });
 
   it('no solver imports the judge, the feasibility rule or the checks', () => {
-    const forbidden = ['evaluate', 'pack-feasibility', 'invariants', 'scorecard', 'harness', 'instances'];
+    const forbidden = [
+      'evaluate',
+      'pack-feasibility',
+      'invariants',
+      'scorecard',
+      'harness',
+      'instances',
+      '/sleep',
+      '/calendar',
+      '/capacity',
+    ];
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
@@ -188,18 +212,18 @@ describe('arena independence', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('candidates re-derive everything: no value import from src/lib or tests/unit', () => {
+  it('candidates re-derive everything: no value import from lib/mission-optimizer or tests/unit', () => {
     // Types move no code. What is excluded is running any of the incumbent's machinery — its LP, its tangent
     // grid, its packer, its search. `SHIM_ENTRIES` is a named exception; everything else here is still forbidden.
     //
-    // `tests/unit` is barred on the same grounds as `src/lib`, not as a tidiness rule: `spec-helpers.ts`
+    // `tests/unit` is barred on the same grounds as `lib/mission-optimizer`, not as a tidiness rule: `spec-helpers.ts`
     // there calls `optimizeFull`, so a candidate reaching it would be the incumbent measured against itself.
     const offenders: string[] = [];
     for (const path of walk(SOLVERS)) {
       const rel = path.slice(SOLVERS.length + 1);
       for (const spec of valueImportsOf(readFileSync(path, 'utf8'))) {
         const target = resolveSpec(path, spec);
-        if (target === null || !(within(LIB, target) || within(UNIT, target))) continue;
+        if (target === null || !(within(LIB, target) || within(APP_LIB, target) || within(UNIT, target))) continue;
         if (SHIM_ENTRIES.includes(path) && within(SHIMS_MAY_IMPORT, target)) continue;
         offenders.push(`${rel} imports ${spec}`);
       }
@@ -219,19 +243,22 @@ describe('arena independence', () => {
       expect(code.length, entry).toBeLessThan(700);
       expect(/\bfor\s*\(|\bwhile\s*\(|\bfunction\b/.test(code), entry).toBe(false);
       // It must go through the same entry points `optimizer-core.ts` does.
-      expect(code, entry).toContain("from '@/lib/solver/solve'");
-      expect(code, entry).toContain("from '@/lib/solver/highs'");
+      expect(code, entry).toContain("from 'lib/mission-optimizer/solver/solve'");
+      expect(code, entry).toContain("from 'lib/mission-optimizer/solver/highs'");
     }
   });
 
   it('production never imports the arena', () => {
     // Widened with the move: production may not reach into `tests/` at all, of which the arena is one part.
     const offenders: string[] = [];
-    for (const path of walk(LIB)) {
-      for (const spec of importsOf(readFileSync(path, 'utf8'))) {
-        const target = resolveSpec(path, spec);
-        if (target !== null && within(TESTS, target)) {
-          offenders.push(`${relative(SRC, path)} imports ${spec}`);
+    // Both halves of production: the shared optimizer and what the explorer keeps of its own.
+    for (const root of [LIB, APP_LIB]) {
+      for (const path of walk(root)) {
+        for (const spec of importsOf(readFileSync(path, 'utf8'))) {
+          const target = resolveSpec(path, spec);
+          if (target !== null && within(TESTS, target)) {
+            offenders.push(`${relative(root, path)} imports ${spec}`);
+          }
         }
       }
     }
@@ -242,6 +269,24 @@ describe('arena independence', () => {
     // It is the goalpost for C1 and for every k-opt move, so it must not be
     // reachable from anything a candidate can change.
     expect(importsOf(readSource('pack-feasibility.ts'))).toEqual([]);
+  });
+
+  it('the sleep model stands alone', () => {
+    // It decides what a launch costs once the player sleeps, which is as much the goalpost as the packer.
+    expect(importsOf(readSource('sleep.ts'))).toEqual([]);
+  });
+
+  it('the capacity model stands alone', () => {
+    // It decides what a doubled launch yields, which is as much the goalpost as the sleep model.
+    expect(importsOf(readSource('capacity.ts'))).toEqual([]);
+  });
+
+  it('the calendar verifier stands alone', () => {
+    // C1 for a sleep-aware problem. Sharing anything with the planner's own verifier (`lib/mission-optimizer/solver/verify.ts`)
+    // or its layout would let a wrong rule pass on both sides at once.
+    expect(importsOf(readSource('calendar.ts'))).toEqual([]);
+    const code = stripComments(readSource('calendar.ts'));
+    expect(/verify|layout|slotFault/.test(code)).toBe(false);
   });
 
   it('every registered solver has a distinct id', () => {

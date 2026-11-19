@@ -26,7 +26,7 @@ jobs:
         run: |
           git config user.name 'github-actions'
           git config user.email 'actions@github.com'
-          git add data/loot.json
+          git add ../../lib/mission-optimizer/data/loot.json
           git diff --cached --quiet || {
             git commit -m 'artifact-explorer: update loot data (from GitHub Actions)'
             git push

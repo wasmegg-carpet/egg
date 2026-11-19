@@ -152,6 +152,8 @@
           <p class="mt-1 text-xs text-gray-400">{{ effortMeta[missionFilters.effort].hint }}</p>
         </div>
 
+        <optimizer-schedule-settings :model-value="missionFilters" @update:model-value="setScheduleSettings" />
+
         <div>
           <label for="gemCostMode" class="block text-sm text-gray-600">Maximum purchase cost</label>
           <select
@@ -373,6 +375,7 @@ import BaseIcon from 'ui/components/BaseIcon.vue';
 import BaseInput from 'ui/components/BaseInput.vue';
 import PlayerIdForm from 'ui/components/PlayerIdForm.vue';
 import LootDataCredit from '@/components/LootDataCredit.vue';
+import OptimizerScheduleSettings from 'ui/components/mission-optimizer/OptimizerScheduleSettings.vue';
 import OptimizerSettingRow from './OptimizerSettingRow.vue';
 import HumilityMissionsExportHelp from './HumilityMissionsExportHelp.vue';
 
@@ -390,8 +393,6 @@ import {
   setCraftingCostInput,
   effectiveConfig,
   effectiveFuelByEggCapacity,
-  EFFORT_LEVELS,
-  type EffortLevel,
   extras,
   missionFilters,
   openPlayerOverridesModal,
@@ -415,6 +416,7 @@ import {
   setOverrideTankLevel,
   setOverrideZerog,
   setPreviousCraftCount,
+  setScheduleSettings,
   setTankLevel,
 } from '@/store';
 import {
@@ -428,10 +430,11 @@ import {
   setVisitFuelBudget,
   solvedVisitCount,
 } from '@/store/plan';
-import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from '@/lib/plan/read';
+import { EFFORT_LEVELS, EFFORT_META } from 'lib/mission-optimizer/effort';
+import { parsePlanSave, planLabelFor, PlanSaveError, sliceHumilityVisits } from 'lib/mission-optimizer/plan/read';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { normalizeBudgetInput } from '@/store/budget-input';
-import { buildHumilityMissionsFile, humilityMissionsFilename } from '@/lib/plan/write';
+import { buildHumilityMissionsFile, humilityMissionsFilename } from 'lib/mission-optimizer/plan/write';
 
 // Set the first time the export help is dismissed, so it opens unprompted only once.
 const HUMILITY_MISSIONS_EXPORT_HELP_SEEN_LOCALSTORAGE_KEY = 'humilityMissionsExportHelpSeen';
@@ -445,31 +448,18 @@ function downloadJson(filename: string, body: unknown): void {
   URL.revokeObjectURL(url);
 }
 
-const effortMeta: Record<EffortLevel, { short: string; label: string; hint: string }> = {
-  low: {
-    short: 'Low',
-    label: 'Low',
-    hint: 'One launch per slot per day — favors long, low-maintenance missions.',
-  },
-  medium: {
-    short: 'Med',
-    label: 'Medium',
-    hint: 'Two launches per slot per day.',
-  },
-  high: {
-    short: 'High',
-    label: 'High',
-    hint: 'One launch per slot per hour.',
-  },
-  max: {
-    short: 'Max',
-    label: 'Max',
-    hint: 'No launch limit — relaunch the instant a mission lands.',
-  },
-};
+const effortMeta = EFFORT_META;
 
 export default defineComponent({
-  components: { BaseIcon, BaseInput, PlayerIdForm, LootDataCredit, OptimizerSettingRow, HumilityMissionsExportHelp },
+  components: {
+    BaseIcon,
+    BaseInput,
+    PlayerIdForm,
+    LootDataCredit,
+    OptimizerScheduleSettings,
+    OptimizerSettingRow,
+    HumilityMissionsExportHelp,
+  },
   props: {
     playerId: { type: String, default: '' },
     exportBlocked: { type: Boolean, default: false },
@@ -776,6 +766,7 @@ export default defineComponent({
       closeExportHelp,
       onUnloadPlan,
       EFFORT_LEVELS,
+      setScheduleSettings,
       effortMeta,
       effortTrack,
       effortRail,

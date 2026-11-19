@@ -3,10 +3,10 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { ArenaSolver } from './contract';
-import { run } from './harness';
+import { unsupported, type ArenaSolver, type PlanResult } from './contract';
+import { run, takeLayoutTally, type LayoutTally } from './harness';
 import { generateInstance } from './instances';
-import { runChecks, type Check, type Violation, type ViolationId } from './invariants';
+import { runChecks, type Check, type InvariantId, type Violation, type ViolationId } from './invariants';
 
 export interface InstanceResult {
   seed: number;
@@ -18,6 +18,16 @@ export interface InstanceResult {
   solveMs: number;
   checkMs: number;
   violations: Violation[];
+  // Set when the instance was not solved at all: it has a sleep window or a 2x window the candidate does not
+  // declare support for (`contract.ts`, `unsupported`). Such an instance has no joint, no latency and no violations, and counts as neither clean
+  // nor failing.
+  skipped?: string;
+  // Checks that did not run on this instance, for the same reason.
+  skippedChecks: InvariantId[];
+  // What the candidate said of laying out its unperturbed plan (`layoutStats`), when it said anything: what the
+  // plan promised before layout, as log10 of its own judge's joint, and the launches trimmed and demoted on the
+  // way to the one delivered. Diagnostics: `joint` above is the harness's figure and the only one scored.
+  layout?: { plannedLog10?: number; trimmed: number; demoted: number };
 }
 
 export interface SweepResult {
@@ -25,6 +35,8 @@ export interface SweepResult {
   description: string;
   instances: InstanceResult[];
   totalMs: number;
+  // What the candidate reported about laying its sleep-aware plans out, over every fresh solve of the sweep.
+  layout: LayoutTally;
 }
 
 export function sweep(
@@ -35,8 +47,27 @@ export function sweep(
 ): SweepResult {
   const instances: InstanceResult[] = [];
   const started = Date.now();
+  takeLayoutTally(solver.plan);
   for (const seed of seeds) {
     const inst = generateInstance(seed);
+    const skip = unsupported(solver, inst);
+    if (skip !== undefined) {
+      const r: InstanceResult = {
+        seed,
+        label: inst.label,
+        targets: inst.targets.length,
+        options: 0,
+        joint: 0,
+        solveMs: 0,
+        checkMs: 0,
+        violations: [],
+        skipped: skip,
+        skippedChecks: [],
+      };
+      instances.push(r);
+      onInstance?.(r);
+      continue;
+    }
     let solved;
     try {
       solved = run(solver.plan, inst);
@@ -56,11 +87,12 @@ export function sweep(
             detail: `solver threw: ${err instanceof Error ? err.message : String(err)}`,
           },
         ],
+        skippedChecks: [],
       });
       continue;
     }
     const t0 = Date.now();
-    const violations = runChecks(solver.plan, inst, checks);
+    const { violations, skipped } = runChecks(solver.plan, inst, checks, solver);
     const r: InstanceResult = {
       seed,
       label: inst.label,
@@ -70,14 +102,32 @@ export function sweep(
       solveMs: solved.elapsedMs,
       checkMs: Date.now() - t0,
       violations,
+      skippedChecks: skipped,
+      ...(solved.result.layoutStats && { layout: reportedLayout(solved.result.layoutStats) }),
     };
     instances.push(r);
     onInstance?.(r);
   }
-  return { solverId: solver.id, description: solver.description, instances, totalMs: Date.now() - started };
+  return {
+    solverId: solver.id,
+    description: solver.description,
+    instances,
+    totalMs: Date.now() - started,
+    layout: takeLayoutTally(solver.plan),
+  };
 }
 
 const log10 = (p: number) => (p > 0 ? Math.log10(p) : -Infinity);
+
+function reportedLayout(stats: NonNullable<PlanResult['layoutStats']>): NonNullable<InstanceResult['layout']> {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const planned = stats.plannedLogJoint;
+  return {
+    ...(typeof planned === 'number' && !Number.isNaN(planned) && { plannedLog10: planned / Math.LN10 }),
+    trimmed: n(stats.launchesTrimmed),
+    demoted: n(stats.launchesDemoted),
+  };
+}
 
 interface InvariantTally {
   invariant: ViolationId;
@@ -126,16 +176,29 @@ function pad(s: string | number, n: number, right = false): string {
 
 export function formatScorecard(r: SweepResult): string {
   const lines: string[] = [];
-  const total = r.instances.reduce((a, i) => a + i.violations.length, 0);
-  const clean = r.instances.filter(i => i.violations.length === 0).length;
+  const ran = r.instances.filter(i => i.skipped === undefined);
+  const skippedInstances = r.instances.length - ran.length;
+  const total = ran.reduce((a, i) => a + i.violations.length, 0);
+  const clean = ran.filter(i => i.violations.length === 0).length;
 
   lines.push('');
   lines.push(`=== ${r.solverId} ===`);
   lines.push(`    ${r.description}`);
   lines.push(
-    `    ${r.instances.length} instances, ${(r.totalMs / 1000).toFixed(1)}s total, ` +
-      `${total} violation(s), ${clean}/${r.instances.length} instances clean`
+    `    ${r.instances.length} instances` +
+      (skippedInstances > 0 ? ` (${skippedInstances} skipped)` : '') +
+      `, ${(r.totalMs / 1000).toFixed(1)}s total, ` +
+      `${total} violation(s), ${clean}/${ran.length} instances clean`
   );
+  if (skippedInstances > 0) {
+    const reasons = [...new Set(r.instances.map(i => i.skipped).filter(Boolean))].join('; ');
+    lines.push(`    skipped ${skippedInstances} instance(s), not solved: ${reasons}`);
+  }
+  const skippedChecks = new Map<string, number>();
+  for (const i of ran) for (const id of i.skippedChecks) skippedChecks.set(id, (skippedChecks.get(id) ?? 0) + 1);
+  for (const [id, n] of skippedChecks) {
+    lines.push(`    skipped ${id} on ${n} instance(s): candidate does not support what it needs`);
+  }
 
   const t = tally(r);
   if (t.length === 0) {
@@ -159,7 +222,7 @@ export function formatScorecard(r: SweepResult): string {
     }
   }
 
-  const solveTimes = r.instances.map(i => i.solveMs).sort((a, b) => a - b);
+  const solveTimes = ran.map(i => i.solveMs).sort((a, b) => a - b);
   if (solveTimes.length > 0) {
     const q = (f: number) => solveTimes[Math.min(solveTimes.length - 1, Math.floor(f * solveTimes.length))];
     lines.push('');
@@ -168,8 +231,52 @@ export function formatScorecard(r: SweepResult): string {
     );
   }
 
-  const finite = r.instances.filter(i => i.joint > 0);
-  const zero = r.instances.length - finite.length;
+  const lt = r.layout;
+  if (lt.solves > 0) {
+    lines.push(
+      `    layout (candidate-reported, ${lt.solves} fresh sleep-on solve(s)): ${lt.plansTrimmed} plan(s) trimmed, ` +
+        `${lt.launchesTrimmed} launch(es) dropped (${lt.overnightTrimmed} overnight), ${lt.layoutSolves} layout MILP(s) ` +
+        `(${lt.marginResolves} margin re-solve(s)), ${lt.verifierRetries} verifier retr${lt.verifierRetries === 1 ? 'y' : 'ies'}` +
+        `, ${lt.plansDemoted} plan(s) demoted, ${lt.launchesDemoted} doubled launch(es) flown at 1x` +
+        `, ${lt.launchesPromoted} 1x launch(es) inside the window flown doubled`
+    );
+  }
+
+  // The unperturbed plans' promise against what was delivered, per instance and over the instances where the
+  // candidate stated both; every promise is the candidate's own figure, every delivery the harness's.
+  const laidOut = ran.filter(i => i.layout !== undefined);
+  if (laidOut.length > 0) {
+    lines.push('');
+    lines.push(
+      `    ${pad('instance', 12)}${pad('planned log10', 15, true)}${pad('delivered log10', 17, true)}${pad('gap', 9, true)}` +
+        `${pad('trimmed', 9, true)}${pad('demoted', 9, true)}`
+    );
+    let gaps = 0;
+    let gapSum = 0;
+    for (const i of laidOut) {
+      const planned = i.layout!.plannedLog10;
+      const delivered = log10(i.joint);
+      const gap = planned !== undefined && Number.isFinite(planned) ? planned - delivered : NaN;
+      if (Number.isFinite(gap)) {
+        gaps++;
+        gapSum += gap;
+      }
+      lines.push(
+        `    ${pad(i.label, 12)}${pad(planned === undefined ? '-' : planned.toFixed(3), 15, true)}` +
+          `${pad(delivered.toFixed(3), 17, true)}${pad(Number.isFinite(gap) ? gap.toFixed(3) : '-', 9, true)}` +
+          `${pad(i.layout!.trimmed, 9, true)}${pad(i.layout!.demoted, 9, true)}`
+      );
+    }
+    const trimmed = laidOut.reduce((a, i) => a + i.layout!.trimmed, 0);
+    const demoted = laidOut.reduce((a, i) => a + i.layout!.demoted, 0);
+    lines.push(
+      `    unperturbed plans: ${trimmed} launch(es) trimmed, ${demoted} demoted` +
+        (gaps > 0 ? `; mean planned-minus-delivered ${(gapSum / gaps).toFixed(4)} log10 over ${gaps}` : '')
+    );
+  }
+
+  const finite = ran.filter(i => i.joint > 0);
+  const zero = ran.length - finite.length;
   if (finite.length > 0) {
     const meanLog = finite.reduce((a, i) => a + log10(i.joint), 0) / finite.length;
     lines.push(
@@ -200,6 +307,10 @@ export function formatComparison(a: SweepResult, b: SweepResult): string {
   for (const ib of b.instances) {
     const ia = bySeed.get(ib.seed);
     if (!ia) continue;
+    if (ia.skipped !== undefined || ib.skipped !== undefined) {
+      lines.push(`    ${pad(ib.label, 12)}${pad(ib.targets, 4, true)}    skipped (${ib.skipped ?? ia.skipped})`);
+      continue;
+    }
     const la = log10(ia.joint);
     const lb = log10(ib.joint);
     let delta: string;

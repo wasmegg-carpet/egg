@@ -3,10 +3,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { ei } from 'lib';
-import { optimizeFull } from '@/lib/optimizer-core';
-import { computeCraftChainTree } from '@/lib/optimizer-tree';
+import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
+import { computeCraftChainTree } from 'lib/mission-optimizer/optimizer-tree';
 import { craftDag, makeNode, makeOpt } from './spec-helpers';
-import type { RecipeDAG } from '@/lib/types';
+import type { RecipeDAG } from 'lib/mission-optimizer/types';
 
 const Name = ei.ArtifactSpec.Name;
 

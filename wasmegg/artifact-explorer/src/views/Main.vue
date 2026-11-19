@@ -28,7 +28,7 @@ import { activePlanVisit, activeVisitSettings, setVisitTargets } from '@/store/p
 import SpoilerAlert from '@/components/SpoilerAlert.vue';
 import ArtifactGrid from '@/components/ArtifactGrid.vue';
 import ArtifactSelector from '@/components/ArtifactSelector.vue';
-import TankArtifactSelector from '@/components/TankArtifactSelector.vue';
+import TankArtifactSelector from 'ui/components/mission-optimizer/TargetSelector.vue';
 import MissionSelector from '@/components/MissionSelector.vue';
 import FuelTankPlanner from '@/views/FuelTankPlanner.vue';
 

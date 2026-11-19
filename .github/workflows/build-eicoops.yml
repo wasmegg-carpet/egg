@@ -5,6 +5,8 @@ on:
       - '.github/workflows/build-eicoops.yml'
       - pnpm-lock.yaml
       - 'lib/**'
+      # Only the artifact explorer and the ascension planner use this, and its loot data changes daily.
+      - '!lib/mission-optimizer/**'
       - 'ui/**'
       - 'eicoop/**'
       - 'periodicals/data/*'
@@ -16,6 +18,8 @@ on:
       - '.github/workflows/build-eicoops.yml'
       - pnpm-lock.yaml
       - 'lib/**'
+      # Only the artifact explorer and the ascension planner use this, and its loot data changes daily.
+      - '!lib/mission-optimizer/**'
       - 'ui/**'
       - 'eicoop/**'
       - 'periodicals/data/*'

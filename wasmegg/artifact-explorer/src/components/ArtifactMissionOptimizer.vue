@@ -87,11 +87,12 @@ import {
   gemCostMode,
   effectivePreviousCraftsOverride,
   effectiveCraftingLevel,
+  effectiveScheduleArgs,
   effectiveWaitTimeSeconds,
-  EFFORT_LAUNCH_PERIOD_SECONDS,
   missionFilters,
   playerGoldenEggs,
   playerInventory,
+  scheduleInvalid,
   setPlayerData,
   setWaitTimeDays,
 } from '@/store';
@@ -103,28 +104,27 @@ import {
   setVisitWaitTime,
   waitTimeInputFor,
 } from '@/store/plan';
-import { gemBudgetFor } from '@/lib/plan/read';
-import { projectSolvedVisit } from '@/lib/plan/write';
+import { EFFORT_LAUNCH_PERIOD_SECONDS } from 'lib/mission-optimizer/effort';
+import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
+import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import {
   buildRecipeDag,
   computeOwnedStock,
-  computeCraftChainTree,
   computeInventoryTree,
   computeCraftUnitPrices,
-  computeMissionLegendaryRows,
-  computePlanCraftingCost,
   finalizeSolutions,
-  lambdaFromDropProbability,
-  legendaryCraftProbabilityOf,
-  legendaryDataIsSparse,
+  solutionView,
   type OptimizerSolution,
-  type TargetView,
 } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
-import { createOptimizerClient, type OptimizerClient, type OptimizerRequestInput } from '@/lib/optimizer-client';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
+import {
+  createOptimizerClient,
+  type OptimizerClient,
+  type OptimizerRequestInput,
+} from 'lib/mission-optimizer/optimizer-client';
 import OptimizerSidebar from './optimizer/OptimizerSidebar.vue';
 import OptimizerInventoryPanel from './optimizer/OptimizerInventoryPanel.vue';
-import OptimizerSolutionCard from './optimizer/OptimizerSolutionCard.vue';
+import OptimizerSolutionCard from 'ui/components/mission-optimizer/OptimizerSolutionCard.vue';
 
 export default defineComponent({
   components: { OptimizerSidebar, OptimizerInventoryPanel, OptimizerSolutionCard },
@@ -177,7 +177,7 @@ export default defineComponent({
     const computing = ref(false);
     const computeError = ref('');
     const computedResults = ref<OptimizerSolution[]>([]);
-    const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value);
+    const inputsValid = computed(() => timeBudgetValid.value && costBudgetsValid.value && !scheduleInvalid.value);
     // Names the field that's blocking a solve, and — for a plan visit whose time budget is empty
     // because the plan hasn't scheduled its missions yet — says why, rather than pointing at "the
     // budget" in general.
@@ -190,6 +190,7 @@ export default defineComponent({
       }
       if (gemCostInvalid.value) return 'Enter a valid maximum purchase cost in the sidebar (e.g. 10S).';
       if (craftingCostInvalid.value) return 'Enter a valid maximum crafting cost in the sidebar (e.g. 25M).';
+      if (scheduleInvalid.value) return 'Enter the time left in the 2× capacity event in the sidebar (e.g. 48h).';
       return 'Correct the invalid budget in the sidebar.';
     });
     const inventoryRevision = ref(0);
@@ -219,6 +220,7 @@ export default defineComponent({
         price: effectiveMaxGemCost.value,
         craftBudget: effectiveCraftingBudget.value,
         effort: missionFilters.value.effort,
+        schedule: effectiveScheduleArgs.value,
         valid: inputsValid.value,
       })
     );
@@ -262,6 +264,8 @@ export default defineComponent({
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
+        // Each absent rather than 0 when off, so a request without sleep or an event carries neither field.
+        ...effectiveScheduleArgs.value,
         ownedStock: playerOwnedStock.value,
         maximumCost: maxGemCost,
         craftBudget,
@@ -363,27 +367,12 @@ export default defineComponent({
       }))
     );
 
+    // Against the inventory the solve was asked with, which the live one may have moved on from since.
     const solutionViews = computed(() =>
-      computedResults.value.map(solution => {
-        // Iterate solution.perTarget, never the live artifactIds: the solution
-        // is stale between a selection change and the next completed solve.
-        const targets: TargetView[] = solution.perTarget.map(perTarget => {
-          const nodeId = perTarget.nodeId;
-          const display = artifactDisplay(nodeId);
-          return {
-            nodeId,
-            name: display.name,
-            iconUrl: display.iconUrl,
-            perTarget,
-            pCraft: legendaryCraftProbabilityOf(solution, nodeId),
-            lambda: lambdaFromDropProbability(perTarget.dropProbability),
-            craftChainTree: computeCraftChainTree(solution, nodeId, snapshot.value?.inventory ?? null),
-            missionLegendarySources: computeMissionLegendaryRows(solution, nodeId),
-            dropDataIsSparse: legendaryDataIsSparse(nodeId),
-          };
-        });
-        return { solution, targets, planCost: computePlanCraftingCost(solution, snapshot.value?.inventory ?? null) };
-      })
+      computedResults.value.map(solution => ({
+        solution,
+        ...solutionView(solution, snapshot.value?.inventory ?? null),
+      }))
     );
 
     const dimSolution = computed(() => computing.value && solutionViews.value.length > 0);

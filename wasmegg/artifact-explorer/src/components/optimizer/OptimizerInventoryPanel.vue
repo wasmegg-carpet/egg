@@ -21,7 +21,7 @@
 import { defineComponent, PropType } from 'vue';
 
 import type { RecipeTreeNode } from '@/lib';
-import OptimizerRecipeTreeRow from './OptimizerRecipeTreeRow.vue';
+import OptimizerRecipeTreeRow from 'ui/components/mission-optimizer/OptimizerRecipeTreeRow.vue';
 
 export default defineComponent({
   components: { OptimizerRecipeTreeRow },

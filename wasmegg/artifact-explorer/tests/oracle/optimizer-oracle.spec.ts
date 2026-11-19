@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
-import { optimizeFull } from '@/lib/optimizer-core';
-import type { OptimizerSolution, RecipeDAG } from '@/lib/types';
+import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
+import type { OptimizerSolution, RecipeDAG } from 'lib/mission-optimizer/types';
 import { makeNode, makeOpt } from '../unit/spec-helpers';
 import { bruteForceBestJoint, RANKING_SLOP_JOINT } from './enumerate';
 import { evaluateAllocation, evaluateAllocationJoint, OracleInstance, targetQ } from './evaluate';

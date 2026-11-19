@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag, computeOwnedStock } from '@/lib';
 import { CUBE_RUN, optimize } from './spec-helpers';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 
 const Name = ei.ArtifactSpec.Name;
 
@@ -120,7 +120,7 @@ describe('optimize', () => {
     expect(sol.slots).toBeDefined();
     expect(sol.slots!.length).toBe(3);
     const busiest = sol.slots!.reduce((a, b) => (b.loadSeconds > a.loadSeconds ? b : a));
-    expect(busiest.missionCount).toBeGreaterThan(0);
+    expect(busiest.launches.length).toBeGreaterThan(0);
     expect(sol.runningTimeSeconds).toBe(Math.round(busiest.rawLoadSeconds));
     expect(sol.runningTimeSeconds).toBeLessThanOrEqual(sol.timeUnitsUsed);
 

@@ -150,6 +150,9 @@ importers:
       dayjs:
         specifier: ^1.11.20
         version: 1.11.20
+      highs:
+        specifier: ^1.15.2
+        version: 1.15.2
       js-sha256:
         specifier: ^0.11.1
         version: 0.11.1
@@ -302,9 +305,6 @@ importers:
       copy-text-to-clipboard:
         specifier: ^3.2.2
         version: 3.2.2
-      highs:
-        specifier: ^1.15.2
-        version: 1.15.2
       lib:
         specifier: workspace:^
         version: link:../../lib

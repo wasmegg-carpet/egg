@@ -36,7 +36,7 @@ export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
     for (const m of payload.missions) {
       const shipName = SHIP_INFO[m.ship as Spaceship]?.displayName ?? 'Unknown';
       const durName = DURATION_NAMES[m.duration as DurationType] ?? 'Unknown';
-      parts.push(`${m.count}× ${durName} ${shipName}${targetLabel(m)}`);
+      parts.push(`${m.count}× ${durName} ${shipName}${targetLabel(m)}${m.doubled ? ' at 2× capacity' : ''}`);
     }
     const summary = parts.join(', ');
     const timeStr = payload.totalTimeSeconds === 0 ? (PROFILE.hasShifts ? '0s (Pre-shift)' : '0s') : formatDuration(payload.totalTimeSeconds);

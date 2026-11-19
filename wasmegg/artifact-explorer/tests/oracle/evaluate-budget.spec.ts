@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { makeNode, makeOpt } from '../unit/spec-helpers';
-import type { RecipeDAG } from '@/lib/types';
+import type { RecipeDAG } from 'lib/mission-optimizer/types';
 import { evaluateAllocation, evaluateAllocationFloat, evaluateAllocationJoint, type OracleInstance } from './evaluate';
 
 // A1 = 2x B1, B1 = 2x C1, C1 drops. Two priced columns.

@@ -2,9 +2,9 @@
 // Every comparison is a difference of logs, in nats; probability 0 is -Infinity.
 
 import { ei, spaceshipList } from 'lib';
-import { EFFORT_LAUNCH_PERIOD_SECONDS, EFFORT_LEVELS } from '@/store/schema';
-import type { RecipeDAG } from '@/lib/types';
-import type { Planner } from './contract';
+import { EFFORT_LAUNCH_PERIOD_SECONDS, EFFORT_LEVELS } from 'lib/mission-optimizer/effort';
+import type { RecipeDAG } from 'lib/mission-optimizer/types';
+import type { Capabilities, Planner } from './contract';
 import {
   budgetsOf,
   craftUnitPrices,
@@ -17,6 +17,7 @@ import {
   type Solved,
 } from './harness';
 import type { ArenaInstance } from './instances';
+import { calendarFaults } from './calendar';
 import { evaluateAllocationJoint, evaluateAllocationJointFloat } from '../oracle/evaluate';
 import { mulberry32 } from '../oracle/generate';
 
@@ -59,6 +60,8 @@ export type InvariantId =
   | 'A7-crafting'
   | 'A8-targets'
   | 'A9-golden-eggs'
+  | 'A10-sleep'
+  | 'A11-window'
   | 'B1-option-order'
   | 'B2-target-order'
   | 'B3-fuel-scale'
@@ -102,6 +105,10 @@ export interface CheckContext {
   planner: Planner;
   inst: ArenaInstance;
   out: Violation[];
+  // What the candidate declares it supports (`contract.ts`). A check that needs something it does not support
+  // records its id in `skipped` instead of running, so the scorecard can say it was skipped rather than passed.
+  can: Capabilities;
+  skipped: InvariantId[];
 }
 
 const solve = (c: CheckContext, over: SolveOverrides = {}): Solved => run(c.planner, c.inst, over);
@@ -171,6 +178,44 @@ export function checkA9GoldenEggs(c: CheckContext) {
     })),
     { label: 'no golden egg cap', over: {} as SolveOverrides },
   ]);
+}
+
+// A shorter sleep window only adds launch opportunities, and the last step is today's problem.
+const A10_SLEEP_HOURS = [12, 10, 8, 6, 4, 0];
+
+export function checkA10Sleep(c: CheckContext) {
+  // Every step but the last has a sleep window, so on an instance with an event window each needs both at once.
+  if (!c.can.sleepAware || (c.inst.eventWindowSeconds > 0 && !c.can.windowWithSleepAware)) {
+    c.skipped.push('A10-sleep');
+    return;
+  }
+  monotone(
+    'A10-sleep',
+    c,
+    A10_SLEEP_HOURS.map(h => ({ label: `sleep=${h}h`, over: { sleepSeconds: h * 3600 } }))
+  );
+}
+
+// More 2x window can only help: a doubled launch legal at offset t stays legal when the window extends past t, and
+// the last step leaves the window nothing to bind on. The axis starts at no window whatever the instance's own,
+// so this covers the window-free path too, and it crosses the horizon.
+export function checkA11Window(c: CheckContext) {
+  if (!c.can.windowAware || (c.inst.sleepSeconds > 0 && !c.can.windowWithSleepAware)) {
+    c.skipped.push('A11-window');
+    return;
+  }
+  const horizon = c.inst.timeCapacityPerSlot;
+  const windows = [...new Set([0, 3600, 48 * 3600, Math.floor(horizon * 0.75), Math.ceil(horizon * 1.25)])]
+    .filter(w => Number.isFinite(w) && w >= 0)
+    .sort((a, b) => a - b);
+  monotone(
+    'A11-window',
+    c,
+    windows.map(w => ({
+      label: w === 0 ? 'no 2x window' : `2x for ${+(w / 3600).toFixed(2)}h`,
+      over: { eventWindowSeconds: w },
+    }))
+  );
 }
 
 export function checkA3Menu(c: CheckContext) {
@@ -396,6 +441,9 @@ export function checkC0Contract(c: CheckContext) {
   }
 }
 
+// One broken calendar can break every launch after the first fault; a handful says what is wrong.
+const CALENDAR_FAULTS_SHOWN = 5;
+
 export function checkC1Feasibility(c: CheckContext) {
   const s = solve(c);
   const b = budgetsOf(s.problem, s.allocation);
@@ -406,18 +454,48 @@ export function checkC1Feasibility(c: CheckContext) {
       `plan burns ${b.fuel.toExponential(4)} fuel against a ${s.problem.fuelCapacity.toExponential(4)} tank`
     );
   }
-  if (b.pack === 'undecided') {
-    reportFlat(
-      c,
-      'C1-inconclusive',
-      `packing undecided within the node budget (${b.totalTime.toFixed(0)}s over ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s)`
-    );
-  } else if (b.pack !== 'packs') {
-    reportFlat(
-      c,
-      'C1-feasibility',
-      `plan does not pack into ${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s (${b.totalTime.toFixed(0)}s total)`
-    );
+  const sleepOn = s.day.sleepSeconds > 0;
+  const windowOn = (s.day.eventWindowSeconds ?? 0) > 0;
+  const calendar = s.result.calendar;
+  // The packer judges the budgets the problem states whenever no calendar stands in for them: an allocation-only
+  // plan, and with a sleep window always. Without sleep a calendar that verifies is itself the arrangement, and a
+  // stricter one than the packer's — it times every launch — so the packer is not asked, and cannot be
+  // inconclusive about a plan that came with one.
+  if (sleepOn || calendar === undefined) {
+    const nightsPerSlot = s.problem.nightsPerSlot;
+    const slotText =
+      nightsPerSlot === undefined
+        ? `${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s`
+        : `${s.problem.slots} slots of ${s.problem.timeCapacityPerSlot}s waking and ${nightsPerSlot} night(s)`;
+    const loadText =
+      nightsPerSlot === undefined
+        ? `${b.totalTime.toFixed(0)}s total`
+        : `${b.totalTime.toFixed(0)}s and ${b.totalNights} night(s) total`;
+    if (b.pack === 'undecided') {
+      reportFlat(
+        c,
+        'C1-inconclusive',
+        `packing undecided within the node budget (${b.totalTime.toFixed(0)}s over ${slotText})`
+      );
+    } else if (b.pack !== 'packs') {
+      reportFlat(c, 'C1-feasibility', `plan does not pack into ${slotText} (${loadText})`);
+    }
+  }
+  // With a sleep window or an event window the plan has to say when each launch goes up: real days, and which
+  // doubled launches start inside the window. A candidate that supports the problem shows it by returning its
+  // calendar, which the harness verifies against its own menu and its own statement of the day and the window.
+  // No calendar is then a failure, not a pass. A calendar returned for any other problem is verified too.
+  if (calendar === undefined) {
+    if (windowOn) reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a 2x window');
+    else if (sleepOn && c.can.sleepAware) {
+      reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a sleep window');
+    }
+    return;
+  }
+  const faults = calendarFaults(calendar, s.problem.options, s.allocation, s.day);
+  for (const f of faults.slice(0, CALENDAR_FAULTS_SHOWN)) reportFlat(c, 'C1-feasibility', `calendar: ${f}`);
+  if (faults.length > CALENDAR_FAULTS_SHOWN) {
+    reportFlat(c, 'C1-feasibility', `calendar: ... and ${faults.length - CALENDAR_FAULTS_SHOWN} more fault(s)`);
   }
 }
 
@@ -511,8 +589,16 @@ export function checkM3UnionLowerBound(c: CheckContext) {
       part.allocation.forEach((count, idx) => {
         if (!(count > 0)) return;
         const o = part.problem.options[idx];
+        // Sleep and capacity variants of one launch share its ship and target, so they are told apart by nights,
+        // charge and variant too; matching on ship and target alone would move overnight launches onto the
+        // daytime line and doubled launches onto the normal one.
         const k = joint.problem.options.findIndex(
-          q => q.ship.missionTypeId === o.ship.missionTypeId && q.targetAfxId === o.targetAfxId
+          q =>
+            q.ship.missionTypeId === o.ship.missionTypeId &&
+            q.targetAfxId === o.targetAfxId &&
+            (q.nights ?? 0) === (o.nights ?? 0) &&
+            q.actualTime === o.actualTime &&
+            q.variant === o.variant
         );
         if (k >= 0) union[k] += count;
       });
@@ -676,17 +762,26 @@ export const CHEAP_CHECKS: Check[] = [
   checkA7CraftingLevel,
   checkA8Targets,
   checkA9GoldenEggs,
+  checkA10Sleep,
+  checkA11Window,
   checkM1M2SoloDominance,
   checkM3UnionLowerBound,
 ];
 
 export const DEEP_CHECKS: Check[] = [checkD1LocalOptimality, checkD2DeepLocalOptimality];
 
-export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[]): Violation[] {
+export interface CheckRun {
+  violations: Violation[];
+  // Checks that did not run because the candidate does not declare support for what they need.
+  skipped: InvariantId[];
+}
+
+export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[], can: Capabilities = {}): CheckRun {
   const out: Violation[] = [];
+  const skipped: InvariantId[] = [];
   for (const check of checks) {
     try {
-      check({ planner, inst, out });
+      check({ planner, inst, out, can, skipped });
     } catch (err) {
       out.push({
         invariant: `${check.name}-threw`,
@@ -695,5 +790,5 @@ export function runChecks(planner: Planner, inst: ArenaInstance, checks: Check[]
       });
     }
   }
-  return out;
+  return { violations: out, skipped };
 }

@@ -38,6 +38,9 @@ describe.skipIf(!REQUESTED)(`arena (${MODE}, ${COUNT} instances)`, () => {
   for (const solver of solvers) {
     it(`${solver.id} holds the invariants`, () => {
       const r = sweep(solver, seeds, checks, inst => {
+        if (inst.skipped !== undefined) {
+          console.log(`  ${describeInstance(generateInstance(inst.seed))} -> skipped (${inst.skipped})`);
+        }
         if (inst.violations.length > 0) {
           console.log(`  ${describeInstance(generateInstance(inst.seed))} -> ${inst.violations.length} violation(s)`);
           for (const v of inst.violations.slice(0, 6)) {

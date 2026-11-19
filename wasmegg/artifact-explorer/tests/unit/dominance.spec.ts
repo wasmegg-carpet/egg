@@ -1,11 +1,11 @@
 // Dominance pruning in `buildModel`: what it drops, and what it refuses to drop.
-// See `src/lib/solver/SPEC.md` section 1.
+// See `lib/mission-optimizer/solver/SPEC.md` section 1.
 
 import { describe, expect, it } from 'vitest';
-import { buildModel } from '@/lib/solver/model';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
 import { craftDag, makeOpt } from './spec-helpers';
-import type { PlanProblem } from '@/lib/solver/types';
-import type { LaunchOption } from '@/lib/types';
+import type { PlanProblem } from 'lib/mission-optimizer/solver/types';
+import type { LaunchOption } from 'lib/mission-optimizer/types';
 
 function modelOf(options: LaunchOption[]) {
   return buildModel({

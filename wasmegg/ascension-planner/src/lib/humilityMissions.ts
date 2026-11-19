@@ -8,38 +8,34 @@ import { VIRTUE_EGGS } from '@/types';
 import { Spaceship, DurationType, FUEL_REQUIREMENTS, missionName } from '@/lib/missions';
 import { type Launch, launchEntries } from 'lib/planners/rockets/launches';
 import { scheduleMissions, type ScheduleResult } from 'lib/planners/rockets/scheduler';
+import {
+  HUMILITY_MISSIONS_SCHEMA,
+  HUMILITY_MISSIONS_SCHEMA_VERSION,
+  type HumilityMissionsFile as ExportedFile,
+  type HumilityMissionsLaunch,
+  type HumilityMissionsVisit as ExportedVisit,
+} from 'lib/mission-optimizer/plan/schema';
 
-// The id predates the humility missions rename and is kept so existing exported files keep parsing.
-export const HUMILITY_MISSIONS_SCHEMA = 'eggverse.humility-plan';
-export const HUMILITY_MISSIONS_SCHEMA_VERSION = 1;
+// The file's shape is the writer's (`lib/mission-optimizer/plan/schema.ts`), so the two sides cannot drift apart;
+// this module narrows it to what this planner reads and validates it. The schema id predates the humility missions
+// rename and is kept so existing exported files keep parsing.
+export { HUMILITY_MISSIONS_SCHEMA, HUMILITY_MISSIONS_SCHEMA_VERSION };
+export type { HumilityMissionsLaunch };
 
-export interface HumilityMissionsLaunch {
-  ship: string;
-  duration: string;
-  targetAfxId: number;
-  count: number;
-}
+export type HumilityMissionsVisit = Pick<
+  ExportedVisit,
+  | 'visitId'
+  | 'visitIndex'
+  | 'label'
+  | 'jointProbability'
+  | 'launches'
+  | 'makespanSeconds'
+  | 'fuelRequired'
+  | 'gemCost'
+  | 'gemBudget'
+>;
 
-export interface HumilityMissionsVisit {
-  visitId: string;
-  visitIndex: number;
-  label: string;
-  jointProbability: number;
-  launches: HumilityMissionsLaunch[];
-  makespanSeconds: number;
-  fuelRequired: Partial<Record<VirtueEgg, number>>;
-  gemCost: number;
-  gemBudget: number;
-}
-
-export interface HumilityMissionsFile {
-  schema: string;
-  schemaVersion: number;
-  source: string;
-  generatedAt: number;
-  planLabel: string;
-  visits: HumilityMissionsVisit[];
-}
+export type HumilityMissionsFile = Omit<ExportedFile, 'visits'> & { visits: HumilityMissionsVisit[] };
 
 export class HumilityMissionsError extends Error {}
 
@@ -80,6 +76,9 @@ export function launchLabel(launch: HumilityMissionsLaunch): string {
 
 export interface ResolvedLaunch extends Launch {
   targetAfxId: number;
+  // Launched inside a 2x mission capacity event. This planner does not model what missions bring home, so it
+  // changes nothing here but what the launch says it is.
+  doubled?: true;
 }
 
 export function resolveLaunches(visit: HumilityMissionsVisit): ResolvedLaunch[] {
@@ -98,12 +97,15 @@ export function resolveLaunches(visit: HumilityMissionsVisit): ResolvedLaunch[] 
     ) {
       throw new HumilityMissionsError(`Visit "${visit.label}" has a launch with an invalid target id.`);
     }
+    if (launch.doubled !== undefined && launch.doubled !== true) {
+      throw new HumilityMissionsError(`Visit "${visit.label}" has a launch with an invalid doubled marker.`);
+    }
     const ship = shipFromName(launch.ship);
     const duration = durationFromName(launch.duration);
     if (!Array.isArray(FUEL_REQUIREMENTS[ship]?.[duration])) {
       throw new HumilityMissionsError(`Unsupported mission ${launch.ship} / ${launch.duration}.`);
     }
-    return { ship, duration, targetAfxId, count };
+    return { ship, duration, targetAfxId, count, ...(launch.doubled && { doubled: true as const }) };
   });
 }
 

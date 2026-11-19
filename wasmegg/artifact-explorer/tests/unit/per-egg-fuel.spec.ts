@@ -4,8 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag } from '@/lib';
-import { buildModel } from '@/lib/solver/model';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
+import { buildModel } from 'lib/mission-optimizer/solver/model';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
 import { optimize } from './spec-helpers';
 
 const TARGET = 'puzzle-cube-4';

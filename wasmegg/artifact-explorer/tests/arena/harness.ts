@@ -3,13 +3,16 @@
 
 import { getArtifactTierPropsFromId, singleCraftCost } from 'lib';
 import { buildRecipeDag } from '@/lib';
-import { enumerateLaunchOptions } from '@/lib/problem-inputs';
-import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from '@/store/schema';
-import type { CraftBudget, LaunchOption, RecipeDAG } from '@/lib/types';
+import { enumerateLaunchOptions } from 'lib/mission-optimizer/problem-inputs';
+import { EFFORT_LAUNCH_PERIOD_SECONDS, type EffortLevel } from 'lib/mission-optimizer/effort';
+import type { CraftBudget, LaunchOption, RecipeDAG } from 'lib/mission-optimizer/types';
 import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluation } from '../oracle/evaluate';
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
+import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
-import { packFeasible, type PackVerdict } from './pack-feasibility';
+import { capacityVariants, isDoubled } from './capacity';
+import { packFeasible, packFeasibleBudgets, type PackVerdict } from './pack-feasibility';
+import { sleepCapacity, sleepVariants } from './sleep';
 
 // Slack on budget comparisons. Capacities are float sums of float costs, so a
 // plan that lands exactly on the cap can read a few ulps over it.
@@ -47,6 +50,11 @@ export interface SolveOverrides {
   craftingLevel?: number;
   previousCrafts?: number;
   ownedStock?: Map<string, number>;
+  // Seconds of sleep a day, replacing the instance's own window. `timeCapacityPerSlot` stays the horizon
+  // either way; `buildProblem` turns the pair into waking seconds and nights.
+  sleepSeconds?: number;
+  // Seconds of 2x capacity window left, replacing the instance's own. Reaches the menu and the problem together.
+  eventWindowSeconds?: number;
   // Applied to the enumerated menu before it reaches the solver, for the
   // invariances that perturb the menu itself.
   transformOptions?: (options: LaunchOption[]) => LaunchOption[];
@@ -54,6 +62,20 @@ export interface SolveOverrides {
   // observe the planner running again rather than a value it returned before.
   // Not part of the problem: `buildProblem` ignores it.
   fresh?: boolean;
+}
+
+// The sleep window, horizon and event window an instance is stated with, after overrides: what C1 verifies a
+// calendar against, kept by the harness rather than read back off the problem a candidate was handed. Without
+// sleep the day is all waking time, and the horizon is the slot.
+function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay {
+  const sleepSeconds = over.sleepSeconds ?? inst.sleepSeconds;
+  const eventWindowSeconds = over.eventWindowSeconds ?? inst.eventWindowSeconds;
+  return {
+    sleepSeconds: sleepSeconds > 0 ? sleepSeconds : 0,
+    horizonSeconds: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
+    slots: NUM_SLOTS,
+    eventWindowSeconds: eventWindowSeconds > 0 ? eventWindowSeconds : 0,
+  };
 }
 
 function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProblem {
@@ -67,8 +89,18 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     null,
     over.previousCrafts ?? inst.previousCrafts
   );
-  let options = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  // Variants are split off the enumerated menu before any menu perturbation, so a shuffle shuffles the
+  // variants too and a duplicate duplicates one variant. Capacity over sleep, so a doubled launch keeps its
+  // nights. With neither this is the menu itself.
+  const sleep = over.sleepSeconds ?? inst.sleepSeconds;
+  const horizon = over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot;
+  const window = over.eventWindowSeconds ?? inst.eventWindowSeconds;
+  const menu = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  let options = [...capacityVariants(sleepVariants(menu, sleep), window)];
   if (over.transformOptions) options = over.transformOptions(options);
+  // With sleep, the slot budget becomes waking seconds plus whole nights. Without, `nightsPerSlot` is absent
+  // rather than undefined, so a sleep-free instance states today's problem exactly.
+  const capacity = sleep > 0 ? sleepCapacity(horizon, sleep) : null;
 
   return {
     options,
@@ -77,7 +109,12 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
     // sorted it in place would silently change every later check instead of producing a violation.
     targets: [...targets],
     fuelCapacity: over.fuelCapacity ?? inst.fuelCapacity,
-    timeCapacityPerSlot: over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot,
+    timeCapacityPerSlot: capacity ? capacity.wakingSecondsPerSlot : horizon,
+    ...(capacity ? { nightsPerSlot: capacity.nightsPerSlot } : {}),
+    // The day itself, which the candidate needs to lay its plan out on real days and return a calendar.
+    ...(capacity ? { sleep: { sleepSeconds: sleep, horizonSeconds: horizon } } : {}),
+    // Absent rather than 0 without one, so a window-free instance states today's problem exactly.
+    ...(window > 0 ? { eventWindowSeconds: window } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -120,7 +157,10 @@ function problemKey(problem: PlanProblem): string {
   const options = problem.options
     .map(
       (o: LaunchOption) =>
-        `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}`
+        `${o.actualFuel}|${o.actualTime}|${sortedEntries(o.yieldVector)}|${sortedEntries(o.legendaryYieldVector)}` +
+        (o.nights === undefined ? '' : `|n${o.nights}`) +
+        // An `event` and an `overhang` copy of one launch are identical in every number above.
+        (o.variant === undefined ? '' : `|v${o.variant}`)
     )
     .join(';');
   const dag = [...problem.dag.keys()]
@@ -140,6 +180,11 @@ function problemKey(problem: PlanProblem): string {
     problem.targets.join(','),
     problem.fuelCapacity,
     problem.timeCapacityPerSlot,
+    ...(problem.nightsPerSlot === undefined ? [] : [`nights${problem.nightsPerSlot}`]),
+    ...(problem.sleep === undefined ? [] : [`sleep${problem.sleep.sleepSeconds}/${problem.sleep.horizonSeconds}`]),
+    // Left out, the cache serves a plan solved for one window to a problem with another, and A11-window compares a
+    // plan against itself and passes.
+    ...(problem.eventWindowSeconds === undefined ? [] : [`window${problem.eventWindowSeconds}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),
@@ -156,7 +201,71 @@ function copyResult(result: PlanResult): PlanResult {
     reported: result.reported
       ? { jointProbability: result.reported.jointProbability, perTarget: result.reported.perTarget.slice() }
       : undefined,
+    // C1 reads the calendar off every solve, cached ones included; dropping it here would fail a cache hit.
+    ...(result.calendar === undefined ? {} : { calendar: result.calendar.map(slot => slot.map(l => ({ ...l }))) }),
+    ...(result.layoutStats === undefined ? {} : { layoutStats: { ...result.layoutStats } }),
   };
+}
+
+// What candidates say it took to lay their plans out, summed over fresh solves (cache hits replay a plan and
+// are not counted again). Diagnostics for the scorecard only: nothing scores or gates on a figure a candidate
+// reports about itself.
+export interface LayoutTally {
+  solves: number;
+  plansTrimmed: number;
+  launchesTrimmed: number;
+  overnightTrimmed: number;
+  layoutSolves: number;
+  marginResolves: number;
+  verifierRetries: number;
+  // Doubled launches the candidate flew at 1x because its layout could not start them inside the 2x window, and
+  // the plans with any; 0 for a candidate that reports none.
+  plansDemoted: number;
+  launchesDemoted: number;
+  // 1x launches the candidate found going up inside the 2x window and flew doubled; 0 for one that reports none.
+  launchesPromoted: number;
+}
+
+const layoutTallies = new WeakMap<Planner, LayoutTally>();
+
+function emptyTally(): LayoutTally {
+  return {
+    solves: 0,
+    plansTrimmed: 0,
+    launchesTrimmed: 0,
+    overnightTrimmed: 0,
+    layoutSolves: 0,
+    marginResolves: 0,
+    verifierRetries: 0,
+    plansDemoted: 0,
+    launchesDemoted: 0,
+    launchesPromoted: 0,
+  };
+}
+
+// Returns the tally so far and starts a new one.
+export function takeLayoutTally(planner: Planner): LayoutTally {
+  const t = layoutTallies.get(planner) ?? emptyTally();
+  layoutTallies.set(planner, emptyTally());
+  return t;
+}
+
+function tallyLayout(planner: Planner, result: PlanResult): void {
+  const stats = result.layoutStats;
+  if (stats === undefined) return;
+  const t = layoutTallies.get(planner) ?? emptyTally();
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  t.solves++;
+  if (n(stats.launchesTrimmed) > 0) t.plansTrimmed++;
+  t.launchesTrimmed += n(stats.launchesTrimmed);
+  t.overnightTrimmed += n(stats.overnightTrimmed);
+  t.layoutSolves += n(stats.layoutSolves);
+  t.marginResolves += n(stats.marginResolves);
+  t.verifierRetries += n(stats.verifierRetries);
+  if (n(stats.launchesDemoted) > 0) t.plansDemoted++;
+  t.launchesDemoted += n(stats.launchesDemoted);
+  t.launchesPromoted += n(stats.launchesPromoted);
+  layoutTallies.set(planner, t);
 }
 
 // One instance per problem, not one per call: the judge caches its compiled LP template on `OracleInstance`
@@ -233,27 +342,60 @@ function contractBreaches(problem: PlanProblem, result: PlanResult): string[] {
 export interface Budgets {
   fuel: number;
   totalTime: number;
+  // Sleep windows the plan flies through, summed over launches. 0 for a problem without a sleep window.
+  totalNights: number;
   pack: PackVerdict;
 }
 
 export function budgetsOf(problem: PlanProblem, alloc: readonly number[]): Budgets {
   let fuel = 0;
   let totalTime = 0;
+  let totalNights = 0;
+  let doubled = 0;
   const durations: number[] = [];
+  const nights: number[] = [];
+  const variants: (string | undefined)[] = [];
   const counts: number[] = [];
   for (let i = 0; i < alloc.length; i++) {
     const n = alloc[i];
     if (!(n > 0)) continue;
-    fuel += n * problem.options[i].actualFuel;
-    totalTime += n * problem.options[i].actualTime;
-    durations.push(problem.options[i].actualTime);
+    const o = problem.options[i];
+    fuel += n * o.actualFuel;
+    totalTime += n * o.actualTime;
+    totalNights += n * (o.nights ?? 0);
+    if (isDoubled(o)) doubled += n;
+    durations.push(o.actualTime);
+    nights.push(o.nights ?? 0);
+    variants.push(o.variant);
     counts.push(n);
   }
-  return {
-    fuel,
-    totalTime,
-    pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots),
-  };
+  // Each further budget only once the plan actually spends it. A plan of daytime, undoubled launches packs exactly
+  // as it always has, so the one-dimensional rule stays the one every earlier result was measured against.
+  const withNights = problem.nightsPerSlot !== undefined && totalNights > 0;
+  if (!withNights && doubled === 0) {
+    return {
+      fuel,
+      totalTime,
+      totalNights,
+      pack: packFeasible(durations, counts, problem.timeCapacityPerSlot, problem.slots),
+    };
+  }
+  // Per launch: waking seconds; then nights; then, with a doubled launch, the window's two budgets as the
+  // labels state them — `event` seconds against the window, `overhang` launches against one a slot. Sound, since
+  // `event` launches first and the one `overhang` after them all go up inside the window; label-bound, since
+  // two `overhang` launches that would both fit are refused (ARENA.md, "The 2x capacity window").
+  const window = problem.eventWindowSeconds ?? 0;
+  const costs = durations.map((d, j) => [
+    d,
+    ...(withNights ? [nights[j]] : []),
+    ...(doubled > 0 ? [variants[j] === 'event' ? d : 0, variants[j] === 'overhang' ? 1 : 0] : []),
+  ]);
+  const capacities = [
+    problem.timeCapacityPerSlot,
+    ...(withNights ? [problem.nightsPerSlot!] : []),
+    ...(doubled > 0 ? [window, window > 0 ? 1 : 0] : []),
+  ];
+  return { fuel, totalTime, totalNights, pack: packFeasibleBudgets(costs, counts, capacities, problem.slots) };
 }
 
 // The golden egg budget is deliberately absent: missions cost no golden eggs, so no allocation can breach
@@ -273,6 +415,9 @@ export interface Solved {
   judged: OracleJointEvaluation;
   joint: number;
   elapsedMs: number;
+  // The day and the event window the problem was stated with: sleep 0 and the slot as the horizon without a
+  // sleep window, window 0 without an event.
+  day: CalendarDay;
 }
 
 export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides = {}): Solved {
@@ -283,6 +428,7 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
   const started = performance.now();
   const result = hit ? copyResult(hit.result) : planner(problem);
   const elapsedMs = hit ? hit.elapsedMs : performance.now() - started;
+  if (!hit) tallyLayout(planner, result);
 
   const breaches = contractBreaches(problem, result);
   // Cached only once it is known well-formed: `copyResult` assumes the arrays
@@ -311,6 +457,7 @@ export function run(planner: Planner, inst: ArenaInstance, over: SolveOverrides 
     judged,
     joint: judged.jointProbability,
     elapsedMs,
+    day: dayOf(inst, over),
   };
 }
 

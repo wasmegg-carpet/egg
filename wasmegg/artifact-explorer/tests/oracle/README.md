@@ -1,7 +1,7 @@
 # Brute-force oracle for the artifact optimizer
 
 An independent correctness harness for `optimizeFull`, whose design is in
-[`../../src/lib/OPTIMIZER.md`](../../src/lib/OPTIMIZER.md). The solver is treated as a black
+[`../../../../lib/mission-optimizer/OPTIMIZER.md`](../../../../lib/mission-optimizer/OPTIMIZER.md). The solver is treated as a black
 box: nothing here imports its internals, and the three-slot packing feasibility
 check is re-derived rather than shared, so the grader and the graded are never
 the same code.
@@ -42,8 +42,8 @@ results are void.
 lines — so it can catch bugs in the solver's tangent approximation instead of
 repeating its logic. For a single target this reduces to one LP, solved exactly
 (see above). For two or more targets it is an independent implementation of the
-same away-step Frank-Wolfe method as `src/lib/solver/evaluator.ts`; see
-`src/lib/solver/SPEC.md`'s introduction for the general background. The two
+same away-step Frank-Wolfe method as `lib/mission-optimizer/solver/evaluator.ts`; see
+`lib/mission-optimizer/solver/SPEC.md`'s introduction for the general background. The two
 implementations are written separately and neither imports the other, so their
 agreement is itself a check; but the joint case is float, correct only to the
 tolerances above, not exact the way the single-target LP is.

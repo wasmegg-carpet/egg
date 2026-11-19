@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { simplexMax } from '@/lib/solver/simplex';
+import { simplexMax } from 'lib/mission-optimizer/solver/simplex';
 // Exact BigInt rationals, so the truth an arm is judged against never turns on the float
 // arithmetic under test. `tests/arena/independence.spec.ts` keeps the arena's candidates away
-// from `src/lib` and `tests/unit`; the oracle is on neither side of that fence and shares no
+// from `lib/mission-optimizer` and `tests/unit`; the oracle is on neither side of that fence and shares no
 // code with `simplexMax`.
 import { Frac } from '../oracle/rational';
 import { simplexMaximizeFull } from '../oracle/simplex';
