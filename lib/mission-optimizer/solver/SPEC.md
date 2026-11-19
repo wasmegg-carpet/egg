@@ -677,7 +677,7 @@ What else changes when `W` is present:
   would be pinned at 0. `variant` is part of the group key, so an `event` and an
   `overhang` copy of one launch, identical in every other number, never merge
   into one group and lose a row. A group's cap gains `slots * floor(W /
-  seconds)` for `event` and `slots` for `overhang`.
+seconds)` for `event` and `slots` for `overhang`.
 - **Dominance only within a variant.** A doubled copy costs exactly what its
   normal twin does and yields twice as much, so across variants it would prune
   the twin — and then every launch of the plan would have to fly doubled, which
@@ -1283,7 +1283,7 @@ else:
   are the regular day's. `OptimizerSolution.wakeOffsetSeconds` carries `x`, and
   is absent at 0. `sinceWake` (`../optimizer-views.ts`) is a launch time on the
   regular day, so the timeline's days break at the player's wake-ups, `t = k D -
-  x`, and its times of day are hours since waking.
+x`, and its times of day are hours since waking.
 
 The alternative was a schedule with a first window of `W - x`. It would have
 touched every one of those functions, each with its own special case for day 0.
@@ -1393,6 +1393,7 @@ wake-up. As the window rows' first launch, it is an `event` or the `overhang`
 like any other.
 
 _What the model adds._
+
 - **Group key.** T+0 groups are keyed apart (`Group.atStart`).
 - **Dominance and copies.** Dominance, twins and copies stay within T+0 or
   within the rest.
@@ -1441,6 +1442,45 @@ lands: the timeline marks it overnight (indigo) whenever it is in the air at all
 after `t = 0`. Slot loads read its block as its landing. `sinceWake`'s day 0 is
 that one instant, and day 1 starts at the first wake-up.
 
+**Measured, the night case.** Seeds 2000-2039, 8 hours of sleep, alone and
+with the window `inside` and `straddle-under`, at 18, 20 and 23 hours awake.
+All of these were judged by the arena, as below.
+
+- **Identity at `x <= W`.** At `x = 0` in all five regimes and at 4, 12 and 16
+  hours, every seed gave the same allocation, calendar, reported joint and
+  `layoutStats` as the revision before this case (one run each, rerun after the
+  last fix on three regimes).
+- **Faults.** There was no C0 or C1 fault. One packer was undecided (8 hours,
+  `straddle-under`, 20 hours awake, seed 2031) on a calendar that verified.
+
+| regime        | x   | mean log10 | x = 0   | gap    | gap > 0.02 | time / x = 0 |
+| ------------- | --- | ---------- | ------- | ------ | ---------- | ------------ |
+| 8 h           | 18  | -9.1114    | -9.1056 | 0.0101 | 6          | 1.66         |
+| 8 h           | 20  | -9.1131    |         | 0.0101 | 6          | 1.67         |
+| 8 h           | 23  | -9.1159    |         | 0.0087 | 5          | 1.66         |
+| 8 h, inside   | 18  | -8.5702    | -8.5624 | 0.0103 | 6          | 1.16         |
+| 8 h, inside   | 20  | -8.5763    |         | 0.0107 | 6          | 1.25         |
+| 8 h, inside   | 23  | -8.5874    |         | 0.0153 | 8          | 1.37         |
+| 8 h, straddle | 18  | -8.3930    | -8.4006 | 0.0129 | 9          | 1.56         |
+| 8 h, straddle | 20  | -8.4033    |         | 0.0203 | 10         | 1.60         |
+| 8 h, straddle | 23  | -8.4021    |         | 0.0183 | 10         | 1.49         |
+
+Time is the total against the same tree's `x = 0` run under the same machine
+load. Nearly all of it is the main MILP, whose menu is a third larger with the
+T+0 variants: for 8 hours at 20 awake, 103 of 109 s, against 57 of 66 at
+`x = 0`. The one gap over 0.02 is 8 hours, `straddle-under`, 20 hours awake. At
+20 and 23 hours awake, seed 2037 there loses 0.31 and 0.30, a seed that loses
+0.36 at `x = 0` as well.
+
+Against the placeholder, which solved any such `x` as `W`: under the real
+offset, 34 to 37 of its 40 plans per regime fail the arena's calendar. They
+launch in the real night, because the clamped waking windows run `x - W` late.
+Against the valid ones, exact modelling delivered more on 2 seeds, the same on
+33 and less on 5, by 0.019 to 0.052. In each of the five the MILP promised the
+same as the placeholder, or less by 0.012 after its search took another path,
+and the layout delivered less. Seed 2001 with the window is three of them, a
+doubled ship the regrouped attempts do not reach.
+
 **Measured.** Seeds 2000-2039, problems from the arena's own builder,
 `ARENA_WAKE` for the offset. Every plan was judged by the arena's evaluator and
 `calendarFaults`, cores pinned. Identity first. At `x = 0`, under no sleep or
@@ -1455,20 +1495,20 @@ With an offset (the gap is the plan's promise less what the judge delivered,
 mean over the 39 scoring seeds; time is the sum of one run against the median
 of the `x = 0` runs):
 
-| regime         | x   | C0/C1 | mean log10 | vs x = 0 | gap    | gap > 0.02 | time s (x = 0) |
-| -------------- | --- | ----- | ---------- | -------- | ------ | ---------- | -------------- |
-| 8 h            | 0   | 0     | -9.1056    |          | 0.0080 | 4          | 61.6           |
-| 8 h            | 4   | 0     | -9.1059    | -0.0003  | 0.0087 | 7          | 56.2           |
-| 8 h            | 12  | 0     | -9.1072    | -0.0016  | 0.0101 | 7          | 53.9           |
-| 8 h            | 16  | 0     | -9.1080    | -0.0024  | 0.0105 | 8          | 55.1           |
-| 8 h, inside    | 0   | 0     | -8.5624    |          | 0.0103 | 9          | 176.1          |
-| 8 h, inside    | 4   | 0     | -8.5792    | -0.0168  | 0.0268 | 10         | 176.2          |
-| 8 h, inside    | 12  | 0     | -8.5644    | -0.0020  | 0.0125 | 9          | 188.0          |
-| 8 h, inside    | 16  | 0     | -8.5585    | +0.0038  | 0.0064 | 6          | 184.1          |
-| 8 h, straddle  | 0   | 0     | -8.4006    |          | 0.0244 | 12         | 201.7          |
-| 8 h, straddle  | 4   | 0 (1) | -8.3955    | +0.0051  | 0.0181 | 7          | 204.4          |
-| 8 h, straddle  | 12  | 0     | -8.3897    | +0.0109  | 0.0110 | 7          | 212.3          |
-| 8 h, straddle  | 16  | 0     | -8.3881    | +0.0125  | 0.0092 | 6          | 234.2          |
+| regime        | x   | C0/C1 | mean log10 | vs x = 0 | gap    | gap > 0.02 | time s (x = 0) |
+| ------------- | --- | ----- | ---------- | -------- | ------ | ---------- | -------------- |
+| 8 h           | 0   | 0     | -9.1056    |          | 0.0080 | 4          | 61.6           |
+| 8 h           | 4   | 0     | -9.1059    | -0.0003  | 0.0087 | 7          | 56.2           |
+| 8 h           | 12  | 0     | -9.1072    | -0.0016  | 0.0101 | 7          | 53.9           |
+| 8 h           | 16  | 0     | -9.1080    | -0.0024  | 0.0105 | 8          | 55.1           |
+| 8 h, inside   | 0   | 0     | -8.5624    |          | 0.0103 | 9          | 176.1          |
+| 8 h, inside   | 4   | 0     | -8.5792    | -0.0168  | 0.0268 | 10         | 176.2          |
+| 8 h, inside   | 12  | 0     | -8.5644    | -0.0020  | 0.0125 | 9          | 188.0          |
+| 8 h, inside   | 16  | 0     | -8.5585    | +0.0038  | 0.0064 | 6          | 184.1          |
+| 8 h, straddle | 0   | 0     | -8.4006    |          | 0.0244 | 12         | 201.7          |
+| 8 h, straddle | 4   | 0 (1) | -8.3955    | +0.0051  | 0.0181 | 7          | 204.4          |
+| 8 h, straddle | 12  | 0     | -8.3897    | +0.0109  | 0.0110 | 7          | 212.3          |
+| 8 h, straddle | 16  | 0     | -8.3881    | +0.0125  | 0.0092 | 6          | 234.2          |
 
 The one mark is not a fault: the arena's packer was undecided within its node
 budget on seed 2021 (C1-inconclusive), and that plan's calendar verified. The
