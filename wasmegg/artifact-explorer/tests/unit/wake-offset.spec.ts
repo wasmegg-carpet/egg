@@ -63,13 +63,12 @@ describe('the wake offset at the solver boundary', () => {
     expect('wakeOffsetSeconds' in zero.sleep!).toBe(false);
   });
 
-  it('keeps an offset inside the waking window, and reads one past it as bedtime for now', () => {
+  it('keeps any offset inside a day, the night included', () => {
     const at = (wakeOffsetSeconds: number) =>
       normalizeProblem({ ...base, sleep: { ...base.sleep!, wakeOffsetSeconds } }).sleep!.wakeOffsetSeconds;
     expect(at(5 * H)).toBe(5 * H);
     expect(at(W)).toBe(W);
-    // The night case is a placeholder: up in the night reads as at bedtime.
-    expect(at(20 * H)).toBe(W);
+    expect(at(20 * H)).toBe(20 * H);
   });
 
   it('throws on an offset that is not a time of day', () => {
@@ -98,6 +97,7 @@ describe('a slot that starts after wake-up', () => {
       horizonSeconds: 3 * D,
       planHorizonSeconds: 3 * D,
       wakeOffsetSeconds: 0,
+      firstNightSeconds: 0,
       nights: 3,
       windows: 3,
       tailSeconds: 0,
@@ -178,19 +178,29 @@ describe('the verifier with a wake offset', () => {
     const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
     for (let trial = 0; trial < 400; trial++) {
       const sleepSeconds = [4, 8, 12][trial % 3] * H;
-      const wake = Math.floor(rand() * (D - sleepSeconds));
+      // Awake at the start, and in the night, where only T+0 may launch.
+      const wake = Math.floor(rand() * D);
+      const firstNight = wake > D - sleepSeconds ? D - wake : 0;
       const horizon = (1 + Math.floor(rand() * 4)) * D;
-      const launches = [];
       let free = rand() < 0.1 ? -600 : 0;
+      const launches: { launchAt: number; wakingSeconds: number; nights: number; atStartSeconds?: number }[] = [];
       for (let i = 0; i < 1 + Math.floor(rand() * 6); i++) {
-        const launchAt = Math.round(free + rand() * 6 * H);
+        // Sometimes a launch at T+0, of a T+0 variant or not, and sometimes one just after it.
+        const pick = rand();
+        const launchAt = i === 0 && pick < 0.3 ? 0 : i === 0 && pick < 0.4 ? 60 : Math.round(free + rand() * 6 * H);
         const nights = rand() < 0.3 ? 1 + Math.floor(rand() * 2) : 0;
         const wakingSeconds = Math.round(rand() * 20 * H);
-        launches.push({ launchAt, wakingSeconds, nights });
-        free = launchAt + wakingSeconds + nights * sleepSeconds - (rand() < 0.1 ? 600 : 0);
+        const atStartSeconds = rand() < 0.4 ? Math.round(firstNight + rand() * 30 * H) : undefined;
+        launches.push({ launchAt, wakingSeconds, nights, ...(atStartSeconds !== undefined && { atStartSeconds }) });
+        free = launchAt + (atStartSeconds ?? wakingSeconds + nights * sleepSeconds) - (rand() < 0.1 ? 600 : 0);
       }
       const planner = slotFault(launches, { sleepSeconds, horizonSeconds: horizon, wakeOffsetSeconds: wake });
-      const menu = launches.map((l, i) => ({ id: `o${i}`, actualTime: l.wakingSeconds, nights: l.nights }));
+      const menu = launches.map((l, i) => ({
+        id: `o${i}`,
+        actualTime: l.wakingSeconds,
+        nights: l.nights,
+        ...(l.atStartSeconds !== undefined && { atStartSeconds: l.atStartSeconds }),
+      }));
       const calendar = [launches.map((l, i) => ({ option: i, optionId: `o${i}`, launchAt: l.launchAt }))];
       const arena = calendarFaults(
         calendar,
@@ -277,6 +287,58 @@ describe('optimizeFull with a wake offset', () => {
         expect(doubled).toBe(l.launchAt <= 6 * H);
       }
       expect(slot.launches.filter(l => l.launchAt <= 6 * H)).toHaveLength(5);
+    }
+  });
+});
+
+describe('optimizeFull with the plan starting in the night', () => {
+  // Twenty hours awake: four hours of night left, so the first wake-up comes 4 hours in and bedtime 20 hours in.
+  const wake = 20 * H;
+  const args = (horizon: number, hours = 1) => ({
+    options: [makeOpt(1, hours * H, [['B', 1]])],
+    recipeDag: craftDag(0.1),
+    desiredArtifactNodeIds: ['A'],
+    fuelCapacity: 1e9,
+    timeCapacityPerSlot: horizon,
+    ownedStock: new Map<string, number>(),
+    maximumCost: undefined,
+    sleepSeconds: S,
+    wakeOffsetSeconds: wake,
+  });
+
+  it('launches once a slot at T+0 and nothing more until the wake-up, then fills the days from it', async () => {
+    const plan = await optimizeFull(args(3 * D));
+    expect(plan.wakeOffsetSeconds).toBe(wake);
+    for (const slot of plan.slots!) {
+      const [first, second] = slot.launches;
+      expect(first.launchAt).toBe(0);
+      expect(plan.choiceHistory[first.choice].atStartSeconds).toBe(H);
+      // Back an hour later, while the player sleeps: still a launch they see in the air through that night.
+      expect(first.nights).toBe(1);
+      expect(second.launchAt).toBe(4 * H);
+      for (const l of slot.launches.slice(1)) expect(awake(l.launchAt, wake)).toBe(true);
+      // 16 + 16 + 16 waking hours after the wake-up, the T+0 launch, and a bedtime launch each of the two whole
+      // nights.
+      expect(slot.launches).toHaveLength(1 + 48 + 2);
+    }
+  });
+
+  it('charges a ship sent at T+0 only for what it holds after the wake-up', async () => {
+    // A 10-hour ship sent at T+0 lands 6 hours after the wake-up: the slot has 10 of that day's waking hours left,
+    // ten one-hour launches it is too long to fit, so each slot flies one at T+0 and three days of 10-hour ships.
+    const plan = await optimizeFull(args(3 * D, 10));
+    for (const slot of plan.slots!) {
+      expect(slot.launches[0].launchAt).toBe(0);
+      expect(slot.launches[1].launchAt).toBe(10 * H);
+    }
+  });
+
+  it('flies only its T+0 launches doubled under a 2x window that closes before the wake-up', async () => {
+    const plan = await optimizeFull({ ...args(3 * D), eventWindowSeconds: 2 * H });
+    for (const slot of plan.slots!) {
+      slot.launches.forEach((l, i) => {
+        expect((plan.choiceHistory[l.choice].variant ?? 'normal') !== 'normal').toBe(i === 0);
+      });
     }
   });
 });

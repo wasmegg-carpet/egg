@@ -1220,19 +1220,12 @@ their regular schedule. Write `r = t + x` for time on that regular day. Its
 wake-ups are at `r = k D`, its waking windows `[k D, k D + W]` and its nights
 `[k D + W, (k + 1) D]`. The plan runs over `[x, x + H]` in `r`.
 
-- **The awake case, `0 <= x <= W`**, is what is modelled. The player is awake at
-  `t = 0` with `W - x` of the first waking window left, and every later day is a
-  whole one.
-- **The night case, `W < x < D`**, is not modelled yet: the player is up at
-  `t = 0` only to launch, and then sleeps the `D - x` left until the regular
-  wake-up. Until it is, `normalizeProblem` reads such an `x` as `W`, bedtime, the
-  latest awake instant, and so do `wakeOffsetSecondsOf` (`../sleep.ts`) and the
-  arena's `wakeOffsetOf`. This is a placeholder, and it is safe: under it the
-  first wake-up comes at `t = S` rather than at the real `t = D - x`, which is
-  earlier, and every block still charges a whole `S` for its first night. So a
-  plan for the clamped offset launches only when the player really is awake, and
-  holds each slot for at least as long as the flights do. It only wastes up to
-  `x - W` of the first morning.
+- **The awake case, `0 <= x <= W`.** The player is awake at `t = 0` with
+  `W - x` of the first waking window left, and every later day is a whole one.
+- **The night case, `W < x < D`** (below, "The night case"). The player is up
+  at `t = 0` only to launch: each slot may send one ship at that instant. Then
+  they sleep the `D - x` left until the regular wake-up, and every later day is a
+  whole one. `x = W` is bedtime, in the awake case.
 - **`x = 0`, or absent**, is the problem of sections 10 to 16 exactly (below).
 - **The 2x window** still opens at `t = 0` and closes at `t = E`, so in `r` it is
   `[x, x + E]`. It composes with the offset and needs nothing of its own.
@@ -1353,29 +1346,90 @@ front insertion and the regrouped attempts are skipped.
 plan to that at `x = 0` against an absent offset. The 40-seed measurement below
 holds the shipped solver to it against the revision before this section.
 
-**What the night case will need.** In `r` the plan then starts at `x`, inside
-the night `[W, D]`. The only awake instant before the first wake-up is `t = 0`
-itself.
+**The night case.** Write `F = D - x` for what is left of the night at `t = 0`.
+The awake case had a placeholder for this: an `x` past `W` was read as `W`. It
+was not safe, as this section once said it was. The clamped day's waking windows
+run `x - W` later than the real ones, so a launch near a clamped bedtime falls
+in the real night. It is gone from `normalizeProblem`, `wakeOffsetSecondsOf`
+(which now reads only a value of a day or more as 0) and the arena's
+`wakeOffsetOf`. The night is modelled at its real length. Up to `t = F` the only
+instant a launch can go up is `t = 0`. From `t = F` on, the plan is one that
+starts at a wake-up, over the horizon `H - F`, which sections 10 to 16 already
+solve. So the solver times everything after `F` on the regular day from that
+wake-up (`daySchedule`: `firstNightSeconds = F`, no busy block, horizon
+`H - F`). What is new is the launch at `t = 0`, one per slot.
 
-- **Verifier** (and the arena's `calendar.ts`). A launch at exactly `t = 0` is
-  admitted though its time of day is past bedtime.
-- **The first night** is `D - x`, shorter than `S`. A block over it as section 9
-  charges it, `waking + m S`, over-states the flight by `x - W`. That is safe, but
-  it costs launches. Exact would need either a first-night variant per option,
-  or a verifier and layout that read blocks against the real nights rather than
-  against `m S`. The second changes the meaning of a variant's `nights`.
-- **Capacity.** The first day has no waking seconds after `t = 0`. A launch at
-  `t = 0` takes the first night, and the nights are the ones ending by `x + H`, as
-  now.
-- **Layout.** The first segment is a zero-length window whose connector takes
-  off at `t = 0`. That is the awake case at `x = W` with a shorter first night,
-  which is why the clamp to `W` is the placeholder. The busy block is then the
-  whole first window: `u^(q)(1) = 1` off every fit row.
-- **Views.** A launch at `t = 0` belongs to a day 0 that is only that launch,
-  before the first wake-up at `t = D - x`.
-- **The placeholder itself:** the clamp in `normalizeProblem`, in
-  `wakeOffsetSecondsOf` and in the arena's `wakeOffsetOf`, which must change
-  together.
+_Why one variant per option at T+0, and not blocks read against real nights._
+The menu's variants charge `m` nights of `S` each, and a launch at `t = 0` flies
+through a first night of `F < S`. Reading a variant's block against real nights
+would keep the variant's waking charge, `max(d - m S, (m - 1) W)`. But a launch
+at `t = 0` needs `d - F - (m - 1) S` of it, which is more, so the variant would
+under-charge it and the MILP over-promise. A launch at `t = 0` has a fixed
+start, so what it takes from its slot is determined. So the menu holds each
+option once more as a **T+0 variant** (`startVariants` in `../sleep.ts`; the
+arena's own copy in `tests/arena/sleep.ts`), which charges exactly that:
+
+- `atStartSeconds` is `d`, the option's whole charge (the effort floor
+  included). The launch holds its slot from `t = 0` to its landing, `t = d`,
+  which must be inside the horizon. The verifier and the arena's checker read
+  the block as exactly that.
+- On the regular day from the first wake-up, its slot is next usable at the
+  first waking instant at or after its landing, `R` (`max(0, d - F)` after the
+  wake-up, rounded up to a wake-up when it lands in a night). Its `actualTime`
+  is the waking seconds before `min(R, H - F)`. Its `nights` are the whole
+  nights before that point which the slot's budget counts; a night the horizon
+  cuts is no part of the budget. A ship back before the wake-up takes nothing.
+- Its id gets a `~start` suffix, and `capacityVariants` doubles it like any
+  other option.
+
+These charges are exact, not a relaxation: every schedule with a launch at
+`t = 0` takes exactly them from the slot's waking seconds and nights. A variant
+charging fewer would over-promise; one per night count, as `sleepVariants`
+makes, would let the MILP pick a cheaper count than the launch can fly. The rest
+of the slot's rows treat it as a launch of those numbers starting at the first
+wake-up, which is when the slot sees it. The slot row and the night row count
+it, and the fit rows count it as an item, which is valid since it starts at a
+wake-up. As the window rows' first launch, it is an `event` or the `overhang`
+like any other.
+
+_What the model adds._
+- **Group key.** T+0 groups are keyed apart (`Group.atStart`).
+- **Dominance and copies.** Dominance, twins and copies stay within T+0 or
+  within the rest.
+- **Start row.** A new row `start_k`, `sum over T+0 classes n[c][k] <= 1`,
+  allows one launch at `t = 0` a slot. A slot flies one block at a time; only a
+  ship of zero charge could share the instant, and none has one.
+- **Charge.** A T+0 launch is charged its own seconds in `slot_k`, since its
+  start is known (`slotCharge`).
+- **Drops.** T+0 options are dropped without a night at the start, and when the
+  charge is past the horizon.
+- **The 2x window.** It closes at `E - F` on the regular day (`windowShape`).
+  When `E < F` it closes before the first wake-up, and only the T+0 launches go
+  up inside it, each its slot's last doubled launch. So every other doubled
+  option is dropped, and so is every T+0 `event` copy.
+- **Absent means unchanged.** `start_k` has no entries without a T+0 class, and
+  `Rows.end` drops it, so `x <= W` builds the matrix it did.
+
+_Layout._ A slot with a T+0 launch puts it at `t = 0` (`-F` on the layout's
+clock). It lays the rest out on the regular day from `R`: its whole days gone
+and the waking seconds of `R`'s day a busy block. That is the awake case's busy
+block, with its layout orders and its first-morning fixes (`layOutAround`). Its
+block in the layout is its landing, the longest of its class's groups. The
+balancing pass never moves it, and `settle` never swaps it with a later launch
+of equal numbers. The regrouped attempts run only in the awake case.
+
+_Verifier and arena._ Both admit a launch at exactly `t = 0`, to a microsecond,
+while the player is in the night, and no other launch in that night. A T+0
+variant may go up only there. Any other option may go up there too, with its
+usual block, which is longer than its flight. `tests/unit/wake-offset.spec.ts`
+holds the two checkers to the same verdict on random calendars, over offsets of
+the whole day, T+0 launches included.
+
+_What the player sees._ A ship sent at `t = 0` goes up while the player is
+going back to sleep. So `nightsFlown` counts that night for it, however soon it
+lands: the timeline marks it overnight (indigo) whenever it is in the air at all
+after `t = 0`. Slot loads read its block as its landing. `sinceWake`'s day 0 is
+that one instant, and day 1 starts at the first wake-up.
 
 **Measured.** Seeds 2000-2039, problems from the arena's own builder,
 `ARENA_WAKE` for the offset. Every plan was judged by the arena's evaluator and

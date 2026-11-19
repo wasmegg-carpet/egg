@@ -37,6 +37,10 @@ export interface Layout {
   classVariant: CapacityVariant[];
   classCap: number[];
   classCharge: number[];
+  // Whether the class goes up at T+0 in the night the plan starts in, and the most any of its groups then holds its
+  // slot from T+0 (SPEC.md section 17); false and 0 for every other class.
+  classAtStart: boolean[];
+  classAtStartBlock: number[];
   groupTotalBase: number;
   craftBase: number;
   // Score in units of theta: sigma in the 'oa' variant, and the raw score in 'scale', where theta is 1.
@@ -55,14 +59,28 @@ export type Variant = 'scale' | 'oa';
 // has 0 nights and is `normal`, and the classes are exactly the durations.
 function durationClasses(
   model: Model
-): Pick<Layout, 'classes' | 'classOf' | 'classSeconds' | 'classNights' | 'classVariant' | 'classCap' | 'classCharge'> {
+): Pick<
+  Layout,
+  | 'classes'
+  | 'classOf'
+  | 'classSeconds'
+  | 'classNights'
+  | 'classVariant'
+  | 'classCap'
+  | 'classCharge'
+  | 'classAtStart'
+  | 'classAtStartBlock'
+> {
   const classOf = new Array<number>(model.groups.length);
   const classSeconds: number[] = [];
   const classNights: number[] = [];
   const classVariant: CapacityVariant[] = [];
   const classCap: number[] = [];
   const classCharge: number[] = [];
-  const shared = new Map<number, Map<number, Map<CapacityVariant, number>>>();
+  const classAtStart: boolean[] = [];
+  const classAtStartBlock: number[] = [];
+  // Keyed by variant, and a launch at T+0 apart from the same numbers flown later (SPEC.md section 17).
+  const shared = new Map<number, Map<number, Map<string, number>>>();
   model.groups.forEach((grp, g) => {
     // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
@@ -70,7 +88,7 @@ function durationClasses(
     const byNights = grp.nights > 0 ? Math.floor(model.nightsPerSlot / grp.nights) : UNBOUNDED_PER_SLOT;
     // And by the window rows, in the waking seconds and nights they charge (SPEC.md sections 11 and 14).
     const byWindow =
-      grp.variant === 'overhang'
+      grp.variant === 'overhang' || grp.atStart
         ? 1
         : grp.variant === 'event'
           ? eventLaunches(grp.timeSeconds, grp.nights, {
@@ -89,16 +107,20 @@ function durationClasses(
         byNightsClass = new Map();
         bySeconds.set(grp.nights, byNightsClass);
       }
-      let c = byNightsClass.get(grp.variant);
+      const key = grp.atStart ? `${grp.variant}@start` : grp.variant;
+      let c = byNightsClass.get(key);
       if (c === undefined) {
         c = classSeconds.length;
-        byNightsClass.set(grp.variant, c);
+        byNightsClass.set(key, c);
         classSeconds.push(grp.timeSeconds);
         classNights.push(grp.nights);
         classVariant.push(grp.variant);
         classCap.push(Math.min(byTime, byNights, byWindow));
         classCharge.push(slotCharge(model, grp));
+        classAtStart.push(grp.atStart);
+        classAtStartBlock.push(grp.atStartBlock);
       }
+      classAtStartBlock[c] = Math.max(classAtStartBlock[c], grp.atStartBlock);
       classOf[g] = c;
     } else {
       classOf[g] = classSeconds.length;
@@ -107,9 +129,21 @@ function durationClasses(
       classVariant.push(grp.variant);
       classCap.push(Math.max(0, Math.min(grp.cap, byTime, byNights, byWindow, UNBOUNDED_PER_SLOT)));
       classCharge.push(slotCharge(model, grp));
+      classAtStart.push(grp.atStart);
+      classAtStartBlock.push(grp.atStartBlock);
     }
   });
-  return { classes: classSeconds.length, classOf, classSeconds, classNights, classVariant, classCap, classCharge };
+  return {
+    classes: classSeconds.length,
+    classOf,
+    classSeconds,
+    classNights,
+    classVariant,
+    classCap,
+    classCharge,
+    classAtStart,
+    classAtStartBlock,
+  };
 }
 
 // What `slot_k` charges one launch of `grp`. Its waking seconds, the least its block holds wherever it goes up;
@@ -117,9 +151,14 @@ function durationClasses(
 // starts no later than the window's last waking instant can be more (SPEC.md section 14). Rounded down by
 // `WINDOW_TOL` so float error never makes it more than that least, and never below the seconds themselves: without
 // a sleep window, or for a launch the window does not constrain, it is the seconds exactly.
-function slotCharge(model: Model, grp: Pick<Model['groups'][number], 'timeSeconds' | 'nights' | 'variant'>): number {
+// A launch at T+0 in the night starts at a known instant, and its seconds are exactly what it holds after the first
+// wake-up (SPEC.md section 17), so it is charged them whatever its variant.
+function slotCharge(
+  model: Model,
+  grp: Pick<Model['groups'][number], 'timeSeconds' | 'nights' | 'variant' | 'atStart'>
+): number {
   const day = model.day;
-  if (day === null || grp.variant === 'normal') return grp.timeSeconds;
+  if (day === null || grp.variant === 'normal' || grp.atStart) return grp.timeSeconds;
   const block = blockSeconds(grp.timeSeconds, grp.nights, day);
   const least = leastWakingIn(block, model.eventWindowLatest, day.wakingSeconds, day.wakeOffsetSeconds) - WINDOW_TOL;
   return least > grp.timeSeconds ? least : grp.timeSeconds;
@@ -375,6 +414,16 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
       if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classNights[c]);
     }
     rows.end(-INF, model.eventWindowNights);
+  }
+  // At most one launch a slot at T+0, when the plan starts in the night: the one instant before the first wake-up the
+  // player is up to launch, and a slot flies one block at a time (SPEC.md section 17). Without such a night no class
+  // goes up at T+0, the row has no entries, and `Rows.end` drops it.
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`start_k${k}`);
+    for (let c = 0; c < layout.classes; c++) {
+      if (layout.classAtStart[c]) rows.add(nCol(layout, c, k), 1);
+    }
+    rows.end(-INF, 1);
   }
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`overhang_k${k}`);

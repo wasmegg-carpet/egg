@@ -23,6 +23,11 @@ export interface Group {
   // Which capacity it flies at; `normal` for every launch of a problem without an event window. See SPEC.md
   // section 11.
   variant: CapacityVariant;
+  // Whether it goes up at T+0 in the night the plan starts in (`LaunchOption.atStartSeconds`, SPEC.md section 17),
+  // and then the most any member holds its slot from T+0, its charge (`atStartSeconds`); false and 0 for every other
+  // launch.
+  atStart: boolean;
+  atStartBlock: number;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -94,6 +99,8 @@ interface Candidate {
   timeSeconds: number;
   nights: number;
   variant: CapacityVariant;
+  atStart: boolean;
+  atStartBlock: number;
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
@@ -130,6 +137,9 @@ function cmpKey(a: Candidate, b: Candidate): number {
   // An `event` and an `overhang` copy of one launch are identical in every number above and below: merged, one
   // of the two rows holding the window would lose its column. Without a window every variant is `normal`.
   if (a.variant !== b.variant) return VARIANT_RANK[a.variant] - VARIANT_RANK[b.variant];
+  // A launch at T+0 and the same numbers flown later spend different budgets (the start row). Without a night at
+  // the start no launch goes up at T+0, and this never decides.
+  if (a.atStart !== b.atStart) return a.atStart ? 1 : -1;
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
 
@@ -225,6 +235,8 @@ export function maxLaunches(capacity: number, unitCost: number): number {
 export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number, nightsPerSlot: number): boolean {
   if (grp.timeSeconds > 0 && maxLaunches(timeCapacitySeconds, grp.timeSeconds) <= UNBOUNDED_PER_SLOT) return true;
   if (grp.variant === 'overhang') return true;
+  // The start row holds a launch at T+0 to one a slot (SPEC.md section 17).
+  if (grp.atStart) return true;
   return (
     grp.nights > 0 && Number.isFinite(nightsPerSlot) && Math.floor(nightsPerSlot / grp.nights) <= UNBOUNDED_PER_SLOT
   );
@@ -238,6 +250,8 @@ function dominates(taker: Group, given: Group): boolean {
   // Only within a variant. A doubled copy costs exactly what its normal twin does and yields twice as much, so
   // across variants it would prune the twin, though the window rows cap how often it may fly. SPEC.md section 11.
   if (taker.variant !== given.variant) return false;
+  // Nor across T+0 and later: a T+0 launch spends the start row, and is timed from T+0 (SPEC.md section 17).
+  if (taker.atStart !== given.atStart) return false;
   if (taker.timeSeconds > given.timeSeconds) return false;
   // Nights are a budget of their own: without this an overnight variant, which charges fewer waking seconds,
   // would prune its own daytime twin.
@@ -286,6 +300,7 @@ function sameFlight(a: Group, b: Group, factor: number): boolean {
   return (
     a.timeSeconds === b.timeSeconds &&
     a.nights === b.nights &&
+    a.atStart === b.atStart &&
     same(a.fuelFractions, b.fuelFractions, 1) &&
     same(a.yieldByItem, b.yieldByItem, factor) &&
     same(a.legendaryByTarget, b.legendaryByTarget, factor)
@@ -441,11 +456,16 @@ export function buildModel(raw: PlanProblem): Model {
   const slots = problem.slots;
   const day = problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null;
   // Without a sleep window, the window itself and no night (SPEC.md section 11); with one, what lies before its last
-  // waking instant (sections 13 and 14), on the regular day when the plan starts after wake-up (section 17).
+  // waking instant (sections 13 and 14), on the regular day when the plan starts after wake-up (section 17). Starting
+  // in the night, the regular day starts at the next wake-up, `firstNight` in: what is left of the window after it,
+  // and when it closes before then, nothing but the launches at T+0 goes up inside it.
+  const firstNight = day?.firstNightSeconds ?? 0;
   const shape =
     day === null
       ? { latest: window, nights: 0, waking: window, partial: window }
-      : windowShape(window, day.wakingSeconds, day.wakeOffsetSeconds);
+      : firstNight > 0 && window < firstNight
+        ? { latest: 0, nights: 0, waking: 0, partial: 0 }
+        : windowShape(window - firstNight, day.wakingSeconds, day.wakeOffsetSeconds);
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {
@@ -477,6 +497,14 @@ export function buildModel(raw: PlanProblem): Model {
     if (!Object.prototype.hasOwnProperty.call(VARIANT_RANK, variant)) return;
     if (variant !== 'normal' && !(window > 0)) return;
     if (variant === 'event' && (opt.actualTime > shape.waking || nights > shape.nights)) return;
+    // A launch at T+0 exists only when the plan starts in the night, and has to be back by the horizon (SPEC.md
+    // section 17). A malformed charge falls out with it.
+    const atStart = opt.atStartSeconds !== undefined;
+    const atStartBlock = atStart ? opt.atStartSeconds! : 0;
+    if (atStart && (!(firstNight > 0) || !(atStartBlock >= 0) || atStartBlock > day!.planHorizonSeconds)) return;
+    // A window that closes before the first wake-up has nothing doubled in it but the launches at T+0, each of which
+    // is its slot's last doubled launch, an `overhang`.
+    if (firstNight > 0 && window < firstNight && variant !== 'normal' && (!atStart || variant === 'event')) return;
 
     const yieldEntries: Entry[] = [];
     for (const [item, qty] of opt.yieldVector) {
@@ -508,7 +536,7 @@ export function buildModel(raw: PlanProblem): Model {
       variant === 'event' && (opt.actualTime > 0 || nights > 0)
         ? slots * eventLaunches(opt.actualTime, nights, shape)
         : UNBOUNDED_GROUP,
-      variant === 'overhang' ? slots : UNBOUNDED_GROUP,
+      variant === 'overhang' || atStart ? slots : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
     if (cap < 1) return;
@@ -519,6 +547,8 @@ export function buildModel(raw: PlanProblem): Model {
       timeSeconds: opt.actualTime,
       nights,
       variant,
+      atStart,
+      atStartBlock,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -531,7 +561,9 @@ export function buildModel(raw: PlanProblem): Model {
   for (let i = 0; i < candidates.length; i++) {
     const cand = candidates[i];
     if (i > 0 && cmpKey(candidates[i - 1], cand) === 0) {
-      groups[groups.length - 1].members.push(cand.index);
+      const into = groups[groups.length - 1];
+      into.members.push(cand.index);
+      into.atStartBlock = Math.max(into.atStartBlock, cand.atStartBlock);
       continue;
     }
     const yieldByItem = new Array<number>(items.length).fill(0);
@@ -546,6 +578,8 @@ export function buildModel(raw: PlanProblem): Model {
       timeSeconds: cand.timeSeconds,
       nights: cand.nights,
       variant: cand.variant,
+      atStart: cand.atStart,
+      atStartBlock: cand.atStartBlock,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,

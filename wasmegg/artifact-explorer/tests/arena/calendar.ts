@@ -16,6 +16,8 @@ export interface CalendarMenuEntry {
   actualTime: number;
   nights?: number;
   variant?: string;
+  // A launch at T+0 in the night the plan starts in (`startVariants`): its charge from T+0.
+  atStartSeconds?: number;
 }
 
 // The day the instance was stated with, as the harness built it, not as the candidate read it. Without a sleep
@@ -88,11 +90,16 @@ export function calendarFaults(
       if (at < free - TIME_TOL) {
         faults.push(`${where} (${entry.id}) at ${at}s starts before the slot is free at ${free}s`);
       }
-      // On the player's own day, which started `awakeFor` before the plan did.
+      // On the player's own day, which started `awakeFor` before the plan did. A plan starting in the night has the
+      // player up at T+0 to launch, at that instant only.
       const sinceWake = awakeFor + at;
       const dayIndex = Math.floor((sinceWake + TIME_TOL) / DAY_SECONDS);
       const timeOfDay = sinceWake - dayIndex * DAY_SECONDS;
-      if (timeOfDay > waking + TIME_TOL) {
+      const upToLaunch = awakeFor > waking && Math.abs(at) <= TIME_TOL;
+      if (entry.atStartSeconds !== undefined && !upToLaunch) {
+        faults.push(`${where} (${entry.id}) at ${at}s is a T+0 launch, flown elsewhere`);
+      }
+      if (timeOfDay > waking + TIME_TOL && !upToLaunch) {
         faults.push(
           `${where} (${entry.id}) at ${at}s launches ${timeOfDay}s into day ${dayIndex}, asleep after ${waking}s`
         );
@@ -106,7 +113,8 @@ export function calendarFaults(
         if (ids.has(copy))
           faults.push(`${where} (${entry.id}) at ${at}s flies 1x inside the 2x window, as ${copy} could`);
       }
-      free = Math.max(free, at) + entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds;
+      // A launch at T+0 holds its slot to its landing; every other launch for its waking seconds and its nights.
+      free = Math.max(free, at) + (entry.atStartSeconds ?? entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds);
     });
     if (free > day.horizonSeconds + TIME_TOL) {
       faults.push(`slot ${k} is busy until ${free}s, past the ${day.horizonSeconds}s horizon`);

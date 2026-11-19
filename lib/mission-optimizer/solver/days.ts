@@ -16,7 +16,12 @@ export interface DaySchedule {
   horizonSeconds: number;
   // The plan's own horizon, `SleepWindow.horizonSeconds`, which the verifier reads.
   planHorizonSeconds: number;
+  // The busy block: the waking seconds of the first window spent before the plan starts. The wake offset when the
+  // player is awake at the start, 0 when they are in the night.
   wakeOffsetSeconds: number;
+  // When the plan starts in the night: what is left of it, `D - x` (SPEC.md section 17), and the schedule is the
+  // regular day from the wake-up that ends it, which is `firstNightSeconds` into the plan. 0 otherwise.
+  firstNightSeconds: number;
   nights: number;
   // Waking windows the horizon touches, a partial trailing one included: `ceil(H / D)`.
   windows: number;
@@ -30,8 +35,12 @@ export interface DaySchedule {
 // wake-up: the busy block's seconds join the waking capacity, and its horizon is the plan's plus the offset.
 export function daySchedule(sleep: SleepWindow, wakingCapacity: number, nightsPerSlot: number): DaySchedule {
   const wakingSeconds = DAY_SECONDS - sleep.sleepSeconds;
-  const offset = sleep.wakeOffsetSeconds ?? 0;
-  const horizonSeconds = sleep.horizonSeconds + offset;
+  const wake = sleep.wakeOffsetSeconds ?? 0;
+  // In the night at the start, the schedule starts at the next wake-up, with no busy block.
+  const firstNightSeconds = wake > wakingSeconds ? DAY_SECONDS - wake : 0;
+  const offset = firstNightSeconds > 0 ? 0 : wake;
+  const horizonSeconds =
+    firstNightSeconds > 0 ? Math.max(0, sleep.horizonSeconds - firstNightSeconds) : sleep.horizonSeconds + offset;
   const nights = Math.max(0, Math.min(nightsPerSlot, Math.floor(horizonSeconds / DAY_SECONDS)));
   const tail = Math.min(
     wakingCapacity + offset - nights * wakingSeconds,
@@ -44,6 +53,7 @@ export function daySchedule(sleep: SleepWindow, wakingCapacity: number, nightsPe
     horizonSeconds,
     planHorizonSeconds: sleep.horizonSeconds,
     wakeOffsetSeconds: offset,
+    firstNightSeconds,
     nights,
     windows: Math.ceil(horizonSeconds / DAY_SECONDS),
     tailSeconds: Math.max(0, tail),

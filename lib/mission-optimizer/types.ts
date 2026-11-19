@@ -28,6 +28,11 @@ export interface LaunchOption {
   // `PlanProblem.nightsPerSlot` (by `sleepVariants` in `sleep.ts`, and by the arena's own copy), in which
   // case `actualTime` counts waking seconds. The solver budgets it per slot (`solver/SPEC.md` section 9).
   nights?: number;
+  // Present only on a variant flown at the plan's start while the player is in the night (a wake offset past the
+  // waking window): the option's whole charge, `max(rawTime, launch period)`, from T+0. Such a launch goes up at
+  // T+0 and nowhere else; `actualTime` and `nights` are then the waking seconds and whole nights it holds after
+  // the first wake-up (`startVariants` in `sleep.ts`, and the arena's own copy; `solver/SPEC.md` section 17).
+  atStartSeconds?: number;
   // Absent is `normal`. Set only alongside `PlanProblem.eventWindowSeconds` (by `capacityVariants` in
   // `capacity.ts`, and by the arena's own copy), in which case the doubled variants carry twice the drops.
   variant?: CapacityVariant;
@@ -73,6 +78,9 @@ export interface LaunchSolution {
   // The capacity these launches fly at. Absent on a plan made without an event window; on one made with it,
   // `event` and `overhang` are doubled launches (the same mission can appear once per variant) and `normal` is not.
   variant?: CapacityVariant;
+  // Present when these launches go up at T+0 in the night (`LaunchOption.atStartSeconds`): the seconds from T+0
+  // each holds its slot at least.
+  atStartSeconds?: number;
   target: string;
   targetAfxId: ei.ArtifactSpec.Name;
   // total count of single-ship missions of this type across all three slots

@@ -2,7 +2,7 @@
 // Pinned because it is part of the goalpost: a variant rule that drifted would move every sleep-on score.
 
 import { describe, expect, it } from 'vitest';
-import { DAY_SECONDS, sleepCapacity, sleepVariants, wakeOffsetOf } from './sleep';
+import { DAY_SECONDS, sleepCapacity, sleepVariants, startVariants, wakeOffsetOf } from './sleep';
 
 const H = 3600;
 
@@ -137,12 +137,31 @@ describe('a wake offset', () => {
     }
   });
 
-  it('is read against the waking window: none without sleep, and bedtime past it until the night case lands', () => {
+  it('is none without sleep, and any time of day with it, the night included', () => {
     expect(wakeOffsetOf(5 * H, 0)).toBe(0);
     expect(wakeOffsetOf(0, S)).toBe(0);
     expect(wakeOffsetOf(5 * H, S)).toBe(5 * H);
-    expect(wakeOffsetOf(20 * H, S)).toBe(16 * H);
+    expect(wakeOffsetOf(20 * H, S)).toBe(20 * H);
     expect(() => wakeOffsetOf(DAY_SECONDS, S)).toThrow(/wake offset/);
     expect(() => wakeOffsetOf(Infinity, S)).toThrow(/wake offset/);
+  });
+});
+
+describe('a plan that starts in the night', () => {
+  const S = 8 * H;
+  it('budgets from the first wake-up, the night it starts in left out', () => {
+    // Twenty hours awake, three days: four hours of night, then 16 + 16 + 16 waking hours and two whole nights.
+    expect(sleepCapacity(3 * DAY_SECONDS, S, 20 * H)).toEqual({ wakingSecondsPerSlot: 48 * H, nightsPerSlot: 2 });
+    // A horizon that ends before the wake-up has nothing in it but T+0.
+    expect(sleepCapacity(3 * H, S, 20 * H)).toEqual({ wakingSecondsPerSlot: 0, nightsPerSlot: 0 });
+  });
+
+  it('offers each launch at T+0, holding its slot to its landing and charging what comes after the wake-up', () => {
+    const variants = startVariants([opt(1), opt(10), opt(24), opt(100)], S, 20 * H, 3 * DAY_SECONDS);
+    expect(variants.map(v => [v.id, v.actualTime / H, v.nights, v.atStartSeconds! / H])).toEqual([
+      ['x~start', 0, 0, 1],
+      ['x~start', 6, 0, 10],
+      ['x~start', 16, 1, 24],
+    ]);
   });
 });

@@ -695,6 +695,8 @@ export function timelineOf(model: Model): SleepWindow {
         sleepSeconds: day.sleepSeconds,
         horizonSeconds: day.planHorizonSeconds,
         ...(day.wakeOffsetSeconds > 0 && { wakeOffsetSeconds: day.wakeOffsetSeconds }),
+        // Starting in the night, the offset that put it there (SPEC.md section 17).
+        ...(day.firstNightSeconds > 0 && { wakeOffsetSeconds: DAY_SECONDS - day.firstNightSeconds }),
       }
     : { sleepSeconds: 0, horizonSeconds: model.timeCapacitySeconds };
 }
@@ -805,8 +807,17 @@ export function layOutPlan(
   // `shift` seconds before it (SPEC.md section 17); the calendar, the verifier and the window are in the plan's own
   // seconds. `planAt` is a launch's plan time, computed as the calendar writes it, so every comparison against the
   // window here is the one the verifier makes. Without an offset the two clocks are one.
-  const shift = day?.wakeOffsetSeconds ?? 0;
+  // Starting in the night (section 17), the regular day is the one from the first wake-up, `firstNight` into the plan,
+  // and the launches at T+0 sit at `-firstNight` on it; then `shift` is negative.
+  const busy = day?.wakeOffsetSeconds ?? 0;
+  const firstNight = day?.firstNightSeconds ?? 0;
+  const shift = busy - firstNight;
   const planAt = (l: ClassLaunch) => l.launchAt - shift;
+  // Where a launch's block ends on the layout's clock: a launch at T+0 holds its slot to its landing, the longest of
+  // its class's; every other launch its block.
+  const isStart = (cls: number) => layout.classAtStart[cls];
+  const blockEnd = (l: ClassLaunch, slotCtx: SlotContext) =>
+    l.launchAt + (isStart(l.cls) ? layout.classAtStartBlock[l.cls] : blockOf(l.cls, slotCtx));
   const current = counts.slice();
   const stats: LayoutStats = {
     launchesTrimmed: 0,
@@ -895,7 +906,7 @@ export function layOutPlan(
     const isDoubled = (c: number) => layout.classVariant[c] !== 'normal';
     const byKey = new Map<string, number[]>();
     launches.forEach((l, i) => {
-      const key = `${layout.classSeconds[l.cls]}/${layout.classNights[l.cls]}`;
+      const key = `${layout.classSeconds[l.cls]}/${layout.classNights[l.cls]}${isStart(l.cls) ? '/start' : ''}`;
       const at = byKey.get(key);
       if (at) at.push(i);
       else byKey.set(key, [i]);
@@ -1027,6 +1038,8 @@ export function layOutPlan(
       wakingSeconds: layout.classSeconds[l.cls],
       nights: layout.classNights[l.cls],
       doubled: layout.classVariant[l.cls] !== 'normal',
+      // The longest landing among the class's groups: one block for them all (section 17).
+      ...(isStart(l.cls) && { atStartSeconds: layout.classAtStartBlock[l.cls] }),
     }));
   const bySlot: ClassLaunch[][] = [];
   // A calendar that verified without the 2x window (`solveWith`'s last resort, SPEC.md section 16), flown as it is
@@ -1091,10 +1104,51 @@ export function layOutPlan(
     return timeline;
   };
 
+  // A slot's launches laid out around its launch at T+0, when the plan starts in the night and the slot has one
+  // (SPEC.md section 17). That launch goes up at T+0 and holds the slot to the first waking instant after its
+  // landing: whole days of the regular day, and then the waking seconds of the next one it lands in. So the rest of
+  // the slot is laid out on the regular day from there, those days gone and those seconds a busy block, as a plan
+  // starting after wake-up is (section 17's awake case), and put back on the layout's clock. A slot holding more
+  // than one, which no plan the start row admits does, or one the days cannot hold, loses it through `drop`.
+  const layOutAround = (want: readonly number[], slotCtx: SlotContext, how: SlotHow): SlotLaid | null => {
+    const starts = want.flatMap((n, c) => (n > 0 && isStart(c) ? Array<number>(n).fill(c) : []));
+    if (starts.length === 0) return layOutSlot(want, slotCtx, how);
+    const rest = want.slice();
+    for (const c of starts) rest[c]--;
+    const c0 = starts[0];
+    for (const c of starts.slice(1)) drop([c]);
+    const d = slotCtx.day;
+    const m = slotCtx.classNights[c0];
+    const held = slotCtx.classSeconds[c0] - m * d.wakingSeconds;
+    if (m > d.nights || (m === d.nights && held > d.tailSeconds + LAYOUT_TOL)) {
+      drop([c0]);
+      return layOutSlot(rest, slotCtx, how);
+    }
+    const after: DaySchedule = {
+      ...d,
+      horizonSeconds: d.horizonSeconds - m * DAY_SECONDS,
+      nights: d.nights - m,
+      windows: Math.max(0, d.windows - m),
+      wakeOffsetSeconds: Math.max(0, held),
+    };
+    const laid = layOutSlot(rest, { ...slotCtx, day: after }, how);
+    if (laid === null) return null;
+    const placed = laid.placed.slice();
+    placed[c0]++;
+    return {
+      ...laid,
+      placed,
+      launches: [
+        { cls: c0, launchAt: -firstNight },
+        ...laid.launches.map(l => ({ ...l, launchAt: l.launchAt + m * DAY_SECONDS })),
+      ],
+    };
+  };
+
   const runSlot = (slotCtx: SlotContext, k: number, how: SlotHow) => {
     let want = demand[k];
     for (;;) {
-      const laid = layOutSlot(want, slotCtx, how);
+      const laid = layOutAround(want, slotCtx, how);
       if (laid === null) return null;
       const launches = promote(settle(how.regroup ? regroup(laid.launches, slotCtx) : laid.launches));
       if (verify(timedOf(launches), sleep, window) === null) return { launches, conns: laid.conns, heads: laid.heads };
@@ -1167,17 +1221,18 @@ export function layOutPlan(
   // where launches go, never what the plan flies. The two slots are promoted again, since a launch can now go up
   // inside the window where it did not, or be the slot's last there (SPEC.md section 12).
   if (ctx !== null && !given) {
-    // An empty slot is free from the plan's start.
+    // An empty slot is free from the plan's start, or from the first wake-up when it starts in the night.
     const endOf = (launches: readonly ClassLaunch[]) => {
       const last = launches[launches.length - 1];
-      return last ? wakingFrom(last.launchAt + blockOf(last.cls, ctx), ctx.day) : shift;
+      return last ? wakingFrom(blockEnd(last, ctx), ctx.day) : busy;
     };
     const total = bySlot.reduce((a, launches) => a + launches.length, 0);
     for (let moves = 0; moves < total * model.slots; moves++) {
       const ends = bySlot.map(endOf);
       const from = ends.indexOf(Math.max(...ends));
       const moving = bySlot[from][bySlot[from].length - 1];
-      if (!moving) break;
+      // A launch at T+0 goes up at T+0 or not at all, so a slot that ends with one has nothing to give.
+      if (!moving || isStart(moving.cls)) break;
       const left = endOf(bySlot[from].slice(0, -1));
       let to = -1;
       let best = Infinity;

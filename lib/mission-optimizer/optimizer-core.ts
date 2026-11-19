@@ -5,7 +5,7 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { capacityVariants, eventWindowSecondsOf } from './capacity';
-import { sleepCapacity, sleepSecondsOf, sleepVariants, wakeOffsetSecondsOf } from './sleep';
+import { sleepCapacity, sleepSecondsOf, sleepVariants, startVariants, wakeOffsetSecondsOf } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
 import {
@@ -45,8 +45,9 @@ export interface OptimizeArgs {
   // Seconds since the player last woke up, now: the plan starts that far into a waking day of the regular schedule
   // `sleepSeconds` sets, so the first waking window has that much less left, and every later day is a whole one
   // (`solver/SPEC.md` section 17). Absent or 0 starts the plan at wake-up, as it always did; ignored without
-  // `sleepSeconds`. Past the waking window (the player is up in the night) is not modelled yet and reads as
-  // bedtime (`wakeOffsetSecondsOf`).
+  // `sleepSeconds`. Past the waking window the player is up in the night, only to launch: each slot may send one
+  // ship at T+0, and the next launches wait for the wake-up `86400 - wakeOffsetSeconds` in (`startVariants`). A
+  // day or more is not a regular schedule and reads as 0 (`wakeOffsetSecondsOf`).
   wakeOffsetSeconds?: number;
   // Seconds of a 2x mission capacity event left, starting now. Absent or 0 is no event. Present, the
   // menu gains the doubled variants (`capacity.ts`), capped at `MAX_DOUBLE_CAPACITY_SECONDS`, and the window
@@ -79,14 +80,19 @@ const CLOCK_TOL = 1e-6;
 // goes to bed is not. This is what the player sees, and it can differ from the night count of the variant the
 // solver budgeted the launch as: a re-timed or folded launch can land a night early, and a daytime one can go up
 // before bed and land in the night (`solver/SPEC.md` section 14). Bedtimes fall on the regular day, `wakeOffset`
-// seconds ahead of the plan's clock (section 17).
+// seconds ahead of the plan's clock (section 17). A ship that goes up asleep, which only a launch at T+0 in the
+// night the plan starts in does, is in the air through that night too, however soon it lands: the player sends it
+// on the way back to sleep, and it is out while they are.
 export function nightsFlown(launchAt: number, flightSeconds: number, sleepSeconds: number, wakeOffset = 0): number {
   if (!(sleepSeconds > 0)) return 0;
   const bedtime = DAY_SECONDS - sleepSeconds;
   const at = launchAt + wakeOffset;
   const first = Math.ceil((at - CLOCK_TOL - bedtime) / DAY_SECONDS);
   const last = Math.ceil((at + flightSeconds - CLOCK_TOL - bedtime) / DAY_SECONDS) - 1;
-  return Math.max(0, last - first + 1);
+  // Read as the verifier reads it, so a time a hair under a wake-up counts as the wake-up.
+  const asleep =
+    at - Math.floor((at + CLOCK_TOL) / DAY_SECONDS) * DAY_SECONDS > bedtime + CLOCK_TOL && flightSeconds > 0 ? 1 : 0;
+  return asleep + Math.max(0, last - first + 1);
 }
 
 // The first instant at or after `t` the player is awake: `t` itself, or the next wake-up when `t` is in a night.
@@ -113,12 +119,13 @@ export function slotSummariesOfCalendar(
   wakeOffset = 0
 ): SlotSummary[] {
   if (calendar.every(launches => launches.length === 0)) return [];
+  // A launch at T+0 in the night holds its slot to its landing (`LaunchOption.atStartSeconds`).
+  const blockOf = (launch: CalendarLaunch) =>
+    options[launch.option].atStartSeconds ?? launch.wakingSeconds + launch.nights * sleepSeconds;
   return calendar.map(launches => {
     const last = launches[launches.length - 1];
     return {
-      loadSeconds: last
-        ? awakeFrom(last.launchAt + last.wakingSeconds + last.nights * sleepSeconds, sleepSeconds, wakeOffset)
-        : 0,
+      loadSeconds: last ? awakeFrom(last.launchAt + blockOf(last), sleepSeconds, wakeOffset) : 0,
       rawLoadSeconds: launches.reduce((total, launch) => total + options[launch.option].rawTime, 0),
       launches: launches.map(launch => {
         const choice = choiceOf.get(launch.option);
@@ -154,8 +161,14 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // The event window, likewise: doubled variants of whatever the sleep split produced, so a doubled launch keeps
   // its nights and its waking seconds. Without one the menu passes through untouched.
   const eventWindowSeconds = eventWindowSecondsOf(args.eventWindowSeconds);
+  // Starting in the night, each option also as a launch at T+0 (`startVariants`); none otherwise.
   const options = capacityVariants(
-    capacity ? sleepVariants(args.options, sleepSeconds) : args.options,
+    capacity
+      ? [
+          ...sleepVariants(args.options, sleepSeconds),
+          ...startVariants(args.options, sleepSeconds, wakeOffsetSeconds, args.timeCapacityPerSlot),
+        ]
+      : args.options,
     eventWindowSeconds
   );
 
@@ -197,8 +210,9 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // is still a launch, paid for with its night. Dropping it would silently turn that launch into none.
   const feasibleOptions = [...options].filter(o => {
     const nights = o.nights ?? 0;
+    // A launch at T+0 that is back before the first wake-up takes no waking time either, and is still a launch.
     return (
-      (ZERO_TOL < o.actualTime || nights > 0) &&
+      (ZERO_TOL < o.actualTime || nights > 0 || o.atStartSeconds !== undefined) &&
       o.actualTime <= S &&
       nights <= nightsPerSlot &&
       axes.every(ax => fuelCostOnAxis(o, ax) <= ax.capacity) &&
@@ -324,6 +338,7 @@ function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number
       actualTime: opt.actualTime,
       ...(opt.nights !== undefined && { nights: opt.nights }),
       ...(opt.variant !== undefined && { variant: opt.variant }),
+      ...(opt.atStartSeconds !== undefined && { atStartSeconds: opt.atStartSeconds }),
       target: opt.target ?? '',
       targetAfxId: opt.targetAfxId,
       numShipsLaunched: k,
