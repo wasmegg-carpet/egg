@@ -1377,5 +1377,50 @@ itself.
   `wakeOffsetSecondsOf` and in the arena's `wakeOffsetOf`, which must change
   together.
 
-**Measured.** See the addendum to the review's evaluation (eval/REPORT.md,
-"Wake offset") for the full tables.
+**Measured.** Seeds 2000-2039, problems from the arena's own builder,
+`ARENA_WAKE` for the offset. Every plan was judged by the arena's evaluator and
+`calendarFaults`, cores pinned. Identity first. At `x = 0`, under no sleep or
+window, 8 hours of sleep, the 48-hour window, and 8 hours with the window
+`inside` and `straddle-under`, every seed gave the same allocation, calendar
+(options and launch times), reported joint and `layoutStats` as the revision
+before this section, in every run. The time was within noise. With 8 hours of
+sleep alone, the sum over three runs each was 57.3 s against 59.2 s, per-seed
+median ratio 1.03, while the same code's own runs spread from 56 to 66 s.
+
+With an offset (the gap is the plan's promise less what the judge delivered,
+mean over the 39 scoring seeds; time is the sum of one run against the median
+of the `x = 0` runs):
+
+| regime         | x   | C0/C1 | mean log10 | vs x = 0 | gap    | gap > 0.02 | time s (x = 0) |
+| -------------- | --- | ----- | ---------- | -------- | ------ | ---------- | -------------- |
+| 8 h            | 0   | 0     | -9.1056    |          | 0.0080 | 4          | 61.6           |
+| 8 h            | 4   | 0     | -9.1059    | -0.0003  | 0.0087 | 7          | 56.2           |
+| 8 h            | 12  | 0     | -9.1072    | -0.0016  | 0.0101 | 7          | 53.9           |
+| 8 h            | 16  | 0     | -9.1080    | -0.0024  | 0.0105 | 8          | 55.1           |
+| 8 h, inside    | 0   | 0     | -8.5624    |          | 0.0103 | 9          | 176.1          |
+| 8 h, inside    | 4   | 0     | -8.5792    | -0.0168  | 0.0268 | 10         | 176.2          |
+| 8 h, inside    | 12  | 0     | -8.5644    | -0.0020  | 0.0125 | 9          | 188.0          |
+| 8 h, inside    | 16  | 0     | -8.5585    | +0.0038  | 0.0064 | 6          | 184.1          |
+| 8 h, straddle  | 0   | 0     | -8.4006    |          | 0.0244 | 12         | 201.7          |
+| 8 h, straddle  | 4   | 0 (1) | -8.3955    | +0.0051  | 0.0181 | 7          | 204.4          |
+| 8 h, straddle  | 12  | 0     | -8.3897    | +0.0109  | 0.0110 | 7          | 212.3          |
+| 8 h, straddle  | 16  | 0     | -8.3881    | +0.0125  | 0.0092 | 6          | 234.2          |
+
+The one mark is not a fault: the arena's packer was undecided within its node
+budget on seed 2021 (C1-inconclusive), and that plan's calendar verified. The
+one gap over 0.02 is seed 2037 with 4 hours awake and the 48-hour window: 0.44,
+an overnight ship the layout trims and a doubled one it demotes. That seed loses
+0.36 under straddle at `x = 0` already. Without it the mean is 0.016. Quality
+against `x` is what the capacity says. A horizon of whole days has the same
+waking hours and nights at every `x`, cut differently, and sleep alone loses
+0.002 log10 at most. With the window, 16 hours awake does better than none: it
+lines bedtime, a launch instant, up with the window's start. But it also gets
+the regrouped attempts, which `x = 0` does not, and its gap is the smallest.
+That suggests the regrouped attempts would help at `x = 0` too, which this
+section does not change. Planned above `x = 0`'s plan on at most 10 seeds per
+regime: a different matrix steers a node-limited search elsewhere. Time is
+within about 5% except with the window from bedtime, which is +16% under
+straddle: the two extra attempts, on every slot with a doubled launch.
+`ARENA_SLEEP=8 ARENA_WINDOW=inside ARENA_WAKE=12 pnpm arena` (smoke) had no C0 or
+C1 failure, two soft violations (A3-menu 0.004 nats, M2-projection 0.011 nats)
+and a mean gap of 0.008.
