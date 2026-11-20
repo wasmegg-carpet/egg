@@ -1634,14 +1634,16 @@ re-times the whole calendar (`pad.ts`, `schedulePad`):
   was ever seen) drops the first launch the verifier rejects, at the times it has,
   which never breaks the pad rule for the rest.
 
-With sleep, the layout itself works to a window closing early, by the fuelings of
-the plan's three longest-fueling doubled launches (`padWindowReserve`), no more
-than a quarter of the window, and the pad stage keeps the real close. A
-48-hour window from a wake-up closes at a wake-up, and the layout, left alone,
-sends every slot's last doubled launch there: one of them can go, fueled
-overnight, and the others go a fueling later, demoted. The early close makes the
-layout's attempts (section 14) prefer layouts that do not depend on that instant,
-and whatever does fly inside the real window is promoted again.
+With sleep, the layout itself works to a window closing early, by the same
+reserve the window rows read (`Model.eventWindowPadReserve`, below: the shortest
+doubled fueling on the menu), and the pad stage keeps the real close. A 48-hour
+window from a wake-up closes at a wake-up, and the layout, left alone, sends every
+slot's last doubled launch there: one of them can go, fueled overnight, and the
+others go a fueling later, demoted. The early close makes the layout's attempts
+(section 14) prefer layouts that do not depend on that instant, and whatever does
+fly inside the real window is promoted again. (An earlier revision closed it by
+the plan's three longest doubled fuelings, more than the MILP had reserved; the
+two agree now, which changed one seed in 40 a regime, by under 0.03.)
 
 **The MILP** (`milp.ts`, `model.ts`). Exact where it can be, a reservation where
 it cannot, and the layout and the pad stage make every plan true:
@@ -1674,6 +1676,16 @@ it cannot, and the layout and the pad stage make every plan true:
   demotes, and the promise is above the delivery by that much (measured below).
   Ordering binaries per slot were not tried: the level binaries already cost the
   MILP its time (below).
+
+**A slot's overnight ships, with the pad.** Section 10's layout drops, while a
+slot's overnight ships cannot be ordered to stand, the one ship whose drop stands
+them up by itself when there is one. The pad's level classes hand the layout other
+slot splits than before, and on 100T seed 2037 (8 hours of sleep) that one ship was
+the plan's 60-hour four-night ship, 3.15 nats: the plan promised -9.10 log10 and
+delivered -10.58. With the pad the layout now weighs that drop against dropping,
+one at a time and the judge choosing, among every overnight ship until the chain
+stands (looked ahead on a copy), and takes the better: -9.22 delivered, the
+revision before's own gap on that seed. Without a rate it is section 10's rule.
 
 **Effort floors and whole-day horizons, flagged.** Low and Medium effort charge
 every launch at least a day or half a day, and a horizon of whole days then fills

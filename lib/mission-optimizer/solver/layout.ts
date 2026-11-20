@@ -795,21 +795,6 @@ function balance(demand: readonly (readonly number[])[], model: Model, layout: L
   return Math.max(...load) < busiest - LAYOUT_TOL ? out : demand.map(d => d.slice());
 }
 
-// How early the layout closes the 2x window with the fueling pad (SPEC.md section 18): the fuellings of the plan's
-// three longest-fuelling doubled launches, which is the most a slot's last doubled launch can wait for at a moment
-// every slot launches at once, no more than a quarter of the window.
-function padWindowReserve(model: Model, counts: readonly number[]): number {
-  const pads = model.groups
-    .flatMap((grp, g) =>
-      grp.variant !== 'normal' && counts[g] > 0 ? Array<number>(Math.min(3, counts[g])).fill(grp.padSeconds) : []
-    )
-    .sort((a, b) => b - a);
-  return Math.min(
-    model.eventWindowSeconds / 4,
-    pads.slice(0, 3).reduce((a, p) => a + p, 0)
-  );
-}
-
 export interface PlanLayout {
   // Per group, the plan that was laid out: the solve's counts less every launch trimmed.
   counts: number[];
@@ -841,13 +826,12 @@ export function layOutPlan(
 ): PlanLayout {
   const day = model.day;
   const sleep = timelineOf(model);
-  // With the fueling pad and a sleep window, the layout works to a window closing a little early, by
-  // `padWindowReserve`: launches it would send exactly at the close, as at a wake-up the close falls on, cannot all go
-  // up there once the pad spaces them, and the pad stage below, which keeps the real close, promotes again whatever it
-  // does fly inside it. Without sleep the slots go back to back from T+0 and meet nowhere but there.
+  // With the fueling pad and a sleep window, the layout works to the window the MILP's rows read, closing a little
+  // early (`Model.eventWindowPadReserve`): launches it would send exactly at the close, as at a wake-up the close falls
+  // on, cannot all go up there once the pad spaces them, and the pad stage below, which keeps the real close, promotes
+  // again whatever it does fly inside it. Without sleep the slots go back to back from T+0 and meet nowhere but there.
   const realWindow = model.eventWindowSeconds;
-  const window =
-    day !== null && realWindow > 0 && model.fuelingRate > 0 ? realWindow - padWindowReserve(model, counts) : realWindow;
+  const window = realWindow - model.eventWindowPadReserve;
   // The layout times a slot on the player's regular day, from the wake-up at or before the plan's start, which is
   // `shift` seconds before it (SPEC.md section 17); the calendar, the verifier and the window are in the plan's own
   // seconds. `planAt` is a launch's plan time, computed as the calendar writes it, so every comparison against the

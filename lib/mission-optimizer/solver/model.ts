@@ -87,6 +87,9 @@ export interface Model {
   eventWindowNights: number;
   eventWindowLatest: number;
   eventWindowPartial: number;
+  // With the fueling pad and a sleep window, how early the window rows read the 2x window as closing
+  // (`windowPadReserve`, SPEC.md section 18), which the layout works to as well; 0 otherwise.
+  eventWindowPadReserve: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
@@ -662,6 +665,7 @@ export function buildModel(raw: PlanProblem): Model {
     eventWindowNights: shape.nights,
     eventWindowLatest: shape.latest,
     eventWindowPartial: shape.partial,
+    eventWindowPadReserve: padReserve,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,
