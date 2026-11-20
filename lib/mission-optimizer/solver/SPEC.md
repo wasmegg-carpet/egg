@@ -1431,7 +1431,8 @@ with them.
 
 _Verifier and arena._ Both admit a launch at exactly `t = 0`, to a microsecond,
 while the player is in the night, and no other launch in that night. A T+0
-variant may go up only there. Any other option may go up there too, with its
+variant may go up only there. (With the fueling pad, `t = 0` is the start chain,
+section 18.) Any other option may go up there too, with its
 usual block, which is longer than its flight. `tests/unit/wake-offset.spec.ts`
 holds the two checkers to the same verdict on random calendars, over offsets of
 the whole day, T+0 launches included.
@@ -1528,3 +1529,149 @@ straddle: the two extra attempts, on every slot with a doubled launch.
 `ARENA_SLEEP=8 ARENA_WINDOW=inside ARENA_WAKE=12 pnpm arena` (smoke) had no C0 or
 C1 failure, two soft violations (A3-menu 0.004 nats, M2-projection 0.011 nats)
 and a mean gap of 0.008.
+
+## 18. The fueling pad
+
+The game has one fueling pad for all three slots. The rule, the user's: a launch
+is fueled on the pad for `f = actualFuel / R` seconds, where `actualFuel` is the
+option's eggs of every type and `R` is the pad's rate, `0.0003` of the tank's size
+a second at every tank level (9T a minute at the 500T tank; `../fueling.ts`). Egg
+types do not fuel side by side, and a doubled launch fuels as long as its 1x twin.
+One ship at a time: fueling the next ship may start the moment the one before it
+launches, even while every slot is still flying, and a fueled ship waits on the
+pad until its slot is free. Fueling runs unattended, the night included; only the
+launch needs the player awake. The pad is empty at T+0. So, over every launch of
+the plan in launch order, `L_1 >= f_1` and `L_i >= L_{i-1} + f_i`, on top of every
+rule of sections 10 to 17. A launch is doubled by its launch time, as before, so
+the pad can carry one past the window's close.
+
+**Input.** `PlanProblem.fuelingRate`, eggs a second. **Absent means instant
+fueling, the problem without the pad exactly**: every group's `padSeconds` is 0,
+there is no level, pad column or pad row, the pad stage below does not run, and
+every check reads as before. `normalizeProblem` leaves it absent when absent and
+throws on a rate that is not a positive finite number, since neither "never" nor
+"instantly" is a safe reading. Both apps pass `fuelingRateOf` of the tank size
+for the player's tank level, not of the fuel budget, which with a by-egg budget is
+what is stored in the tank.
+
+A plan's fuel fits its tank, so its fueling sums to at most `1 / 0.0003` seconds,
+about 55.6 minutes, at any tank; a launch takes that times its share of the tank.
+Against horizons of days the pad matters only where launches meet: at T+0, at a
+wake-up after ships landed in the night, at a cadence of whole days (Low and
+Medium effort), at the window's close and where ships land together.
+
+**The rule, exactly** (`verify.ts`, `padFault` and `startChain`; the arena's own
+copy in `tests/arena/calendar.ts`, `padRule`). The pad's order is launch order,
+launches at one instant read longest fueling first, which is the one order the pad
+could have served them in if any can. The **start chain** is the launches from
+the start that went up back to back on the pad, at `f_1`, `f_1 + f_2`, and on,
+with the pad never idle: the player stays up for exactly that chain. It is section
+17's "a launch at exactly `t = 0` in the night", generalized: a launch in it is
+admitted asleep, and a T+0 variant goes up only in it, in the night the plan starts
+in. Without the pad every `f` is 0 and the chain is the launches at `t = 0`, so
+both checkers' verdicts are the ones they were. One reading goes past what the
+user stated, and is flagged as an assumption: the chain is admitted at any wake
+offset, not only past bedtime. At `x = W` (bedtime, the awake case) a plan's first
+launch would otherwise wait for the next wake-up, eight hours, for want of a few
+minutes of fueling, where at `x = W + 1` second it goes in the chain.
+`assertVerified` checks the pad over the whole calendar with each option's own
+fuel, and each slot against `slotFault` with the chain read off the same times.
+`tests/unit/fuel-pad.spec.ts` holds the two checkers to the same verdict on
+random three-slot calendars built along the pad.
+
+**The pad stage** (`layout.ts`, after the calendar is written, only with a
+rate). The layout lays the plan out as if fueling took no time; the pad stage then
+re-times the whole calendar (`pad.ts`, `schedulePad`):
+
+- Each slot keeps its order and each launch its group. Launches are placed one at
+  a time, the next chosen among the slots' next launches by trying their orders
+  (at most six) against each launch's **latest start**: the latest it can go up
+  with the rest of its slot, re-timed at the first waking instant each block
+  leaves, still ending by the horizon, and its doubled launches by the window's
+  close. The latest start is exact for a fixed order: computed backward, each one
+  the last waking instant at or before the next one's less this block.
+- A placed launch goes up at the first instant its slot is free, the pad has
+  fueled it and the player is awake, or, when its slot is free by the time the pad
+  has fueled it and the pad has not been idle since T+0, in the chain. So the
+  times keep the pad rule, each slot's order and blocks and the sleep rule by
+  construction; the chain is exactly the verifier's.
+- Each slot's fastest-fueling launch (of those as doubled as its first) goes first,
+  when that leaves no launch late, since the MILP charges a slot its fastest first
+  launch (below). A slot whose first launch is a T+0 variant keeps it first.
+- A launch past its latest start means its slot has to lose one. Left alone, the
+  delay runs through the slot, and a bedtime launch it carries past bedtime waits
+  for the next wake-up and takes the rest of the slot a night later: on arena seed
+  2012 (500T, 8 hours of sleep) that trimmed 127 launches. So the slot loses one
+  launch where that keeps its timeline instead: the last of one of its groups up
+  to the late launch (the first after it when there is none), the judge choosing
+  among the drops after which the slot's first late launch is a later one. The
+  same seed then trims 25 to 40, most of them its first morning's.
+- The window both ways at the new times: a doubled launch carried past the close
+  is flown as its twin, and a 1x launch brought inside it is flown doubled, as
+  sections 13 and 16 settle and promote. A slot still past the horizon loses a
+  launch, the judge choosing among the drops that bring it back.
+- Rounds are bounded by the plan's launch count; a fault left after them (none
+  was ever seen) drops the first launch the verifier rejects, at the times it has,
+  which never breaks the pad rule for the rest.
+
+With sleep, the layout itself works to a window closing early, by the fuelings of
+the plan's three longest-fueling doubled launches (`padWindowReserve`), no more
+than a quarter of the window, and the pad stage keeps the real close. A
+48-hour window from a wake-up closes at a wake-up, and the layout, left alone,
+sends every slot's last doubled launch there: one of them can go, fueled
+overnight, and the others go a fueling later, demoted. The early close makes the
+layout's attempts (section 14) prefer layouts that do not depend on that instant,
+and whatever does fly inside the real window is promoted again.
+
+**The MILP** (`milp.ts`, `model.ts`). Exact where it can be, a reservation where
+it cannot, and the layout and the pad stage make every plan true:
+
+- _Valid (they cut off no plan the pad allows):_ every doubled launch goes up by
+  the close and the pad fuels them one at a time from an empty pad, so their
+  fuelings summed fit in the window (`pad_window`). A slot's first launch goes up
+  no sooner than its own fueling after T+0, so the waking seconds before then are
+  in no launch's reach: `slot_k` and `window_k` lose them. Each class's shortest
+  fueling is rounded down to a power of 16 seconds (to 0 under about a
+  millisecond); classes are keyed by that level as well, so a class's level is
+  each of its groups'; one binary per slot and level past the first lets the loss
+  drop to a level only when the slot flies a class at that level that can go
+  first (`padlevel_k_j`). With a 2x window only a doubled class can go first,
+  since a slot's first launch is inside the window and so doubled (section 16),
+  and the loss is capped at the window's waking seconds, which a slot with no
+  doubled launch spends before its first launch. Without sleep, an option whose
+  fueling and flight are longer than the slot is dropped. Groups are keyed and
+  dominated by fueling too, so dominance never moves a launch onto a longer
+  fueling.
+- _Reservations (conservative, not valid inequalities):_ `window_k` charges each
+  doubled launch its own fueling level on top of its seconds, for the wait at an
+  instant every slot launches; and with sleep the window's shape is read as
+  closing one shortest doubled fueling early (`windowPadReserve`), which moves a
+  close that falls on a wake-up to the bedtime before it.
+- _Not modelled:_ which slot goes first. The second and third slots to launch at
+  an instant wait for the fuelings of the ones before them, at T+0 and at every
+  wake-up where all three slots launch, and nothing in the MILP orders the slots.
+  Where that wait meets a slot filled to a deadline, the pad stage trims or
+  demotes, and the promise is above the delivery by that much (measured below).
+  Ordering binaries per slot were not tried: the level binaries already cost the
+  MILP its time (below).
+
+**Effort floors and whole-day horizons, flagged.** Low and Medium effort charge
+every launch at least a day or half a day, and a horizon of whole days then fills
+a slot to the horizon exactly. Every slot's first launch waits for its fueling,
+however short, so under the strict rule every such slot loses its last launch: a
+Low-effort plan over one day (arena seed 2003) can fly nothing, since a one-day
+block cannot start after T+0 and end by the horizon. The MILP knows (the first-
+launch loss), so it promises no more than that, and a slot that flies a fuelless
+ship (Chicken Nine) first keeps its last launch. This is the rule as stated with
+the effort floor as the existing model reads it (a launch's block is its floored
+time, the last one's included); if the floor should not hold the last launch to
+the horizon, that is a change to sections 7 to 17's block, for every plan.
+
+**What the player sees.** Launch times are the pad's, so the timeline and the
+slot loads (`../optimizer-core.ts`, read off the calendar) show launches spaced
+by their fueling with no change of their own. A launch in the start chain past
+bedtime is sent while the player stays up, and `nightsFlown` counts that night
+for it as it does for a T+0 launch. `OptimizerSolution.fuelingRate` and the
+humility missions file carry the rate, absent without one. `layoutStats` is
+reported with the pad even without sleep, since the pad stage can trim, demote
+and promote; `plannedLogJoint` is what the MILP promised.
