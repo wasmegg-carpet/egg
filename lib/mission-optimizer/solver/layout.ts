@@ -1417,7 +1417,17 @@ export function layOutPlan(
           changed = true;
         }
       }
-      const inside = seq.flatMap((l, i) => (l.at <= realWindow + LAYOUT_TOL ? [i] : []));
+      // A 1x launch at the close itself, within the verifier's microsecond, may stay 1x (section 16); one the pad has
+      // brought there is left so, rather than promoted into a second `overhang` its slot may have no room for.
+      const inside = seq.flatMap((l, i) =>
+        model.groups[l.g].variant !== 'normal'
+          ? l.at <= realWindow + LAYOUT_TOL
+            ? [i]
+            : []
+          : l.at < realWindow - VERIFY_TOL_SECONDS
+            ? [i]
+            : []
+      );
       const relabel = (i: number, want: DoubledVariant): boolean => {
         const grp = model.groups[seq[i].g];
         if (grp.variant === want) return true;
@@ -1435,6 +1445,25 @@ export function layOutPlan(
           if (!relabel(i, 'event') && model.groups[seq[i].g].variant === 'overhang') overhangLeft = true;
         }
         if (!(overhangLeft && relabel(last, 'event'))) relabel(last, 'overhang');
+      }
+      // One `overhang` a slot, as the window rows and the arena's labelled packer have it: a later one that found no
+      // `event` copy to become is flown at 1x when it goes up at the close itself, and leaves the plan otherwise.
+      for (
+        let i = seq.length - 1, seen = seq.filter(l => model.groups[l.g].variant === 'overhang').length;
+        i >= 0;
+        i--
+      ) {
+        if (seen <= 1) break;
+        const grp = model.groups[seq[i].g];
+        if (grp.variant !== 'overhang') continue;
+        seen--;
+        if (grp.twin >= 0 && seq[i].at >= realWindow - VERIFY_TOL_SECONDS) {
+          fly(seq[i], grp.twin);
+          stats.launchesDemoted = (stats.launchesDemoted ?? 0) + 1;
+        } else {
+          removeLaunch(seq, i);
+          changed = true;
+        }
       }
       // A 1x launch the model has no copy for, where the menu could double it, cannot fly there.
       let lastInside = -1;
@@ -1481,21 +1510,42 @@ export function layOutPlan(
     const seq = seqs[k];
     const when = seq[i].at;
     const groups = seq.map(l => l.g);
-    let best: { value: number; at: number; resolved: boolean } | null = null;
-    for (const g of new Set(groups)) {
+    // Where a drop keeps the slot's timeline where it is: the run of launches that went up back to back into the late
+    // one, the late one, and the one after it. A drop further off can also leave nothing late, by giving the rest of
+    // the slot a day to slide into, and then the slide takes the slot's nights with it, so those are tried only when
+    // no nearby drop does.
+    let first = i;
+    while (first > 0 && seq[first - 1].at + blockOfGroup(seq[first - 1].g) >= seq[first].at - LAYOUT_TOL) first--;
+    const near = [
+      ...groups.slice(first, i + 1).map((g, j) => ({ g, at: first + j })),
+      ...(i + 1 < seq.length ? [{ g: groups[i + 1], at: i + 1 }] : []),
+    ];
+    const far = [...new Set(groups)].map(g => {
       const before = groups.slice(0, i + 1).lastIndexOf(g);
-      const at = before >= 0 ? before : groups.indexOf(g);
-      const trial = seqs.map(other => other.map(l => ({ ...l })));
-      trial[k].splice(at, 1);
-      const late = retime(trial)[k];
-      const resolved = late.length === 0 || trial[k][late[0]].at > when + LAYOUT_TOL;
-      current[g]--;
-      const value = judged();
-      current[g]++;
-      if (best === null || (resolved && !best.resolved) || (resolved === best.resolved && value > best.value)) {
-        best = { value, at, resolved };
+      return { g, at: before >= 0 ? before : groups.indexOf(g) };
+    });
+    const choose = (candidates: readonly { g: number; at: number }[]) => {
+      let best: { value: number; at: number; resolved: boolean } | null = null;
+      const tried = new Set<number>();
+      for (const { g, at } of candidates) {
+        if (tried.has(g)) continue;
+        tried.add(g);
+        const trial = seqs.map(other => other.map(l => ({ ...l })));
+        trial[k].splice(at, 1);
+        const late = retime(trial)[k];
+        const resolved = late.length === 0 || trial[k][late[0]].at > when + LAYOUT_TOL;
+        current[g]--;
+        const value = judged();
+        current[g]++;
+        if (best === null || (resolved && !best.resolved) || (resolved === best.resolved && value > best.value)) {
+          best = { value, at, resolved };
+        }
       }
-    }
+      return best;
+    };
+    // The nearest occurrence of each group first, so a group is tried where its drop is most local.
+    const local = choose([...near].reverse());
+    const best = local?.resolved ? local : (choose(far) ?? local);
     removeLaunch(seq, best!.at);
   };
 
