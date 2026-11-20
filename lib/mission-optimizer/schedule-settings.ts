@@ -248,7 +248,7 @@ export function timingTooltip(timing: Timing): string {
     const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
     parts.push(
       pastBedtime
-        ? `You're up past your usual bedtime: launch at T+0, then sleep until ${clockOfHours(wakeUp)}, your usual wake-up.`
+        ? `You're up past your usual bedtime: launch the first ships from T+0 as each finishes fueling, then sleep until ${clockOfHours(wakeUp)}, your usual wake-up.`
         : `You go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}, then keep the same hours.`,
       'No launches during your sleep hours, but ships still fly and land. A ship that lands while you sleep ' +
         'waits until you wake. The green dot is a launch while you are awake, the indigo dot a launch that is in ' +
@@ -256,5 +256,7 @@ export function timingTooltip(timing: Timing): string {
     );
   }
   if (timing.event) parts.push('Launches with the 2× badge go up inside the event.');
+  // The pad: nothing is fueled at T+0, and launches due together go up one fueling apart.
+  parts.push('One ship fuels at a time, starting now, so launches due together go up a few minutes apart.');
   return parts.join(' ');
 }
