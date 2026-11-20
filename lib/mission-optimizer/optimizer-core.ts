@@ -55,6 +55,11 @@ export interface OptimizeArgs {
   // enumerates against the window itself. Combines with `sleepSeconds`, the window then counting nights too
   // (`solver/SPEC.md` section 13).
   eventWindowSeconds?: number;
+  // Eggs a second the game's one fueling pad moves into a ship, for every slot: each launch is fuelled there first,
+  // one ship at a time, for `actualFuel / fuelingRate` seconds, so launches the plan would send together are spaced
+  // out (`solver/SPEC.md` section 18). Both apps pass `fuelingRateOf` their tank size (`fueling.ts`). Absent fuels
+  // every launch in no time, the plan without the pad exactly.
+  fuelingRate?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
   // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal
   // way to say "the whole menu" where an infinite capacity would be malformed.
@@ -193,6 +198,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
       },
     }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
+    ...(args.fuelingRate !== undefined && { fuelingRate: args.fuelingRate }),
     slots: NUM_SLOTS,
     ownedStock,
     craftBudget,
@@ -245,6 +251,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     ...(capacity && { sleepSeconds }),
     ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
+    ...(normalized.fuelingRate !== undefined && { fuelingRate: normalized.fuelingRate }),
   });
 }
 
@@ -253,7 +260,7 @@ function assembleFullSolution(
   bestAlloc: Map<number, number>,
   bestSlots: SlotSummary[],
   craftSplit: CraftSplitReport | undefined,
-  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'wakeOffsetSeconds' | 'eventWindowSeconds'>
+  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'wakeOffsetSeconds' | 'eventWindowSeconds' | 'fuelingRate'>
 ): OptimizerSolution {
   const { recipeDag, ownedStock, targets } = a;
   const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(

@@ -156,6 +156,9 @@ export interface OptimizerSolution {
   // there was none, which is also what tells the card and the export that `choiceHistory` carries no `variant`.
   // Carried on the solution rather than read back off the settings, which stay editable after a solve.
   eventWindowSeconds?: number;
+  // Eggs a second the fueling pad moved, which the plan's launch times were spaced by (`solver/SPEC.md` section 18).
+  // Absent when the plan was solved with instant fueling.
+  fuelingRate?: number;
   slots?: SlotSummary[];
   choiceHistory: LaunchSolution[];
   expectedDrops: DropRow[];
