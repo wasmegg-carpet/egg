@@ -12,11 +12,12 @@ import type {
   PlanProblem,
   PlanResult,
 } from './types';
+import { padSecondsOf } from './types';
 import { EXACT_PRECISION, STEERING_PRECISION, evaluateCounts, type EvalResult } from './evaluator';
 import { buildModel, type Model } from './model';
 import { buildOaMilp, decodeCounts, effectiveQs, layoutOf, nCol, scaleLps, type Layout } from './milp';
 import { layOutPlan, timelineOf } from './layout';
-import { doubledCopiesOnMenu, slotFault } from './verify';
+import { doubledCopiesOnMenu, padFault, slotFault, startChain } from './verify';
 
 export interface Tuning {
   maxNodes: number;
@@ -119,7 +120,14 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
     columnValues,
     layout.classAtStart.map(t => (t ? 1 : 0))
   );
+  const lastLoads = slotLoads(
+    model,
+    layout,
+    columnValues,
+    layout.classLast.map(t => (t ? 1 : 0))
+  );
   for (let k = 0; k < model.slots; k++) {
+    if (lastLoads[k] > 1) return false;
     if (overhangLoads[k] > 1) return false;
     if (startLoads[k] > 1) return false;
     if (!(window > 0) && doubledLoads[k] > 0) return false;
@@ -152,7 +160,8 @@ function emptyLaid(model: Model): Laid {
     calendar: Array.from({ length: model.slots }, () => []),
     layoutStats: {
       ...NO_LAYOUT,
-      ...(model.day !== null && model.eventWindowSeconds > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
+      ...((model.day !== null || model.fuelingRate > 0) &&
+        model.eventWindowSeconds > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
     },
   };
 }
@@ -176,6 +185,20 @@ export function assertVerified(
     fail(`${calendar.length} slot(s) in the calendar, ${model.slots} in the problem`);
   const flown = new Array<number>(allocation.length).fill(0);
   const copies = doubledCopiesOnMenu(problem.options);
+  // With the fueling pad, the plan's rule across its slots, each launch fuelled for its own option's fuel, and the
+  // start chain the player stays up for read off the same times (SPEC.md section 18). Without it, neither.
+  const rate = model.fuelingRate > 0 ? model.fuelingRate : undefined;
+  const pads = calendar.map(launches =>
+    launches.map(l => ({
+      launchAt: l.launchAt,
+      padSeconds: padSecondsOf(problem.options[l.option] ?? { actualFuel: NaN }, rate),
+    }))
+  );
+  const chained = rate === undefined ? null : startChain(pads);
+  if (rate !== undefined) {
+    const fault = padFault(pads);
+    if (fault !== null) fail(fault);
+  }
   calendar.forEach((launches, k) => {
     for (const l of launches) {
       const opt = problem.options[l.option];
@@ -188,10 +211,13 @@ export function assertVerified(
       }
       flown[l.option]++;
     }
-    const timed = launches.map(l => ({
+    const timed = launches.map((l, i) => ({
       ...l,
       eventCopy: copies[l.option].event,
       overhangCopy: copies[l.option].overhang,
+      ...(chained !== null && { startChain: chained[k][i] }),
+      flightSeconds: problem.options[l.option].rawTime,
+      ...(problem.options[l.option].lastInSlot && { lastInSlot: true }),
       ...(problem.options[l.option].atStartSeconds !== undefined && {
         atStartSeconds: problem.options[l.option].atStartSeconds,
       }),
@@ -210,7 +236,10 @@ function emit(problem: PlanProblem, model: Model, counts: readonly number[], rep
     if (counts[g] > 0) allocation[model.groups[g].members[0]] += counts[g];
   }
   assertVerified(problem, model, allocation, laid.calendar);
-  const extra = { calendar: laid.calendar, ...(model.day && { layoutStats: laid.layoutStats }) };
+  const extra = {
+    calendar: laid.calendar,
+    ...((model.day !== null || model.fuelingRate > 0) && { layoutStats: laid.layoutStats }),
+  };
   if (!report) return { allocation, ...extra };
 
   // Inside the guard the rest of the pass works under: `evaluateCounts` runs a simplex that throws on

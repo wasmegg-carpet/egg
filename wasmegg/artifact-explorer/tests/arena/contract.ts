@@ -28,19 +28,23 @@ export interface ArenaSolver {
   // Whether it does so on a problem that also has a sleep window. Absent or false, an instance with both, and
   // A10-sleep or A11-window on an instance with the other, are skipped for it.
   windowWithSleepAware?: boolean;
+  // Whether `plan` honours `PlanProblem.fuelingRate`, the one fueling pad every launch queues for, and returns a
+  // `calendar` whose times keep it. Absent or false, instances with a pad are skipped for it.
+  padAware?: boolean;
 }
 
 // What a candidate declares it can be handed; the skips above are decided from this alone.
-export type Capabilities = Pick<ArenaSolver, 'sleepAware' | 'windowAware' | 'windowWithSleepAware'>;
+export type Capabilities = Pick<ArenaSolver, 'sleepAware' | 'windowAware' | 'windowWithSleepAware' | 'padAware'>;
 
 // Why an instance with this sleep and window is not handed to a candidate with these capabilities, or undefined
 // when it is.
 export function unsupported(
   can: Capabilities,
-  inst: { sleepSeconds: number; eventWindowSeconds: number }
+  inst: { sleepSeconds: number; eventWindowSeconds: number; fuelingRate?: number }
 ): string | undefined {
   const sleep = inst.sleepSeconds > 0;
   const window = inst.eventWindowSeconds > 0;
+  if (inst.fuelingRate !== undefined && !can.padAware) return 'fueling pad on, candidate not pad-aware';
   if (sleep && !can.sleepAware) return 'sleep window on, candidate not sleep-aware';
   if (window && !can.windowAware) return '2x window on, candidate not window-aware';
   if (sleep && window && !can.windowWithSleepAware)

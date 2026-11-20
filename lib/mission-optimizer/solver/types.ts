@@ -55,6 +55,13 @@ export interface PlanProblem {
   // window is wall-clock seconds from the plan's start, nights included, and a doubled launch that the layout
   // cannot start inside it is flown at 1x instead (SPEC.md section 13).
   readonly eventWindowSeconds?: number;
+  // Eggs a second the game's one fueling pad moves into a ship. Every launch is fueled on that pad first, for its
+  // `actualFuel / fuelingRate` seconds (`padSecondsOf`), one ship at a time for all the slots: fueling the next ship
+  // may start the moment the previous one launches, and a fueled ship waits on the pad until its slot is free. So,
+  // over every launch of the plan in launch order, the first goes up no sooner than its own fueling after t = 0 and
+  // each later one no sooner than its fueling after the one before it. Absent means instant fueling, the problem
+  // without the pad exactly. The app sets it from the player's tank level (`../fueling.ts`). See SPEC.md section 18.
+  readonly fuelingRate?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.
   readonly ownedStock: ReadonlyMap<string, number>;
@@ -120,7 +127,24 @@ export function normalizeProblem(problem: PlanProblem): NormalizedProblem {
     // The window is a budget like any other. With a sleep window as well its rows are a relaxation and the
     // layout makes every plan true (SPEC.md section 13).
     ...(problem.eventWindowSeconds === undefined ? {} : { eventWindowSeconds: capacityOf(problem.eventWindowSeconds) }),
+    // Left absent when absent, so a problem without the pad normalizes to exactly what it did before.
+    ...(problem.fuelingRate === undefined ? {} : { fuelingRate: fuelingRateOf(problem.fuelingRate) }),
   };
+}
+
+// The pad's rate is not a budget either, and no reading of a malformed one is safe: 0 or less would mean no ship is
+// ever fueled, and a non-finite one fuels in no time, which is a different problem from the one the caller set. So
+// it throws, as a malformed sleep window does. The only path to one is a programming error: the app derives it from
+// a tank size.
+function fuelingRateOf(rate: number): number {
+  if (!Number.isFinite(rate) || !(rate > 0)) throw new Error(`fueling rate must be a positive number, got ${rate}`);
+  return rate;
+}
+
+// Seconds the pad takes to fuel one launch of `opt` at `rate` eggs a second: all of its eggs at one rate, so egg types
+// do not fuel side by side. A doubled launch carries its 1x twin's fuel, so it fuels as long. 0 without a rate.
+export function padSecondsOf(opt: Pick<LaunchOption, 'actualFuel'>, rate: number | undefined): number {
+  return rate !== undefined && rate > 0 ? opt.actualFuel / rate : 0;
 }
 
 // The horizon is a budget and follows the rule above. The sleep window is not one: no reading of a malformed
@@ -212,7 +236,7 @@ export interface PlanResult {
   // arena's contract lets a candidate return an allocation alone for a problem with neither a sleep window nor
   // an event window.
   calendar?: CalendarLaunch[][];
-  // Present exactly when the problem carries `sleep`, the one case with anything to lay out or trim.
+  // Present exactly when the problem carries `sleep` or a `fuelingRate`, the cases with anything to lay out or trim.
   layoutStats?: LayoutStats;
 }
 

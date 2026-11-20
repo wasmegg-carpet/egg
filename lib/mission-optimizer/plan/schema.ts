@@ -119,6 +119,9 @@ export interface HumilityMissionsVisit {
   // The 2x capacity event window the plan was solved against, in seconds from its start. Absent on a plan made
   // without one, as `sleepSeconds` is. AP does not read it; the launches it doubled carry `doubled`.
   eventWindowSeconds?: number;
+  // Eggs a second the fueling pad moved, which spaced the plan's launches (one pad for every slot). Absent on a plan
+  // solved with instant fueling, so such a file is exactly what it was before the field existed. AP does not read it.
+  fuelingRate?: number;
 }
 
 export interface HumilityMissionsFile {

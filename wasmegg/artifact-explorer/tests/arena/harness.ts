@@ -10,7 +10,7 @@ import { evaluateAllocationJoint, type OracleInstance, type OracleJointEvaluatio
 import { NUM_SLOTS, type PlanProblem, type PlanResult, type Planner } from './contract';
 import type { CalendarDay } from './calendar';
 import type { ArenaInstance } from './instances';
-import { capacityVariants, isDoubled } from './capacity';
+import { capacityVariants, isDoubled, lastVariants } from './capacity';
 import { packFeasible, packFeasibleBudgets, type PackVerdict } from './pack-feasibility';
 import { sleepCapacity, sleepVariants, startVariants, wakeOffsetOf } from './sleep';
 
@@ -80,6 +80,8 @@ function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay {
     slots: NUM_SLOTS,
     eventWindowSeconds: eventWindowSeconds > 0 ? eventWindowSeconds : 0,
     ...(wake > 0 && { wakeOffsetSeconds: wake }),
+    // The instance's pad, never the one on the problem a candidate was handed.
+    ...(inst.fuelingRate !== undefined && { fuelingRate: inst.fuelingRate }),
   };
 }
 
@@ -105,7 +107,10 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
   const sleep = over.sleepSeconds ?? inst.sleepSeconds;
   const horizon = over.timeCapacityPerSlot ?? inst.timeCapacityPerSlot;
   const window = over.eventWindowSeconds ?? inst.eventWindowSeconds;
-  const menu = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  // The effort level spaces launches only, so each entry its floor lengthens is offered once more as a slot's last
+  // launch, at its real flight (ARENA.md, "The effort level").
+  const floored = enumerateLaunchOptions(config, dag, EFFORT_LAUNCH_PERIOD_SECONDS[effort]);
+  const menu = [...floored, ...lastVariants(floored)];
   // Starting in the night, the menu also holds each option as a launch at T+0, before capacity so a doubled T+0
   // launch keeps its charge; otherwise there are none, and the menu is what it always was.
   const wake = wakeOf(inst, over);
@@ -133,6 +138,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
       : {}),
     // Absent rather than 0 without one, so a window-free instance states today's problem exactly.
     ...(window > 0 ? { eventWindowSeconds: window } : {}),
+    // Absent without a pad, so such an instance states today's problem exactly.
+    ...(inst.fuelingRate !== undefined ? { fuelingRate: inst.fuelingRate } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -179,7 +186,8 @@ function problemKey(problem: PlanProblem): string {
         (o.nights === undefined ? '' : `|n${o.nights}`) +
         // An `event` and an `overhang` copy of one launch are identical in every number above.
         (o.variant === undefined ? '' : `|v${o.variant}`) +
-        (o.atStartSeconds === undefined ? '' : `|s${o.atStartSeconds}`)
+        (o.atStartSeconds === undefined ? '' : `|s${o.atStartSeconds}`) +
+        (o.lastInSlot ? '|last' : '')
     )
     .join(';');
   const dag = [...problem.dag.keys()]
@@ -205,6 +213,7 @@ function problemKey(problem: PlanProblem): string {
     // Left out, the cache serves a plan solved for one window to a problem with another, and A11-window compares a
     // plan against itself and passes.
     ...(problem.eventWindowSeconds === undefined ? [] : [`window${problem.eventWindowSeconds}`]),
+    ...(problem.fuelingRate === undefined ? [] : [`pad${problem.fuelingRate}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),

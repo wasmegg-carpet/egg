@@ -5,6 +5,7 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { capacityVariants, eventWindowSecondsOf } from './capacity';
+import { lastVariants } from './last-launch';
 import { sleepCapacity, sleepSecondsOf, sleepVariants, startVariants, wakeOffsetSecondsOf } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
@@ -55,6 +56,11 @@ export interface OptimizeArgs {
   // enumerates against the window itself. Combines with `sleepSeconds`, the window then counting nights too
   // (`solver/SPEC.md` section 13).
   eventWindowSeconds?: number;
+  // Eggs a second the game's one fueling pad moves into a ship, for every slot: each launch is fuelled there first,
+  // one ship at a time, for `actualFuel / fuelingRate` seconds, so launches the plan would send together are spaced
+  // out (`solver/SPEC.md` section 18). Both apps pass `fuelingRateOfLevel` of the tank level (`fueling.ts`). Absent fuels
+  // every launch in no time, the plan without the pad exactly.
+  fuelingRate?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
   // will not pay for, and leaves the feasible set bounded at any value, so `Infinity` is a legal
   // way to say "the whole menu" where an infinite capacity would be malformed.
@@ -161,14 +167,17 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // The event window, likewise: doubled variants of whatever the sleep split produced, so a doubled launch keeps
   // its nights and its waking seconds. Without one the menu passes through untouched.
   const eventWindowSeconds = eventWindowSecondsOf(args.eventWindowSeconds);
-  // Starting in the night, each option also as a launch at T+0 (`startVariants`); none otherwise.
+  // Starting in the night, each option also as a launch at T+0 (`startVariants`); none otherwise. The effort level
+  // only spaces launches, so each option its floor lengthens is offered once more as a slot's last launch, at its real
+  // flight (`lastVariants`, `solver/SPEC.md` section 19), before the sleep and capacity splits.
+  const menu = [...args.options, ...lastVariants(args.options)];
   const options = capacityVariants(
     capacity
       ? [
-          ...sleepVariants(args.options, sleepSeconds),
-          ...startVariants(args.options, sleepSeconds, wakeOffsetSeconds, args.timeCapacityPerSlot),
+          ...sleepVariants(menu, sleepSeconds),
+          ...startVariants(menu, sleepSeconds, wakeOffsetSeconds, args.timeCapacityPerSlot),
         ]
-      : args.options,
+      : menu,
     eventWindowSeconds
   );
 
@@ -193,6 +202,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
       },
     }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
+    ...(args.fuelingRate !== undefined && { fuelingRate: args.fuelingRate }),
     slots: NUM_SLOTS,
     ownedStock,
     craftBudget,
@@ -245,6 +255,7 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
     ...(capacity && { sleepSeconds }),
     ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
     ...(eventWindowSeconds > 0 && { eventWindowSeconds }),
+    ...(normalized.fuelingRate !== undefined && { fuelingRate: normalized.fuelingRate }),
   });
 }
 
@@ -253,7 +264,7 @@ function assembleFullSolution(
   bestAlloc: Map<number, number>,
   bestSlots: SlotSummary[],
   craftSplit: CraftSplitReport | undefined,
-  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'wakeOffsetSeconds' | 'eventWindowSeconds'>
+  windows: Pick<OptimizerSolution, 'sleepSeconds' | 'wakeOffsetSeconds' | 'eventWindowSeconds' | 'fuelingRate'>
 ): OptimizerSolution {
   const { recipeDag, ownedStock, targets } = a;
   const { supplyByItem, totalLegendary, fuelUsed, fuelByEgg, choiceHistory } = assembleSolution(
@@ -339,6 +350,7 @@ function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number
       ...(opt.nights !== undefined && { nights: opt.nights }),
       ...(opt.variant !== undefined && { variant: opt.variant }),
       ...(opt.atStartSeconds !== undefined && { atStartSeconds: opt.atStartSeconds }),
+      ...(opt.lastInSlot && { lastInSlot: true }),
       target: opt.target ?? '',
       targetAfxId: opt.targetAfxId,
       numShipsLaunched: k,

@@ -96,6 +96,7 @@ export function projectSolvedVisit(args: {
     ...(solution.sleepSeconds !== undefined && { sleepSeconds: solution.sleepSeconds }),
     ...(solution.wakeOffsetSeconds !== undefined && { wakeOffsetSeconds: solution.wakeOffsetSeconds }),
     ...(solution.eventWindowSeconds !== undefined && { eventWindowSeconds: solution.eventWindowSeconds }),
+    ...(solution.fuelingRate !== undefined && { fuelingRate: solution.fuelingRate }),
   };
 }
 
