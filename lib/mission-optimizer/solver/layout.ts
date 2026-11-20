@@ -77,6 +77,9 @@ interface SlotContext {
   solve: MilpSolve;
   // Drops one launch of one of `candidates` from the plan, chosen by the judge, and returns its class.
   drop: (candidates: readonly number[]) => number;
+  // With the fueling pad: what the judge makes of the plan after one drop from each of `steps` in turn, each the drop
+  // `drop` would make there, and the classes those drops come from, without making any. Absent without the pad.
+  peek?: (steps: readonly (readonly number[])[]) => { value: number; classes: number[] };
   stats: LayoutStats;
   // The limits of this slot's layout MILPs: `LAYOUT_LIMITS`, or `ALTERNATIVE_LAYOUT_LIMITS` for an alternative.
   limits: MilpLimits;
@@ -514,13 +517,13 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
   // Doubled ships first when that order stands, the usual order when only it does (SPEC.md section 13); with no
   // doubled ship the two are one order, tried once. With a wake offset each is tried from its other starts as well
   // when it does not stand from the usual one (`connectorOrders`, SPEC.md section 17).
-  const standing = (): Connector[] | null => {
+  const standing = (of: readonly number[] = counts): Connector[] | null => {
     if (how.doubledFirst) {
-      const first = connectorOrders(counts, ctx, true).find(order => standsAlone(order, day));
+      const first = connectorOrders(of, ctx, true).find(order => standsAlone(order, day));
       if (first) return first;
-      if (!counts.some((n, c) => n > 0 && ctx.classNights[c] > 0 && ctx.doubled[c])) return null;
+      if (!of.some((n, c) => n > 0 && ctx.classNights[c] > 0 && ctx.doubled[c])) return null;
     }
-    return connectorOrders(counts, ctx).find(order => standsAlone(order, day)) ?? null;
+    return connectorOrders(of, ctx).find(order => standsAlone(order, day)) ?? null;
   };
   while (nightsOf() > day.nights) dropOvernight(overnight());
   for (;;) {
@@ -534,6 +537,25 @@ function layOutSlot(demand: readonly number[], ctx: SlotContext, how: SlotHow = 
       counts[c]++;
       return ok;
     });
+    // With the fueling pad, a drop that stands the chain up by itself can be the plan's most valuable ship, where
+    // dropping cheaper ones until the chain stands costs less (SPEC.md section 18): the judge weighs the two ways to a
+    // standing chain, the one drop against the drops of its choice among them all.
+    if (fixes.length > 0 && fixes.length < candidates.length && ctx.peek) {
+      const single = ctx.peek([fixes]);
+      const sim = counts.slice();
+      const steps: number[][] = [];
+      while (standing(sim) === null && steps.length < candidates.length * 8) {
+        const open = sim.flatMap((n, c) => (n > 0 && ctx.classNights[c] > 0 ? [c] : []));
+        if (open.length === 0) break;
+        steps.push(open);
+        const { classes } = ctx.peek(steps);
+        sim[classes[classes.length - 1]]--;
+      }
+      if (standing(sim) !== null && steps.length > 0 && ctx.peek(steps).value > single.value) {
+        for (const step of steps) dropOvernight(step);
+        continue;
+      }
+    }
     dropOvernight(fixes.length > 0 ? fixes : candidates);
   }
   const conns = how.fold ? foldConnectors(standing()!, how.fold) : standing()!;
@@ -854,6 +876,41 @@ export function layOutPlan(
   const groupsOf: number[][] = Array.from({ length: layout.classes }, () => []);
   for (let g = 0; g < layout.groups; g++) groupsOf[layout.classOf[g]].push(g);
 
+  // `drop`'s choices for each of `steps` in turn, made on a copy and undone: the judge's value after them all.
+  const peek = (steps: readonly (readonly number[])[]): { value: number; classes: number[] } => {
+    const saved = current.slice();
+    const classes: number[] = [];
+    for (const candidates of steps) {
+      let best = -Infinity;
+      let bestGroup = -1;
+      for (const c of candidates) {
+        for (const g of groupsOf[c]) {
+          if (current[g] <= 0) continue;
+          current[g]--;
+          let value: number;
+          try {
+            value = judge(current);
+          } catch {
+            value = -Infinity;
+          }
+          current[g]++;
+          if (bestGroup < 0 || value > best) [best, bestGroup] = [value, g];
+        }
+      }
+      if (bestGroup < 0) break;
+      current[bestGroup]--;
+      classes.push(layout.classOf[bestGroup]);
+    }
+    let value: number;
+    try {
+      value = judge(current);
+    } catch {
+      value = -Infinity;
+    }
+    saved.forEach((n, g) => (current[g] = n));
+    return { value, classes };
+  };
+
   const drop = (candidates: readonly number[]): number => {
     let best = -Infinity;
     let bestGroup = -1;
@@ -1099,6 +1156,7 @@ export function layOutPlan(
     day,
     solve,
     drop,
+    ...(model.fuelingRate > 0 && { peek }),
     stats,
     limits: LAYOUT_LIMITS,
   };
