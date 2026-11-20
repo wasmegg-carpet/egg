@@ -20,4 +20,6 @@ export const highs: ArenaSolver = {
   // rows, doubled-first layout and demotion of section 13.
   windowAware: true,
   windowWithSleepAware: true,
+  // Every calendar re-timed on the one fueling pad, and verified against it (section 18).
+  padAware: true,
 };

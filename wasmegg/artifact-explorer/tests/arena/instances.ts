@@ -24,6 +24,9 @@ export interface ArenaInstance {
   // Seconds since the player last woke up, at the plan's start; absent is 0, a plan starting at wake-up, today's
   // problem. Meaningful only with sleep. See `ARENA_WAKE` below and ARENA.md.
   wakeOffsetSeconds?: number;
+  // Eggs a second the one fueling pad moves; absent is instant fueling, today's problem. See `ARENA_PAD` below and
+  // ARENA.md, "The fueling pad".
+  fuelingRate?: number;
 }
 
 // The windows `generateInstance` draws from, in hours. 0 is in the draw so `draw` mixes sleep-free instances in.
@@ -58,6 +61,24 @@ function wakeOverride(): number {
     throw new Error(`ARENA_WAKE must be a number of hours in [0, 24), got ${JSON.stringify(raw)}`);
   }
   return hours * HOUR;
+}
+
+// The game's fueling pad moves this share of the tank a second, at every tank level. Stated here, not imported, for
+// the reason the arena keeps its own sleep model: a rate shared with the planner would agree with itself.
+export const PAD_TANK_SHARE_PER_SECOND = 0.0003;
+
+// `ARENA_PAD`: unset, no instance has a pad (today's arena, every recorded figure unchanged); `tank`, the pad of each
+// instance's own tank, its fuel capacity, which the plan's fuel fits; a number of trillions of eggs, that tank on
+// every instance, as its fuel capacity and as its pad. Read per call, like `ARENA_SLEEP`. Nothing is drawn, so no
+// seed's other fields move.
+function padOverride(drawnTank: number): { fuelCapacity: number; fuelingRate?: number } {
+  const raw = process.env.ARENA_PAD;
+  if (raw === undefined || raw === '') return { fuelCapacity: drawnTank };
+  const tank = raw === 'tank' ? drawnTank : Number(raw) * 1e12;
+  if (!Number.isFinite(tank) || !(tank > 0)) {
+    throw new Error(`ARENA_PAD must be "tank" or a positive number of trillions, got ${JSON.stringify(raw)}`);
+  }
+  return { fuelCapacity: tank, fuelingRate: tank * PAD_TANK_SHARE_PER_SECOND };
 }
 
 // Where a 2x capacity window can sit relative to the plan, named against the horizon, which is what decides
@@ -137,6 +158,7 @@ export function generateInstance(seed: number): ArenaInstance {
   const drawnRegime = pick(rng, EVENT_REGIME_NAMES);
 
   const wakeOffsetSeconds = wakeOverride();
+  const pad = padOverride(fuelCapacity);
   return {
     label: `arena:${seed}`,
     seed,
@@ -144,12 +166,13 @@ export function generateInstance(seed: number): ArenaInstance {
     config,
     craftingLevel,
     previousCrafts,
-    fuelCapacity,
+    fuelCapacity: pad.fuelCapacity,
     timeCapacityPerSlot,
     effort,
     sleepSeconds: sleepOverride(drawnSleep),
     eventWindowSeconds: windowOverride(drawnRegime, timeCapacityPerSlot),
     ...(wakeOffsetSeconds > 0 && { wakeOffsetSeconds }),
+    ...(pad.fuelingRate !== undefined && { fuelingRate: pad.fuelingRate }),
   };
 }
 
@@ -160,6 +183,7 @@ export function describeInstance(inst: ArenaInstance): string {
     `fuel=${inst.fuelCapacity.toExponential(1)}, craft=${inst.craftingLevel}, prev=${inst.previousCrafts}` +
     (inst.sleepSeconds > 0 ? `, sleep=${+(inst.sleepSeconds / 3600).toFixed(2)}h` : '') +
     ((inst.wakeOffsetSeconds ?? 0) > 0 ? `, awake ${+(inst.wakeOffsetSeconds! / HOUR).toFixed(2)}h` : '') +
-    (inst.eventWindowSeconds > 0 ? `, 2x for ${+(inst.eventWindowSeconds / HOUR).toFixed(2)}h` : '')
+    (inst.eventWindowSeconds > 0 ? `, 2x for ${+(inst.eventWindowSeconds / HOUR).toFixed(2)}h` : '') +
+    (inst.fuelingRate !== undefined ? `, pad ${inst.fuelingRate.toExponential(2)} eggs/s` : '')
   );
 }

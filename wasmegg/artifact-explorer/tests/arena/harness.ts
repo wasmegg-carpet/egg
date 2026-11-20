@@ -80,6 +80,8 @@ function dayOf(inst: ArenaInstance, over: SolveOverrides): CalendarDay {
     slots: NUM_SLOTS,
     eventWindowSeconds: eventWindowSeconds > 0 ? eventWindowSeconds : 0,
     ...(wake > 0 && { wakeOffsetSeconds: wake }),
+    // The instance's pad, never the one on the problem a candidate was handed.
+    ...(inst.fuelingRate !== undefined && { fuelingRate: inst.fuelingRate }),
   };
 }
 
@@ -133,6 +135,8 @@ function buildProblem(inst: ArenaInstance, over: SolveOverrides = {}): PlanProbl
       : {}),
     // Absent rather than 0 without one, so a window-free instance states today's problem exactly.
     ...(window > 0 ? { eventWindowSeconds: window } : {}),
+    // Absent without a pad, so such an instance states today's problem exactly.
+    ...(inst.fuelingRate !== undefined ? { fuelingRate: inst.fuelingRate } : {}),
     slots: NUM_SLOTS,
     ownedStock: over.ownedStock ?? new Map<string, number>(),
     // Only ever set by an override: generated instances are uncapped, so the
@@ -205,6 +209,7 @@ function problemKey(problem: PlanProblem): string {
     // Left out, the cache serves a plan solved for one window to a problem with another, and A11-window compares a
     // plan against itself and passes.
     ...(problem.eventWindowSeconds === undefined ? [] : [`window${problem.eventWindowSeconds}`]),
+    ...(problem.fuelingRate === undefined ? [] : [`pad${problem.fuelingRate}`]),
     budget,
     problem.slots,
     sortedEntries(problem.ownedStock),

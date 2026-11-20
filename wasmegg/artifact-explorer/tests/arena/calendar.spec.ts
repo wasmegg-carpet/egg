@@ -209,3 +209,88 @@ describe('calendarFaults with the plan starting in the night', () => {
     ).toMatch(/T\+0 launch/);
   });
 });
+
+describe('calendarFaults with the fueling pad', () => {
+  // Two ships, one burning 600 eggs and one 300, on a pad moving 1 egg a second: ten and five minutes of fueling.
+  const M = 60;
+  const fuelMenu = [
+    { id: 'big', actualTime: 4 * H, actualFuel: 600 },
+    { id: 'small', actualTime: 4 * H, actualFuel: 300 },
+    { id: 'small~start', actualTime: 0, nights: 0, atStartSeconds: 4 * H, actualFuel: 300 },
+  ];
+  const at = (option: number, launchAt: number) => ({ option, optionId: fuelMenu[option].id, launchAt });
+  const padDay: CalendarDay = { sleepSeconds: 0, horizonSeconds: D, slots: 3, fuelingRate: 1 };
+  const faults = (cal: unknown[], d: CalendarDay = padDay) =>
+    calendarFaults(
+      cal,
+      fuelMenu,
+      fuelMenu.map((_, i) => cal.flat().filter((l: any) => l.option === i).length),
+      d
+    );
+
+  it('rejects launches the one pad could not have fueled, across slots, from an empty pad at T+0', () => {
+    // Three slots at T+0, as a plan without the pad would send them.
+    expect(faults([[at(0, 0)], [at(1, 0)], [at(1, 0)]]).join('\n')).toMatch(/fueling pad/);
+    // The same ships back to back on the pad: the first after its own fueling, each next one after its own.
+    expect(faults([[at(0, 10 * M)], [at(1, 15 * M)], [at(1, 20 * M)]])).toEqual([]);
+    expect(faults([[at(0, 10 * M - 1)], [at(1, 15 * M)], [at(1, 20 * M)]]).join('\n')).toMatch(/fueling pad/);
+    // Two ships landing together: the next ones go up a fueling apart, in either order.
+    expect(faults([[at(1, 5 * M), at(1, 5 * M + 4 * H)], [at(0, 15 * M), at(0, 5 * M + 4 * H + 10 * M)], []])).toEqual(
+      []
+    );
+    expect(
+      faults([[at(1, 5 * M), at(1, 5 * M + 4 * H)], [at(0, 15 * M), at(0, 5 * M + 4 * H)], []]).join('\n')
+    ).toMatch(/fueling pad/);
+  });
+
+  it('fuels the next ship from the moment the one before goes up, even while every slot flies', () => {
+    // Slot 0's second ship was fueled while slot 1's waited: it goes up the moment its slot is free.
+    expect(faults([[at(1, 5 * M), at(1, 5 * M + 4 * H)], [at(0, 15 * M)], []])).toEqual([]);
+  });
+
+  it('reads launches at one instant longest fueling first, and admits none of two that both fuel', () => {
+    expect(faults([[at(1, 10 * M)], [at(0, 10 * M)], []]).join('\n')).toMatch(/fueling pad/);
+  });
+
+  it('is the rule without it when the day carries no rate', () => {
+    const cal = [[at(0, 0)], [at(1, 0)], [at(1, 0)]];
+    expect(faults(cal, { ...padDay, fuelingRate: undefined })).toEqual([]);
+  });
+
+  it('admits the start chain in the night the plan starts in, back to back on the pad and nothing else', () => {
+    // Up 20 hours with 8 hours of sleep: in the night until T+4h.
+    const night: CalendarDay = {
+      sleepSeconds: S,
+      horizonSeconds: 2 * D,
+      slots: 3,
+      wakeOffsetSeconds: 20 * H,
+      fuelingRate: 1,
+    };
+    // T+0 launches at T+5m and T+10m, then a normal one at T+20m: the chain.
+    expect(faults([[at(2, 5 * M)], [at(2, 10 * M)], [at(0, 20 * M)]], night)).toEqual([]);
+    // One minute idle before the third: the pad stood still, so the chain ended and the third went up asleep.
+    expect(faults([[at(2, 5 * M)], [at(2, 10 * M)], [at(0, 21 * M)]], night).join('\n')).toMatch(/asleep/);
+    // A T+0 launch outside the chain is a fault however it is timed.
+    expect(faults([[at(0, 10 * M)], [at(2, 26 * M)], []], night).join('\n')).toMatch(/T\+0 launch/);
+    // Without the pad the chain is T+0 itself.
+    expect(faults([[at(2, 0)], [at(2, 0)], [at(0, 0)]], { ...night, fuelingRate: undefined })).toEqual([]);
+    expect(faults([[at(2, 0)], [at(2, 0)], [at(0, 60)]], { ...night, fuelingRate: undefined }).join('\n')).toMatch(
+      /asleep/
+    );
+  });
+
+  it('keeps the player up for a chain the pad carries past bedtime, and for nothing after it', () => {
+    // Starting at bedtime: the chain from T+0 is admitted, a launch a minute after it is not.
+    const bedtime: CalendarDay = {
+      sleepSeconds: S,
+      horizonSeconds: 2 * D,
+      slots: 3,
+      wakeOffsetSeconds: W,
+      fuelingRate: 1,
+    };
+    expect(faults([[at(0, 10 * M)], [at(1, 15 * M)], []], bedtime)).toEqual([]);
+    expect(faults([[at(0, 10 * M)], [at(1, 16 * M)], []], bedtime).join('\n')).toMatch(/asleep/);
+    // From the next wake-up, the pad having fueled one ship in the night, it goes up at the wake-up itself.
+    expect(faults([[at(0, 10 * M), at(1, S)], [at(1, 15 * M), at(0, S + 10 * M)], []], bedtime)).toEqual([]);
+  });
+});
