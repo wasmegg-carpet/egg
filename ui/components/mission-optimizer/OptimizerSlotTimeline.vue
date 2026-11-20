@@ -48,11 +48,6 @@
         </ul>
       </li>
     </ol>
-
-    <p v-if="timeline.slots.length > 0" class="mt-1 text-xs text-gray-400">
-      Each slot's launches in order, back to back. T+ is when the first of a line goes up, and counts from
-      {{ zero }}.
-    </p>
   </div>
 </template>
 
@@ -60,7 +55,7 @@
 import { computed, defineComponent, PropType } from 'vue';
 
 import { planTimeline, type OptimizerSolution } from 'lib/mission-optimizer';
-import { formatPlanClock, timingZero } from 'lib/mission-optimizer/schedule-settings';
+import { formatPlanClock } from 'lib/mission-optimizer/schedule-settings';
 import DoubleCapacityBadge from './DoubleCapacityBadge.vue';
 import MissionName from './MissionName.vue';
 
@@ -73,15 +68,7 @@ export default defineComponent({
   },
   setup(props) {
     const timeline = computed(() => planTimeline(props.solution));
-    // Where T+0 is and what the day does from there, in the words the settings use for it.
-    const zero = computed(() =>
-      timingZero({
-        sleepHours: (props.solution.sleepSeconds ?? 0) / 3600,
-        hoursSinceWake: (props.solution.wakeOffsetSeconds ?? 0) / 3600,
-        event: (props.solution.eventWindowSeconds ?? 0) > 0,
-      })
-    );
-    return { timeline, clock, zero };
+    return { timeline, clock };
   },
 });
 </script>

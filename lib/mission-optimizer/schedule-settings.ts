@@ -223,21 +223,7 @@ function sleepTimes({ sleepHours, hoursSinceWake }: Timing) {
   return { bedtime: waking - x, wakeUp: DAY_HOURS - x, pastBedtime: x > waking };
 }
 
-// The sleep part of the timing, short enough for a footnote.
-function sleepClause(timing: Timing): string {
-  const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
-  return pastBedtime
-    ? `you sleep until ${clockOfHours(wakeUp)}`
-    : `you go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}`;
-}
-
 const eventClause = 'the moment the event shows the time left you entered';
-
-// Where the plan's clock starts and what it says about the day, to finish "T+ counts from ...".
-export function timingZero(timing: Timing): string {
-  const now = timing.event ? `now, ${eventClause}` : 'now';
-  return timing.sleepHours > 0 ? `${now}; ${sleepClause(timing)}` : now;
-}
 
 // The line under the settings that opens the explanation below, or '' when neither setting has a start to
 // explain.

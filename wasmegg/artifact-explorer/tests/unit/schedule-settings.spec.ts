@@ -22,7 +22,6 @@ import {
   scheduleSettingsFieldsValid,
   timingNote,
   timingTooltip,
-  timingZero,
   withSleepEnabled,
   type Timing,
 } from 'lib/mission-optimizer/schedule-settings';
@@ -220,7 +219,6 @@ describe('schedule settings', () => {
     it('has nothing to say with neither sleep nor event', () => {
       expect(timingNote(none)).toBe('');
       expect(timingTooltip(none)).toBe('');
-      expect(timingZero(none)).toBe('now');
     });
 
     it('reads the note off the time since waking and the event', () => {
@@ -261,7 +259,6 @@ describe('schedule settings', () => {
       );
       expect(timingTooltip(sleep(20))).not.toContain('You go to sleep at');
       expect(timingNote(sleep(20))).toBe('The plan starts now, 20h after you woke.');
-      expect(timingZero(sleep(20))).toBe('now; you sleep until T+4h');
     });
 
     it('keeps the rest of the explanation to the settings that are on', () => {
@@ -272,15 +269,6 @@ describe('schedule settings', () => {
       expect(timingTooltip(event)).not.toContain('indigo');
       expect(timingTooltip(event)).not.toContain('sleep');
       expect(timingTooltip(sleep(0, true))).toContain('2×');
-    });
-
-    it('gives the footnote the same facts in a clause', () => {
-      expect(timingZero(sleep(0))).toBe('now; you go to sleep at T+16h and wake at T+1d');
-      expect(timingZero(sleep(3.5, true))).toBe(
-        'now, the moment the event shows the time left you entered; you go to sleep at T+12h30m and wake at T+20h30m'
-      );
-      expect(timingZero(event)).toBe('now, the moment the event shows the time left you entered');
-      expect(timingZero(sleep(2, false, 10))).toBe('now; you go to sleep at T+12h and wake at T+22h');
     });
   });
 });
