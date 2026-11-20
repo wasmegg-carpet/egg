@@ -1605,17 +1605,27 @@ re-times the whole calendar (`pad.ts`, `schedulePad`):
   has fueled it and the pad has not been idle since T+0, in the chain. So the
   times keep the pad rule, each slot's order and blocks and the sleep rule by
   construction; the chain is exactly the verifier's.
-- Each slot's fastest-fueling launch (of those as doubled as its first) goes first,
-  when that leaves no launch late, since the MILP charges a slot its fastest first
-  launch (below). A slot whose first launch is a T+0 variant keeps it first.
+- Each slot's fastest-fueling launch (of those as doubled as its first) can go
+  first, when that leaves no launch late, since the MILP charges a slot its
+  fastest first launch (below). A slot whose first launch is a T+0 variant keeps
+  it first.
 - A launch past its latest start means its slot has to lose one. Left alone, the
   delay runs through the slot, and a bedtime launch it carries past bedtime waits
   for the next wake-up and takes the rest of the slot a night later: on arena seed
   2012 (500T, 8 hours of sleep) that trimmed 127 launches. So the slot loses one
-  launch where that keeps its timeline instead: the last of one of its groups up
-  to the late launch (the first after it when there is none), the judge choosing
-  among the drops after which the slot's first late launch is a later one. The
-  same seed then trims 25 to 40, most of them its first morning's.
+  launch instead, the judge choosing among the drops after which the slot's first
+  late launch is a later one: the last of each of its groups up to the late launch
+  (the first after it when there is none), or, tried first, those in the run that
+  went up back to back into the late launch, it and the one after it. The same
+  seed then trims 25 to 40, most of them its first morning's.
+- Which of those is better is not knowable locally: a drop anywhere in the slot
+  can let the rest slide a day and lose its nights (12 hours of sleep, Medium
+  effort: each waking window one 12-hour launch and a bedtime launch, seed 2024
+  lost 1.8 log10), a drop near the late launch can cost a launch a slide would not
+  have (seed 2002, 1.0), and moving the fastest launch first can move an overnight
+  ship to a morning the slot needed (100T, seed 2037, 1.5). So the stage runs four
+  ways from the same start, with and without the move, each repair order, and the
+  judge keeps the best plan, ties to the first.
 - The window both ways at the new times: a doubled launch carried past the close
   is flown as its twin, and a 1x launch brought inside it is flown doubled, as
   sections 13 and 16 settle and promote. A slot still past the horizon loses a
@@ -1685,3 +1695,34 @@ for it as it does for a T+0 launch. `OptimizerSolution.fuelingRate` and the
 humility missions file carry the rate, absent without one. `layoutStats` is
 reported with the pad even without sleep, since the pad stage can trim, demote
 and promote; `plannedLogJoint` is what the MILP promised.
+
+**Measured.** Seeds 2000-2039, problems from the arena's own builder with
+`ARENA_PAD=7` (the 500T tank, 9T a minute) and `ARENA_PAD=3` (100T, 3T a minute, a
+full tank in 33 minutes), ten regimes each: no sleep or window, 8 hours of sleep,
+the `inside` and `sliver` windows alone and with 8 hours, 12 hours with
+`straddle-under`, and 8 hours at 12 and 20 hours awake, alone and (20) with
+`inside`. Every plan was judged by the arena's evaluator, packer and pad-aware
+`calendarFaults`; the revision before this section (3846bc04) solved the same
+problems, which carry the rate it ignores.
+
+- **The bug.** The judge rejects 797 of the revision before's 800 plans, every
+  rejection for the pad alone.
+- **Faults.** No C0 or C1 fault in any of the 800 plans of this section.
+- **Promise against delivery** (mean planned minus delivered log10 over the 39
+  scoring seeds): at 500T 0.001 to 0.036 a regime, 0.019 in the mean, against
+  0.010 to 0.024 for the revision before where it has a promise (with sleep); at 100T 0.002 to 0.059, 0.029 in the mean. The regimes over 0.02 carry one or two
+  seeds each that lose 0.2 to 1.8 (100T seed 2037 with 8 hours of sleep, 1.47),
+  and 12 hours of sleep with `straddle-under`, where Medium effort fills each
+  waking window with one 12-hour launch and a bedtime launch only one slot a day
+  can keep (above, not modelled): 0.028 at 500T, 0.058 at 100T.
+- **Value.** Against the revision before's plans as flown, which the pad forbids:
+  the mean over the seeds both make non-empty is from 0.049 log10 lower to 0.008
+  higher a regime, 0.012 lower in the median regime; one seed (2003, Low effort over one day)
+  is empty, as the effort floor note above says it must be.
+- **Without a rate** the allocation, calendar, reported joint and `layoutStats`
+  are the revision before's on all forty seeds of five regimes.
+- **Time.** The MILP's level binaries and the pad stage's four runs cost 1.0 to
+  1.7 times the revision before's time a regime, per-seed median, with a p90 up
+  to 4 to 8 on a few seeds; without a rate it is unchanged (within noise).
+
+`scratchpad/eval/REPORT.md`, "Addendum: the fueling pad", has the full tables.
