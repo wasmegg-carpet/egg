@@ -734,7 +734,12 @@ const LAUNCH_ORDER: Readonly<Record<CapacityVariant, number>> = { event: 0, over
 function backToBack(demand: readonly number[], layout: Layout): ClassLaunch[] {
   const order = demand
     .flatMap((n, c) => (n > 0 ? [c] : []))
-    .sort((a, b) => LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] || a - b);
+    .sort(
+      (a, b) =>
+        Number(layout.classLast[a]) - Number(layout.classLast[b]) ||
+        LAUNCH_ORDER[layout.classVariant[a]] - LAUNCH_ORDER[layout.classVariant[b]] ||
+        a - b
+    );
   const launches: ClassLaunch[] = [];
   let at = 0;
   for (const c of order) {
@@ -772,6 +777,7 @@ function balance(demand: readonly (readonly number[])[], model: Model, layout: L
   const nights = new Array<number>(slots).fill(0);
   const event = new Array<number>(slots).fill(0);
   const overhang = new Array<number>(slots).fill(0);
+  const last = new Array<number>(slots).fill(0);
   for (const c of order) {
     const seconds = layout.classSeconds[c];
     const variant = layout.classVariant[c];
@@ -782,6 +788,7 @@ function balance(demand: readonly (readonly number[])[], model: Model, layout: L
         if (nights[k] + layout.classNights[c] > model.nightsPerSlot) continue;
         if (variant === 'event' && event[k] + seconds > model.eventWindowBudget + LAYOUT_TOL) continue;
         if (variant === 'overhang' && overhang[k] >= 1) continue;
+        if (layout.classLast[c] && last[k] >= 1) continue;
         if (to < 0 || load[k] < load[to]) to = k;
       }
       if (to < 0) return demand.map(d => d.slice());
@@ -790,6 +797,7 @@ function balance(demand: readonly (readonly number[])[], model: Model, layout: L
       nights[to] += layout.classNights[c];
       if (variant === 'event') event[to] += seconds;
       if (variant === 'overhang') overhang[to]++;
+      if (layout.classLast[c]) last[to]++;
     }
   }
   return Math.max(...load) < busiest - LAYOUT_TOL ? out : demand.map(d => d.slice());
@@ -859,6 +867,12 @@ export function layOutPlan(
   };
   const groupsOf: number[][] = Array.from({ length: layout.classes }, () => []);
   for (let g = 0; g < layout.groups; g++) groupsOf[layout.classOf[g]].push(g);
+  // Per class, the longest real flight among its groups' options, which a slot's last launch is held to (section 19).
+  const classFlight = new Array<number>(layout.classes).fill(0);
+  model.groups.forEach((grp, g) => {
+    const c = layout.classOf[g];
+    classFlight[c] = Math.max(classFlight[c], options[grp.members[0]].rawTime);
+  });
 
   // `drop`'s choices for each of `steps` in turn, made on a copy and undone: the judge's value after them all.
   const peek = (steps: readonly (readonly number[])[]): { value: number; classes: number[] } => {
@@ -971,7 +985,9 @@ export function layOutPlan(
     const isDoubled = (c: number) => layout.classVariant[c] !== 'normal';
     const byKey = new Map<string, number[]>();
     launches.forEach((l, i) => {
-      const key = `${layout.classSeconds[l.cls]}/${layout.classNights[l.cls]}${isStart(l.cls) ? '/start' : ''}`;
+      const key =
+        `${layout.classSeconds[l.cls]}/${layout.classNights[l.cls]}${isStart(l.cls) ? '/start' : ''}` +
+        (layout.classLast[l.cls] ? '/last' : '');
       const at = byKey.get(key);
       if (at) at.push(i);
       else byKey.set(key, [i]);
@@ -1105,6 +1121,8 @@ export function layOutPlan(
       doubled: layout.classVariant[l.cls] !== 'normal',
       // The longest landing among the class's groups: one block for them all (section 17).
       ...(isStart(l.cls) && { atStartSeconds: layout.classAtStartBlock[l.cls] }),
+      // A slot's last launch flown as such is held to its real flight, the longest of its class's (section 19).
+      ...(layout.classLast[l.cls] && { lastInSlot: true, flightSeconds: classFlight[l.cls] }),
     }));
   const bySlot: ClassLaunch[][] = [];
   // A calendar that verified without the 2x window (`solveWith`'s last resort, SPEC.md section 16), flown as it is
@@ -1214,10 +1232,33 @@ export function layOutPlan(
     };
   };
 
+  // A slot's-last-launch variant (SPEC.md section 19) goes after everything else in its slot: the rest is laid out
+  // without it, and it goes up at the first waking instant the slot is free from then, when its real flight still lands
+  // by the horizon; otherwise it leaves the plan, as does a second one in a slot, which the `last_k` row admits none of.
+  const layOutWithLast = (want: readonly number[], slotCtx: SlotContext, how: SlotHow): SlotLaid | null => {
+    const lasts = want.flatMap((n, c) => (n > 0 && layout.classLast[c] ? Array<number>(n).fill(c) : []));
+    if (lasts.length === 0) return layOutAround(want, slotCtx, how);
+    const rest = want.slice();
+    for (const c of lasts) rest[c]--;
+    for (const c of lasts.slice(1)) drop([c]);
+    const laid = layOutAround(rest, slotCtx, how);
+    if (laid === null) return null;
+    const c = lasts[0];
+    const prev = laid.launches[laid.launches.length - 1];
+    const at = wakingFrom(prev ? blockEnd(prev, slotCtx) : shift, slotCtx.day);
+    if (at - shift + classFlight[c] > sleep.horizonSeconds + LAYOUT_TOL) {
+      drop([c]);
+      return laid;
+    }
+    const placed = laid.placed.slice();
+    placed[c]++;
+    return { ...laid, placed, launches: [...laid.launches, { cls: c, launchAt: at }] };
+  };
+
   const runSlot = (slotCtx: SlotContext, k: number, how: SlotHow) => {
     let want = demand[k];
     for (;;) {
-      const laid = layOutAround(want, slotCtx, how);
+      const laid = layOutWithLast(want, slotCtx, how);
       if (laid === null) return null;
       const launches = promote(settle(how.regroup ? regroup(laid.launches, slotCtx) : laid.launches));
       if (verify(timedOf(launches), sleep, window) === null) return { launches, conns: laid.conns, heads: laid.heads };
@@ -1305,12 +1346,14 @@ export function layOutPlan(
       const moving = bySlot[from][bySlot[from].length - 1];
       // A launch at T+0 goes up at T+0 or not at all, so a slot that ends with one has nothing to give.
       if (!moving || isStart(moving.cls)) break;
+      // Nothing may follow a slot's-last-launch variant.
+      const endsLast = (k: number) => bySlot[k].length > 0 && layout.classLast[bySlot[k][bySlot[k].length - 1].cls];
       const left = endOf(bySlot[from].slice(0, -1));
       let to = -1;
       let best = Infinity;
       let at = 0;
       for (let k = 0; k < model.slots; k++) {
-        if (k === from) continue;
+        if (k === from || endsLast(k)) continue;
         const start = wakingFrom(ends[k], ctx.day);
         const finish = start + blockOf(moving.cls, ctx);
         if (finish > ctx.day.horizonSeconds + LAYOUT_TOL) continue;
@@ -1417,6 +1460,7 @@ export function layOutPlan(
       seq.map(({ g, at }) => ({
         padSeconds: model.groups[g].padSeconds,
         block: blockOfGroup(g),
+        landing: optionOf(g).rawTime,
         launchAt: at,
         doubled: model.groups[g].variant !== 'normal',
         startVariant: model.groups[g].atStart,
@@ -1429,7 +1473,8 @@ export function layOutPlan(
     into.forEach((seq, k) => seq.forEach((l, i) => (l.at = times.launchAt[k][i])));
     return times.late;
   };
-  const endOf = (seq: Seq) => (seq.length > 0 ? seq[seq.length - 1].at + blockOfGroup(seq[seq.length - 1].g) : 0);
+  // The slot's last launch only has to land by the horizon (SPEC.md section 19).
+  const endOf = (seq: Seq) => (seq.length > 0 ? seq[seq.length - 1].at + optionOf(seq[seq.length - 1].g).rawTime : 0);
   const overHorizon = (seq: Seq) => endOf(seq) > sleep.horizonSeconds + LAYOUT_TOL;
   const removeLaunch = (seq: Seq, i: number) => {
     current[seq[i].g]--;
@@ -1604,7 +1649,11 @@ export function layOutPlan(
       const doubled = (l: Seq[number]) => model.groups[l.g].variant !== 'normal';
       let fastest = 0;
       seq.forEach((l, i) => {
-        if (doubled(l) === doubled(seq[0]) && model.groups[l.g].padSeconds < model.groups[seq[fastest].g].padSeconds) {
+        if (
+          !model.groups[l.g].lastInSlot &&
+          doubled(l) === doubled(seq[0]) &&
+          model.groups[l.g].padSeconds < model.groups[seq[fastest].g].padSeconds
+        ) {
           fastest = i;
         }
       });
@@ -1691,6 +1740,8 @@ export function layOutPlan(
           eventCopy: menuCopies[model.groups[l.g].members[0]].event,
           overhangCopy: menuCopies[model.groups[l.g].members[0]].overhang,
           startChain: chained[k][i],
+          flightSeconds: optionOf(l.g).rawTime,
+          ...(model.groups[l.g].lastInSlot && { lastInSlot: true }),
         }));
       if (verify(timed(seqs[k].length), sleep, realWindow) === null) continue;
       let n = 1;

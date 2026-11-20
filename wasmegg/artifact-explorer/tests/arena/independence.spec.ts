@@ -108,6 +108,7 @@ const IMPLEMENTATION = [
   // Prices a finished plan and derives the cap's per-craft prices from the same curve. Everything here
   // reads a plan, so the module sits downstream.
   'optimizer-cost.ts',
+  'last-launch.ts', // the apps' slot's-last-launch variants; the arena makes its own in `capacity.ts`
   'fueling.ts', // the apps' fueling rate from a tank size; the arena states its pad with its own rate in `instances.ts`
   'optimizer-tree.ts', // craft-tree assembly from a plan
   'optimizer-views.ts', // render models built from a plan

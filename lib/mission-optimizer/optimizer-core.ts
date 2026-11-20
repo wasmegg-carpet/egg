@@ -5,6 +5,7 @@ import type { CraftBudget, LaunchOption, LaunchSolution, OptimizerSolution, Reci
 import { ei } from '../index';
 import { craftsToProbability } from './objective';
 import { capacityVariants, eventWindowSecondsOf } from './capacity';
+import { lastVariants } from './last-launch';
 import { sleepCapacity, sleepSecondsOf, sleepVariants, startVariants, wakeOffsetSecondsOf } from './sleep';
 import { loadHighs } from './solver/highs';
 import { DEFAULT_TUNING, solveWith } from './solver/solve';
@@ -166,14 +167,17 @@ export async function optimizeFull(args: OptimizeArgs): Promise<OptimizerSolutio
   // The event window, likewise: doubled variants of whatever the sleep split produced, so a doubled launch keeps
   // its nights and its waking seconds. Without one the menu passes through untouched.
   const eventWindowSeconds = eventWindowSecondsOf(args.eventWindowSeconds);
-  // Starting in the night, each option also as a launch at T+0 (`startVariants`); none otherwise.
+  // Starting in the night, each option also as a launch at T+0 (`startVariants`); none otherwise. The effort level
+  // only spaces launches, so each option its floor lengthens is offered once more as a slot's last launch, at its real
+  // flight (`lastVariants`, `solver/SPEC.md` section 19), before the sleep and capacity splits.
+  const menu = [...args.options, ...lastVariants(args.options)];
   const options = capacityVariants(
     capacity
       ? [
-          ...sleepVariants(args.options, sleepSeconds),
-          ...startVariants(args.options, sleepSeconds, wakeOffsetSeconds, args.timeCapacityPerSlot),
+          ...sleepVariants(menu, sleepSeconds),
+          ...startVariants(menu, sleepSeconds, wakeOffsetSeconds, args.timeCapacityPerSlot),
         ]
-      : args.options,
+      : menu,
     eventWindowSeconds
   );
 
@@ -346,6 +350,7 @@ function assembleSolution(ownedStock: Map<string, number>, bestAlloc: Map<number
       ...(opt.nights !== undefined && { nights: opt.nights }),
       ...(opt.variant !== undefined && { variant: opt.variant }),
       ...(opt.atStartSeconds !== undefined && { atStartSeconds: opt.atStartSeconds }),
+      ...(opt.lastInSlot && { lastInSlot: true }),
       target: opt.target ?? '',
       targetAfxId: opt.targetAfxId,
       numShipsLaunched: k,

@@ -242,6 +242,18 @@ solved, not clean, not failed, left out of quality and latency and of the
 head-to-head), and **A10-sleep** is reported as skipped on every instance. The
 scorecard prints both.
 
+## The effort level
+
+The effort level spaces a slot's launches and nothing else: consecutive launches
+in a slot go up at least the launch period apart (a day at Low, half a day at
+Medium, an hour at High), which the menu's floored `actualTime` charges. A slot's
+last launch has nothing after it to space, and only its real flight, `rawTime`,
+has to land by the horizon. So C1 holds every launch but a slot's last to its
+block as before and the last to `launchAt + rawTime <= H`. The harness adds its
+own `lastVariants` (`capacity.ts`): each entry its floor lengthens once more at
+its `rawTime`, id suffixed `~last`, `lastInSlot`, which may only be its slot's
+last launch and gets no doubled copy. At Max effort there are none.
+
 ## The fueling pad
 
 The game has one fueling pad for all three slots, and fueling takes minutes. A

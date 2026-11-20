@@ -20,6 +20,10 @@ export interface CalendarMenuEntry {
   atStartSeconds?: number;
   // Eggs the launch burns, all types together: what the fueling pad has to move into it before it goes up.
   actualFuel?: number;
+  // The real flight, unfloored: what a slot's last launch has to land within the horizon by. Absent, `actualTime`.
+  rawTime?: number;
+  // An entry that may only be its slot's last launch.
+  lastInSlot?: boolean;
 }
 
 // The day the instance was stated with, as the harness built it, not as the candidate read it. Without a sleep
@@ -117,6 +121,7 @@ export function calendarFaults(
       return;
     }
     let free = 0;
+    let landing = 0;
     // The last launch that may go up doubled, which is the one that could be the slot's overhang.
     let lastInside = -1;
     slot.forEach((launch: { launchAt?: unknown }, i: number) => {
@@ -170,10 +175,16 @@ export function calendarFaults(
           faults.push(`${where} (${entry.id}) at ${at}s flies 1x inside the 2x window, as ${copy} could`);
       }
       // A launch at T+0 holds its slot to its landing; every other launch for its waking seconds and its nights.
+      if (entry.lastInSlot && i < slot.length - 1) {
+        faults.push(`${where} (${entry.id}) may only be its slot's last launch, and another follows it`);
+      }
       free = Math.max(free, at) + (entry.atStartSeconds ?? entry.actualTime + (entry.nights ?? 0) * day.sleepSeconds);
+      // The effort level only spaces launches: the slot's last one has to land by the horizon, its real flight after
+      // it goes up, and nothing more.
+      landing = entry.rawTime !== undefined ? at + entry.rawTime : free;
     });
-    if (free > day.horizonSeconds + TIME_TOL) {
-      faults.push(`slot ${k} is busy until ${free}s, past the ${day.horizonSeconds}s horizon`);
+    if (landing > day.horizonSeconds + TIME_TOL) {
+      faults.push(`slot ${k}'s last launch lands at ${landing}s, past the ${day.horizonSeconds}s horizon`);
     }
   });
   for (let i = 0; i < menu.length; i++) {

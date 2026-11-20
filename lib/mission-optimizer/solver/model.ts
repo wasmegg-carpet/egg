@@ -31,6 +31,9 @@ export interface Group {
   // Seconds the fueling pad takes to fuel one launch (`padSecondsOf`, SPEC.md section 18); 0 without a fueling rate.
   // Part of the group key, so every member fuels exactly as long.
   padSeconds: number;
+  // Whether it may fly only as its slot's last launch (`LaunchOption.lastInSlot`, SPEC.md section 19); the `last_k`
+  // rows hold a slot to one.
+  lastInSlot: boolean;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -111,6 +114,7 @@ interface Candidate {
   atStart: boolean;
   atStartBlock: number;
   padSeconds: number;
+  lastInSlot: boolean;
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
@@ -153,6 +157,8 @@ function cmpKey(a: Candidate, b: Candidate): number {
   // Two options of equal fuel fractions can still fuel for different lengths, when one draws on an egg no axis
   // budgets. Without a fueling rate every pad time is 0, and this never decides.
   if (a.padSeconds !== b.padSeconds) return a.padSeconds - b.padSeconds;
+  // A slot's-last-launch variant spends the `last_k` row; without an effort floor there is none.
+  if (a.lastInSlot !== b.lastInSlot) return a.lastInSlot ? 1 : -1;
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
 
@@ -250,6 +256,8 @@ export function boundsFollowFromRows(grp: Group, timeCapacitySeconds: number, ni
   if (grp.variant === 'overhang') return true;
   // The start row holds a launch at T+0 to one a slot (SPEC.md section 17).
   if (grp.atStart) return true;
+  // So does the last-launch row (SPEC.md section 19).
+  if (grp.lastInSlot) return true;
   return (
     grp.nights > 0 && Number.isFinite(nightsPerSlot) && Math.floor(nightsPerSlot / grp.nights) <= UNBOUNDED_PER_SLOT
   );
@@ -265,6 +273,8 @@ function dominates(taker: Group, given: Group): boolean {
   if (taker.variant !== given.variant) return false;
   // Nor across T+0 and later: a T+0 launch spends the start row, and is timed from T+0 (SPEC.md section 17).
   if (taker.atStart !== given.atStart) return false;
+  // Nor across a slot's last launch and the rest: the last spends the `last_k` row and can fly nowhere else.
+  if (taker.lastInSlot !== given.lastInSlot) return false;
   if (taker.timeSeconds > given.timeSeconds) return false;
   // Nights are a budget of their own: without this an overnight variant, which charges fewer waking seconds,
   // would prune its own daytime twin.
@@ -319,6 +329,7 @@ function sameFlight(a: Group, b: Group, factor: number): boolean {
     a.nights === b.nights &&
     a.atStart === b.atStart &&
     a.padSeconds === b.padSeconds &&
+    a.lastInSlot === b.lastInSlot &&
     same(a.fuelFractions, b.fuelFractions, 1) &&
     same(a.yieldByItem, b.yieldByItem, factor) &&
     same(a.legendaryByTarget, b.legendaryByTarget, factor)
@@ -583,7 +594,7 @@ export function buildModel(raw: PlanProblem): Model {
       variant === 'event' && (opt.actualTime > 0 || nights > 0)
         ? slots * eventLaunches(opt.actualTime, nights, shape)
         : UNBOUNDED_GROUP,
-      variant === 'overhang' || atStart ? slots : UNBOUNDED_GROUP,
+      variant === 'overhang' || atStart || opt.lastInSlot ? slots : UNBOUNDED_GROUP,
       UNBOUNDED_GROUP
     );
     if (cap < 1) return;
@@ -597,6 +608,7 @@ export function buildModel(raw: PlanProblem): Model {
       atStart,
       atStartBlock,
       padSeconds,
+      lastInSlot: opt.lastInSlot === true,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -629,6 +641,7 @@ export function buildModel(raw: PlanProblem): Model {
       atStart: cand.atStart,
       atStartBlock: cand.atStartBlock,
       padSeconds: cand.padSeconds,
+      lastInSlot: cand.lastInSlot,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,

@@ -41,6 +41,8 @@ export interface Layout {
   // slot from T+0 (SPEC.md section 17); false and 0 for every other class.
   classAtStart: boolean[];
   classAtStartBlock: number[];
+  // Whether the class may fly only as its slot's last launch (SPEC.md section 19).
+  classLast: boolean[];
   // The fueling pad's levels (SPEC.md section 18): `padLevels` ascending, the first launch of a slot fuelling for at
   // least `padLevels[0]` and, where the slot flies no class that can go first fuelling for at most `padLevels[j - 1]`,
   // for at least `padLevels[j]`; `classPadLevel` is each class's own level, its shortest fuelling rounded down onto
@@ -79,6 +81,7 @@ function durationClasses(
   | 'classCharge'
   | 'classAtStart'
   | 'classAtStartBlock'
+  | 'classLast'
 > {
   const classOf = new Array<number>(model.groups.length);
   const classSeconds: number[] = [];
@@ -88,6 +91,7 @@ function durationClasses(
   const classCharge: number[] = [];
   const classAtStart: boolean[] = [];
   const classAtStartBlock: number[] = [];
+  const classLast: boolean[] = [];
   // Keyed by variant, and a launch at T+0 apart from the same numbers flown later (SPEC.md section 17), and with the
   // fueling pad by pad level, so a class's level is every one of its groups' (SPEC.md section 18).
   const shared = new Map<number, Map<number, Map<string, number>>>();
@@ -120,7 +124,8 @@ function durationClasses(
       }
       const key =
         (grp.atStart ? `${grp.variant}@start` : grp.variant) +
-        (model.fuelingRate > 0 ? `@pad${padLevel(grp.padSeconds)}` : '');
+        (model.fuelingRate > 0 ? `@pad${padLevel(grp.padSeconds)}` : '') +
+        (grp.lastInSlot ? '@last' : '');
       let c = byNightsClass.get(key);
       if (c === undefined) {
         c = classSeconds.length;
@@ -132,6 +137,7 @@ function durationClasses(
         classCharge.push(slotCharge(model, grp));
         classAtStart.push(grp.atStart);
         classAtStartBlock.push(grp.atStartBlock);
+        classLast.push(grp.lastInSlot);
       }
       classAtStartBlock[c] = Math.max(classAtStartBlock[c], grp.atStartBlock);
       classOf[g] = c;
@@ -144,6 +150,7 @@ function durationClasses(
       classCharge.push(slotCharge(model, grp));
       classAtStart.push(grp.atStart);
       classAtStartBlock.push(grp.atStartBlock);
+      classLast.push(grp.lastInSlot);
     }
   });
   return {
@@ -156,6 +163,7 @@ function durationClasses(
     classCharge,
     classAtStart,
     classAtStartBlock,
+    classLast,
   };
 }
 
@@ -530,6 +538,15 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     rows.begin(`start_k${k}`);
     for (let c = 0; c < layout.classes; c++) {
       if (layout.classAtStart[c]) rows.add(nCol(layout, c, k), 1);
+    }
+    rows.end(-INF, 1);
+  }
+  // One last launch a slot, the only launch a slot's-last-launch variant can be (SPEC.md section 19). Without an
+  // effort floor there is no such class, the row has no entries, and `Rows.end` drops it.
+  for (let k = 0; k < layout.slots; k++) {
+    rows.begin(`last_k${k}`);
+    for (let c = 0; c < layout.classes; c++) {
+      if (layout.classLast[c]) rows.add(nCol(layout, c, k), 1);
     }
     rows.end(-INF, 1);
   }
