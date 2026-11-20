@@ -220,11 +220,11 @@ describe('calendarFaults with the fueling pad', () => {
   ];
   const at = (option: number, launchAt: number) => ({ option, optionId: fuelMenu[option].id, launchAt });
   const padDay: CalendarDay = { sleepSeconds: 0, horizonSeconds: D, slots: 3, fuelingRate: 1 };
-  const faults = (cal: unknown[], d: CalendarDay = padDay) =>
+  const faults = (cal: ReturnType<typeof at>[][], d: CalendarDay = padDay) =>
     calendarFaults(
       cal,
       fuelMenu,
-      fuelMenu.map((_, i) => cal.flat().filter((l: any) => l.option === i).length),
+      fuelMenu.map((_, i) => cal.flat().filter(l => l.option === i).length),
       d
     );
 

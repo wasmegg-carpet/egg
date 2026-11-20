@@ -105,7 +105,8 @@ describe('the fueling rate', () => {
   });
 
   it('is left absent when absent and refused when it fuels nothing or in no time', () => {
-    const { fuelingRate: _rate, ...base } = problemOf([makeOpt(1, H, [['B', 1]])], D);
+    const base: PlanProblem = { ...problemOf([makeOpt(1, H, [['B', 1]])], D) };
+    delete (base as { fuelingRate?: number }).fuelingRate;
     expect('fuelingRate' in normalizeProblem(base)).toBe(false);
     expect(normalizeProblem({ ...base, fuelingRate: 3 }).fuelingRate).toBe(3);
     for (const bad of [0, -1, NaN, Infinity]) expect(() => normalizeProblem({ ...base, fuelingRate: bad })).toThrow();
