@@ -1554,25 +1554,27 @@ export function layOutPlan(
   // of those as doubled as its first, goes first instead, when that leaves no more launches late across the plan.
   const lateCount = (late: number[][]) => late.reduce((a, positions) => a + positions.length, 0);
 
-  let lateNow = lateCount(retime(seqs));
-  seqs.forEach((seq, k) => {
-    // A launch at T+0 in the night goes up there or nowhere, so a slot that starts with one keeps it first.
-    if (seq.length < 2 || model.groups[seq[0].g].atStart) return;
-    const doubled = (l: Seq[number]) => model.groups[l.g].variant !== 'normal';
-    let fastest = 0;
-    seq.forEach((l, i) => {
-      if (doubled(l) === doubled(seq[0]) && model.groups[l.g].padSeconds < model.groups[seq[fastest].g].padSeconds) {
-        fastest = i;
-      }
+  const fastestFirst = () => {
+    let lateNow = lateCount(retime(seqs));
+    seqs.forEach((seq, k) => {
+      // A launch at T+0 in the night goes up there or nowhere, so a slot that starts with one keeps it first.
+      if (seq.length < 2 || model.groups[seq[0].g].atStart) return;
+      const doubled = (l: Seq[number]) => model.groups[l.g].variant !== 'normal';
+      let fastest = 0;
+      seq.forEach((l, i) => {
+        if (doubled(l) === doubled(seq[0]) && model.groups[l.g].padSeconds < model.groups[seq[fastest].g].padSeconds) {
+          fastest = i;
+        }
+      });
+      if (fastest === 0) return;
+      const trial = seqs.map(other => other.map(l => ({ ...l })));
+      trial[k].unshift(...trial[k].splice(fastest, 1));
+      const late = lateCount(retime(trial));
+      if (late > lateNow) return;
+      seq.unshift(...seq.splice(fastest, 1));
+      lateNow = late;
     });
-    if (fastest === 0) return;
-    const trial = seqs.map(other => other.map(l => ({ ...l })));
-    trial[k].unshift(...trial[k].splice(fastest, 1));
-    const late = lateCount(retime(trial));
-    if (late > lateNow) return;
-    seq.unshift(...seq.splice(fastest, 1));
-    lateNow = late;
-  });
+  };
 
   const total = seqs.reduce((a, seq) => a + seq.length, 0);
   const rounds = (nearFirst: boolean) => {
@@ -1595,7 +1597,9 @@ export function layOutPlan(
   };
   // Which drops a repair tries first is a heuristic either way: those anywhere in the slot can let the rest of it slide
   // a day, taking its nights with it, and those near the late launch can cost a launch where a slide would have cost
-  // nothing. So the rounds run both ways, from the same start, and the judge keeps the better plan, ties to the first.
+  // nothing. Moving the fastest-fuelling launch first is one too: it can move an overnight ship to a morning the slot
+  // needed for something else. So the stage runs each way, from the same start, and the judge keeps the better plan,
+  // ties to the first.
   const snapshot = () => ({
     seqs: seqs.map(seq => seq.map(l => ({ ...l }))),
     counts: current.slice(),
@@ -1608,8 +1612,14 @@ export function layOutPlan(
   };
   const start = snapshot();
   let kept: { value: number; saved: ReturnType<typeof snapshot> } | null = null;
-  for (const nearFirst of [false, true]) {
+  for (const [fastest, nearFirst] of [
+    [true, false],
+    [true, true],
+    [false, false],
+    [false, true],
+  ]) {
     restoreSnapshot(start);
+    if (fastest) fastestFirst();
     rounds(nearFirst);
     const value = judged();
     if (kept === null || value > kept.value) kept = { value, saved: snapshot() };
