@@ -19,7 +19,8 @@ import {
   type MilpSolve,
   type SleepWindow,
 } from './types';
-import { VERIFY_TOL_SECONDS, doubledCopiesOnMenu, slotFault, type TimedLaunch } from './verify';
+import { VERIFY_TOL_SECONDS, doubledCopiesOnMenu, padFault, slotFault, startChain, type TimedLaunch } from './verify';
+import { schedulePad, type PadItem } from './pad';
 
 // A node limit and never a timeout, for SPEC.md section 7's reason: the layout decides what is trimmed, so a
 // clock here would make the plan a function of machine load.
@@ -772,6 +773,21 @@ function balance(demand: readonly (readonly number[])[], model: Model, layout: L
   return Math.max(...load) < busiest - LAYOUT_TOL ? out : demand.map(d => d.slice());
 }
 
+// How early the layout closes the 2x window with the fueling pad (SPEC.md section 18): the fuellings of the plan's
+// three longest-fuelling doubled launches, which is the most a slot's last doubled launch can wait for at a moment
+// every slot launches at once, no more than a quarter of the window.
+function padWindowReserve(model: Model, counts: readonly number[]): number {
+  const pads = model.groups
+    .flatMap((grp, g) =>
+      grp.variant !== 'normal' && counts[g] > 0 ? Array<number>(Math.min(3, counts[g])).fill(grp.padSeconds) : []
+    )
+    .sort((a, b) => b - a);
+  return Math.min(
+    model.eventWindowSeconds / 4,
+    pads.slice(0, 3).reduce((a, p) => a + p, 0)
+  );
+}
+
 export interface PlanLayout {
   // Per group, the plan that was laid out: the solve's counts less every launch trimmed.
   counts: number[];
@@ -803,7 +819,13 @@ export function layOutPlan(
 ): PlanLayout {
   const day = model.day;
   const sleep = timelineOf(model);
-  const window = model.eventWindowSeconds;
+  // With the fueling pad and a sleep window, the layout works to a window closing a little early, by
+  // `padWindowReserve`: launches it would send exactly at the close, as at a wake-up the close falls on, cannot all go
+  // up there once the pad spaces them, and the pad stage below, which keeps the real close, promotes again whatever it
+  // does fly inside it. Without sleep the slots go back to back from T+0 and meet nowhere but there.
+  const realWindow = model.eventWindowSeconds;
+  const window =
+    day !== null && realWindow > 0 && model.fuelingRate > 0 ? realWindow - padWindowReserve(model, counts) : realWindow;
   // The layout times a slot on the player's regular day, from the wake-up at or before the plan's start, which is
   // `shift` seconds before it (SPEC.md section 17); the calendar, the verifier and the window are in the plan's own
   // seconds. `planAt` is a launch's plan time, computed as the calendar writes it, so every comparison against the
@@ -826,7 +848,8 @@ export function layOutPlan(
     layoutSolves: 0,
     marginResolves: 0,
     verifierRetries: 0,
-    ...(day !== null && window > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
+    // With the fueling pad as well as without sleep: the pad can carry a doubled launch out of the window.
+    ...((day !== null || model.fuelingRate > 0) && window > 0 && { launchesDemoted: 0, launchesPromoted: 0 }),
   };
   const groupsOf: number[][] = Array.from({ length: layout.classes }, () => []);
   for (let g = 0; g < layout.groups; g++) groupsOf[layout.classOf[g]].push(g);
@@ -1330,5 +1353,240 @@ export function layOutPlan(
     })
   );
   if (left.some(n => n !== 0)) throw new Error('layout: some group launches have no place on the calendar');
-  return { counts: current, calendar, stats };
+  if (!(model.fuelingRate > 0)) return { counts: current, calendar, stats };
+
+  // The fueling pad (SPEC.md section 18). Everything above lays the plan out as if fuelling took no time; with a
+  // fueling rate the whole calendar is then re-timed on the one pad (`schedulePad`), every slot keeping its order and
+  // every launch its group, and what that leaves outside the plan's rules is settled: a doubled launch carried past
+  // the 2x window's close is flown as its twin, a 1x launch brought inside it is flown doubled, as `settle` and
+  // `promote` do, and a slot carried past the horizon loses a launch, the judge choosing which, until it ends in
+  // time. A launch dropped, or one whose fuelling changes, re-times the plan. The times keep the pad, sleep and slot
+  // rules by construction, and the result is verified the way `assertVerified` verifies it.
+  const groupOfOption = new Map(model.groups.map((grp, g) => [grp.members[0], g]));
+  const seqs = calendar.map(launches => launches.map(l => ({ g: groupOfOption.get(l.option)!, at: l.launchAt })));
+  type Seq = (typeof seqs)[number];
+  const optionOf = (g: number) => options[model.groups[g].members[0]];
+  const blockOfGroup = (g: number) => {
+    const o = optionOf(g);
+    return o.atStartSeconds ?? o.actualTime + (o.nights ?? 0) * sleep.sleepSeconds;
+  };
+  const itemsOf = (from: readonly Seq[]): PadItem[][] =>
+    from.map(seq =>
+      seq.map(({ g, at }) => ({
+        padSeconds: model.groups[g].padSeconds,
+        block: blockOfGroup(g),
+        launchAt: at,
+        doubled: model.groups[g].variant !== 'normal',
+        startVariant: model.groups[g].atStart,
+      }))
+    );
+  // Re-times `into` on the pad, and returns, per slot, the launches that went up too late for the slot to end by the
+  // horizon (`schedulePad`).
+  const retime = (into: Seq[]) => {
+    const times = schedulePad(itemsOf(into), sleep, realWindow);
+    into.forEach((seq, k) => seq.forEach((l, i) => (l.at = times.launchAt[k][i])));
+    return times.late;
+  };
+  const endOf = (seq: Seq) => (seq.length > 0 ? seq[seq.length - 1].at + blockOfGroup(seq[seq.length - 1].g) : 0);
+  const overHorizon = (seq: Seq) => endOf(seq) > sleep.horizonSeconds + LAYOUT_TOL;
+  const removeLaunch = (seq: Seq, i: number) => {
+    current[seq[i].g]--;
+    stats.launchesTrimmed++;
+    seq.splice(i, 1);
+  };
+
+  // The 2x window against the re-timed plan, both ways, at the times it has (SPEC.md section 16). True when the pad
+  // sequence changed: a launch left the plan, or one is now flown as a group that fuels for less (a stand-in).
+  const settleWindow = (): boolean => {
+    let changed = false;
+    const fly = (l: Seq[number], to: number) => {
+      if (model.groups[to].padSeconds !== model.groups[l.g].padSeconds) changed = true;
+      move(l.g, to);
+      l.g = to;
+    };
+    for (const seq of seqs) {
+      if (!(realWindow > 0)) break;
+      for (let i = 0; i < seq.length; i++) {
+        const grp = model.groups[seq[i].g];
+        if (grp.variant === 'normal' || seq[i].at <= realWindow + LAYOUT_TOL) continue;
+        if (grp.twin >= 0) {
+          fly(seq[i], grp.twin);
+          stats.launchesDemoted = (stats.launchesDemoted ?? 0) + 1;
+        } else {
+          removeLaunch(seq, i--);
+          changed = true;
+        }
+      }
+      const inside = seq.flatMap((l, i) => (l.at <= realWindow + LAYOUT_TOL ? [i] : []));
+      const relabel = (i: number, want: DoubledVariant): boolean => {
+        const grp = model.groups[seq[i].g];
+        if (grp.variant === want) return true;
+        if (grp.variant === 'normal' && !onMenu(seq[i].g, want)) return false;
+        const to = grp.copy[want];
+        if (to < 0) return false;
+        if (grp.variant === 'normal') stats.launchesPromoted = (stats.launchesPromoted ?? 0) + 1;
+        fly(seq[i], to);
+        return true;
+      };
+      if (inside.length > 0) {
+        const last = inside[inside.length - 1];
+        let overhangLeft = false;
+        for (const i of inside.slice(0, -1)) {
+          if (!relabel(i, 'event') && model.groups[seq[i].g].variant === 'overhang') overhangLeft = true;
+        }
+        if (!(overhangLeft && relabel(last, 'event'))) relabel(last, 'overhang');
+      }
+      // A 1x launch the model has no copy for, where the menu could double it, cannot fly there.
+      let lastInside = -1;
+      seq.forEach((l, i) => l.at <= realWindow + VERIFY_TOL_SECONDS && (lastInside = i));
+      for (let i = seq.length - 1; i >= 0; i--) {
+        const grp = model.groups[seq[i].g];
+        if (grp.variant !== 'normal' || !(seq[i].at < realWindow - VERIFY_TOL_SECONDS)) continue;
+        if (onMenu(seq[i].g, i === lastInside ? 'overhang' : 'event')) {
+          removeLaunch(seq, i);
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  };
+
+  // One launch off slot `k`, which ends past the horizon: the last of one of its groups, the judge choosing which
+  // among the drops that bring the slot back inside the horizon once the plan is re-timed, or, when none does, the
+  // slot's last launch.
+  const dropFrom = (k: number) => {
+    const seq = seqs[k];
+    let best: { value: number; i: number } | null = null;
+    for (const g of new Set(seq.map(l => l.g))) {
+      const i = seq.map(l => l.g).lastIndexOf(g);
+      const trial = seqs.map(other => other.map(l => ({ ...l })));
+      trial[k].splice(i, 1);
+      retime(trial);
+      if (overHorizon(trial[k])) continue;
+      current[g]--;
+      const value = judged();
+      current[g]++;
+      if (best === null || value > best.value) best = { value, i };
+    }
+    removeLaunch(seq, best?.i ?? seq.length - 1);
+  };
+
+  // A launch the pad made go up too late for its slot to end by the horizon means the slot has to lose one; left to
+  // itself the delay runs on through the slot, and with a sleep window a launch carried past a bedtime waits for the
+  // next wake-up and takes the slot's whole timeline a night later with it. So the slot loses one launch where that
+  // keeps its timeline instead: the last of one of its groups up to the late launch (or the first after it), the
+  // judge choosing which among the drops after which the slot's first late launch is a later one, or among them all
+  // when none is.
+  const repair = (k: number, i: number) => {
+    const seq = seqs[k];
+    const when = seq[i].at;
+    const groups = seq.map(l => l.g);
+    let best: { value: number; at: number; resolved: boolean } | null = null;
+    for (const g of new Set(groups)) {
+      const before = groups.slice(0, i + 1).lastIndexOf(g);
+      const at = before >= 0 ? before : groups.indexOf(g);
+      const trial = seqs.map(other => other.map(l => ({ ...l })));
+      trial[k].splice(at, 1);
+      const late = retime(trial)[k];
+      const resolved = late.length === 0 || trial[k][late[0]].at > when + LAYOUT_TOL;
+      current[g]--;
+      const value = judged();
+      current[g]++;
+      if (best === null || (resolved && !best.resolved) || (resolved === best.resolved && value > best.value)) {
+        best = { value, at, resolved };
+      }
+    }
+    removeLaunch(seq, best!.at);
+  };
+
+  // Every slot's first launch waits for its own fuelling after T+0, which the plan's MILP charges at the shortest
+  // fuelling of any class the slot flies (`padLevelsOf` in `milp.ts`). So each slot's launch that fuels the fastest,
+  // of those as doubled as its first, goes first instead, when that leaves no more launches late across the plan.
+  const lateCount = (late: number[][]) => late.reduce((a, positions) => a + positions.length, 0);
+
+  let lateNow = lateCount(retime(seqs));
+  seqs.forEach((seq, k) => {
+    // A launch at T+0 in the night goes up there or nowhere, so a slot that starts with one keeps it first.
+    if (seq.length < 2 || model.groups[seq[0].g].atStart) return;
+    const doubled = (l: Seq[number]) => model.groups[l.g].variant !== 'normal';
+    let fastest = 0;
+    seq.forEach((l, i) => {
+      if (doubled(l) === doubled(seq[0]) && model.groups[l.g].padSeconds < model.groups[seq[fastest].g].padSeconds) {
+        fastest = i;
+      }
+    });
+    if (fastest === 0) return;
+    const trial = seqs.map(other => other.map(l => ({ ...l })));
+    trial[k].unshift(...trial[k].splice(fastest, 1));
+    const late = lateCount(retime(trial));
+    if (late > lateNow) return;
+    seq.unshift(...seq.splice(fastest, 1));
+    lateNow = late;
+  });
+
+  const total = seqs.reduce((a, seq) => a + seq.length, 0);
+  for (let round = 0; round <= total + model.slots; round++) {
+    const late = retime(seqs);
+    if (settleWindow()) continue;
+    let first: { k: number; i: number } | null = null;
+    late.forEach((positions, k) => {
+      const i = positions[0];
+      if (i !== undefined && (first === null || seqs[k][i].at < seqs[first.k][first.i].at)) first = { k, i };
+    });
+    if (first !== null) {
+      repair((first as { k: number; i: number }).k, (first as { k: number; i: number }).i);
+      continue;
+    }
+    const over = seqs.findIndex(overHorizon);
+    if (over < 0) break;
+    dropFrom(over);
+  }
+
+  // The times as the verifier reads them: the pad rule over the plan, then each slot with the start chain read off
+  // those times. A fault here is a launch the rounds above could not settle within their bound; it leaves the plan,
+  // at the times it has, until the plan verifies. Removing a launch never breaks the pad rule for the rest.
+  const timedSlots = () => {
+    const pads = seqs.map(seq => seq.map(l => ({ launchAt: l.at, padSeconds: model.groups[l.g].padSeconds })));
+    const chained = startChain(pads);
+    return { pads, chained };
+  };
+  for (let guard = 0; guard <= total; guard++) {
+    const { pads, chained } = timedSlots();
+    if (padFault(pads) !== null) throw new Error(`layout: the pad schedule fails the pad rule: ${padFault(pads)}`);
+    let fixed = true;
+    for (let k = 0; k < seqs.length && fixed; k++) {
+      const timed = (n: number) =>
+        seqs[k].slice(0, n).map((l, i) => ({
+          launchAt: l.at,
+          wakingSeconds: model.groups[l.g].timeSeconds,
+          nights: model.groups[l.g].nights,
+          doubled: model.groups[l.g].variant !== 'normal',
+          ...(optionOf(l.g).atStartSeconds !== undefined && { atStartSeconds: optionOf(l.g).atStartSeconds }),
+          eventCopy: menuCopies[model.groups[l.g].members[0]].event,
+          overhangCopy: menuCopies[model.groups[l.g].members[0]].overhang,
+          startChain: chained[k][i],
+        }));
+      if (verify(timed(seqs[k].length), sleep, realWindow) === null) continue;
+      let n = 1;
+      while (n < seqs[k].length && verify(timed(n), sleep, realWindow) === null) n++;
+      removeLaunch(seqs[k], n - 1);
+      fixed = false;
+    }
+    if (fixed) break;
+  }
+
+  const padded = seqs.map(seq =>
+    seq.map(({ g, at }) => {
+      const option = model.groups[g].members[0];
+      return {
+        option,
+        optionId: options[option].id,
+        launchAt: at,
+        wakingSeconds: model.groups[g].timeSeconds,
+        nights: model.groups[g].nights,
+        doubled: model.groups[g].variant !== 'normal',
+      };
+    })
+  );
+  return { counts: current, calendar: padded, stats };
 }
