@@ -60,7 +60,7 @@ export interface PlanProblem {
   // may start the moment the previous one launches, and a fueled ship waits on the pad until its slot is free. So,
   // over every launch of the plan in launch order, the first goes up no sooner than its own fueling after t = 0 and
   // each later one no sooner than its fueling after the one before it. Absent means instant fueling, the problem
-  // without the pad exactly. The app sets it from the player's tank (`../fueling.ts`). See SPEC.md section 18.
+  // without the pad exactly. The app sets it from the player's tank level (`../fueling.ts`). See SPEC.md section 18.
   readonly fuelingRate?: number;
   readonly slots: number;
   // Copies of each node the player already owns, folded in before crafting.

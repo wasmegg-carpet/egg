@@ -7,7 +7,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { optimizeFull } from 'lib/mission-optimizer/optimizer-core';
-import { FUELING_TANK_SHARE_PER_SECOND, fuelingRateOf } from 'lib/mission-optimizer/fueling';
+import { fuelTankOutputsPerMinute, fuelTankSizes } from 'lib';
+import { fuelingRateOfLevel } from 'lib/mission-optimizer/fueling';
 import { capacityVariants } from 'lib/mission-optimizer/capacity';
 import { sleepCapacity, sleepVariants, startVariants } from 'lib/mission-optimizer/sleep';
 import { loadHighs } from 'lib/mission-optimizer/solver/highs';
@@ -24,6 +25,7 @@ import {
 import { padFault, slotFault, startChain } from 'lib/mission-optimizer/solver/verify';
 import type { LaunchOption } from 'lib/mission-optimizer/types';
 import { calendarFaults } from '../arena/calendar';
+import { PAD_EGGS_PER_MINUTE } from '../arena/instances';
 import { craftDag, makeOpt } from './spec-helpers';
 
 const M = 60;
@@ -91,10 +93,19 @@ function arenaFaults(problem: PlanProblem, calendar: CalendarLaunch[][], allocat
 }
 
 describe('the fueling rate', () => {
-  it('moves 0.0003 of the tank a second at every level, 9T a minute at the 500T tank', () => {
-    expect(fuelingRateOf(500e12) * 60).toBeCloseTo(9e12, 0);
-    for (const tank of [2e9, 10e12, 500e12]) expect(tank / fuelingRateOf(tank)).toBeCloseTo(1 / 0.0003, 6);
-    expect(FUELING_TANK_SHARE_PER_SECOND).toBe(0.0003);
+  it('moves its tank level’s output, a full tank in 6.67 to 55.56 minutes, 9T a minute at the 500T tank', () => {
+    expect(fuelingRateOfLevel(7)! * 60).toBe(9e12);
+    expect(fuelingRateOfLevel(3)! * 60).toBe(3e12);
+    const fullTankMinutes = fuelTankSizes.map((size, level) => size / fuelingRateOfLevel(level)! / 60);
+    [6.67, 16.67, 55.56, 33.33, 44.44, 50, 53.33, 55.56].forEach((minutes, level) =>
+      expect(fullTankMinutes[level]).toBeCloseTo(minutes, 2)
+    );
+    expect(fuelTankOutputsPerMinute).toHaveLength(fuelTankSizes.length);
+    for (const level of [-1, 8, 2.5]) expect(fuelingRateOfLevel(level)).toBeUndefined();
+  });
+
+  it('is the table the arena states on its own', () => {
+    expect(PAD_EGGS_PER_MINUTE).toEqual(fuelTankOutputsPerMinute);
   });
 
   it('fuels a launch for all its eggs at one rate, a doubled one as long as its 1x twin', () => {

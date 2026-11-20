@@ -1534,9 +1534,18 @@ and a mean gap of 0.008.
 
 The game has one fueling pad for all three slots. The rule, the user's: a launch
 is fueled on the pad for `f = actualFuel / R` seconds, where `actualFuel` is the
-option's eggs of every type and `R` is the pad's rate, `0.0003` of the tank's size
-a second at every tank level (9T a minute at the 500T tank; `../fueling.ts`). Egg
-types do not fuel side by side, and a doubled launch fuels as long as its 1x twin.
+option's eggs of every type and `R` is the pad's rate, its tank level's output
+(`fuelTankOutputsPerMinute` in `lib/missions.ts`, beside the tank sizes, over 60;
+`../fueling.ts`). It is not proportional to the tank:
+
+| tank level       | 0    | 1     | 2     | 3     | 4     | 5    | 6     | 7     |
+| ---------------- | ---- | ----- | ----- | ----- | ----- | ---- | ----- | ----- |
+| size             | 2B   | 200B  | 10T   | 100T  | 200T  | 300T | 400T  | 500T  |
+| output a minute  | 300M | 12B   | 180B  | 3T    | 4.5T  | 6T   | 7.5T  | 9T    |
+| a full tank, min | 6.67 | 16.67 | 55.56 | 33.33 | 44.44 | 50   | 53.33 | 55.56 |
+
+Egg types do not fuel side by side, and a doubled launch fuels as long as its 1x
+twin.
 One ship at a time: fueling the next ship may start the moment the one before it
 launches, even while every slot is still flying, and a fueled ship waits on the
 pad until its slot is free. Fueling runs unattended, the night included; only the
@@ -1550,12 +1559,13 @@ fueling, the problem without the pad exactly**: every group's `padSeconds` is 0,
 there is no level, pad column or pad row, the pad stage below does not run, and
 every check reads as before. `normalizeProblem` leaves it absent when absent and
 throws on a rate that is not a positive finite number, since neither "never" nor
-"instantly" is a safe reading. Both apps pass `fuelingRateOf` of the tank size
-for the player's tank level, not of the fuel budget, which with a by-egg budget is
+"instantly" is a safe reading. Both apps pass `fuelingRateOfLevel` of the
+player's tank level, not anything of the fuel budget, which with a by-egg budget is
 what is stored in the tank.
 
-A plan's fuel fits its tank, so its fueling sums to at most `1 / 0.0003` seconds,
-about 55.6 minutes, at any tank; a launch takes that times its share of the tank.
+A plan's fuel fits its tank, so its fueling sums to at most a full tank's, from
+400 seconds at level 0 to 3333 seconds (55.56 minutes) at levels 2 and 7; a launch
+takes that times its share of the tank.
 Against horizons of days the pad matters only where launches meet: at T+0, at a
 wake-up after ships landed in the night, at a cadence of whole days (Low and
 Medium effort), at the window's close and where ships land together.

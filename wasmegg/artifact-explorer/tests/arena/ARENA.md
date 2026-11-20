@@ -246,8 +246,8 @@ scorecard prints both.
 
 The game has one fueling pad for all three slots, and fueling takes minutes. A
 ship is fueled there for its total fuel, every egg type at one rate, over the
-pad's rate `R`, which is `0.0003` of the tank's size a second at every tank level
-(9T a minute at the 500T tank): `f = actualFuel / R` seconds. One ship at a time;
+pad's rate `R`, its tank level's output (9T a minute at the 500T tank, 3T at the
+100T one): `f = actualFuel / R` seconds. One ship at a time;
 fueling the next may start the moment the one before it launches, and a fueled
 ship waits on the pad until its slot is free. Fueling runs unattended, the night
 included; only the launch needs the player awake. The pad is empty at T+0.
@@ -267,13 +267,14 @@ launches at T+0 itself, and C1 is the rule it was.
 
 The rate rides on the problem as `fuelingRate`, absent without one, and on the day
 C1 verifies against, the instance's rather than the problem's. The arena keeps its
-own `0.0003` (`instances.ts`) rather than the planner's. `ARENA_PAD` sets it:
-unset, no instance has a pad and every instance is what it was; `tank`, each
-instance's pad is its own tank's, its fuel capacity, which the plan's fuel fits;
-a number of trillions of eggs (`ARENA_PAD=500`, `ARENA_PAD=10`) makes that the
-tank of every instance, as its fuel capacity and as its pad. A plan's fuel fits
-its tank, so its fueling sums to at most `1 / 0.0003` seconds, about 55.6 minutes,
-at any tank: the pad spaces launches by minutes, and it matters where launches
+own table of the outputs per tank level (`instances.ts`, `PAD_EGGS_PER_MINUTE`)
+rather than the planner's. `ARENA_PAD` sets it: unset, no instance has a pad and
+every instance is what it was; `tank`, each instance's pad is its own tank
+level's, the level its fuel capacity is the size of; a tank level 0 to 7
+(`ARENA_PAD=7`, `ARENA_PAD=3`) makes that the tank of every instance, its size the
+fuel capacity and its output the pad. A plan's fuel fits its tank, so its fueling
+sums to at most a full tank's, 400 seconds at level 0 to 3333 (55.56 minutes) at
+levels 2 and 7: the pad spaces launches by minutes, and it matters where launches
 meet (T+0, a wake-up, the window's close, ships landing together). With a pad a
 plan with no calendar fails C1. Nothing is drawn for it, so no seed's other
 fields move. The packer does not see the pad: an arrangement the pad forbids can
@@ -359,7 +360,7 @@ SOLVER=my-solver ARENA=sweep pnpm arena     # one entry
 ARENA_SLEEP=8 ARENA=sweep pnpm arena        # an 8-hour sleep window on every instance
 ARENA_WINDOW=inside ARENA=sweep pnpm arena  # a 48-hour 2x window on every instance
 ARENA_SLEEP=8 ARENA_WAKE=12 ARENA=sweep pnpm arena  # 8 hours of sleep, 12 hours awake at the start
-ARENA_PAD=500 ARENA_SLEEP=8 ARENA=sweep pnpm arena  # a 500T tank and its fueling pad on every instance
+ARENA_PAD=7 ARENA_SLEEP=8 ARENA=sweep pnpm arena  # the 500T tank and its fueling pad on every instance
 ARENA_INSTANCES=80 ARENA_SEED_BASE=9000 ARENA=sweep pnpm arena
 pnpm arena:check                            # independence guard only
 ```
@@ -373,7 +374,7 @@ pnpm arena:check                            # independence guard only
 | `ARENA_SLEEP`     | unset (no sleep)       | hours of sleep on every instance, or `draw`; see Sleep            |
 | `ARENA_WINDOW`    | unset (no window)      | a regime on every instance, or `draw`; see The 2x capacity window |
 | `ARENA_WAKE`      | unset (start at wake)  | hours since the player woke, at the plan's start; see Sleep       |
-| `ARENA_PAD`       | unset (no pad)         | `tank`, or a tank in trillions; see The fueling pad               |
+| `ARENA_PAD`       | unset (no pad)         | `tank`, or a tank level 0-7; see The fueling pad                  |
 | `ARENA_GATE`      | —                      | `all` promotes every invariant to a hard failure                  |
 
 The sweep is opt-in and `pnpm test` does not run it: every tier here is minutes

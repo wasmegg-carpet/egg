@@ -63,22 +63,22 @@ function wakeOverride(): number {
   return hours * HOUR;
 }
 
-// The game's fueling pad moves this share of the tank a second, at every tank level. Stated here, not imported, for
-// the reason the arena keeps its own sleep model: a rate shared with the planner would agree with itself.
-export const PAD_TANK_SHARE_PER_SECOND = 0.0003;
+// What the game's fueling pad moves a minute at each tank level, parallel to `fuelTankSizes`. Stated here, not
+// imported, for the reason the arena keeps its own sleep model: a rate shared with the planner would agree with itself.
+export const PAD_EGGS_PER_MINUTE = [3e8, 1.2e10, 1.8e11, 3e12, 4.5e12, 6e12, 7.5e12, 9e12];
 
 // `ARENA_PAD`: unset, no instance has a pad (today's arena, every recorded figure unchanged); `tank`, the pad of each
-// instance's own tank, its fuel capacity, which the plan's fuel fits; a number of trillions of eggs, that tank on
-// every instance, as its fuel capacity and as its pad. Read per call, like `ARENA_SLEEP`. Nothing is drawn, so no
-// seed's other fields move.
+// instance's own tank level, the level its fuel capacity is the size of; a tank level 0 to 7, that tank on every
+// instance, its size as the fuel capacity and its output as the pad. Read per call, like `ARENA_SLEEP`. Nothing is
+// drawn, so no seed's other fields move.
 function padOverride(drawnTank: number): { fuelCapacity: number; fuelingRate?: number } {
   const raw = process.env.ARENA_PAD;
   if (raw === undefined || raw === '') return { fuelCapacity: drawnTank };
-  const tank = raw === 'tank' ? drawnTank : Number(raw) * 1e12;
-  if (!Number.isFinite(tank) || !(tank > 0)) {
-    throw new Error(`ARENA_PAD must be "tank" or a positive number of trillions, got ${JSON.stringify(raw)}`);
+  const level = raw === 'tank' ? fuelTankSizes.indexOf(drawnTank) : Number(raw);
+  if (!Number.isInteger(level) || level < 0 || level >= PAD_EGGS_PER_MINUTE.length) {
+    throw new Error(`ARENA_PAD must be "tank" or a tank level 0 to 7, got ${JSON.stringify(raw)}`);
   }
-  return { fuelCapacity: tank, fuelingRate: tank * PAD_TANK_SHARE_PER_SECOND };
+  return { fuelCapacity: fuelTankSizes[level], fuelingRate: PAD_EGGS_PER_MINUTE[level] / 60 };
 }
 
 // Where a 2x capacity window can sit relative to the plan, named against the horizon, which is what decides

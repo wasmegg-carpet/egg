@@ -57,7 +57,7 @@ export interface OptimizeArgs {
   eventWindowSeconds?: number;
   // Eggs a second the game's one fueling pad moves into a ship, for every slot: each launch is fuelled there first,
   // one ship at a time, for `actualFuel / fuelingRate` seconds, so launches the plan would send together are spaced
-  // out (`solver/SPEC.md` section 18). Both apps pass `fuelingRateOf` their tank size (`fueling.ts`). Absent fuels
+  // out (`solver/SPEC.md` section 18). Both apps pass `fuelingRateOfLevel` of the tank level (`fueling.ts`). Absent fuels
   // every launch in no time, the plan without the pad exactly.
   fuelingRate?: number;
   // Not a budget the plan spends against but a threshold on the menu: it drops ships the player
