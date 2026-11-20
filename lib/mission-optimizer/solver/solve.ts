@@ -120,14 +120,7 @@ function fitsBudgets(model: Model, layout: Layout, columnValues: Float64Array, c
     columnValues,
     layout.classAtStart.map(t => (t ? 1 : 0))
   );
-  const lastLoads = slotLoads(
-    model,
-    layout,
-    columnValues,
-    layout.classLast.map(t => (t ? 1 : 0))
-  );
   for (let k = 0; k < model.slots; k++) {
-    if (lastLoads[k] > 1) return false;
     if (overhangLoads[k] > 1) return false;
     if (startLoads[k] > 1) return false;
     if (!(window > 0) && doubledLoads[k] > 0) return false;
@@ -216,8 +209,6 @@ export function assertVerified(
       eventCopy: copies[l.option].event,
       overhangCopy: copies[l.option].overhang,
       ...(chained !== null && { startChain: chained[k][i] }),
-      flightSeconds: problem.options[l.option].rawTime,
-      ...(problem.options[l.option].lastInSlot && { lastInSlot: true }),
       ...(problem.options[l.option].atStartSeconds !== undefined && {
         atStartSeconds: problem.options[l.option].atStartSeconds,
       }),

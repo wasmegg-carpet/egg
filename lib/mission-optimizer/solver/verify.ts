@@ -28,11 +28,6 @@ export interface TimedLaunch {
   // fueling pad from T+0, which the player stays up for (SPEC.md section 18). Absent, the chain is read without the
   // pad, as the launches at T+0 itself, to a microsecond.
   startChain?: boolean;
-  // The launch's real flight, its option's `rawTime`: what the slot's last launch is held to, landing by the horizon,
-  // since the effort level only spaces launches (SPEC.md section 19). Absent, the last launch is held to its block.
-  flightSeconds?: number;
-  // A slot's-last-launch variant (`LaunchOption.lastInSlot`), which nothing in its slot may follow. Absent is false.
-  lastInSlot?: boolean;
 }
 
 // Per option, for a `normal` one, whether the menu also holds the same flight at 2x as an `event` and as an
@@ -51,7 +46,6 @@ export function doubledCopiesOnMenu(options: readonly LaunchOption[]): { event: 
       o.nights ?? 0,
       o.actualFuel,
       o.atStartSeconds ?? '',
-      o.lastInSlot ? 'last' : '',
       entries(o.fuelByEgg, 1),
       entries(o.yieldVector, f),
       entries(o.legendaryYieldVector, f),
@@ -124,16 +118,10 @@ export function slotFault(launches: readonly TimedLaunch[], sleep: SleepWindow, 
     } else if (inside(launches[i]) && (i === lastInside ? launches[i].overhangCopy : launches[i].eventCopy)) {
       return `launch ${i} at ${launchAt}s is flown at 1x inside the 2x window, which closes at ${eventWindowSeconds}s`;
     }
-    if (launches[i].lastInSlot && i < launches.length - 1) {
-      return `launch ${i} at ${launchAt}s may only be its slot's last launch, and launch ${i + 1} follows it`;
-    }
     free = launchAt + (startCharge ?? wakingSeconds + nights * sleep.sleepSeconds);
   }
-  // The last launch only has to land: nothing follows it for the effort level to space (SPEC.md section 19).
-  const last = launches[launches.length - 1];
-  const end = last === undefined ? 0 : last.flightSeconds !== undefined ? last.launchAt + last.flightSeconds : free;
-  if (end > sleep.horizonSeconds + VERIFY_TOL_SECONDS) {
-    return `the last launch lands at ${end}s, past the ${sleep.horizonSeconds}s horizon`;
+  if (free > sleep.horizonSeconds + VERIFY_TOL_SECONDS) {
+    return `the last block ends at ${free}s, past the ${sleep.horizonSeconds}s horizon`;
   }
   return null;
 }

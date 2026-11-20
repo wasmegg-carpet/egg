@@ -1687,14 +1687,17 @@ one at a time and the judge choosing, among every overnight ship until the chain
 stands (looked ahead on a copy), and takes the better: -9.22 delivered, the
 revision before's own gap on that seed. Without a rate it is section 10's rule.
 
-**Effort floors and whole-day horizons.** Low and Medium effort charge every
-launch at least a day or half a day, and a horizon of whole days then fills a slot
-to the horizon exactly. Every slot's first launch waits for its fueling, however
-short, so with the floor holding a slot's last launch to the horizon every such
-slot lost its last launch, and a Low-effort plan over one day (arena seed 2003)
-could fly nothing. The user has since decided that the effort level only spaces
-launches: section 19, under which a slot's last launch only has to land by the
-horizon, and that plan flies a launch a slot.
+**Effort floors and whole-day horizons, flagged.** Low and Medium effort charge
+every launch at least a day or half a day, and a horizon of whole days then fills
+a slot to the horizon exactly. Every slot's first launch waits for its fueling,
+however short, so under the strict rule every such slot loses its last launch: a
+Low-effort plan over one day (arena seed 2003) can fly nothing, since a one-day
+block cannot start after T+0 and end by the horizon. The MILP knows (the first-
+launch loss), so it promises no more than that, and a slot that flies a fuelless
+ship (Chicken Nine) first keeps its last launch. This is the rule as stated with
+the effort floor as the existing model reads it (a launch's block is its floored
+time, the last one's included); if the floor should not hold the last launch to
+the horizon, that is a change to sections 7 to 17's block, for every plan.
 
 **What the player sees.** Launch times are the pad's, so the timeline and the
 slot loads (`../optimizer-core.ts`, read off the calendar) show launches spaced
@@ -1735,46 +1738,3 @@ problems, which carry the rate it ignores.
   to 4 to 8 on a few seeds; without a rate it is unchanged (within noise).
 
 `scratchpad/eval/REPORT.md`, "Addendum: the fueling pad", has the full tables.
-
-## 19. The effort level spaces launches
-
-The decision this section rests on, the user's: the effort level only spaces a
-slot's launches. At Low consecutive launches in a slot go up at least 24 hours
-apart, at Medium 12 and at High one hour, as before; at Max nothing. A slot's
-**last** launch is not held to the floored block: it only has to land, its real
-flight (`rawTime`) after it goes up, by the horizon `H`. With or without the pad
-(section 18), with or without sleep.
-
-**The rule, exactly** (`verify.ts`, `slotFault`; the arena's own copy in
-`tests/arena/calendar.ts`). Each launch but a slot's last waits for the block
-before it, the floored `actualTime` with its nights as before, which is at least
-the period; the slot's last launch must land by `H`, `launchAt + rawTime`, rather
-than end its block by it. `assertVerified` hands every launch its option's
-`rawTime`. A slot's-last-launch variant (below) followed by anything is a fault.
-
-**The menu** (`../last-launch.ts`; the arena's own `lastVariants` in
-`tests/arena/capacity.ts`). An option whose floor lengthens it (`rawTime <
-actualTime`) is offered once more, id suffixed `~last`, with `actualTime =
-rawTime` and `lastInSlot`. It goes through the sleep and T+0 splits like any
-option, so its waking charge and nights are its real flight's. It gets no doubled
-copy: a slot's last launch inside a 2x window flies, and is counted, at 1x, an
-under-statement the verifier admits (the menu holds no copy of it). At Max effort,
-and for a flight longer than the period, there is no such variant.
-
-**The MILP.** `lastInSlot` is part of the group key and the class key, dominance,
-twins and copies stay within it, and a row `last_k` holds a slot to one such
-launch. Its charge in `slot_k` is its real flight's, so a slot holds its floored
-launches and one real one: Low over 36 hours flies two a slot where it flew one,
-and Low over one day flies one where, with the pad, it flew none (section 18's
-flagged note, which this resolves).
-
-**Layout.** Without sleep the class goes last in the back-to-back order, and the
-re-deal keeps one a slot. With sleep a slot is laid out without it and it goes on
-the end, at the first waking instant the slot is free, when its real flight lands
-by `H`; otherwise it leaves the plan. Nothing is appended after it when the slots
-are balanced, and the pad stage never moves it first. The pad stage's latest
-starts and horizon read the slot's last launch by its real flight.
-
-**Rate absent.** Plans change only where the rule bites: at Low, Medium or High
-effort, where an option's flight is shorter than its floored time. At Max effort
-the menu, the matrix and the plan are what they were.

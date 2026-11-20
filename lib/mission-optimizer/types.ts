@@ -33,10 +33,6 @@ export interface LaunchOption {
   // T+0 and nowhere else; `actualTime` and `nights` are then the waking seconds and whole nights it holds after
   // the first wake-up (`startVariants` in `sleep.ts`, and the arena's own copy; `solver/SPEC.md` section 17).
   atStartSeconds?: number;
-  // Present only on a variant that may fly only as its slot's last launch (`lastVariants` in `last-launch.ts`, and the
-  // arena's own copy): the effort level spaces launches, so a slot's last launch is held only to its real flight
-  // landing by the horizon, and `actualTime` is then `rawTime`, not the floored time (`solver/SPEC.md` section 19).
-  lastInSlot?: boolean;
   // Absent is `normal`. Set only alongside `PlanProblem.eventWindowSeconds` (by `capacityVariants` in
   // `capacity.ts`, and by the arena's own copy), in which case the doubled variants carry twice the drops.
   variant?: CapacityVariant;
@@ -85,8 +81,6 @@ export interface LaunchSolution {
   // Present when these launches go up at T+0 in the night (`LaunchOption.atStartSeconds`): the seconds from T+0
   // each holds its slot at least.
   atStartSeconds?: number;
-  // Present when these launches are flown as their slot's last launch, at their real flight (`LaunchOption.lastInSlot`).
-  lastInSlot?: boolean;
   target: string;
   targetAfxId: ei.ArtifactSpec.Name;
   // total count of single-ship missions of this type across all three slots

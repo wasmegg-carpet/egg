@@ -25,7 +25,6 @@ export interface CapacityVariantSource {
   id: string;
   actualTime: number;
   variant?: CapacityVariant;
-  lastInSlot?: boolean;
   supplyVector: Map<string, number>;
   yieldVector: Map<string, number>;
   legendaryYieldVector: Map<string, number>;
@@ -38,9 +37,7 @@ export interface CapacityVariantSource {
 // The event multiplies capacity only, so fuel, duration and cost are the option's own; `2 * floor(x)` against
 // `floor(2 * x)` is not modelled, these being expected drops per launch. Doubled ids get a `::event` or
 // `::overhang` suffix; the normal variant keeps the option's own id. With no window this returns `options`
-// itself, untouched: no variant field, today's menu exactly. A slot's-last-launch variant (`last-launch.ts`) gets no
-// doubled copy: a slot's last launch inside the window is flown, and counted, at 1x, an under-statement
-// (`solver/SPEC.md` section 19).
+// itself, untouched: no variant field, today's menu exactly.
 export function capacityVariants<T extends CapacityVariantSource>(options: readonly T[], window: number): readonly T[] {
   if (!(window > 0)) return options;
   const twice = (vector: Map<string, number>) => new Map([...vector].map(([k, q]) => [k, 2 * q]));
@@ -55,7 +52,6 @@ export function capacityVariants<T extends CapacityVariantSource>(options: reado
   const variants: T[] = [];
   for (const option of options) {
     variants.push({ ...option, variant: 'normal' });
-    if (option.lastInSlot) continue;
     if (option.actualTime <= window) variants.push(doubled(option, 'event'));
     variants.push(doubled(option, 'overhang'));
   }

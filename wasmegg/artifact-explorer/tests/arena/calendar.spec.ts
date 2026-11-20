@@ -50,12 +50,12 @@ describe('calendarFaults', () => {
     expect(calendarFaults(overlap, menu, validAllocation, day).join('\n')).toMatch(/before the slot is free/);
   });
 
-  it('rejects a slot whose last launch lands past the horizon', () => {
+  it('rejects a slot still busy past the horizon', () => {
     const cal = valid();
     cal[1][0].launchAt = D + W - H;
     // Slot 0 ends at 34h, inside a 40-hour horizon; slot 1's short ship launched at 39h lands at 45h.
     expect(calendarFaults(cal, menu, validAllocation, { ...day, horizonSeconds: D + W })).toEqual([
-      `slot 1's last launch lands at ${D + W + 5 * H}s, past the ${D + W}s horizon`,
+      `slot 1 is busy until ${D + W + 5 * H}s, past the ${D + W}s horizon`,
     ]);
   });
 

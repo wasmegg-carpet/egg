@@ -17,9 +17,6 @@ export interface PadItem {
   padSeconds: number;
   // Seconds it holds its slot from its launch, as the verifier times it.
   block: number;
-  // Seconds its real flight takes: what the slot's last launch is held to, landing by the horizon (SPEC.md section
-  // 19). Absent, the block.
-  landing?: number;
   // When the layout had it go up, on the plan's clock. The scheduler reads it only to break ties between slots,
   // never as a launch time.
   launchAt: number;
@@ -76,7 +73,7 @@ function latestStarts(
   const raw = new Array<number>(n);
   const latest = new Array<number>(n);
   for (let i = n - 1; i >= 0; i--) {
-    raw[i] = i + 1 < n ? latest[i + 1] - seq[i].block : horizon - (seq[i].landing ?? seq[i].block);
+    raw[i] = (i + 1 < n ? latest[i + 1] : horizon) - seq[i].block;
     if (window !== null && seq[i].doubled) raw[i] = Math.min(raw[i], window);
     latest[i] = clock.latestAwake(raw[i]);
   }
