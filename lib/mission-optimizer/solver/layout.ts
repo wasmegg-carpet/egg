@@ -1506,7 +1506,7 @@ export function layOutPlan(
   // keeps its timeline instead: the last of one of its groups up to the late launch (or the first after it), the
   // judge choosing which among the drops after which the slot's first late launch is a later one, or among them all
   // when none is.
-  const repair = (k: number, i: number) => {
+  const repair = (k: number, i: number, nearFirst: boolean) => {
     const seq = seqs[k];
     const when = seq[i].at;
     const groups = seq.map(l => l.g);
@@ -1544,7 +1544,7 @@ export function layOutPlan(
       return best;
     };
     // The nearest occurrence of each group first, so a group is tried where its drop is most local.
-    const local = choose([...near].reverse());
+    const local = nearFirst ? choose([...near].reverse()) : null;
     const best = local?.resolved ? local : (choose(far) ?? local);
     removeLaunch(seq, best!.at);
   };
@@ -1575,22 +1575,46 @@ export function layOutPlan(
   });
 
   const total = seqs.reduce((a, seq) => a + seq.length, 0);
-  for (let round = 0; round <= total + model.slots; round++) {
-    const late = retime(seqs);
-    if (settleWindow()) continue;
-    let first: { k: number; i: number } | null = null;
-    late.forEach((positions, k) => {
-      const i = positions[0];
-      if (i !== undefined && (first === null || seqs[k][i].at < seqs[first.k][first.i].at)) first = { k, i };
-    });
-    if (first !== null) {
-      repair((first as { k: number; i: number }).k, (first as { k: number; i: number }).i);
-      continue;
+  const rounds = (nearFirst: boolean) => {
+    for (let round = 0; round <= total + model.slots; round++) {
+      const late = retime(seqs);
+      if (settleWindow()) continue;
+      let first: { k: number; i: number } | null = null;
+      late.forEach((positions, k) => {
+        const i = positions[0];
+        if (i !== undefined && (first === null || seqs[k][i].at < seqs[first.k][first.i].at)) first = { k, i };
+      });
+      if (first !== null) {
+        repair((first as { k: number; i: number }).k, (first as { k: number; i: number }).i, nearFirst);
+        continue;
+      }
+      const over = seqs.findIndex(overHorizon);
+      if (over < 0) break;
+      dropFrom(over);
     }
-    const over = seqs.findIndex(overHorizon);
-    if (over < 0) break;
-    dropFrom(over);
+  };
+  // Which drops a repair tries first is a heuristic either way: those anywhere in the slot can let the rest of it slide
+  // a day, taking its nights with it, and those near the late launch can cost a launch where a slide would have cost
+  // nothing. So the rounds run both ways, from the same start, and the judge keeps the better plan, ties to the first.
+  const snapshot = () => ({
+    seqs: seqs.map(seq => seq.map(l => ({ ...l }))),
+    counts: current.slice(),
+    stats: { ...stats },
+  });
+  const restoreSnapshot = (saved: ReturnType<typeof snapshot>) => {
+    saved.seqs.forEach((seq, k) => seqs[k].splice(0, seqs[k].length, ...seq.map(l => ({ ...l }))));
+    saved.counts.forEach((n, g) => (current[g] = n));
+    Object.assign(stats, saved.stats);
+  };
+  const start = snapshot();
+  let kept: { value: number; saved: ReturnType<typeof snapshot> } | null = null;
+  for (const nearFirst of [false, true]) {
+    restoreSnapshot(start);
+    rounds(nearFirst);
+    const value = judged();
+    if (kept === null || value > kept.value) kept = { value, saved: snapshot() };
   }
+  restoreSnapshot(kept!.saved);
 
   // The times as the verifier reads them: the pad rule over the plan, then each slot with the start chain read off
   // those times. A fault here is a launch the rounds above could not settle within their bound; it leaves the plan,
