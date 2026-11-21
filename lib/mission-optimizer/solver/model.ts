@@ -2,7 +2,7 @@
 // filtered and duplicate-merged option groups.
 
 import type { CapacityVariant, LaunchOption, RecipeDAG } from '../types';
-import { fuelCostOnAxis, normalizeProblem, type FuelAxis, type PlanProblem } from './types';
+import { fuelCostOnAxis, normalizeProblem, padSecondsOf, type FuelAxis, type PlanProblem } from './types';
 import { qOf } from '../objective';
 import { daySchedule, windowShape, type DaySchedule } from './days';
 
@@ -28,6 +28,9 @@ export interface Group {
   // launch.
   atStart: boolean;
   atStartBlock: number;
+  // Seconds the fueling pad takes to fuel one launch (`padSecondsOf`, SPEC.md section 18); 0 without a fueling rate.
+  // Part of the group key, so every member fuels exactly as long.
+  padSeconds: number;
   yieldByItem: number[];
   legendaryByTarget: number[];
   cap: number;
@@ -84,10 +87,16 @@ export interface Model {
   eventWindowNights: number;
   eventWindowLatest: number;
   eventWindowPartial: number;
+  // With the fueling pad and a sleep window, how early the window rows read the 2x window as closing
+  // (`windowPadReserve`, SPEC.md section 18), which the layout works to as well; 0 otherwise.
+  eventWindowPadReserve: number;
   // Upper bound per craft column; Infinity where nothing bounds it.
   craftCaps: number[];
   craftPrices: number[];
   craftBudgetCapacity: number;
+  // Eggs a second the fueling pad moves (`PlanProblem.fuelingRate`, SPEC.md section 18); 0 without one, when every
+  // launch fuels in no time.
+  fuelingRate: number;
   groups: Group[];
 }
 
@@ -101,6 +110,7 @@ interface Candidate {
   variant: CapacityVariant;
   atStart: boolean;
   atStartBlock: number;
+  padSeconds: number;
   yieldEntries: Entry[]; // sorted by item id
   legendaryEntries: Entry[]; // sorted by target id
   cap: number;
@@ -140,6 +150,9 @@ function cmpKey(a: Candidate, b: Candidate): number {
   // A launch at T+0 and the same numbers flown later spend different budgets (the start row). Without a night at
   // the start no launch goes up at T+0, and this never decides.
   if (a.atStart !== b.atStart) return a.atStart ? 1 : -1;
+  // Two options of equal fuel fractions can still fuel for different lengths, when one draws on an egg no axis
+  // budgets. Without a fueling rate every pad time is 0, and this never decides.
+  if (a.padSeconds !== b.padSeconds) return a.padSeconds - b.padSeconds;
   return cmpEntries(a.yieldEntries, b.yieldEntries) || cmpEntries(a.legendaryEntries, b.legendaryEntries);
 }
 
@@ -256,7 +269,11 @@ function dominates(taker: Group, given: Group): boolean {
   // Nights are a budget of their own: without this an overnight variant, which charges fewer waking seconds,
   // would prune its own daytime twin.
   if (taker.nights > given.nights) return false;
-  let strict = taker.timeSeconds < given.timeSeconds || taker.nights < given.nights;
+  // Nor one that fuels longer on the pad, which every launch of the plan queues for (SPEC.md section 18). Without a
+  // fueling rate both are 0.
+  if (taker.padSeconds > given.padSeconds) return false;
+  let strict =
+    taker.timeSeconds < given.timeSeconds || taker.nights < given.nights || taker.padSeconds < given.padSeconds;
   // Every axis, not the total: drawing less of one egg does not excuse drawing more of another, or a
   // pruned group's launches would land on a dominator the player cannot fuel.
   for (let a = 0; a < taker.fuelFractions.length; a++) {
@@ -301,6 +318,7 @@ function sameFlight(a: Group, b: Group, factor: number): boolean {
     a.timeSeconds === b.timeSeconds &&
     a.nights === b.nights &&
     a.atStart === b.atStart &&
+    a.padSeconds === b.padSeconds &&
     same(a.fuelFractions, b.fuelFractions, 1) &&
     same(a.yieldByItem, b.yieldByItem, factor) &&
     same(a.legendaryByTarget, b.legendaryByTarget, factor)
@@ -359,6 +377,18 @@ function linkTwins(all: readonly Group[], kept: Group[], timeCapacitySeconds: nu
       );
     grp.twin = standIn ?? -1;
   }
+}
+
+// The shortest fuelling of any doubled option, under a quarter of the window: how long before the 2x window's close
+// the second of two launches meeting at one instant goes up at the soonest (SPEC.md section 18). Fuellings too short
+// to count (`PAD_LEVEL_FLOOR` in `milp.ts`'s terms) are passed over, and none leaves no reserve.
+function windowPadReserve(options: readonly LaunchOption[], rate: number, window: number): number {
+  let least = Infinity;
+  for (const opt of options) {
+    const pad = padSecondsOf(opt, rate);
+    if ((opt.variant ?? 'normal') !== 'normal' && pad >= 2 ** -10 && pad < least) least = pad;
+  }
+  return Number.isFinite(least) ? Math.min(least, window / 4) : 0;
 }
 
 export function buildModel(raw: PlanProblem): Model {
@@ -454,18 +484,26 @@ export function buildModel(raw: PlanProblem): Model {
   // Absent is 0: no window, so nothing may fly doubled (SPEC.md section 11).
   const window = problem.eventWindowSeconds ?? 0;
   const slots = problem.slots;
+  // Absent is 0: every launch fuels in no time (SPEC.md section 18).
+  const fuelingRate = problem.fuelingRate ?? 0;
   const day = problem.sleep ? daySchedule(problem.sleep, timeCap, nightsCap) : null;
   // Without a sleep window, the window itself and no night (SPEC.md section 11); with one, what lies before its last
   // waking instant (sections 13 and 14), on the regular day when the plan starts after wake-up (section 17). Starting
   // in the night, the regular day starts at the next wake-up, `firstNight` in: what is left of the window after it,
   // and when it closes before then, nothing but the launches at T+0 goes up inside it.
+  // With the fueling pad as well, the window rows read it as closing `padReserve` early (SPEC.md section 18): the
+  // shortest fuelling any doubled option has. A window closing at a wake-up, as a 48-hour one does from a wake-up, has
+  // every slot's doubled launch that waited out the night go up at that one instant, and the pad lets one of them.
   const firstNight = day?.firstNightSeconds ?? 0;
+  const padReserve =
+    day !== null && fuelingRate > 0 && window > 0 ? windowPadReserve(problem.options, fuelingRate, window) : 0;
+  const shapeWindow = window - padReserve;
   const shape =
     day === null
       ? { latest: window, nights: 0, waking: window, partial: window }
-      : firstNight > 0 && window < firstNight
+      : firstNight > 0 && shapeWindow < firstNight
         ? { latest: 0, nights: 0, waking: 0, partial: 0 }
-        : windowShape(window - firstNight, day.wakingSeconds, day.wakeOffsetSeconds);
+        : windowShape(shapeWindow - firstNight, day.wakingSeconds, day.wakeOffsetSeconds);
 
   const candidates: Candidate[] = [];
   problem.options.forEach((opt: LaunchOption, index: number) => {
@@ -484,6 +522,11 @@ export function buildModel(raw: PlanProblem): Model {
     const fuelFractions = axes.map((ax, a) => (ax.capacity > 0 ? costs[a] / ax.capacity : costs[a] > 0 ? Infinity : 0));
     const timeFraction = timeCap > 0 ? opt.actualTime / timeCap : Infinity;
     if (timeFraction > 1) return;
+    // Without a sleep window a launch goes up no sooner than its own fuelling after T+0, so one whose fuelling and
+    // flight together are longer than the slot never ends in time (SPEC.md section 18). Without a rate this is the
+    // test above.
+    const padSeconds = padSecondsOf(opt, problem.fuelingRate);
+    if (day === null && padSeconds > 0 && opt.actualTime + padSeconds > timeCap) return;
     // More nights than a slot has fits no slot, exactly as more seconds than one does not. A malformed count
     // falls out with it rather than reaching a row.
     const nights = opt.nights ?? 0;
@@ -553,6 +596,7 @@ export function buildModel(raw: PlanProblem): Model {
       variant,
       atStart,
       atStartBlock,
+      padSeconds,
       yieldEntries,
       legendaryEntries,
       cap,
@@ -584,6 +628,7 @@ export function buildModel(raw: PlanProblem): Model {
       variant: cand.variant,
       atStart: cand.atStart,
       atStartBlock: cand.atStartBlock,
+      padSeconds: cand.padSeconds,
       yieldByItem,
       legendaryByTarget,
       cap: cand.cap,
@@ -620,9 +665,11 @@ export function buildModel(raw: PlanProblem): Model {
     eventWindowNights: shape.nights,
     eventWindowLatest: shape.latest,
     eventWindowPartial: shape.partial,
+    eventWindowPadReserve: padReserve,
     craftCaps: craftUpperBounds(dag, targets, craftables, craftIndex, items, itemIndex, baseInventoryByItem, kept),
     craftPrices,
     craftBudgetCapacity,
+    fuelingRate,
     groups: kept,
   };
 }

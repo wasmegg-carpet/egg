@@ -6,6 +6,7 @@
 import { fuelTankSizes, getCraftingLevelFromXp, type ShipsConfig } from 'lib';
 import { buildRecipeDag, computeCraftUnitPrices, computeOwnedStock } from 'lib/mission-optimizer';
 import { EFFORT_LAUNCH_PERIOD_SECONDS } from 'lib/mission-optimizer/effort';
+import { fuelingRateOfLevel } from 'lib/mission-optimizer/fueling';
 import type { OptimizerRequestInput } from 'lib/mission-optimizer/optimizer-client';
 import { gemBudgetFor, type HumilityVisit } from 'lib/mission-optimizer/plan/read';
 import type { PlayerData } from 'lib/mission-optimizer/player-data';
@@ -52,6 +53,8 @@ export function buildRequest(
       fuelCapacity: fuelTankSizes[visit.tankLevel],
       // Absent means the pooled tank row: one capacity the optimizer splits across the eggs as it likes.
       fuelByEggCapacity: settings.fuelBudget === 'banked' ? new Map(visit.fuelByEgg) : undefined,
+      // The one fueling pad, at the output of the visit's tank level, which spaces launches the plan would send together.
+      fuelingRate: fuelingRateOfLevel(visit.tankLevel),
       timeCapacityPerSlot: timeSeconds,
       // Sleep and the event window, each absent when off, as the explorer asks them.
       ...schedule,

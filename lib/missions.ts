@@ -208,6 +208,11 @@ export const missionDurationTypeList = [
 
 export const fuelTankSizes = [2e9, 200e9, 10e12, 100e12, 200e12, 300e12, 400e12, 500e12];
 
+// The fueling pad's output at each tank level, parallel to `fuelTankSizes`: eggs a minute it moves into a ship, every
+// egg type at one rate. Not proportional to the size: a full tank takes from 6.67 minutes (level 0) to 55.56 minutes
+// (levels 2 and 7) to fuel.
+export const fuelTankOutputsPerMinute = [300e6, 12e9, 180e9, 3e12, 4.5e12, 6e12, 7.5e12, 9e12];
+
 export interface ShipsConfig {
   epicResearchFTLLevel: number;
   epicResearchZerogLevel: number;
@@ -504,8 +509,7 @@ export class MissionType {
 
   maxBoostedCapacity(): number {
     return Math.floor(
-      (this.defaultCapacity + this.params.levelCapacityBump * this.maxLevel) *
-        (1.5 ) // 10 Zero-G Levels
+      (this.defaultCapacity + this.params.levelCapacityBump * this.maxLevel) * 1.5 // 10 Zero-G Levels
     );
   }
 

@@ -223,21 +223,7 @@ function sleepTimes({ sleepHours, hoursSinceWake }: Timing) {
   return { bedtime: waking - x, wakeUp: DAY_HOURS - x, pastBedtime: x > waking };
 }
 
-// The sleep part of the timing, short enough for a footnote.
-function sleepClause(timing: Timing): string {
-  const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
-  return pastBedtime
-    ? `you sleep until ${clockOfHours(wakeUp)}`
-    : `you go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}`;
-}
-
 const eventClause = 'the moment the event shows the time left you entered';
-
-// Where the plan's clock starts and what it says about the day, to finish "T+ counts from ...".
-export function timingZero(timing: Timing): string {
-  const now = timing.event ? `now, ${eventClause}` : 'now';
-  return timing.sleepHours > 0 ? `${now}; ${sleepClause(timing)}` : now;
-}
 
 // The line under the settings that opens the explanation below, or '' when neither setting has a start to
 // explain.
@@ -262,7 +248,7 @@ export function timingTooltip(timing: Timing): string {
     const { bedtime, wakeUp, pastBedtime } = sleepTimes(timing);
     parts.push(
       pastBedtime
-        ? `You're up past your usual bedtime: launch at T+0, then sleep until ${clockOfHours(wakeUp)}, your usual wake-up.`
+        ? `You're up past your usual bedtime: launch the first ships from T+0 as each finishes fueling, then sleep until ${clockOfHours(wakeUp)}, your usual wake-up.`
         : `You go to sleep at ${clockOfHours(bedtime)} and wake at ${clockOfHours(wakeUp)}, then keep the same hours.`,
       'No launches during your sleep hours, but ships still fly and land. A ship that lands while you sleep ' +
         'waits until you wake. The green dot is a launch while you are awake, the indigo dot a launch that is in ' +
@@ -270,5 +256,7 @@ export function timingTooltip(timing: Timing): string {
     );
   }
   if (timing.event) parts.push('Launches with the 2× badge go up inside the event.');
+  // The pad: nothing is fueled at T+0, and launches due together go up one fueling apart.
+  parts.push('One ship fuels at a time, starting now, so launches due together go up a few minutes apart.');
   return parts.join(' ');
 }

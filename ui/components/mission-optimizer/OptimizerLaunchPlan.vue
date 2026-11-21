@@ -26,7 +26,11 @@
       <optimizer-choice-list v-else :lines="totals" />
     </template>
 
-    <optimizer-slot-timeline :solution="solution" />
+    <!-- A rule and a heading of its own, so the last line of the totals does not read as slot 1's first. -->
+    <div :class="{ 'mt-3 border-t border-gray-200 pt-1': totals.length > 0 }">
+      <div :class="headingClass">By slot</div>
+      <optimizer-slot-timeline :solution="solution" />
+    </div>
   </div>
 </template>
 

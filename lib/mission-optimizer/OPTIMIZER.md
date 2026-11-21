@@ -298,6 +298,26 @@ doubling it there would change which missions are shown as having enough data.
 variant rule (`tests/arena/capacity.ts`); `tests/unit/capacity.spec.ts` holds the
 two to the same answers.
 
+## The fueling pad
+
+The game has one fueling pad for every slot, and a ship fuels there for its fuel
+over the pad's rate, its tank level's output (`fuelTankOutputsPerMinute` beside
+`fuelTankSizes` in `lib/missions.ts`: 9T a minute at the 500T tank, 3T at the
+100T one), one ship at a time; the next starts fueling the moment the one before
+it launches. So launches the plan would send together go up a fueling apart: at
+T+0, at a wake-up, at the 2x window's close, where ships land together.
+`OptimizeArgs.fuelingRate` is that rate, in eggs a second; both apps pass
+`fuelingRateOfLevel` of the player's tank level (`fueling.ts`), never anything of
+the fuel budget.
+Absent, every launch fuels in no time and the plan is the one without the pad.
+
+The solver re-times every calendar on the pad and verifies it there
+(`solver/SPEC.md` section 18), so every launch time a view shows keeps it, the
+timeline, slot loads and nights included, read off the calendar as before. The
+player stays up for the launches the pad sends back to back from T+0, which can
+run past bedtime. The solution carries `fuelingRate`, and so does the humility
+missions file (absent without one; the ascension planner does not read it).
+
 ## Module boundaries that are load-bearing
 
 Most of `lib/mission-optimizer` reads as it looks. Two edges do not, and both exist to keep

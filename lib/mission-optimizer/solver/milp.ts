@@ -41,6 +41,15 @@ export interface Layout {
   // slot from T+0 (SPEC.md section 17); false and 0 for every other class.
   classAtStart: boolean[];
   classAtStartBlock: number[];
+  // The fueling pad's levels (SPEC.md section 18): `padLevels` ascending, the first launch of a slot fuelling for at
+  // least `padLevels[0]` and, where the slot flies no class that can go first fuelling for at most `padLevels[j - 1]`,
+  // for at least `padLevels[j]`; `classPadLevel` is each class's own level, its shortest fuelling rounded down onto
+  // them, and `classFirst` whether it can be a slot's first launch (`padLevelsOf`). One binary column per slot and
+  // level past the first, from `padBase` (`padCol`). Empty, and no column, without a fueling rate.
+  padLevels: number[];
+  classPadLevel: number[];
+  classFirst: boolean[];
+  padBase: number;
   groupTotalBase: number;
   craftBase: number;
   // Score in units of theta: sigma in the 'oa' variant, and the raw score in 'scale', where theta is 1.
@@ -79,8 +88,10 @@ function durationClasses(
   const classCharge: number[] = [];
   const classAtStart: boolean[] = [];
   const classAtStartBlock: number[] = [];
-  // Keyed by variant, and a launch at T+0 apart from the same numbers flown later (SPEC.md section 17).
+  // Keyed by variant, and a launch at T+0 apart from the same numbers flown later (SPEC.md section 17), and with the
+  // fueling pad by pad level, so a class's level is every one of its groups' (SPEC.md section 18).
   const shared = new Map<number, Map<number, Map<string, number>>>();
+  const padLevel = padLevelOf(model);
   model.groups.forEach((grp, g) => {
     // In seconds, like the slot row this bound must not contradict (SPEC.md section 3).
     const byTime = grp.timeSeconds > 0 ? maxLaunches(model.timeCapacitySeconds, grp.timeSeconds) : UNBOUNDED_PER_SLOT;
@@ -107,7 +118,9 @@ function durationClasses(
         byNightsClass = new Map();
         bySeconds.set(grp.nights, byNightsClass);
       }
-      const key = grp.atStart ? `${grp.variant}@start` : grp.variant;
+      const key =
+        (grp.atStart ? `${grp.variant}@start` : grp.variant) +
+        (model.fuelingRate > 0 ? `@pad${padLevel(grp.padSeconds)}` : '');
       let c = byNightsClass.get(key);
       if (c === undefined) {
         c = classSeconds.length;
@@ -175,18 +188,70 @@ export function layoutOf(model: Model, variant: Variant): Layout {
   const craftBase = groupTotalBase + groups;
   const scoreBase = craftBase + crafts;
   const envelopeBase = scoreBase + targets;
+  const padBase = withZ ? envelopeBase + targets : envelopeBase;
+  const pad = padLevelsOf(model, classes.classOf, padLevelOf(model));
   return {
     slots,
     groups,
     crafts,
     targets,
     ...classes,
+    ...pad,
+    padBase,
     groupTotalBase,
     craftBase,
     scoreBase,
     envelopeBase: withZ ? envelopeBase : -1,
-    columnCount: withZ ? envelopeBase + targets : envelopeBase,
+    columnCount: padBase + slots * Math.max(0, pad.padLevels.length - 1),
   };
+}
+
+// What the fueling pad takes from a slot before its first launch (SPEC.md section 18): that launch goes up no sooner
+// than its own fuelling after T+0, so the slot's waking seconds up to then are in no launch's reach. With a sleep
+// window that is no more than what is left of the first waking window, and nothing when the plan starts in the
+// night, whose first launches go up in it; never more than the slot holds, so an empty slot stays feasible. Each
+// class's shortest fuelling is rounded down to a power of four seconds (to 0 under `PAD_LEVEL_FLOOR`), which keeps the
+// levels few, a dozen at most, and the loss a lower bound. Even a fraction of a second counts: a slot its launches
+// fill to the horizon exactly has no room for any. No levels without a fueling rate, or when every class rounds to 0.
+const PAD_LEVEL_FLOOR = 2 ** -10;
+// So that a fuelling of exactly a power of four lands on its own level whatever `log2` rounds it to.
+const PAD_LEVEL_TOL = 1e-12;
+
+function padLevelOf(model: Model): (pad: number) => number {
+  const day = model.day;
+  const most =
+    !(model.fuelingRate > 0) || (day !== null && day.firstNightSeconds > 0)
+      ? 0
+      : Math.min(model.timeCapacitySeconds, day === null ? Infinity : day.wakingSeconds - day.wakeOffsetSeconds);
+  return pad => Math.min(most, pad >= PAD_LEVEL_FLOOR ? 16 ** Math.floor(Math.log2(pad) / 4 + PAD_LEVEL_TOL) : 0);
+}
+
+// With a 2x window a slot's first launch goes up inside it, and so doubled (SPEC.md section 16), unless the menu has
+// no doubled copy of it: so only those classes can be first, and a slot with none of them starts no sooner than the
+// window's close, which the rows cap the loss at. Without a window every class can be first.
+function padLevelsOf(
+  model: Model,
+  classOf: readonly number[],
+  level: (pad: number) => number
+): Pick<Layout, 'padLevels' | 'classPadLevel' | 'classFirst'> {
+  const classes = classOf.length > 0 ? Math.max(...classOf) + 1 : 0;
+  const shortest = new Array<number>(classes).fill(Infinity);
+  const classFirst = new Array<boolean>(classes).fill(!(model.eventWindowSeconds > 0));
+  model.groups.forEach((grp, g) => {
+    const c = classOf[g];
+    shortest[c] = Math.min(shortest[c], grp.padSeconds);
+    if (grp.variant !== 'normal' || grp.copy.event < 0 || grp.copy.overhang < 0) classFirst[c] = true;
+  });
+  const classPadLevel = shortest.map(level);
+  const padLevels = [...new Set(classPadLevel)].sort((a, b) => a - b);
+  if (!(model.fuelingRate > 0) || !(padLevels[padLevels.length - 1] > 0)) {
+    return { padLevels: [], classPadLevel, classFirst };
+  }
+  return { padLevels, classPadLevel, classFirst };
+}
+
+export function padCol(layout: Layout, slot: number, level: number): number {
+  return layout.padBase + slot * (layout.padLevels.length - 1) + level - 1;
 }
 
 export function nCol(layout: Layout, durationClass: number, slot: number): number {
@@ -337,6 +402,12 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
       columnUpper[layout.envelopeBase + t] = 0;
     }
   }
+  for (let k = 0; k < layout.slots; k++) {
+    for (let j = 1; j < layout.padLevels.length; j++) {
+      columnUpper[padCol(layout, k, j)] = 1;
+      columnIsInteger[padCol(layout, k, j)] = withZ ? 1 : 0;
+    }
+  }
 
   const rows = new Rows();
 
@@ -377,10 +448,33 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
 
   // Raw seconds rather than normalized — not cosmetic, see SPEC.md section 3. A doubled launch under a sleep window
   // may be charged more than its seconds (SPEC.md section 14); every other launch is charged its seconds.
+  // With the fueling pad, a slot also loses what its first launch's fuelling takes (`padLevelsOf`, SPEC.md section
+  // 18): at least the top level, less each step down to a level the slot flies a class at that can go first, which
+  // `padlevel` allows only when it does. A valid inequality: the loss it charges is at most the shortest fuelling of
+  // any class the slot flies that can be its first launch. With a 2x window, no more than the window's own waking
+  // seconds, before which a slot with no doubled launch has none. Without a fueling rate there are no levels, and the
+  // row is the one it was.
+  const levels = layout.padLevels.map(v => (model.eventWindowSeconds > 0 ? Math.min(v, model.eventWindowBudget) : v));
+  const padTerms = (k: number) => {
+    for (let j = 1; j < levels.length; j++) rows.add(padCol(layout, k, j), -(levels[j] - levels[j - 1]));
+  };
+  const padTop = levels.length > 0 ? levels[levels.length - 1] : 0;
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`slot_k${k}`);
     for (let c = 0; c < layout.classes; c++) rows.add(nCol(layout, c, k), layout.classCharge[c]);
-    rows.end(-INF, model.timeCapacitySeconds);
+    padTerms(k);
+    rows.end(-INF, model.timeCapacitySeconds - padTop);
+  }
+  for (let k = 0; k < layout.slots; k++) {
+    for (let j = 1; j < levels.length; j++) {
+      rows.begin(`padlevel_k${k}_j${j}`);
+      rows.add(padCol(layout, k, j), 1);
+      for (let c = 0; c < layout.classes; c++) {
+        if (layout.classFirst[c] && layout.classPadLevel[c] <= layout.padLevels[j - 1])
+          rows.add(nCol(layout, c, k), -1);
+      }
+      rows.end(-INF, 0);
+    }
   }
 
   // Whole nights against whole nights, so no scaling question arises. Without a sleep window every class
@@ -401,12 +495,26 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
   // `Rows.end` drops them: the model is today's exactly; without a sleep window no class spends a night, and
   // `windownight_k` is dropped the same way. One window shared by every slot, so slots stay interchangeable and
   // `order_k` remains a pure symmetry break.
+  // With the fueling pad the slot's `event` launches, and the `overhang` after them, go up after its first launch
+  // too, so the window also loses what that launch's fuelling takes, as `slot_k` does above, capped as it is there at
+  // the window's waking seconds, which keeps the row satisfiable by a slot with no doubled launch. And each doubled
+  // launch is charged its own fuelling (its class's level) on top of its seconds. That part is a reservation, not a
+  // valid inequality: a launch whose slot frees up while the pad is busy with another slot's ship waits for its own
+  // fuelling, which the pad fuels only from then, and where every slot's launches meet (at T+0, at a wake-up, on a cadence
+  // of whole days) all but one of them do. A doubled launch that waits past the window's close loses its yield, so the
+  // window is where waiting is reserved for. Without levels, the row above exactly.
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`window_k${k}`);
     for (let c = 0; c < layout.classes; c++) {
-      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classSeconds[c]);
+      const reserve =
+        levels.length > 0 && model.eventWindowSeconds > 0
+          ? Math.min(layout.classPadLevel[c], model.eventWindowBudget)
+          : 0;
+      if (layout.classVariant[c] === 'event') rows.add(nCol(layout, c, k), layout.classSeconds[c] + reserve);
+      if (layout.classVariant[c] === 'overhang') rows.add(nCol(layout, c, k), reserve);
     }
-    rows.end(-INF, model.eventWindowBudget);
+    if (model.eventWindowSeconds > 0) padTerms(k);
+    rows.end(-INF, model.eventWindowBudget - (model.eventWindowSeconds > 0 ? padTop : 0));
   }
   for (let k = 0; k < layout.slots; k++) {
     rows.begin(`windownight_k${k}`);
@@ -432,6 +540,19 @@ function buildCore(model: Model, qs: readonly number[], theta: readonly number[]
     }
     rows.end(-INF, 1);
   }
+
+  // The fueling pad (SPEC.md section 18): every doubled launch goes up by the 2x window's close, and the pad fuels one
+  // ship at a time from an empty pad at T+0, so the last of them goes up no sooner than all their fuelling summed. A
+  // valid inequality on the group totals, across every slot. Without a fueling rate or without a window it has no
+  // entries, and `Rows.end` drops it.
+  rows.begin('pad_window');
+  if (model.eventWindowSeconds > 0) {
+    for (let g = 0; g < layout.groups; g++) {
+      const grp = model.groups[g];
+      if (grp.variant !== 'normal') rows.add(layout.groupTotalBase + g, grp.padSeconds);
+    }
+  }
+  rows.end(-INF, model.eventWindowSeconds);
 
   // Per-day fit rows, only with a sleep window: the slot row pools a slot's waking seconds across its days,
   // and these say how many launches of each length one waking window holds. Valid inequalities, so they cut

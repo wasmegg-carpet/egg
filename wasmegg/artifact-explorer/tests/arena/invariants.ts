@@ -487,7 +487,9 @@ export function checkC1Feasibility(c: CheckContext) {
   // No calendar is then a failure, not a pass. A calendar returned for any other problem is verified too.
   if (calendar === undefined) {
     if (windowOn) reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a 2x window');
-    else if (sleepOn && c.can.sleepAware) {
+    else if (s.day.fuelingRate !== undefined) {
+      reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a fueling pad');
+    } else if (sleepOn && c.can.sleepAware) {
       reportFlat(c, 'C1-feasibility', 'no calendar returned for a problem with a sleep window');
     }
     return;

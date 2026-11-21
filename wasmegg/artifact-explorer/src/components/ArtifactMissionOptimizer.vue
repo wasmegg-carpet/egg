@@ -79,6 +79,7 @@ import {
   effectiveConfig,
   effectiveFuelByEggCapacity,
   effectiveFuelTankCapacity,
+  effectiveTankLevel,
   effectiveMaxGemCost,
   effectiveCraftingBudget,
   costBudgetsValid,
@@ -105,6 +106,7 @@ import {
   waitTimeInputFor,
 } from '@/store/plan';
 import { EFFORT_LAUNCH_PERIOD_SECONDS } from 'lib/mission-optimizer/effort';
+import { fuelingRateOfLevel } from 'lib/mission-optimizer/fueling';
 import { gemBudgetFor } from 'lib/mission-optimizer/plan/read';
 import { projectSolvedVisit } from 'lib/mission-optimizer/plan/write';
 import {
@@ -217,6 +219,8 @@ export default defineComponent({
         fuel: effectiveFuelByEggCapacity.value
           ? [...effectiveFuelByEggCapacity.value]
           : effectiveFuelTankCapacity.value,
+        // The pad's rate follows the tank level, which a by-egg budget above does not show.
+        tank: effectiveTankLevel.value,
         price: effectiveMaxGemCost.value,
         craftBudget: effectiveCraftingBudget.value,
         effort: missionFilters.value.effort,
@@ -263,6 +267,8 @@ export default defineComponent({
         desiredArtifactNodeIds: [...artifactIds.value],
         fuelCapacity: effectiveFuelTankCapacity.value,
         fuelByEggCapacity: effectiveFuelByEggCapacity.value ?? undefined,
+        // The one fueling pad, at the output of the tank level, not of the fuel budget, which can be what is stored in it.
+        fuelingRate: fuelingRateOfLevel(effectiveTankLevel.value),
         timeCapacityPerSlot: maxWaitTimeSeconds.value,
         // Each absent rather than 0 when off, so a request without sleep or an event carries neither field.
         ...effectiveScheduleArgs.value,
