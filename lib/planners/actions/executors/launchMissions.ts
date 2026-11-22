@@ -5,11 +5,20 @@
  * (normal flow) and by replay.ts (replay flow).
  */
 
+import { getTargetName } from '../../../artifacts/data';
+
 import { PROFILE } from '@planner/lib/profile';
 import type { PayloadExecutor } from '../executorTypes';
-import type { LaunchMissionsPayload } from '@planner/types';
+import type { LaunchMissionEntry, LaunchMissionsPayload } from '@planner/types';
 import { SHIP_INFO, DURATION_NAMES, type Spaceship, type DurationType } from '@planner/lib/missions';
 import { formatDuration } from '@planner/lib/format';
+
+// Only an imported plan aims a launch at anything; one built by hand in the mission grid carries no
+// target and makes no claim about one, so it says nothing rather than "untargeted".
+function targetLabel(entry: LaunchMissionEntry): string {
+  if (entry.targetAfxId === undefined) return '';
+  return ` → ${getTargetName(entry.targetAfxId)}`;
+}
 
 export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
   execute(_payload: LaunchMissionsPayload): number {
@@ -27,7 +36,7 @@ export const launchMissionsExecutor: PayloadExecutor<LaunchMissionsPayload> = {
     for (const m of payload.missions) {
       const shipName = SHIP_INFO[m.ship as Spaceship]?.displayName ?? 'Unknown';
       const durName = DURATION_NAMES[m.duration as DurationType] ?? 'Unknown';
-      parts.push(`${m.count}× ${durName} ${shipName}`);
+      parts.push(`${m.count}× ${durName} ${shipName}${targetLabel(m)}`);
     }
     const summary = parts.join(', ');
     const timeStr = payload.totalTimeSeconds === 0 ? (PROFILE.hasShifts ? '0s (Pre-shift)' : '0s') : formatDuration(payload.totalTimeSeconds);

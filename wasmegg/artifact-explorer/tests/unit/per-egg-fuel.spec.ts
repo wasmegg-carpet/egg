@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { ei, perfectShipsConfig } from 'lib';
 import { buildRecipeDag } from '@/lib';
 import { buildModel } from '@/lib/solver/model';
-import { enumerateLaunchOptions } from '@/lib/phases';
+import { enumerateLaunchOptions } from '@/lib/problem-inputs';
 import { optimize } from './spec-helpers';
 
 const TARGET = 'puzzle-cube-4';
@@ -21,7 +21,7 @@ function problemOf(fuelAxes?: { egg: ei.Egg | null; capacity: number }[]) {
     fuelAxes,
     timeCapacityPerSlot: 30 * 86400,
     slots: 3,
-    baseYield: new Map<string, number>(),
+    ownedStock: new Map<string, number>(),
   };
 }
 
@@ -33,6 +33,30 @@ describe('fuel axes', () => {
     for (const group of model.groups) {
       expect(group.fuelFractions).toHaveLength(1);
       expect(group.fuelFractions[0]).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('applies the one capacity rule on every axis, not just the tank', () => {
+    // The rule `types.ts` states: no number means no limit, so a capacity that is not a finite
+    // non-negative number has to mean none rather than an unlimited tank nobody stocked.
+    const model = buildModel(
+      problemOf([
+        { egg: ei.Egg.CURIOSITY, capacity: NaN },
+        { egg: ei.Egg.INTEGRITY, capacity: Infinity },
+        { egg: ei.Egg.RESILIENCE, capacity: -1 },
+        { egg: ei.Egg.KINDNESS, capacity: 5e12 },
+      ])
+    );
+    expect(model.fuelAxes.map(axis => axis.capacity)).toEqual([0, 0, 0, 5e12]);
+  });
+
+  it('reads an empty per-egg list as an empty tank, not as an absent budget', () => {
+    // Reachable: `effectiveFuelByEggCapacity` returns the visit's banked fuel, and a visit that banked
+    // nothing hands over an empty Map. Zero axes would constrain nothing at all.
+    const model = buildModel(problemOf([]));
+    expect(model.fuelAxes).toEqual([{ egg: null, capacity: 0 }]);
+    for (const group of model.groups) {
+      expect(group.fuelFractions[0]).toBe(0);
     }
   });
 
@@ -83,9 +107,9 @@ describe('optimizeFull with a per-egg budget', () => {
     includeNotEnoughData: false,
   };
 
-  // Humility is free everywhere in this tool (`phases.ts` strips it), so an empty tank
-  // does not ground the player: it leaves exactly the ships that burn humility alone —
-  // Chicken One, Nine and Heavy. Anything needing a budgeted egg is gone.
+  // Humility is stripped by `makeLaunchOption` (problem-inputs.ts), so an empty tank does not
+  // ground the player. It leaves exactly the ships that burn humility alone, which are Chicken
+  // One, Nine and Heavy. Anything needing a budgeted egg is gone.
   it('an empty tank leaves only the missions that burn nothing budgeted', async () => {
     const dag = buildRecipeDag([TARGET], 30);
     const empty = new Map<ei.Egg, number>([

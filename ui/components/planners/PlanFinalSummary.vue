@@ -184,6 +184,7 @@ import { formatNumber } from '@planner/lib/format';
 import { isTestingEnvironment } from '@planner/lib/isTestingEnvironment';
 import { readImportedJson } from 'lib/planners/utils/export';
 import { iconURL } from 'lib';
+import { onPlanImported } from '@planner/lib/actions/plannerRules';
 import PlannerSummaryStats from '@planner/components/PlannerSummaryStats.vue';
 
 const actionsStore = useActionsStore();
@@ -317,6 +318,7 @@ function handleImport(event: Event) {
       }
 
       await actionsStore.importPlan(jsonString);
+      onPlanImported();
     } catch (error) {
       console.error(error);
       alert('Failed to import plan: Invalid file format.');

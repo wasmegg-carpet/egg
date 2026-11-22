@@ -16,6 +16,7 @@ import { solveForTime } from 'lib/planners/engine/apply/math';
 import { safeImport } from 'lib/planners/import';
 import { countTEThresholdsPassed, eggsNeededForTE } from '@/lib/truthEggs';
 import { usePlanStore } from '@/stores/plan';
+import { useHumilityMissionsStore } from '@/stores/humilityMissions';
 import { useTruthEggsStore } from '@/stores/truthEggs';
 
 /** Which payload field holds this planner-only action's duration, if it is one. */
@@ -91,6 +92,11 @@ export function registerPlannerStrategies(registerStrategy: typeof import('lib/p
       return currentEggIndex >= targetEggIndex ? 'completed' : 'pending';
     }
   });
+}
+
+/** Solved humility visits go with the plan they were solved for, so a new plan starts without them. */
+export function onPlanImported(): void {
+  useHumilityMissionsStore().clear();
 }
 
 /** Whether an edit to a past shift can go ahead, after asking about any plan conflicts it causes. */
