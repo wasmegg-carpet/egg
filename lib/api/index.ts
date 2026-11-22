@@ -57,7 +57,8 @@ export async function request(endpoint: string, encodedPayload: string, apiRoot?
     } else if (e instanceof TypeError) {
       throw new TypeError(
         `POST ${url}: ${e} ` +
-          `(please check any ad/content blocking solution you might be using, e.g. uBlock, Brave, Pi-hole, NextDNS, etc.)`,
+          `(please check any ad/content blocking solution you might be using, e.g. uBlock, Brave, Pi-hole, NextDNS, etc. ` +
+          `Note: Spanish ISPs have blocked Cloudflare during LaLiga football matches, so if you're in Spain try again later or use a VPN.)`,
         { cause: e }
       );
     } else {
