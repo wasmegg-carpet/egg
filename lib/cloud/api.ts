@@ -8,7 +8,7 @@ import type { LibrarySettings } from './crypto';
 /** The worker's base URL: VITE_CLOUD_API_URL when set (e.g. http://localhost:8787 for `wrangler dev`). */
 export const CLOUD_API_URL: string =
   (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_CLOUD_API_URL ??
-  'https://joo-cloudflare.joo-cloudflare.workers.dev';
+  'https://cloudsaves.carpet.workers.dev';
 
 export type CloudErrorCode =
   | 'not_found'

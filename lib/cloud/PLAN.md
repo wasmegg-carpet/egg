@@ -10,8 +10,12 @@ update the Status and checklist before ending a session.**
 - **Phase:** 1–4 done, 5 partly. Everything works end to end, including in a real browser (headless Chromium
   against `wrangler dev`: set up, remembered device, sync, second device with PIN, wrong PIN, share link import,
   replace via "Forgot PIN?").
-- **Test deployment (user's account):** `https://joo-cloudflare.joo-cloudflare.workers.dev`, bucket
-  `planner-cloud`, lifecycle rules, `SESSION_SECRET` set. `CLOUD_API_URL` in `api.ts` points at it.
+- **Production deployment:** `https://cloudsaves.carpet.workers.dev` (account `726fa1cf…`), bucket
+  `planner-cloud`. `CLOUD_API_URL` in `api.ts` points at it. On 2026-11-21 the old bucket (68 objects) was
+  copied into it byte for byte, keeping custom metadata, so existing libraries, remembered devices and share
+  links carry over.
+- **Old test deployment (user's account):** `https://joo-cloudflare.joo-cloudflare.workers.dev`, bucket
+  `planner-cloud`. Keep it up until the switch has shipped and a final catch-up copy has run.
 - **Commits:** worker all committed locally in `joo-cloudflare` (not pushed). Egg changes are **uncommitted**
   (`lib/cloud/`, `lib/planners/composables/useCloudLibrary.ts`, `ui/components/planners/cloud/`,
   `PlanLibrary.vue`, the two planner vitest configs, `lib/jest.config.js`).
