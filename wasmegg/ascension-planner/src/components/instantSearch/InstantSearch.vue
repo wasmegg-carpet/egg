@@ -26,7 +26,7 @@
       the maxed one. Weaker earnings artifacts are allowed for (the table is read lower by the Clothed TE they give up).
     </p>
 
-    <fieldset :disabled="store.status === 'running'" class="space-y-6 disabled:opacity-50">
+    <fieldset :disabled="store.status === 'running'" class="min-w-0 space-y-6 disabled:opacity-50">
       <section>
         <h3 class="text-sm font-bold text-slate-800 mb-2">Target</h3>
         <SegmentedToggle v-model="store.mode" :options="targetModes" class="mb-3" />
@@ -63,7 +63,7 @@
             class="rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900"
           >
             <div class="flex flex-wrap items-start gap-3">
-              <div class="flex-1 min-w-[16rem]">
+              <div class="min-w-0 grow basis-64">
                 <span class="font-black">Current ascension detected:</span>
                 {{ store.current.claimedTE }} TE claimed + {{ store.current.pendingTE }} pending |
                 {{ formatNumber(store.current.elr * 3600) }}/hr delivery rate |
@@ -191,6 +191,7 @@
         <input type="file" accept=".bin,.gz" class="hidden" @change="onFile" />
       </label>
     </div>
+    <CustomTablePanel />
     <p v-if="store.tableNote" class="mt-2 text-[11px] text-amber-700">{{ store.tableNote }}</p>
     <p v-for="w in store.rangeWarnings" :key="w" class="mt-2 text-[11px] text-amber-700">{{ w }}</p>
 
@@ -238,6 +239,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import InstantSearchResults from './InstantSearchResults.vue';
 import ChainComparison from './ChainComparison.vue';
+import CustomTablePanel from './CustomTablePanel.vue';
+import { useCustomTable } from '@/composables/useCustomTable';
 import InstantSearchFilters from './InstantSearchFilters.vue';
 import AutoLoadoutEditor from '@/components/auto/AutoLoadoutEditor.vue';
 import { loadoutInputsEqual } from '@/auto/loadout';
@@ -340,10 +343,13 @@ onMounted(() => {
   if (store.tableStatus === 'idle') store.loadTable();
 });
 
+const customTable = useCustomTable();
+
 function onFile(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
-  if (file) store.loadFile(file);
+  // Through the custom table, which remembers the file so it can be saved to the cloud library.
+  if (file) void customTable.pickFile(file);
   input.value = '';
 }
 </script>

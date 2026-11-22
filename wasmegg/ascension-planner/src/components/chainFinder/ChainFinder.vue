@@ -23,7 +23,7 @@
       Choose the metronome, compass, and gusset you deliver with. The set's fourth artifact is a 3-slot stone
       holder.
     </p>
-    <fieldset :disabled="store.status === 'running'" class="disabled:opacity-50">
+    <fieldset :disabled="store.status === 'running'" class="min-w-0 disabled:opacity-50">
       <DeliveryArtifactPicker v-model="store.deliverySelection" />
     </fieldset>
 

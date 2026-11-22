@@ -577,9 +577,17 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
   });
 
   async function loadFile(file: File): Promise<void> {
+    await loadExternal(await file.arrayBuffer(), file.name);
+  }
+
+  /**
+   * Load a table that isn't the store's pick (a file, the player's cloud table, a shared one): a change in
+   * `loadout` then leaves it alone. `bytes` is handed to the worker, so pass a copy if it's needed after.
+   */
+  async function loadExternal(bytes: ArrayBuffer, source: string): Promise<void> {
     pickedFor = null;
     tableNote.value = '';
-    await loadBytes(await file.arrayBuffer(), file.name);
+    await loadBytes(bytes, source);
     answer.value = null;
     status.value = 'idle';
   }
@@ -952,6 +960,7 @@ export const useInstantSearchStore = defineStore('instantSearch', () => {
     rangeWarnings,
     loadTable,
     loadFile,
+    loadExternal,
     search,
   };
 });

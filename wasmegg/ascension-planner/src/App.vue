@@ -32,12 +32,14 @@
             <!-- Mode Tabs -->
             <div
               v-if="playerId && !loading"
-              class="mt-6 flex justify-center animate-in fade-in slide-in-from-top-4 duration-500"
+              ref="modeTabsScroller"
+              class="mt-4 px-4 py-2 overflow-x-auto overscroll-x-contain snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden animate-in fade-in slide-in-from-top-4 duration-500"
               :class="plannerTab !== 'manual' ? 'pb-8' : ''"
             >
-              <div class="bg-slate-50 p-1.5 rounded-2xl border border-slate-200/50 shadow-sm flex gap-1">
+              <div class="w-max mx-auto bg-slate-50 p-1.5 rounded-2xl border border-slate-200/50 shadow-sm flex gap-1">
                 <button
-                  class="px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
+                  :aria-current="plannerTab === 'manual' ? 'page' : undefined"
+                  class="shrink-0 snap-center whitespace-nowrap px-4 sm:px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
                   :class="
                     plannerTab === 'manual'
                       ? 'bg-slate-900 text-white shadow-lg shadow-slate-200'
@@ -56,7 +58,8 @@
                   Manual Planner
                 </button>
                 <button
-                  class="px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
+                  :aria-current="plannerTab === 'automatic' ? 'page' : undefined"
+                  class="shrink-0 snap-center whitespace-nowrap px-4 sm:px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
                   :class="
                     plannerTab === 'automatic'
                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'
@@ -78,7 +81,8 @@
                   >
                 </button>
                 <button
-                  class="px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
+                  :aria-current="plannerTab === 'chainFinder' ? 'page' : undefined"
+                  class="shrink-0 snap-center whitespace-nowrap px-4 sm:px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
                   :class="
                     plannerTab === 'chainFinder'
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100'
@@ -97,7 +101,8 @@
                   Chain Finder
                 </button>
                 <button
-                  class="px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
+                  :aria-current="plannerTab === 'tableBuilder' ? 'page' : undefined"
+                  class="shrink-0 snap-center whitespace-nowrap px-4 sm:px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-[0.15em] transition-all duration-300 flex items-center gap-2"
                   :class="
                     plannerTab === 'tableBuilder'
                       ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100'
@@ -522,7 +527,7 @@ import { usePlannerPageStatus } from 'lib/planners/composables/usePlannerPageSta
 import { usePlanDialogs } from 'lib/planners/composables/usePlanDialogs';
 import { usePlanSaving } from 'lib/planners/composables/usePlanSaving';
 import PlannerDialogs from 'ui/components/planners/PlannerDialogs.vue';
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import TheNavBar from 'ui/components/NavBar.vue';
 import { getSavedPlayerID, savePlayerID, requestFirstContact, resolveColleggtibleContracts } from 'lib';
@@ -548,6 +553,7 @@ import WarningDialog from 'ui/components/planners/WarningDialog.vue';
 import RecalculationOverlay from 'ui/components/planners/RecalculationOverlay.vue';
 import LoadingOverlay from 'ui/components/planners/LoadingOverlay.vue';
 import PlanLibrary from 'ui/components/planners/PlanLibrary.vue';
+import { useIncomingShare } from 'lib/planners/composables/useIncomingShare';
 import AutoPlanImportDialog from '@/components/AutoPlanImportDialog.vue';
 import { useAutoPlanImport } from '@/composables/useAutoPlanImport';
 import PlanSelectionDialog from 'ui/components/planners/PlanSelectionDialog.vue';
@@ -591,6 +597,31 @@ const initialStateStore = useInitialStateStore();
 const actionsStore = useActionsStore();
 const uiStore = useUIStore();
 const { plannerTab, isHeaderCollapsed, isFooterCollapsed, loading, error } = storeToRefs(uiStore);
+
+// On narrow screens the mode tabs scroll sideways; keep the active one in view.
+const modeTabsScroller = ref<HTMLElement | null>(null);
+watch(
+  [plannerTab, modeTabsScroller],
+  async () => {
+    await nextTick();
+    const scroller = modeTabsScroller.value;
+    const active = scroller?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!scroller || !active || scroller.scrollWidth <= scroller.clientWidth) return;
+    const s = scroller.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    scroller.scrollBy({ left: a.left + a.width / 2 - (s.left + s.width / 2), behavior: 'smooth' });
+  },
+  { flush: 'post' }
+);
+
+// Opened with a share link to a Chain Finder table: go to the Chain Finder, which offers to import it.
+const incomingShare = useIncomingShare();
+watch(
+  () => incomingShare.state.info?.content,
+  content => {
+    if (content === 'table') handleChainFinderTabClick();
+  }
+);
 const planStore = usePlanStore();
 const fuelTankStore = useFuelTankStore();
 const truthEggsStore = useTruthEggsStore();
