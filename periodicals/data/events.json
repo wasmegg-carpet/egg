@@ -29871,6 +29871,15 @@
     "ultra": false
   },
   {
+    "endTimestamp": 1795366800,
+    "id": "ultra-11-21",
+    "message": "75% OFF VEHICLES!",
+    "multiplier": 0.25,
+    "startTimestamp": 1795280400,
+    "type": "vehicle-sale",
+    "ultra": true
+  },
+  {
     "endTimestamp": 1795453200,
     "id": "event-11-21-2",
     "message": "4x PIGGY GROWTH!",
@@ -29880,12 +29889,12 @@
     "ultra": false
   },
   {
-    "endTimestamp": 1795366800,
-    "id": "ultra-11-21",
-    "message": "75% OFF VEHICLES!",
-    "multiplier": 0.25,
-    "startTimestamp": 1795280400,
-    "type": "vehicle-sale",
-    "ultra": true
+    "endTimestamp": 1795453200,
+    "id": "event-11-22",
+    "message": "35% OFF EPIC RESEARCH!!",
+    "multiplier": 0.65,
+    "startTimestamp": 1795366800,
+    "type": "epic-research-sale",
+    "ultra": false
   }
 ]
